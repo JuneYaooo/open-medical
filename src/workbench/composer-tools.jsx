@@ -118,23 +118,24 @@ export function ComposerTools({
       />
       <button
         type="button"
+        title="添加材料（也可直接拖拽或粘贴文件）"
         disabled={disabled || loading}
         onClick={() => file.current.click()}
       >
         <Paperclip size={15} />
-        {loading ? "读取中…" : "添加材料"}
+        {loading ? "读取中…" : "材料"}
       </button>
-      <button type="button" disabled={disabled} onClick={onMention}>
+      <button type="button" title="引用工作区文件" disabled={disabled} onClick={onMention}>
         <AtSign size={15} />
-        引用文件
+        引用
       </button>
-      <span>也可将文件拖到这里</span>
       <button
         type="button"
+        title="选择项目技能"
         disabled={disabled || current.runs.some((r) => r.status === "running")}
         onClick={loadSkills}
       >
-        选择技能
+        技能
       </button>
       {skills && (
         <select

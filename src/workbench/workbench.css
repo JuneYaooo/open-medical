@@ -778,3 +778,151 @@
 .wb-pty:empty {
   display: none;
 }
+
+/* --- Chat-first topbar: title + status chip + icon panel switch --- */
+.wb-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  min-height: 52px;
+  border-bottom: 1px solid var(--desk-line);
+  padding: 0 2px;
+}
+.wb-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.generic-workspaces .wb-topbar h2 {
+  font-size: 14px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.wb-status-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #9ab;
+  background: #1d2226;
+  border: 1px solid var(--desk-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.wb-status-chip.running {
+  color: #7dd3c0;
+  border-color: #2c6f5f;
+}
+.wb-panel-switch {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.wb-panel-switch button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a9299;
+  padding: 0;
+}
+.wb-panel-switch button:hover {
+  background: #23282d;
+  color: #dfe5e9;
+}
+.wb-panel-switch button[aria-current] {
+  background: #2a3138;
+  color: #fff;
+}
+.wb-panel-switch .desk-count {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  background: #d06060;
+  color: #fff;
+  line-height: 1;
+  padding: 2px 4px;
+  font-size: 9px;
+  border-radius: 8px;
+}
+
+/* --- Compact composer: run options collapsed, actions right-aligned --- */
+.generic-workspaces .desk-composer .wb-run-compact {
+  margin: 0 0 8px;
+}
+.generic-workspaces .wb-run-compact > summary {
+  padding: 4px 0;
+  font-size: 11px;
+  color: #7d858c;
+}
+.generic-workspaces .wb-run-compact[open] > summary {
+  margin-bottom: 8px;
+}
+.wb-composer-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.wb-consent {
+  flex: 1;
+  min-width: 220px;
+  margin: 0;
+  color: #9aa2a8;
+  font-size: 11px;
+}
+.wb-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.wb-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
+  background: #e8e8e8;
+  color: #16181a;
+}
+.wb-send:hover:not(:disabled) {
+  background: #fff;
+}
+.wb-send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.wb-model-missing {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #c9a35c;
+}
+.generic-workspaces .wb-fork-button {
+  margin: 0 0 14px;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .wb-topbar {
+    flex-wrap: wrap;
+    padding: 6px 0;
+  }
+  .wb-topbar-left {
+    flex-basis: 100%;
+  }
+}
