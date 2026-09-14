@@ -17,7 +17,7 @@ export function backupDatabase(source, destination) {
     const schema = database
       .prepare("SELECT value FROM meta WHERE key=?")
       .get("schema_version");
-    if (!["2", "3", "4"].includes(schema?.value))
+    if (!["2", "3", "4", "5"].includes(schema?.value))
       throw new Error("数据库版本不支持");
     // SQLite produces a consistent snapshot, including committed WAL data.
     database.prepare("VACUUM INTO ?").run(destination);

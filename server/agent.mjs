@@ -20,6 +20,7 @@ import { PatientRegistry, composeDigest } from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
+import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -159,11 +160,14 @@ export function createServer(options = {}) {
         ? process.env.MEDICAL_SKILLS_DIR.split(",")
         : []),
     ]);
+  const doctor = options.doctor || new DoctorProfile(store);
+  const literature =
+    options.literature || new LiteratureService(store);
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
-    toolPlugins: options.toolPlugins || [],
-    doctor: options.doctor || new DoctorProfile(store),
+    toolPlugins: options.toolPlugins || [...literatureTools(literature)],
+    doctor,
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     onNotification: options.onNotification,
@@ -417,6 +421,7 @@ export function createServer(options = {}) {
           ingestConfigured: Boolean(ingestSecret),
           patientsEnabled: true,
           doctorMemory: runtime.doctor.counts(),
+          literature: { enabled: true, sources: ["pubmed", "europepmc"] },
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
@@ -705,6 +710,48 @@ export function createServer(options = {}) {
           }
         }
       }
+      if (parts[0] === "api" && parts[1] === "literature") {
+        const numberParam = (key) => {
+          const raw = url.searchParams.get(key);
+          return raw === null || raw === "" ? undefined : Number(raw);
+        };
+        if (parts[2] === "search" && req.method === "GET")
+          return send(
+            res,
+            200,
+            await literature.search({
+              query: url.searchParams.get("query") || undefined,
+              source: url.searchParams.get("source") || undefined,
+              yearFrom: numberParam("yearFrom"),
+              yearTo: numberParam("yearTo"),
+              limit: numberParam("limit"),
+            }),
+          );
+        if (parts[2] === "article" && req.method === "GET")
+          return send(
+            res,
+            200,
+            await literature.fetchArticle({
+              pmid: url.searchParams.get("pmid") || undefined,
+              doi: url.searchParams.get("doi") || undefined,
+            }),
+          );
+        if (parts[2] === "import" && req.method === "POST") {
+          const b = await body(req);
+          const article = await literature.fetchArticle({
+            pmid: b.pmid,
+            doi: b.doi,
+          });
+          const name = article.pmid
+            ? `PMID-${article.pmid}.md`
+            : `DOI-${String(article.doi).replace(/[^A-Za-z0-9.-]/g, "_").slice(0, 80)}.md`;
+          const file = runtime.addFile(identifier(b.sessionId), {
+            name,
+            text: literature.materialText(article),
+          });
+          return send(res, 201, { file, article });
+        }
+      }
       if (parts[0] === "api" && parts[1] === "doctor") {
         if (parts[2] === "profile" && parts.length === 3) {
           if (req.method === "GET") return send(res, 200, runtime.doctor.get());
@@ -934,6 +981,7 @@ export function createServer(options = {}) {
   server.patients = patients;
   server.followups = followups;
   server.doctor = runtime.doctor;
+  server.literature = literature;
   server.wechat = wechat;
   server.once("listening", () => {
     scheduler.start();

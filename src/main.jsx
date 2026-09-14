@@ -41,6 +41,7 @@ import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
 import { ModuleView, MODULE_VIEW_IDS } from "./module-skeletons";
 import { DoctorProfilePanel } from "./doctor-profile";
+import { LiteratureView } from "./literature";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 const WORKFLOWS = [
   {
@@ -1027,6 +1028,8 @@ function App() {
               initialCreate={patientRoute.create}
               onOpenWorkspace={openTask}
             />
+          ) : view === "literature" ? (
+            <LiteratureView onOpenTask={openTask} />
           ) : MODULE_VIEW_IDS.includes(view) ? (
             <ModuleView view={view} onView={navigate} />
           ) : view !== "workbench" ? (

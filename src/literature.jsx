@@ -1,0 +1,223 @@
+import { useState } from "react";
+import { api } from "./agent-runtime";
+import { Search, Loader2, FilePlus, Copy, ExternalLink, Check } from "lucide-react";
+
+// Literature search view: queries PubMed / Europe PMC through the local
+// server. Only the query text leaves the machine; imports land as session
+// materials with SHA-256 provenance.
+export function LiteratureView({ onOpenTask }) {
+  const [query, setQuery] = useState("");
+  const [source, setSource] = useState("pubmed");
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
+  const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState({});
+  const [abstracts, setAbstracts] = useState({});
+  const [imported, setImported] = useState({});
+  const [copied, setCopied] = useState("");
+
+  const runSearch = async (event) => {
+    event?.preventDefault();
+    if (!query.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({
+        query,
+        source,
+        limit: "15",
+      });
+      if (yearFrom) params.set("yearFrom", yearFrom);
+      if (yearTo) params.set("yearTo", yearTo);
+      const value = await api(`/api/literature/search?${params}`);
+      setResults(value);
+      setAbstracts({});
+      setExpanded({});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const loadAbstract = async (article) => {
+    const key = article.pmid || article.doi;
+    if (abstracts[key]) return abstracts[key];
+    const params = new URLSearchParams();
+    if (article.pmid) params.set("pmid", article.pmid);
+    else params.set("doi", article.doi);
+    const full = await api(`/api/literature/article?${params}`);
+    setAbstracts((prev) => ({ ...prev, [key]: full }));
+    return full;
+  };
+  const toggleExpand = async (article) => {
+    const key = article.pmid || article.doi;
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+    if (!expanded[key]) loadAbstract(article).catch(() => {});
+  };
+  const importAsMaterial = async (article) => {
+    setError("");
+    try {
+      const session = await api("/api/sessions", "POST", {
+        title: `文献 · ${(article.title || "未命名").slice(0, 40)}`,
+      });
+      await api("/api/literature/import", "POST", {
+        sessionId: session.id,
+        pmid: article.pmid || undefined,
+        doi: article.doi || undefined,
+      });
+      setImported((prev) => ({ ...prev, [article.pmid || article.doi]: true }));
+      onOpenTask?.(session.id);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  const citation = (article) => {
+    const authors = article.authors || [];
+    const authorText =
+      authors.length > 3 ? `${authors.slice(0, 3).join(", ")} 等` : authors.join(", ");
+    return `${authorText}. ${article.title}. ${article.journal}${article.year ? `, ${article.year}` : ""}.${article.doi ? ` doi:${article.doi}.` : ""}${article.pmid ? ` PMID:${article.pmid}.` : ""}`;
+  };
+  const copyCitation = async (article) => {
+    try {
+      await navigator.clipboard.writeText(citation(article));
+      setCopied(article.pmid || article.doi);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {
+      setError("浏览器拒绝了剪贴板访问");
+    }
+  };
+  const pubmedLink = (article) =>
+    article.pmid
+      ? `https://pubmed.ncbi.nlm.nih.gov/${article.pmid}/`
+      : `https://doi.org/${article.doi}`;
+
+  return (
+    <div className="module-view">
+      <section className="module-card literature-view">
+        <div className="module-head">
+          <div>
+            <h1>文献检索</h1>
+            <p className="module-phase">PubMed · Europe PMC · 检索结果本地缓存 6 小时</p>
+          </div>
+        </div>
+        <form className="literature-form" onSubmit={runSearch}>
+          <input
+            className="literature-query"
+            value={query}
+            placeholder="检索词（仅检索词会发送给文献源）"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="pubmed">PubMed</option>
+            <option value="europepmc">Europe PMC</option>
+          </select>
+          <input
+            className="literature-year"
+            value={yearFrom}
+            placeholder="起始年"
+            inputMode="numeric"
+            onChange={(e) => setYearFrom(e.target.value.replace(/\D/g, ""))}
+          />
+          <input
+            className="literature-year"
+            value={yearTo}
+            placeholder="结束年"
+            inputMode="numeric"
+            onChange={(e) => setYearTo(e.target.value.replace(/\D/g, ""))}
+          />
+          <button type="submit" disabled={busy || !query.trim()}>
+            {busy ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
+            检索
+          </button>
+        </form>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {results && (
+          <p className="muted literature-meta">
+            {results.cached ? "（本地缓存结果）" : ""}
+            共 {results.count} 条
+          </p>
+        )}
+        <ul className="literature-results">
+          {(results?.articles || []).map((article) => {
+            const key = article.pmid || article.doi;
+            return (
+              <li className="literature-item" key={key}>
+                <div className="literature-title-row">
+                  <button className="literature-title" onClick={() => toggleExpand(article)}>
+                    {article.title}
+                  </button>
+                  <span className="literature-journal">
+                    {article.journal}
+                    {article.year ? ` · ${article.year}` : ""}
+                  </span>
+                </div>
+                <p className="literature-authors">
+                  {(article.authors || []).slice(0, 4).join(", ")}
+                  {article.authorCount > 4 ? " 等" : ""}
+                </p>
+                {(article.hints || []).length > 0 && (
+                  <div className="literature-hints">
+                    {article.hints.map((hint) => (
+                      <span className="hint-tag" key={hint}>
+                        {hint}
+                      </span>
+                    ))}
+                    {article.isOpenAccess && <span className="hint-tag oa">开放获取</span>}
+                  </div>
+                )}
+                {expanded[key] && (
+                  <div className="literature-abstract">
+                    {abstracts[key] ? (
+                      abstracts[key].abstract ? (
+                        <p>{abstracts[key].abstract.replace(/<[^>]+>/g, "")}</p>
+                      ) : (
+                        <p className="muted">该文献未提供结构化摘要。</p>
+                      )
+                    ) : (
+                      <p className="muted">正在加载摘要…</p>
+                    )}
+                  </div>
+                )}
+                <div className="literature-actions">
+                  <button
+                    className="secondary"
+                    onClick={() => importAsMaterial(article)}
+                    disabled={imported[key]}
+                  >
+                    {imported[key] ? <Check size={14} /> : <FilePlus size={14} />}
+                    {imported[key] ? "已导入" : "导入为材料"}
+                  </button>
+                  <button className="secondary" onClick={() => copyCitation(article)}>
+                    {copied === key ? <Check size={14} /> : <Copy size={14} />}
+                    复制引用
+                  </button>
+                  <a
+                    className="icon-link"
+                    href={pubmedLink(article)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="在 PubMed 打开"
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                </div>
+              </li>
+            );
+          })}
+          {results && !results.count && (
+            <li className="memory-empty">没有检索到结果，可尝试更换检索词或文献源。</li>
+          )}
+        </ul>
+        <p className="module-note">
+          证据类型标签由出版类型映射而来，仅为提示，不构成质量结论；全文导入仅限摘要与开放获取许可范围。
+        </p>
+      </section>
+    </div>
+  );
+}
