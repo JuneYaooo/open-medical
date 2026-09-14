@@ -175,7 +175,6 @@ export class AgentRuntime {
       if (calls.length > this.maxToolCalls) {
         // Reject the entire bounded batch without side effects, then let the
         // model split its work. Preserve one result per call for all providers.
-        for (const call of calls) registry.authorize(call.function.name, permissions);
         for (const call of calls) {
           const output = { code: "TOOL_BATCH_LIMIT",
             error: `本轮 ${calls.length} 个工具调用均未执行。每轮最多 ${this.maxToolCalls} 个，请拆分为较小批次后重试。` };
@@ -187,9 +186,22 @@ export class AgentRuntime {
         continue;
       }
       for (const call of calls) {
-        // Authorization is outside the recoverable tool-error path.
-        registry.authorize(call.function.name, permissions);
         signal.throwIfAborted();
+        // An unauthorized tool call is returned to the model as a tool result
+        // so it can adapt (different tool, or ask the user) instead of the
+        // whole run dying on one permission mismatch.
+        try {
+          registry.authorize(call.function.name, permissions);
+        } catch (error) {
+          const output = {
+            code: error.code || "PERMISSION_DENIED",
+            error: `${error.message}（该工具在当前授权下不可用；请改用其他工具完成任务，或向用户说明需要在设置中开启的能力）`,
+          };
+          messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
+          await onTrace({ type: "tool.result", call, output, durationMs: 0 });
+          emit("tool.failed", { tool: call.function.name, call_id: call.id, error: output.error });
+          continue;
+        }
         // Write intent before any hook or tool side effect. Recovery never replays
         // an intent whose result was not durably recorded.
         await onCheckpoint(structuredClone(messages), { pendingToolCall: call.id });

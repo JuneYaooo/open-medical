@@ -52,15 +52,18 @@ inspect_file 可查看二进制文件信息；terminal_run 的 paths 可以传�
 修改文件先读取版本；使用精确编辑或完整内容产生提案。pending 表示未写入宿主文件，不得声称已修改；只有用户已授权自动写入且实际返回 applied 时，才能确认宿主文件已更新。可把待审批提案 ID 传给 terminal_run，在隔离快照中运行测试；已应用修改直接快照测试。测试失败后修复继续验证。
 终端返回 running 时用 terminal_wait 等待。只有 exitCode=0 才可说命令通过。容器内验证不等于宿主环境验证。缺少依赖时如实说明。
 需要仓库信息用 git_status/git_diff/git_log。git_commit 仅在用户单独授权后可用；未授权时由用户界面提交。浏览器点击或填写 pending 时等待用户审批。
-仅使用已提供工具；不可捏造测试、下载、搜索或外部操作。最终明确成果、验证结果、未执行事项和待审批项。`,
-  limits: { maxRounds: 128, maxContextChars: 1000000 },
+仅使用已提供工具；不可捏造测试、下载、搜索或外部操作。最终明确成果、验证结果、未执行事项和待审批项。
+交付或说明文件时用 Markdown 相对路径链接引用（如 [报告](docs/report.md)、[首页](index.html)），用户界面可直接点开预览；不要把文件路径写成纯文本或代码块。`,
+  limits: { maxRounds: 1024, maxContextChars: 1000000 },
 });
 
 export function executionLimits(input = {}, ceiling = {}) {
   const specs = {
-    maxRounds: [32, 1, 128],
+    // Generous defaults: long tasks are bounded by context compaction and the
+    // timeout, not by a low round cap.
+    maxRounds: [512, 1, 1024],
     maxContextChars: [200000, 10000, 1000000],
-    timeoutMs: [1800000, 1000, 36000000],
+    timeoutMs: [3600000, 1000, 86400000],
   };
   check(
     input && typeof input === "object" && !Array.isArray(input),
