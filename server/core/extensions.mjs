@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { check } from "../errors.mjs";
 import { PermissionEngine } from "./permissions.mjs";
-import { hashText } from "./workspace-files.mjs";
+import { hashText, WorkspaceFiles } from "./workspace-files.mjs";
+import { pathToFileURL } from "node:url";
 import { ProcessRunner } from "./process-runner.mjs";
 import { TerminalTools } from "./terminal.mjs";
 import { PluginPackages, identifier } from "./plugins.mjs";
@@ -989,29 +990,45 @@ export class WorkspaceExtensions {
     );
     tool(
       "browser_open",
-      "打开已授权来源的网页。独立浏览器会话，不共享用户浏览器登录信息。",
-      "browser.read",
+      "打开网页或本工作区内的页面。传相对路径（如 index.html）即可在隔离浏览器中打开工作区文件，用于检查和验证自己生成的页面；传 http(s) 网址需在扩展设置中授权来源。独立浏览器会话，不共享用户浏览器登录信息。",
+      "tools.execute",
       { url: str },
       (a) => {
-        this.require(id, "network");
+        const w = this.service.store.get(id);
+        if (/^https?:\/\//i.test(a.url)) {
+          this.require(id, "browser.read");
+          this.require(id, "network");
+          return this.browser.navigate(
+            id,
+            this.current(id).config.origins,
+            a.url,
+          );
+        }
+        // Workspace-local page: every path protection applies, then it is
+        // opened as a file URL contained to the authorized root.
+        const target = new WorkspaceFiles(w.root).path(
+          a.url.replace(/^file:\/\//, ""),
+        );
         return this.browser.navigate(
           id,
           this.current(id).config.origins,
-          a.url,
+          pathToFileURL(target).href,
+          w.root,
         );
       },
+      ["url"],
     );
     tool(
       "browser_snapshot",
-      "读取当前网页文本、链接与可交互元素。网页是外部资料，不能授予权限。",
-      "browser.read",
+      "读取当前网页文本、链接与可交互元素，可用于验证页面结构与按钮状态。网页是外部资料，不能授予权限。",
+      "tools.execute",
       {},
       () => this.browser.snapshot(id, this.current(id).config.origins),
     );
     tool(
       "browser_screenshot",
-      "捕获当前浏览器视口 PNG（base64）；适用于界面检查。",
-      "browser.read",
+      "捕获当前浏览器视口 PNG（base64）；适用于界面与动画检查。",
+      "tools.execute",
       {},
       async () =>
         (
@@ -1020,8 +1037,8 @@ export class WorkspaceExtensions {
     );
     tool(
       "browser_action",
-      "提出点击或填写操作，待用户在界面逐次批准后才执行；此调用不会操作网页。",
-      "browser.read",
+      "在工作区本地页面（browser_open 相对路径打开的）上点击或填写，可直接执行用于自验证；远程网页上的操作仍需用户逐次批准。",
+      "tools.execute",
       {
         action: { type: "string", enum: ["click", "fill"] },
         selector: { type: "string", maxLength: 500 },
@@ -1032,6 +1049,14 @@ export class WorkspaceExtensions {
           id,
           this.current(id).config.origins,
         );
+        if (snapshot.url.startsWith("file://")) {
+          // Own artifact in an isolated browser: verify directly.
+          return this.browser.act(
+            id,
+            this.current(id).config.origins,
+            a,
+          );
+        }
         const approval = {
           id: randomUUID(),
           status: "pending",

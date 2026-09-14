@@ -63,13 +63,18 @@ test("advanced capabilities default denied and require explicit consent, revisio
     "terminal_start",
     "mcp_list",
     "plugin_list",
-    "browser_snapshot",
     "memory_list",
   ])
     await assert.rejects(
       f.tool(name, {}),
       (e) => e.code === "PERMISSION_DENIED",
     );
+  // Local-file browsing for self-verification is allowed by default, but
+  // remote web pages still require explicit origin/network authorization.
+  await assert.rejects(
+    f.tool("browser_open", { url: "https://example.com/" }),
+    (e) => e.code === "PERMISSION_DENIED",
+  );
   await assert.rejects(
     f.manage({ action: "configure", consent: false }),
     (e) => e.code === "EXTENSION_CONSENT",
