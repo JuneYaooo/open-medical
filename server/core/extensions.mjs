@@ -60,6 +60,13 @@ export class WorkspaceExtensions {
     p.require(key);
     return p;
   }
+  searchKey(id) {
+    try {
+      return this.oauth.vault.get(`brave-search:${id}`).key || null;
+    } catch {
+      return null; // no persistent credential storage available
+    }
+  }
   async close(id) {
     await this.service.advancedMedia?.stop(id);
     this.service.pty?.close(id);
@@ -204,12 +211,29 @@ export class WorkspaceExtensions {
     const searchUrl =
       body.searchUrl === undefined ? config.searchUrl : body.searchUrl;
     if (searchUrl) permittedURL(searchUrl, origins);
+    // The Brave key lives in the encrypted vault, never in the workspace
+    // record; the config only keeps a boolean flag.
+    const braveKey =
+      body.braveKey === undefined ? this.searchKey(id) : body.braveKey;
+    check(
+      braveKey === null ||
+        braveKey === "" ||
+        (typeof braveKey === "string" &&
+          /^[A-Za-z0-9_-]{16,120}$/.test(braveKey)),
+      "INVALID_INPUT",
+      "Brave Search API Key 格式无效",
+    );
+    if (body.braveKey !== undefined)
+      this.oauth.vault.set(`brave-search:${id}`, {
+        key: braveKey || null,
+      });
     check(!body.terminal || image, "SANDBOX_IMAGE", "开启终端前请选择本地镜像");
     await this.close(id);
     const value = this.mutate(id, body, (c, w) => {
       c.image = image;
       c.origins = origins;
       c.searchUrl = searchUrl || undefined;
+      c.braveSearch = Boolean(braveKey);
       c.memory = memory;
       c.terminalNetwork =
         body.terminal === true && body.terminalNetwork === true;
@@ -635,7 +659,7 @@ export class WorkspaceExtensions {
     }
   }
   register(id, registry, runId) {
-    registerWebTools(this, id, registry);
+    registerWebTools(this, id, registry, runId);
     const tool = (
       name,
       description,

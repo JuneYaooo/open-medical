@@ -61,7 +61,7 @@ const ENGINE_HEADERS = {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
   accept: "application/rss+xml, text/html, text/xml",
 };
-async function fetchEngine(url, signal, fetchImpl = fetch) {
+async function fetchEngine(url, signal, fetchImpl = fetch, headers) {
   const target = new URL(url);
   check(
     target.protocol === "https:" &&
@@ -77,7 +77,7 @@ async function fetchEngine(url, signal, fetchImpl = fetch) {
       ...(signal ? [signal] : []),
       AbortSignal.timeout(12000),
     ]),
-    headers: ENGINE_HEADERS,
+    headers: { ...ENGINE_HEADERS, ...(headers || {}) },
   });
   check(
     response.ok && response.body,
@@ -160,7 +160,13 @@ function parseDuckLite(html) {
 const sanitizeQuery = (query) =>
   // eslint-disable-next-line no-control-regex -- intentional: strip C0 controls
   query.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 400);
-export async function searchWeb(query, config, signal, fetchImpl = fetch) {
+export async function searchWeb(
+  query,
+  config,
+  signal,
+  fetchImpl = fetch,
+  braveKey = null,
+) {
   const q = sanitizeQuery(query);
   check(q.length > 0, "SEARCH_INPUT", "搜索词为空");
   if (config.searchUrl) {
@@ -181,8 +187,28 @@ export async function searchWeb(query, config, signal, fetchImpl = fetch) {
       snippet: String(r.content || "").slice(0, 500),
     })) };
   }
-  // Default engine: Bing RSS (accessible worldwide incl. CN); DuckDuckGo lite
-  // as a keyless fallback for environments where Bing redirects badly.
+  // Brave Search API when a key is configured (encrypted local vault).
+  if (braveKey) {
+    try {
+      const response = await fetchEngine(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=10`,
+        signal,
+        fetchImpl,
+        { "x-subscription-token": braveKey, accept: "application/json" },
+      );
+      const data = JSON.parse(response);
+      const results = (data.web?.results || []).map((r) => ({
+        title: String(r.title || "").slice(0, 300),
+        url: String(r.url || "").slice(0, 2000),
+        snippet: String(r.description || "").slice(0, 500),
+      }));
+      if (results.length) return { engine: "brave", results: results.slice(0, 10) };
+    } catch (error) {
+      if (error.code === "SEARCH_LIMIT") throw error;
+    }
+  }
+  // Keyless default: Bing RSS (accessible worldwide incl. CN); DuckDuckGo lite
+  // as a fallback for environments where Bing redirects badly.
   try {
     const xml = await fetchEngine(
       `https://www.bing.com/search?q=${encodeURIComponent(q)}&format=rss&count=10`,
@@ -203,11 +229,11 @@ export async function searchWeb(query, config, signal, fetchImpl = fetch) {
   check(
     results.length > 0,
     "SEARCH_RESPONSE",
-    "两个搜索源都未返回结果，请稍后重试或配置 SearXNG",
+    "搜索源都未返回结果，请稍后重试或配置 SearXNG / Brave",
   );
   return { engine: "duckduckgo", results };
 }
-export function registerWebTools(extensions, id, registry) {
+export function registerWebTools(extensions, id, registry, runId = "manual") {
   const add = (name, description, properties, execute, permission) =>
     registry.register({
       permission: permission || "browser.read",
@@ -239,13 +265,41 @@ export function registerWebTools(extensions, id, registry) {
   );
   // Web search works out of the box (Bing RSS, keyless); the engine hosts are
   // fixed, so no per-origin authorization applies to the query itself.
+  // Workspace search policy: allow (default) / ask (per-run consent) / deny.
   add(
     "web_search",
-    "联网搜索公开网页，返回标题、URL 和摘要。默认用必应，无需配置；也可在扩展设置中配置 SearXNG 优先使用。查资料、找文档、核实事实时使用；拿到 URL 后可用 web_fetch 读取正文（需来源授权）。",
+    "联网搜索公开网页，返回标题、URL 和摘要。默认用必应，无需配置；配置 SearXNG 或 Brave Search Key 后优先使用更高质量引擎。查资料、找文档、核实事实时使用；拿到 URL 后可用 web_fetch 读取正文（需来源授权）。",
     {
       query: { type: "string", minLength: 1, maxLength: 1000 },
     },
-    (a, c) => searchWeb(a.query, extensions.current(id).config, c.signal),
+    (a, c) => {
+      const workspace = extensions.service.store.get(id);
+      const policy = workspace.searchPolicy || "allow";
+      if (policy === "deny")
+        check(
+          false,
+          "SEARCH_DISABLED",
+          "本工作区已禁用联网搜索；如需开启请在工作区设置中调整",
+          403,
+        );
+      if (policy === "ask") {
+        const run = workspace.runs.find((r) => r.id === runId);
+        check(
+          run?.searchConsent === true,
+          "SEARCH_CONSENT",
+          "本工作区要求每个任务单独授权联网搜索：请告知用户在发送任务时勾选「联网」，或在工作区设置中将搜索权限改为始终允许",
+          403,
+        );
+      }
+      const config = extensions.current(id).config;
+      return searchWeb(
+        a.query,
+        config,
+        c.signal,
+        fetch,
+        config.braveSearch ? extensions.searchKey(id) : null,
+      );
+    },
     "tools.execute",
   );
 }

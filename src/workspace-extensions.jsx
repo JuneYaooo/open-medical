@@ -12,6 +12,7 @@ const defaults = {
   image: "",
   origins: "",
   searchUrl: "",
+  braveKey: "",
   memory: { provider: "lsa" },
 };
 export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
@@ -218,6 +219,22 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
                 />
               </label>
               <label>
+                Brave Search API Key（可选，加密存储）
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={form.braveKey}
+                  onChange={(e) =>
+                    setForm({ ...form, braveKey: e.target.value })
+                  }
+                  placeholder={
+                    data?.config?.braveSearch
+                      ? "已保存（留空保持不变，输入新值更换）"
+                      : "BSA… 免费层每月 2000 次，brave.com/search/api 申请"
+                  }
+                />
+              </label>
+              <label>
                 语义记忆后端
                 <select
                   value={form.memory.provider}
@@ -279,9 +296,12 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
                 disabled={!consent}
                 onClick={() =>
                   act(async () => {
+                    const { braveKey, ...rest } = form;
                     await manage({
                       action: "configure",
-                      ...form,
+                      ...rest,
+                      // 留空 = 保持已保存的 key 不变；有值才提交更换。
+                      ...(braveKey ? { braveKey } : {}),
                       origins: form.origins
                         .split("\n")
                         .map((s) => s.trim())
