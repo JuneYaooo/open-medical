@@ -1156,3 +1156,21 @@ iframe.wb-file-preview {
 .wb-browse-toggle:hover {
   color: #dfe5e9;
 }
+
+/* --- Composer: short start, capped auto-grow, tools in the bottom row --- */
+.generic-workspaces .desk-composer textarea {
+  min-height: 44px;
+  max-height: 260px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+.generic-workspaces .wb-composer-footer {
+  flex-wrap: wrap;
+}
+.generic-workspaces .wb-composer-footer .wb-composer-tools {
+  margin: 0;
+  min-width: 0;
+}
+.generic-workspaces .desk-composer textarea {
+  resize: none;
+}
