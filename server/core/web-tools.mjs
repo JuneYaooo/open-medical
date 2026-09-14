@@ -233,7 +233,7 @@ export async function searchWeb(
   );
   return { engine: "duckduckgo", results };
 }
-export function registerWebTools(extensions, id, registry, runId = "manual") {
+export function registerWebTools(extensions, id, registry, _runId = "manual") {
   const add = (name, description, properties, execute, permission) =>
     registry.register({
       permission: permission || "browser.read",
