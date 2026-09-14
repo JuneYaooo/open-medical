@@ -158,6 +158,7 @@ function parseDuckLite(html) {
   return items;
 }
 const sanitizeQuery = (query) =>
+  // eslint-disable-next-line no-control-regex -- intentional: strip C0 controls
   query.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 400);
 export async function searchWeb(query, config, signal, fetchImpl = fetch) {
   const q = sanitizeQuery(query);

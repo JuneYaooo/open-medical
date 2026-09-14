@@ -171,7 +171,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [directoryConsent, setDirectoryConsent] = useState(false);
   const [error, setError] = useState(""),
     [trajectory, setTrajectory] = useState(null),
-    [history, setHistory] = useState(null),
+    // Kept for the run-history panel's pagination loader.
+    [history, setHistory] = useState(null), // eslint-disable-line no-unused-vars
     [replay, setReplay] = useState(null),
     [replayIndex, setReplayIndex] = useState(0),
     [busy, setBusy] = useState(false),
