@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   FolderOpen,
+  AlertTriangle,
   History,
   Loader2,
   MessageSquare,
@@ -89,6 +90,7 @@ export function WorkbenchHome({
   const [prompt, setPrompt] = useState("");
   const [patientId, setPatientId] = useState("");
   const [starting, setStarting] = useState(false);
+  const [risksOpen, setRisksOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const inputRef = useRef(null);
@@ -99,16 +101,18 @@ export function WorkbenchHome({
     let live = true;
     const refresh = async () => {
       try {
-        const [people, todo, inbox] = await Promise.all([
+        const [people, todo, inbox, risks] = await Promise.all([
           api("/api/patients"),
           api("/api/reminders"),
           api("/api/inbox"),
+          api("/api/risk-alerts"),
         ]);
         if (live) {
           setData({
             patients: people.patients,
             reminders: todo.reminders,
             inbox: inbox.messages,
+            risks,
           });
           setError("");
         }
@@ -427,7 +431,46 @@ export function WorkbenchHome({
               <b>{data ? data.reminders.length : "—"}</b>
               <ArrowRight size={14} />
             </button>
+            <button onClick={() => setRisksOpen((value) => !value)}>
+              <AlertTriangle size={18} />
+              <span>风险提醒</span>
+              <b className={data?.risks?.counts?.critical ? "risk-critical" : ""}>
+                {data ? data.risks.counts.active : "—"}
+              </b>
+              <ArrowRight size={14} />
+            </button>
           </section>
+          {risksOpen && data?.risks?.alerts?.length > 0 && (
+            <section className="hub-risk-list" aria-label="活跃风险提醒">
+              {data.risks.alerts.slice(0, 6).map((alert) => (
+                <div className={`hub-risk risk-${alert.severity}`} key={alert.id}>
+                  <div className="hub-risk-main">
+                    <b>{alert.patientName}</b> · {alert.title}
+                    <small>{alert.message}</small>
+                  </div>
+                  <div className="hub-risk-actions">
+                    {alert.patientId && (
+                      <button
+                        className="text-button"
+                        onClick={() => onPatient({ id: alert.patientId })}
+                      >
+                        打开患者
+                      </button>
+                    )}
+                    <button
+                      className="text-button"
+                      onClick={async () => {
+                        await api(`/api/risk-alerts/${alert.id}/ack`, "POST", {});
+                        onRefresh().catch(() => {});
+                      }}
+                    >
+                      确认
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
           <section className="hub-recent">
             <div className="hub-section-head">
               <h2>继续最近的工作</h2>

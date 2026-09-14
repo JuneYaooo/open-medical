@@ -3757,3 +3757,47 @@ blockquote p {
   gap: 4px;
   flex-shrink: 0;
 }
+
+/* ---- risk alerts ---- */
+.hub-attention button .risk-critical {
+  background: #a04b3a;
+  color: white;
+}
+.hub-risk-list,
+.patient-risk-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.hub-risk {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 10px;
+  padding: 9px 12px;
+  border: 1px solid #e3ead9;
+  background: #fbfcfa;
+}
+.hub-risk.risk-critical {
+  background: #faeceb;
+  border-color: #ecd2cf;
+}
+.hub-risk.risk-warning {
+  background: #fbf7ea;
+  border-color: #e4d5a8;
+}
+.hub-risk-main b {
+  font-size: 13px;
+}
+.hub-risk-main small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #5d6c5f;
+}
+.hub-risk-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}

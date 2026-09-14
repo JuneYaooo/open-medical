@@ -83,6 +83,7 @@ export function PatientsView({
   const [tab, setTab] = useState("overview");
   const [messages, setMessages] = useState([]);
   const [followups, setFollowups] = useState([]);
+  const [risks, setRisks] = useState([]);
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
@@ -122,16 +123,18 @@ export function PatientsView({
     setTab(nextTab);
     setConsent(false);
     setPaste("");
-    const [one, msgs, jobs] = await Promise.all([
+    const [one, msgs, jobs, risks] = await Promise.all([
       api(`/api/patients/${id}`),
       api(`/api/patients/${id}/messages`),
       api(`/api/patients/${id}/followups`),
+      api(`/api/risk-alerts?patientId=${id}`),
     ]);
     const work = await api(`/api/sessions/${one.sessionId}`);
     if (version !== patientGeneration.current) return;
     setDetail(one);
     setMessages(msgs.messages);
     setFollowups(jobs.jobs);
+    setRisks(risks.alerts);
     setSession(work);
   };
   const refreshPatient = async () => {
@@ -585,6 +588,27 @@ export function PatientsView({
           </div>
           {tab === "overview" && (
             <div className="detail-panel">
+              {risks.length > 0 && (
+                <div className="patient-risk-list">
+                  {risks.map((alert) => (
+                    <div className={`hub-risk risk-${alert.severity}`} key={alert.id}>
+                      <div className="hub-risk-main">
+                        <b>{alert.title}</b>
+                        <small>{alert.message}</small>
+                      </div>
+                      <button
+                        className="text-button"
+                        onClick={async () => {
+                          await api(`/api/risk-alerts/${alert.id}/ack`, "POST", {});
+                          await openPatient(detail.id, tab);
+                        }}
+                      >
+                        确认
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="count-cards">
                 <div>
                   <b>{session.files.length}</b>
