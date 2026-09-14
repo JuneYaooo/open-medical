@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, streamTurn } from "./agent-runtime";
 import { Badge, IconButton, Modal } from "./components";
+import { ClinicalPanel } from "./patient-clinical";
 
 const ORGANIZE_PROMPT =
   "请整理本患者的病例材料：生成病历时间线、检验数值摘录和用药资料核对，保留来源与行号，标注缺失信息。";
@@ -566,6 +567,7 @@ export function PatientsView({
           <div className="tab-row">
             {[
               ["overview", "概览"],
+              ["clinical", "临床资料"],
               [
                 "messages",
                 `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`,
@@ -631,6 +633,13 @@ export function PatientsView({
                 评估与摘要只是待复核草稿：没有药物知识库、剂量或相互作用判断，不构成诊疗决定。
               </p>
             </div>
+          )}
+          {tab === "clinical" && (
+            <ClinicalPanel
+              detail={detail}
+              onChanged={refreshPatient}
+              onError={setError}
+            />
           )}
           {tab === "messages" && (
             <div className="detail-panel">
