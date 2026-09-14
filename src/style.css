@@ -3837,3 +3837,74 @@ blockquote p {
   color: #5d6c5f;
   font-weight: 600;
 }
+
+/* ---- DRG estimator view ---- */
+.drg-view {
+  width: min(880px, 100%);
+}
+.drg-settings {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #5d6c5f;
+}
+.drg-settings input {
+  width: 110px;
+  border: 1px solid #d7e0d0;
+  border-radius: 7px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12px;
+}
+.drg-import {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #d7e0d0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.drg-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.drg-form input {
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13px;
+}
+.drg-result {
+  border: 1px solid #b8cfbc;
+  background: #f3f8f1;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+.drg-code {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.drg-code b {
+  font-size: 26px;
+  color: #245740;
+  letter-spacing: 0.03em;
+}
+.drg-code span {
+  color: #5d6c5f;
+  font-size: 12.5px;
+}
+.drg-result p {
+  margin: 0;
+  font-size: 13px;
+  color: #3c4a3e;
+}
+.drg-result .risk {
+  color: #a04b3a;
+}
