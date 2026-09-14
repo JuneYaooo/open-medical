@@ -27,7 +27,6 @@ import { TeamModels } from "./workbench/team-models";
 import { RemoteJobs } from "./workbench/remote-jobs";
 import { DesktopPanel } from "./workbench/desktop-control";
 import { BrowserPanel } from "./workbench/browser";
-import { FileEditor } from "./workbench/editor";
 import { TaskSidebar } from "./workbench/sidebar";
 import { RichMessage } from "./workbench/message";
 import { DiffView } from "./workbench/diff";
@@ -54,11 +53,9 @@ const stateLabel = (value) =>
   })[value] || value;
 
 export function WorkspacesView({ config, onOpenSettings }) {
-  const [fileLine, setFileLine] = useState(1);
   const [view, setView] = useState("chat");
   const [showCreate, setShowCreate] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true),
-    [panelWidth, setPanelWidth] = useState(48);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [attachments, setAttachments] = useState([]),
     [attachmentError, setAttachmentError] = useState("");
   const selectedId = useRef(null),
@@ -85,11 +82,15 @@ export function WorkspacesView({ config, onOpenSettings }) {
   }
   // Open a workspace file in the results panel, tracked as a tab so several
   // files can be viewed and switched between.
-  async function openInTab(path, line = 1) {
+  async function openInTab(path) {
     const id = selectedId.current;
     try {
       let result = { path };
-      if (!/\.(png|jpe?g|webp|gif|pdf)$/i.test(path)) {
+      // Image/PDF stream as blobs; office docs go through the document
+      // runtime; everything readable as text (html/md/code) uses read_file.
+      if (
+        !/\.(png|jpe?g|webp|gif|pdf|docx|xlsx|pptx)$/i.test(path)
+      ) {
         result = await api(`/api/workspaces/${id}/tools`, "POST", {
           tool: "read_file",
           arguments: { path },
@@ -98,7 +99,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
       if (id === selectedId.current) {
         setFile(result);
         setContent(result.text || "");
-        setFileLine(line);
         setView("files");
         setOpenTabs((tabs) =>
           tabs.some((t) => t.path === path)
@@ -111,13 +111,12 @@ export function WorkspacesView({ config, onOpenSettings }) {
     }
   }
   async function openFile(href) {
-    const location = href.match(/(?:#L?|:)(\d+)(?::\d+)?$/);
     let path = decodeURIComponent(href)
       .replace(/#L?\d+.*$/, "")
       .replace(/:\d+(?::\d+)?$/, "");
     const prefix = current.root.replace(/\/$/, "") + "/";
     if (path.startsWith(prefix)) path = path.slice(prefix.length);
-    await openInTab(path, Number(location?.[1] || 1));
+    await openInTab(path);
   }
   function closeTab(path) {
     setOpenTabs((tabs) => {
@@ -199,7 +198,9 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [content, setContent] = useState(""),
     [preview, setPreview] = useState(null),
     [officeText, setOfficeText] = useState(""),
-    [officeBusy, setOfficeBusy] = useState(false);
+    [officeError, setOfficeError] = useState(""),
+    [officeBusy, setOfficeBusy] = useState(false),
+    [htmlUrl, setHtmlUrl] = useState("");
   // Binary previews (image/PDF) are fetched as blobs with the session token
   // and rendered from object URLs; nothing untrusted is fetched cross-origin.
   useEffect(() => {
@@ -229,6 +230,53 @@ export function WorkspacesView({ config, onOpenSettings }) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [file?.path, current?.id]);
+  const previewKind = (() => {
+    if (!file) return null;
+    if (preview) return preview.kind;
+    const extension = (file.path || "").split(".").at(-1)?.toLowerCase();
+    if (extension === "html" || extension === "htm") return "html";
+    if (extension === "md" || extension === "markdown") return "markdown";
+    if (["docx", "xlsx", "pptx"].includes(extension)) return "office";
+    return "text";
+  })();
+  // HTML preview renders from an opaque-origin blob: scripts may run for
+  // interactive pages, but they cannot touch the app origin or credentials.
+  useEffect(() => {
+    if (previewKind !== "html" || !content) {
+      setHtmlUrl("");
+      return undefined;
+    }
+    const url = URL.createObjectURL(
+      new Blob([content], { type: "text/html" }),
+    );
+    setHtmlUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [previewKind, content]);
+  // Office documents convert automatically through the document runtime.
+  useEffect(() => {
+    if (previewKind !== "office" || !file || officeBusy || officeText) {
+      if (previewKind !== "office") setOfficeError("");
+      return;
+    }
+    let alive = true;
+    setOfficeBusy(true);
+    setOfficeError("");
+    api(base + "/tools", "POST", {
+      tool: "document_read",
+      arguments: { path: file.path },
+    })
+      .then((result) => {
+        if (!alive) return;
+        setOfficeText(
+          result.text || result.markdown || JSON.stringify(result, null, 2),
+        );
+      })
+      .catch((e) => alive && setOfficeError(e.message))
+      .finally(() => alive && setOfficeBusy(false));
+    return () => {
+      alive = false;
+    };
+  }, [previewKind, file?.path, current?.id]);
   const [prompt, setPrompt] = useState(""),
     [partial, setPartial] = useState(""),
     [events, setEvents] = useState([]);
@@ -650,7 +698,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
         {current ? (
           <section
             className={`workspace-detail ${view !== "chat" ? "wb-panel-open" : ""}`}
-            style={{ "--wb-panel-width": `${panelWidth}%` }}
           >
             <header className="wb-topbar">
               <div className="wb-topbar-left">
@@ -965,37 +1012,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                 hidden={view === "chat"}
                 aria-label="工作面板"
               >
-                <header className="wb-inspector-header">
-                  <span>
-                    {
-                      {
-                        media: "图片与音视频",
-                        browser: "浏览器预览",
-                        files: "文件预览",
-                        review: "变更审批",
-                        history: "运行记录",
-                        settings: "工作区设置",
-                      }[view]
-                    }
-                  </span>
-                  <label>
-                    宽度
-                    <input
-                      aria-label="工作面板宽度"
-                      type="range"
-                      min="32"
-                      max="65"
-                      value={panelWidth}
-                      onChange={(e) => setPanelWidth(Number(e.target.value))}
-                    />
-                  </label>
-                  <button
-                    aria-label="关闭工作面板"
-                    onClick={() => setView("chat")}
-                  >
-                    <X size={16} />
-                  </button>
-                </header>
                 {view === "media" && (
                   <MediaPanel
                     key={current.id}
@@ -1263,6 +1279,17 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     </div>
                     </>
                   )}
+                  <div className="wb-files-toolbar">
+                    <button
+                      className="wb-browse-toggle"
+                      onClick={() => {
+                        setBrowserOpen(!browserOpen);
+                        if (!browserOpen) act(() => list(directory));
+                      }}
+                    >
+                      {browserOpen ? "收起浏览" : "浏览文件"}
+                    </button>
+                  </div>
                   {openTabs.length > 0 && (
                     <div className="wb-file-tabs" role="tablist">
                       {openTabs.map((tab) => (
@@ -1290,122 +1317,50 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     </div>
                   )}
                   {file && (
-                      <div>
-                        <div className="wb-editor-heading">
-                          <h3>{file.path}</h3>
-                          <button
-                            onClick={() => {
-                              setPrompt(
-                                (p) => p + `\n请查看文件：${file.path}\n`,
-                              );
-                              promptRef.current?.focus();
-                            }}
-                          >
-                            引用到对话
-                          </button>
-                        </div>
-                        {preview ? (
-                          preview.kind === "image" ? (
-                            <img
-                              className="wb-file-preview"
-                              src={preview.url}
-                              alt={file.path}
-                            />
-                          ) : (
-                            <iframe
-                              className="wb-file-preview"
-                              title={file.path}
-                              src={preview.url}
-                            />
-                          )
-                        ) : /\.(docx|xlsx|pptx)$/i.test(file.path) ? (
-                          <div className="wb-office-preview">
-                            <div className="workspace-toolbar">
-                              <button
-                                className="secondary"
-                                disabled={officeBusy || busy || running}
-                                onClick={() =>
-                                  act(async () => {
-                                    setOfficeBusy(true);
-                                    try {
-                                      const result = await api(
-                                        base + "/tools",
-                                        "POST",
-                                        {
-                                          tool: "document_read",
-                                          arguments: { path: file.path },
-                                        },
-                                      );
-                                      setOfficeText(
-                                        result.text ||
-                                          result.markdown ||
-                                          JSON.stringify(result, null, 2),
-                                      );
-                                    } finally {
-                                      setOfficeBusy(false);
-                                    }
-                                  })
-                                }
-                              >
-                                {officeBusy ? "转换中…" : "转换为文本预览"}
-                              </button>
-                              <small>
-                                Word / Excel / PPT 通过办公文档运行时（Docker）读取
-                              </small>
-                            </div>
-                            {officeText && (
-                              <pre className="wb-office-text">{officeText}</pre>
-                            )}
-                          </div>
+                    <div className="wb-viewer">
+                      {preview ? (
+                        preview.kind === "image" ? (
+                          <img
+                            className="wb-file-preview"
+                            src={preview.url}
+                            alt={file.path}
+                          />
                         ) : (
-                          <>
-                            <FileEditor
-                          key={`${current.id}-${file.path}`}
-                          content={content}
-                          onChange={setContent}
-                          line={fileLine}
-                          onQuote={(selected) => {
-                            if (!selected) {
-                              setError("请先在文件编辑器中选中需要讨论的内容");
-                              return;
-                            }
-                            setPrompt(
-                              (p) =>
-                                p +
-                                `\n关于 ${file.path} 中这段代码：\n\`\`\`\n${selected}\n\`\`\`\n`,
-                            );
-                            promptRef.current?.focus();
-                          }}
+                          <iframe
+                            className="wb-file-preview"
+                            title={file.path}
+                            src={preview.url}
+                          />
+                        )
+                      ) : previewKind === "html" ? (
+                        <iframe
+                          className="wb-file-preview"
+                          title={file.path}
+                          src={htmlUrl}
+                          sandbox="allow-scripts allow-modals allow-popups"
                         />
-                        <button
-                          className="secondary"
-                          disabled={
-                            busy ||
-                            running ||
-                            !current.permissions.grants["filesystem.write"]
-                          }
-                          onClick={() =>
-                            act(async () => {
-                              await api(base + "/tools", "POST", {
-                                tool: "propose_file_write",
-                                arguments: {
-                                  path: file.path,
-                                  content,
-                                  ...(file.hash
-                                    ? { expectedHash: file.hash }
-                                    : {}),
-                                },
-                              });
-                              await refresh();
-                            })
-                          }
-                        >
-                          提交修改供批准
-                        </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                      ) : previewKind === "markdown" ? (
+                        <div className="wb-md-preview">
+                          <RichMessage text={content} onOpenFile={openFile} />
+                        </div>
+                      ) : previewKind === "office" ? (
+                        <div className="wb-office-preview">
+                          {officeBusy && (
+                            <p className="wb-muted">正在通过办公运行时转换…</p>
+                          )}
+                          {!officeBusy && !officeText && !officeError && (
+                            <p className="wb-muted">正在读取文档…</p>
+                          )}
+                          {officeError && (
+                            <p className="wb-muted">{officeError}</p>
+                          )}
+                          {officeText && <RichMessage text={officeText} />}
+                        </div>
+                      ) : (
+                        <pre className="wb-viewer-text">{content}</pre>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div hidden={view !== "review"}>
                   {current.approvals.length === 0 && (
