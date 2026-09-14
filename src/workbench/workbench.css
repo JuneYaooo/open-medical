@@ -926,3 +926,21 @@
     flex-basis: 100%;
   }
 }
+
+/* --- Write-scope editor in the authorization panel --- */
+.wb-write-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0;
+  font-size: 12px;
+  color: #b4b4b4;
+}
+.wb-write-scope input {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.wb-write-scope small {
+  color: #7d858c;
+  font-size: 11px;
+}

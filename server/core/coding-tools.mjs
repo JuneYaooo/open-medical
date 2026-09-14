@@ -85,15 +85,26 @@ export function registerCodingTools(
         },
       },
     },
-    (a) =>
-      service.propose(id, runId, files.edit(a.path, a.edits, a.expectedHash)),
+    (a) => {
+      // Scope first, before hash checks: an out-of-scope write must fail
+      // closed with WRITE_SCOPE rather than a misleading version conflict.
+      service.assertWriteScope(id, a.path, runId);
+      return service.propose(
+        id,
+        runId,
+        files.edit(a.path, a.edits, a.expectedHash),
+      );
+    },
   );
   add(
     "propose_file_delete",
     "提出删除单个文本文件，绑定原 hash，批准前不会删除。",
     "filesystem.write",
     { path: str, expectedHash: str },
-    (a) => service.propose(id, runId, files.deletion(a.path, a.expectedHash)),
+    (a) => {
+      service.assertWriteScope(id, a.path, runId);
+      return service.propose(id, runId, files.deletion(a.path, a.expectedHash));
+    },
   );
   add(
     "read_file_proposal",
@@ -124,6 +135,7 @@ export function registerCodingTools(
         "只能修订待审批写入提案",
         409,
       );
+      service.assertWriteScope(id, original.path, runId);
       return service.propose(
         id,
         runId,

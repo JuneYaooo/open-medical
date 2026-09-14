@@ -452,6 +452,25 @@ export class WorkspaceService {
     };
   }
   assertWriteScope(id, path, runId) {
+    // Workspace-level write scope: when set, only the configured subtrees of
+    // the authorized root may be written — enforced here so every write entry
+    // point (proposals, terminal exports, extensions, subagents) inherits it.
+    const record = this.store.get(id);
+    if (Array.isArray(record.writeScope)) {
+      const files = new WorkspaceFiles(record.root);
+      const canonical = relative(
+        files.root,
+        files.path(path, { create: true, parents: true }),
+      );
+      check(
+        record.writeScope.some(
+          (scope) => canonical === scope || canonical.startsWith(scope + "/"),
+        ),
+        "WRITE_SCOPE",
+        "此路径不在工作区的可写范围内",
+        403,
+      );
+    }
     const team = this.teams.get(id);
     if (!team) return;
     const files = new WorkspaceFiles(this.store.get(id).root);
@@ -657,6 +676,12 @@ export class WorkspaceService {
         "需要明确授权 Agent 执行本地 Git 写操作，且领域必须允许",
         412,
       );
+    let writeScope;
+    if (body.writeScope !== undefined)
+      writeScope =
+        body.writeScope === null
+          ? null
+          : this.#normalizeWriteScope(id, body.writeScope);
     const permissions = new PermissionEngine({ profile, grants }).snapshot();
     return publicWorkspace(
       this.store.update(
@@ -664,6 +689,12 @@ export class WorkspaceService {
         (w) => {
           w.permissions = permissions;
           w.approvalPolicy = approvalPolicy;
+          if (body.writeScope !== undefined) {
+            w.writeScope = writeScope;
+            this.store.event(id, "manual", "write_scope.changed", {
+              writeScope,
+            });
+          }
           w.contextEpoch = (w.contextEpoch || 0) + 1;
           this.pty.close(id);
           void this.extensions.close(id);
@@ -675,6 +706,44 @@ export class WorkspaceService {
         this.revision(body),
       ),
     );
+  }
+  // Sub-directory write scope entries go through WorkspaceFiles.path so the
+  // same protections apply as to real writes: relative-only, no traversal,
+  // no forbidden names (.git/.env/keys), no symlinked segments, platform-safe.
+  #normalizeWriteScope(id, entries) {
+    check(
+      Array.isArray(entries) &&
+        entries.length >= 1 &&
+        entries.length <= 10 &&
+        entries.every((entry) => typeof entry === "string"),
+      "WRITE_SCOPE",
+      "可写范围需为 1–10 个子目录路径，或留空表示整个工作区",
+    );
+    const files = new WorkspaceFiles(this.store.get(id).root);
+    const normalized = [];
+    for (const entry of entries) {
+      check(
+        entry.length > 0 && entry.length <= 200 && !entry.includes("\0"),
+        "WRITE_SCOPE",
+        "可写子目录路径格式无效",
+      );
+      const rel = relative(
+        files.root,
+        files.path(entry, { create: true, parents: true }),
+      );
+      check(
+        rel !== "",
+        "WRITE_SCOPE",
+        "可写范围不能是工作区根目录本身；清除配置即代表整个工作区",
+      );
+      check(
+        !normalized.some((existing) => scopesOverlap(existing, rel)),
+        "WRITE_SCOPE",
+        "可写子目录之间不能互相包含",
+      );
+      normalized.push(rel);
+    }
+    return normalized;
   }
   revision(body) {
     check(
@@ -742,6 +811,7 @@ export class WorkspaceService {
         ),
         permission: "filesystem.write",
         execute: (a) => {
+          this.assertWriteScope(id, a.path, runId);
           const approval = files.proposal(
             a.path,
             a.content,
@@ -1221,6 +1291,7 @@ export class WorkspaceService {
       "只能回退已应用的现有文本文件修改",
       409,
     );
+    this.assertWriteScope(id, original.path, "manual");
     const proposal = new WorkspaceFiles(w.root).proposal(
       original.path,
       original.before,
@@ -1268,8 +1339,12 @@ export class WorkspaceService {
       "审批决定无效",
     );
     const approved = body.decision === "approve";
-    if (approved)
+    if (approved) {
       new PermissionEngine(w.permissions).require("filesystem.write");
+      // Defense in depth: re-verify the scope at decision time even though
+      // authority changes revoke pending approvals.
+      this.assertWriteScope(id, approval.path, approval.runId);
+    }
     this.store.update(
       id,
       (current) => {

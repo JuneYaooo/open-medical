@@ -162,7 +162,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
   const [profile, setProfile] = useState("standard"),
     [write, setWrite] = useState(false),
     [autoWrite, setAutoWrite] = useState("review"),
-    [gitWrite, setGitWrite] = useState(false);
+    [gitWrite, setGitWrite] = useState(false),
+    [writeScopeText, setWriteScopeText] = useState("");
   const [files, setFiles] = useState([]),
     [directory, setDirectory] = useState("."),
     [file, setFile] = useState(null),
@@ -259,6 +260,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
       setWrite(w.permissions.grants["filesystem.write"]);
       setAutoWrite(w.approvalPolicy || "review");
       setGitWrite(w.permissions.grants["git.write"] === true);
+      setWriteScopeText((w.writeScope || []).join(", "));
       const log = await api(`/api/workspaces/${id}/events`);
       if (selectedId.current === id) setEvents(log.events);
       return w;
@@ -1132,6 +1134,24 @@ export function WorkspacesView({ config, onOpenSettings }) {
                           />
                           授权 Agent 提交本地 Git 历史（不包含推送）
                         </label>
+                        <label className="wb-write-scope">
+                          可写子目录
+                          <input
+                            value={writeScopeText}
+                            disabled={
+                              !write ||
+                              profile === "minimal" ||
+                              busy ||
+                              running
+                            }
+                            placeholder="留空 = 整个工作区；示例：docs, src/lib"
+                            onChange={(e) => setWriteScopeText(e.target.value)}
+                          />
+                          <small>
+                            安全收窄：填写后 Agent
+                            只能修改这些子目录内的文件，其余路径一律只读（密钥文件仍然全局禁止）。
+                          </small>
+                        </label>
                       </>
                     )}
                     <button
@@ -1139,6 +1159,10 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       disabled={busy || running}
                       onClick={() =>
                         act(async () => {
+                          const scopeEntries = writeScopeText
+                            .split(/[,，\n]/)
+                            .map((entry) => entry.trim())
+                            .filter(Boolean);
                           await api(base, "PATCH", {
                             revision: current.revision,
                             profile,
@@ -1155,6 +1179,9 @@ export function WorkspacesView({ config, onOpenSettings }) {
                               (gitWrite || autoWrite === "full") &&
                               profile !== "minimal",
                             gitConsent: gitWrite || autoWrite === "full",
+                            writeScope: scopeEntries.length
+                              ? scopeEntries
+                              : null,
                           });
                           setConsent(false);
                           await refresh();
