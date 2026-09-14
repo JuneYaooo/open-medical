@@ -180,8 +180,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
     streaming || Boolean(current?.runs.some((r) => r.status === "running"));
   const [background, setBackground] = useState(true),
     [resumeOnRestart, setResumeOnRestart] = useState(false),
-    [rounds, setRounds] = useState(32),
-    [minutes, setMinutes] = useState(30),
+    [rounds, setRounds] = useState(512),
+    [minutes, setMinutes] = useState(720),
     [resumeRunId, setResumeRunId] = useState("");
   const [profile, setProfile] = useState("standard"),
     [write, setWrite] = useState(false),
@@ -776,118 +776,20 @@ export function WorkspacesView({ config, onOpenSettings }) {
                   <div ref={messagesEnd} />
                 </div>
                 <div className="desk-composer">
-                  <details className="desk-run-options wb-run-compact">
-                    <summary>
-                      运行选项 · {minutes} 分钟 · 最多 {rounds} 轮
-                      {resumeRunId ? " · 续接检查点" : ""}
-                    </summary>
-                    <div className="workspace-authority">
-                      <label>
-                        最多模型轮数
-                        <input
-                          type="number"
-                          min="1"
-                          max="128"
-                          value={rounds}
-                          disabled={running}
-                          onChange={(e) => setRounds(Number(e.target.value))}
-                        />
-                      </label>
-                      <label>
-                        执行时限（分钟）
-                        <input
-                          type="number"
-                          min="1"
-                          max="600"
-                          value={minutes}
-                          disabled={running}
-                          onChange={(e) => setMinutes(Number(e.target.value))}
-                        />
-                      </label>
-                      <label className="workspace-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={background}
-                          disabled={running}
-                          onChange={(e) => setBackground(e.target.checked)}
-                        />
-                        后台执行，关闭页面后继续（应用须运行）
-                      </label>
-                      <label className="workspace-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={resumeOnRestart}
-                          disabled={running}
-                          onChange={(e) => setResumeOnRestart(e.target.checked)}
-                        />
-                        服务重启后自动续接本任务（沿用当前授权和预算，最多恢复 3
-                        次）
-                      </label>
-                      {current.runs.at(-1)?.canResume && !running && (
-                        <label className="workspace-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(resumeRunId)}
-                            onChange={(e) =>
-                              setResumeRunId(
-                                e.target.checked ? current.runs.at(-1).id : "",
-                              )
-                            }
-                          />
-                          使用上次持久化检查点继续；未知工具结果先核查，已完成工具不会重放
-                        </label>
-                      )}
-                    </div>
-                    {current.archivedRuns > 0 && (
-                      <details>
-                        <summary>
-                          较早的任务（{current.archivedRuns} 条归档）
-                        </summary>
-                        {history?.entries.map(({ run, messages }) => (
-                          <article key={run.id}>
-                            <small>
-                              {new Date(run.startedAt).toLocaleString()} ·{" "}
-                              {stateLabel(run.status)}
-                            </small>
-                            {messages.map((m, i) => (
-                              <pre key={i}>
-                                {m.role === "user" ? "你：" : "助理："}
-                                {m.content}
-                              </pre>
-                            ))}
-                          </article>
-                        ))}
-                        {(!history || history.nextCursor) && (
-                          <button
-                            onClick={async () => {
-                              const ticket = generation.current;
-                              try {
-                                const page = await api(
-                                  base +
-                                    "/history" +
-                                    (history?.nextCursor
-                                      ? `?before=${history.nextCursor}`
-                                      : ""),
-                                );
-                                if (ticket === generation.current)
-                                  setHistory((old) => ({
-                                    ...page,
-                                    entries: [
-                                      ...(old?.entries || []),
-                                      ...page.entries,
-                                    ],
-                                  }));
-                              } catch (e) {
-                                setError(e.message);
-                              }
-                            }}
-                          >
-                            加载较早的任务
-                          </button>
-                        )}
-                      </details>
-                    )}
-                  </details>
+                  {current.runs.at(-1)?.canResume && !running && (
+                    <label className="workspace-checkbox wb-resume-row">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(resumeRunId)}
+                        onChange={(e) =>
+                          setResumeRunId(
+                            e.target.checked ? current.runs.at(-1).id : "",
+                          )
+                        }
+                      />
+                      上次任务被中断，勾选后从检查点继续
+                    </label>
+                  )}
                   <ComposerTools
                     key={current.id}
                     current={current}
@@ -934,26 +836,28 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     }}
                   />
                   <div className="wb-composer-footer">
-                    <label
-                      className="workspace-checkbox wb-consent"
-                      title="允许本次任务、同授权下的历史及工具读取的文件内容发送给当前模型"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={consent}
-                        onChange={(e) => {
-                          setConsent(e.target.checked);
-                          try {
-                            localStorage.setItem(
-                              `workbench.consent.${current.id}`,
-                              e.target.checked ? "1" : "0",
-                            );
-                          } catch {}
-                        }}
-                        disabled={busy}
-                      />
-                      允许发送任务与所读文件给模型
-                    </label>
+                    {!consent && (
+                      <label
+                        className="workspace-checkbox wb-consent"
+                        title="允许本次任务、同授权下的历史及工具读取的文件内容发送给当前模型（首次确认后不再提示）"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={consent}
+                          onChange={(e) => {
+                            setConsent(e.target.checked);
+                            try {
+                              localStorage.setItem(
+                                `workbench.consent.${current.id}`,
+                                e.target.checked ? "1" : "0",
+                              );
+                            } catch {}
+                          }}
+                          disabled={busy}
+                        />
+                        允许发送任务与所读文件给模型（仅首次确认）
+                      </label>
+                    )}
                     <div className="wb-composer-actions">
                       <button
                         className="wb-model-shortcut"
