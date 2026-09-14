@@ -1,4 +1,4 @@
-import { BookOpen, CalendarClock, FileText, Activity, ClipboardList, Users } from "lucide-react";
+import { CalendarClock, FileText, Activity, ClipboardList } from "lucide-react";
 
 // Module landing views for capabilities that roll out in later phases.
 // Each keeps its own file-level component so the phase upgrade replaces
@@ -26,18 +26,6 @@ const MODULES = {
       "结构化摘要：诊断、人口学、关键检验、治疗与结局",
       "相似病例搜索：结构过滤 + 文本相关性，返回匹配理由",
       "全部数据仅存本机，科研输出支持脱敏",
-    ],
-  },
-  guidelines: {
-    icon: BookOpen,
-    title: "指南库",
-    phase: "第二期上线",
-    desc: "本地上传指南 PDF 建立全文索引，检索结果带文档与行号出处，作为临床草稿的引用依据。",
-    features: [
-      "PDF / Markdown 指南导入，自动抽取全文并分块索引",
-      "全文检索返回原文块，带文档名与行号出处",
-      "机构与年份标签管理（中华医学会、NICE、WHO 等）",
-      "引用到会话：把指南条目作为材料送入工作流",
     ],
   },
   research: {
@@ -102,4 +90,3 @@ export function ModuleView({ view, onView }) {
 }
 
 export const MODULE_VIEW_IDS = Object.keys(MODULES);
-export const MODULE_ICONS = { Users };

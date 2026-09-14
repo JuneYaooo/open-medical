@@ -21,6 +21,7 @@ import { FollowUpManager } from "./followups.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
+import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -163,10 +164,15 @@ export function createServer(options = {}) {
   const doctor = options.doctor || new DoctorProfile(store);
   const literature =
     options.literature || new LiteratureService(store);
+  const guidelines =
+    options.guidelines || new GuidelineLibrary(store);
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
-    toolPlugins: options.toolPlugins || [...literatureTools(literature)],
+    toolPlugins: options.toolPlugins || [
+      ...literatureTools(literature),
+      ...guidelineTools(guidelines),
+    ],
     doctor,
   });
   const workspaces = new WorkspaceService(store.db, provider, {
@@ -422,6 +428,7 @@ export function createServer(options = {}) {
           patientsEnabled: true,
           doctorMemory: runtime.doctor.counts(),
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
+          guidelines: { enabled: true, count: guidelines.list().length },
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
@@ -752,6 +759,33 @@ export function createServer(options = {}) {
           return send(res, 201, { file, article });
         }
       }
+      if (parts[0] === "api" && parts[1] === "guidelines") {
+        if (parts.length === 2 && req.method === "GET")
+          return send(res, 200, { documents: guidelines.list() });
+        if (parts.length === 2 && req.method === "POST")
+          return send(res, 201, guidelines.addDocument(await body(req)));
+        if (parts[2] === "search" && req.method === "GET") {
+          const yearRaw = url.searchParams.get("year");
+          return send(
+            res,
+            200,
+            guidelines.search({
+              query: url.searchParams.get("q") || undefined,
+              org: url.searchParams.get("org") || undefined,
+              year: yearRaw ? Number(yearRaw) : undefined,
+              limit: url.searchParams.get("limit")
+                ? Number(url.searchParams.get("limit"))
+                : undefined,
+            }),
+          );
+        }
+        if (parts.length === 3 && parts[2] !== "search") {
+          const docId = parts[2];
+          if (req.method === "GET") return send(res, 200, guidelines.get(docId));
+          if (req.method === "DELETE")
+            return send(res, 200, guidelines.removeDocument(docId));
+        }
+      }
       if (parts[0] === "api" && parts[1] === "doctor") {
         if (parts[2] === "profile" && parts.length === 3) {
           if (req.method === "GET") return send(res, 200, runtime.doctor.get());
@@ -982,6 +1016,7 @@ export function createServer(options = {}) {
   server.followups = followups;
   server.doctor = runtime.doctor;
   server.literature = literature;
+  server.guidelines = guidelines;
   server.wechat = wechat;
   server.once("listening", () => {
     scheduler.start();

@@ -42,6 +42,7 @@ import { WorkbenchHome } from "./workbench-home";
 import { ModuleView, MODULE_VIEW_IDS } from "./module-skeletons";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
+import { GuidelinesView } from "./guidelines";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 const WORKFLOWS = [
   {
@@ -1030,6 +1031,8 @@ function App() {
             />
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
+          ) : view === "guidelines" ? (
+            <GuidelinesView />
           ) : MODULE_VIEW_IDS.includes(view) ? (
             <ModuleView view={view} onView={navigate} />
           ) : view !== "workbench" ? (
