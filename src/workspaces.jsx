@@ -280,6 +280,50 @@ export function WorkspacesView({ config, onOpenSettings }) {
   const [prompt, setPrompt] = useState(""),
     [partial, setPartial] = useState(""),
     [events, setEvents] = useState([]);
+  // Auto-refresh open previews when the agent applies file changes: the
+  // viewer re-reads the file and rebuilds its blob, so the panel never shows
+  // a stale version of an open tab.
+  const lastAppliedEvent = useRef(0);
+  const pendingPreviewRefresh = useRef(new Set());
+  useEffect(() => {
+    lastAppliedEvent.current = 0;
+  }, [current?.id]);
+  useEffect(() => {
+    if (!events.length) return;
+    const maxId = Math.max(...events.map((e) => e.id));
+    if (!lastAppliedEvent.current) {
+      lastAppliedEvent.current = maxId; // baseline: ignore history on load
+      return;
+    }
+    const fresh = events.filter(
+      (e) => e.id > lastAppliedEvent.current && e.type === "approval.applied",
+    );
+    lastAppliedEvent.current = maxId;
+    if (!fresh.length) return;
+    const changed = new Set(
+      fresh.map((e) => e.payload?.path).filter(Boolean),
+    );
+    // approval.applied lands while the run is still executing, and read_file
+    // is refused mid-run — defer those refreshes until the run finishes.
+    if (file && changed.has(file.path)) {
+      if (running) pendingPreviewRefresh.current.add(file.path);
+      else void openInTab(file.path);
+    }
+    if (browserOpen) {
+      if (running) pendingPreviewRefresh.current.add("__list__");
+      else void list(directory);
+    }
+  }, [events, current?.id]);
+  useEffect(() => {
+    if (running || !pendingPreviewRefresh.current.size) return;
+    const timer = setTimeout(() => {
+      const pending = pendingPreviewRefresh.current;
+      pendingPreviewRefresh.current = new Set();
+      for (const path of pending)
+        path === "__list__" ? void list(directory) : void openInTab(path);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [running, current?.id]);
   // Auto-grow within a cap: starts at one line, follows content, stops at a
   // readable maximum and scrolls beyond that.
   useEffect(() => {
@@ -307,15 +351,37 @@ export function WorkspacesView({ config, onOpenSettings }) {
   useEffect(() => {
     if (!current?.runs.some((r) => r.status === "running") || streaming) return;
     let alive = true;
+    let sawRunning = false;
     const timer = setInterval(async () => {
       try {
         const w = await api(`/api/workspaces/${current.id}`);
-        if (alive && selectedId.current === current.id) {
-          setCurrent(w);
-          setPartial(w.runs.find((r) => r.status === "running")?.partial || "");
-          const log = await api(`/api/workspaces/${current.id}/events`);
-          if (alive && selectedId.current === current.id) setEvents(log.events);
+        if (!alive || selectedId.current !== current.id) return;
+        setCurrent(w);
+        setPartial(w.runs.find((r) => r.status === "running")?.partial || "");
+        const stillRunning = w.runs.some((r) => r.status === "running");
+        if (sawRunning && !stillRunning) {
+          // The run just finished: trailing events (approval.applied, final
+          // message) land right after the status flip — fetch once more
+          // after a beat so open previews refresh to the final content.
+          sawRunning = false;
+          setTimeout(async () => {
+            if (!alive || selectedId.current !== current.id) return;
+            try {
+              const [finalWorkspace, finalLog] = await Promise.all([
+                api(`/api/workspaces/${current.id}`),
+                api(`/api/workspaces/${current.id}/events?latest=1`),
+              ]);
+              if (alive && selectedId.current === current.id) {
+                setCurrent(finalWorkspace);
+                setEvents(finalLog.events);
+              }
+            } catch {}
+          }, 900);
+          return;
         }
+        sawRunning = stillRunning;
+        const log = await api(`/api/workspaces/${current.id}/events?latest=1`);
+        if (alive && selectedId.current === current.id) setEvents(log.events);
       } catch (e) {
         if (alive) setError(e.message);
       }
@@ -352,14 +418,26 @@ export function WorkspacesView({ config, onOpenSettings }) {
     const timer = setInterval(async () => {
       try {
         const list = await api("/api/workspaces");
-        if (alive) setItems(list.workspaces);
+        if (!alive) return;
+        setItems(list.workspaces);
+        // Pick up activity started outside this tab (background runs,
+        // applied edits) so the selected workspace and its events stay live.
+        const meta = list.workspaces.find((w) => w.id === selectedId.current);
+        if (
+          meta &&
+          !streaming &&
+          (meta.running ||
+            meta.revision !== current?.revision ||
+            meta.updatedAt !== current?.updatedAt)
+        )
+          refresh(meta.id).catch(() => {});
       } catch {}
     }, 3000);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [current?.revision, streaming]);
   useEffect(() => {
     if (followOutput.current)
       messagesEnd.current?.scrollIntoView({ block: "end" });
@@ -375,7 +453,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
       setWrite(w.permissions.grants["filesystem.write"]);
       setGitWrite(w.permissions.grants["git.write"] === true);
       setWriteScopeText((w.writeScope || []).join(", "));
-      const log = await api(`/api/workspaces/${id}/events`);
+      const log = await api(`/api/workspaces/${id}/events?latest=1`);
       if (selectedId.current === id) setEvents(log.events);
       return w;
     }
