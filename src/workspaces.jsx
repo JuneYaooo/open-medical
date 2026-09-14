@@ -409,12 +409,12 @@ export function WorkspacesView({ config, onOpenSettings }) {
     if (
       !Number.isInteger(rounds) ||
       rounds < 1 ||
-      rounds > 128 ||
+      rounds > 1024 ||
       !Number.isFinite(minutes) ||
       minutes < 1 ||
-      minutes > 600
+      minutes > 1440
     ) {
-      setError("运行预算需为 1–128 轮、1–600 分钟");
+      setError("运行预算需为 1–1024 轮、1–1440 分钟");
       return;
     }
     if (running) {
