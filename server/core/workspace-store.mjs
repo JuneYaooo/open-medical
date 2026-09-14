@@ -186,6 +186,23 @@ export class WorkspaceStore {
       payload,
     };
   }
+  // Newest window for UI loads: after=0 pagination on a busy workspace would
+  // otherwise always return the OLDEST `limit` events, hiding new activity.
+  eventsLatest(id, limit = 500) {
+    this.get(id);
+    check(
+      Number.isInteger(limit) && limit > 0 && limit <= 1000,
+      "INVALID_INPUT",
+      "事件数量无效",
+    );
+    return this.db
+      .prepare(
+        "SELECT * FROM agent_events WHERE workspace_id=? ORDER BY id DESC LIMIT ?",
+      )
+      .all(id, limit)
+      .reverse()
+      .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+  }
   events(id, after = 0, limit = 500) {
     this.get(id);
     check(

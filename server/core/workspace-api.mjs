@@ -243,10 +243,13 @@ export async function workspaceApi({
     return true;
   }
   if (action === "events" && req.method === "GET") {
-    const events = service.store.events(
-      id,
-      Number(url.searchParams.get("after") || 0),
-    );
+    const events =
+      url.searchParams.get("latest") === "1"
+        ? service.store.eventsLatest(id)
+        : service.store.events(
+            id,
+            Number(url.searchParams.get("after") || 0),
+          );
     send(res, 200, {
       events,
       cursor: events.at(-1)?.id ?? Number(url.searchParams.get("after") || 0),

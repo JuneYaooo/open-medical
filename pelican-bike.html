@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>鹈鹕骑自行车 · SVG 2D 动画</title>
+<style>
+  :root { --sky:#bfe8f5; --ink:#24343b; --orange:#f28b42; --blue:#287f9b; }
+  *{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5efe5;font-family:system-ui,-apple-system,"PingFang SC",sans-serif;color:var(--ink)}
+  .scene{width:min(1000px,96vw);aspect-ratio:16/9;overflow:hidden;border-radius:24px;background:var(--sky);box-shadow:0 22px 55px #6e5d4633;position:relative}
+  svg{width:100%;height:100%;display:block}
+  .road{animation:roadMove 1.5s linear infinite}
+  .wheel{transform-box:fill-box;transform-origin:center;animation:spin .9s linear infinite}
+  .bike{animation:bob .45s ease-in-out infinite alternate}
+  .pelican{animation:ride .45s ease-in-out infinite alternate}
+  .wing{transform-box:fill-box;transform-origin:100% 100%;animation:flap .45s ease-in-out infinite alternate}
+  .cloud{animation:cloudMove 22s linear infinite}
+  .sun{animation:sunPulse 3s ease-in-out infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes roadMove{to{transform:translateX(-110px)}}
+  @keyframes bob{to{transform:translateY(4px)}}
+  @keyframes ride{to{transform:translateY(-3px)}}
+  @keyframes flap{to{transform:rotate(-12deg)}}
+  @keyframes cloudMove{to{transform:translateX(1100px)}}
+  @keyframes sunPulse{50%{opacity:.72;transform:scale(1.04)}}
+</style>
+</head>
+<body>
+<div class="scene" aria-label="一只鹈鹕骑着自行车的 SVG 2D 动画">
+<svg viewBox="0 0 1000 562" role="img" xmlns="http://www.w3.org/2000/svg">
+ <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#a9e2f2"/><stop offset="1" stop-color="#e3f6f6"/></linearGradient><linearGradient id="sea" x2="0" y2="1"><stop stop-color="#78c5c9"/><stop offset="1" stop-color="#b8e4d4"/></linearGradient></defs>
+ <rect width="1000" height="562" fill="url(#sky)"/><circle class="sun" cx="830" cy="105" r="54" fill="#ffd77d"/>
+ <g class="cloud" fill="#fff" opacity=".8"><ellipse cx="130" cy="110" rx="70" ry="25"/><ellipse cx="180" cy="100" rx="46" ry="32"/><ellipse cx="220" cy="114" rx="60" ry="22"/></g>
+ <path d="M0 325 Q170 280 330 322 T660 315 T1000 300 V562H0Z" fill="url(#sea)"/>
+ <path d="M0 386 Q220 350 430 382 T1000 365" fill="none" stroke="#fff" stroke-width="5" opacity=".55"/>
+ <rect y="430" width="1000" height="132" fill="#d8b48a"/><path d="M0 505H1000" stroke="#886748" stroke-width="8"/>
+ <g class="road" stroke="#9c7753" stroke-width="7" stroke-linecap="round"><path d="M20 462h70M150 462h70M280 462h70M410 462h70M540 462h70M670 462h70M800 462h70M930 462h70"/><path d="M-30 535h100M110 535h100M250 535h100M390 535h100M530 535h100M670 535h100M810 535h100M950 535h100"/></g>
+ <g class="bike" stroke="var(--ink)" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g class="wheel"><circle cx="390" cy="445" r="57" stroke="#31515a" stroke-width="7"/><path d="M390 388v114M333 445h114M350 405l80 80M430 405l-80 80" stroke="#6da3a6" stroke-width="3"/></g>
+  <g class="wheel"><circle cx="630" cy="445" r="57" stroke="#31515a" stroke-width="7"/><path d="M630 388v114M573 445h114M590 405l80 80M670 405l-80 80" stroke="#6da3a6" stroke-width="3"/></g>
+  <path d="M390 445l88-78 68 78H390l45-92m43 14h45l30 78m-93 0l55-78" stroke="#db6d3c"/>
+  <circle cx="478" cy="367" r="10" fill="#f4a04d"/><path d="M530 367h45"/>
+  <path d="M540 445l-18 25m18-25l22 20"/><circle cx="522" cy="470" r="8" fill="#24343b"/><circle cx="560" cy="465" r="8" fill="#24343b"/>
+ </g>
+ <g class="pelican" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+  <ellipse cx="505" cy="280" rx="78" ry="93" fill="#f8f5eb"/><ellipse cx="505" cy="198" rx="61" ry="54" fill="#fffdf5"/>
+  <path d="M456 209 Q385 210 328 245 Q390 270 466 246Z" fill="#f2a15f"/><path d="M332 245q25 24 75 26" fill="none" stroke="#d77a43"/>
+  <circle cx="522" cy="188" r="8" fill="#24343b" stroke="none"/><path d="M485 146q28-30 57 0" fill="none"/>
+  <path class="wing" d="M453 267 Q385 290 423 353 Q466 334 489 285Z" fill="#d9e3e1"/>
+  <path d="M482 354v67M535 354v67" fill="none"/><path d="M467 420h31M520 420h31"/>
+  <path d="M490 244q-14 35 2 60" fill="none" stroke="#e1b179"/>
+ </g>
+ <text x="42" y="70" font-size="28" font-weight="700" fill="#31515a">海风骑行日</text><text x="44" y="98" font-size="16" fill="#52737a">PELICAN ON TWO WHEELS</text>
+</svg></div></body></html>
