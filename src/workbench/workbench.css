@@ -1116,3 +1116,43 @@ iframe.wb-file-preview {
   background: #444;
   color: #fff;
 }
+
+/* --- Files panel empty state (browser is opt-in) --- */
+.wb-files-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 48px 20px;
+  color: #8a9299;
+}
+.wb-files-empty h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #c7ccd1;
+}
+.wb-files-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: #7d858c;
+}
+.wb-files-empty .secondary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.wb-files-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.wb-browse-toggle {
+  background: transparent;
+  border: 0;
+  color: #7d858c;
+  font-size: 11px;
+  padding: 4px 2px;
+}
+.wb-browse-toggle:hover {
+  color: #dfe5e9;
+}
