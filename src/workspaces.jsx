@@ -193,7 +193,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [write, setWrite] = useState(false),
     [gitWrite, setGitWrite] = useState(false),
     [writeScopeText, setWriteScopeText] = useState(""),
-    [openTabs, setOpenTabs] = useState([]);
+    [openTabs, setOpenTabs] = useState([]),
+    [browserOpen, setBrowserOpen] = useState(false);
   const [files, setFiles] = useState([]),
     [directory, setDirectory] = useState("."),
     [file, setFile] = useState(null),
@@ -368,6 +369,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
     setFile(null);
     setFiles([]);
     setOpenTabs([]);
+    setBrowserOpen(false);
     setDirectory(".");
     setPartial("");
     setResumeRunId("");
@@ -709,11 +711,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     title={label}
                     onClick={() => {
                       if (view === key) setView("chat");
-                      else {
-                        setView(key);
-                        if (key === "files" && !files.length)
-                          list().catch((e) => setError(e.message));
-                      }
+                      else setView(key);
                     }}
                   >
                     <Icon size={16} />
@@ -1292,6 +1290,25 @@ export function WorkspacesView({ config, onOpenSettings }) {
                   />
                 </div>
                 <div hidden={view !== "files"}>
+                  {!browserOpen && !file && (
+                    <div className="wb-files-empty">
+                      <FileText size={30} strokeWidth={1.4} />
+                      <h3>没有打开的文件</h3>
+                      <p>在对话中点击文件名可直接打开，或浏览工作区文件夹。</p>
+                      <button
+                        className="secondary"
+                        disabled={busy || running}
+                        onClick={() => {
+                          setBrowserOpen(true);
+                          act(() => list(directory));
+                        }}
+                      >
+                        <FolderOpen size={14} /> 浏览工作区文件
+                      </button>
+                    </div>
+                  )}
+                  {browserOpen && (
+                    <>
                   <nav className="wb-file-breadcrumb" aria-label="当前目录">
                     <button onClick={() => act(() => list("."))}>
                       {current.root.split(/[\\/]/).filter(Boolean).at(-1) ||
@@ -1341,7 +1358,11 @@ export function WorkspacesView({ config, onOpenSettings }) {
                               ? entry.name
                               : directory.replace(/\/$/, "") + "/" + entry.name;
                           if (entry.directory) act(() => list(path));
-                          else act(() => openInTab(path));
+                          else {
+                            // Picker semantics: choose a file, then show it.
+                            act(() => openInTab(path));
+                            setBrowserOpen(false);
+                          }
                         }}
                       >
                         {entry.directory ? (
@@ -1356,6 +1377,16 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       <p className="wb-muted">此目录为空，或点击 ↻ 刷新。</p>
                     )}
                   </div>
+                    <div className="wb-files-toolbar">
+                      <button
+                        className="wb-browse-toggle"
+                        onClick={() => setBrowserOpen(false)}
+                      >
+                        收起浏览
+                      </button>
+                    </div>
+                    </>
+                  )}
                   {openTabs.length > 0 && (
                     <div className="wb-file-tabs" role="tablist">
                       {openTabs.map((tab) => (
