@@ -179,10 +179,13 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [streaming, setRunning] = useState(false);
   const running =
     streaming || Boolean(current?.runs.some((r) => r.status === "running"));
-  const [background, setBackground] = useState(true),
-    [resumeOnRestart, setResumeOnRestart] = useState(false),
-    [rounds, setRounds] = useState(512),
-    [minutes, setMinutes] = useState(720),
+  // Fixed run defaults: effectively unlimited rounds/time with automatic
+  // context compaction; background execution on. Setters kept for a future
+  // advanced-options UI.
+  const [background] = useState(true),
+    [resumeOnRestart] = useState(false),
+    [rounds] = useState(512),
+    [minutes] = useState(720),
     [resumeRunId, setResumeRunId] = useState("");
   const [profile, setProfile] = useState("standard"),
     [write, setWrite] = useState(false),
