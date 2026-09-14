@@ -1214,3 +1214,58 @@ iframe.wb-file-preview {
   font-size: 12px;
   color: #9aa2a8;
 }
+
+/* --- Pure viewer: fills the panel, aligned with the conversation column --- */
+.wb-inspector {
+  display: flex;
+  flex-direction: column;
+}
+.wb-inspector > [hidden] {
+  display: none;
+}
+.wb-viewer {
+  flex: 1;
+  min-height: 50vh;
+  display: flex;
+  flex-direction: column;
+}
+.wb-viewer .wb-file-preview {
+  flex: 1;
+  min-height: 55vh;
+  max-height: none;
+  width: 100%;
+}
+.wb-viewer-text {
+  flex: 1;
+  margin: 0;
+  padding: 2px 0 12px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #ccd4cf;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wb-md-preview {
+  flex: 1;
+  overflow: auto;
+  padding: 2px 0 12px;
+  font-size: 13.5px;
+}
+.wb-office-preview {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Fill the inspector column so the viewer aligns with the chat height. */
+.wb-inspector > div:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.wb-files-toolbar {
+  justify-content: flex-start;
+  padding-top: 8px;
+}
