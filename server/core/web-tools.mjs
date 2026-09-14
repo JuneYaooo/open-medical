@@ -263,9 +263,9 @@ export function registerWebTools(extensions, id, registry, runId = "manual") {
     },
     (a, c) => fetchWeb(a.url, extensions.current(id).config.origins, c.signal),
   );
-  // Web search works out of the box (Bing RSS, keyless); the engine hosts are
-  // fixed, so no per-origin authorization applies to the query itself.
-  // Workspace search policy: allow (default) / ask (per-run consent) / deny.
+  // Web search is a default agent capability like any other tool: gated by
+  // the workspace tool-permission profile and audited via the event log, with
+  // fixed HTTPS engine hosts so queries cannot target arbitrary origins.
   add(
     "web_search",
     "联网搜索公开网页，返回标题、URL 和摘要。默认用必应，无需配置；配置 SearXNG 或 Brave Search Key 后优先使用更高质量引擎。查资料、找文档、核实事实时使用；拿到 URL 后可用 web_fetch 读取正文（需来源授权）。",
@@ -273,24 +273,6 @@ export function registerWebTools(extensions, id, registry, runId = "manual") {
       query: { type: "string", minLength: 1, maxLength: 1000 },
     },
     (a, c) => {
-      const workspace = extensions.service.store.get(id);
-      const policy = workspace.searchPolicy || "allow";
-      if (policy === "deny")
-        check(
-          false,
-          "SEARCH_DISABLED",
-          "本工作区已禁用联网搜索；如需开启请在工作区设置中调整",
-          403,
-        );
-      if (policy === "ask") {
-        const run = workspace.runs.find((r) => r.id === runId);
-        check(
-          run?.searchConsent === true,
-          "SEARCH_CONSENT",
-          "本工作区要求每个任务单独授权联网搜索：请告知用户在发送任务时勾选「联网」，或在工作区设置中将搜索权限改为始终允许",
-          403,
-        );
-      }
       const config = extensions.current(id).config;
       return searchWeb(
         a.query,

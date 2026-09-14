@@ -191,7 +191,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [write, setWrite] = useState(false),
     [gitWrite, setGitWrite] = useState(false),
     [writeScopeText, setWriteScopeText] = useState(""),
-    [searchPolicy, setSearchPolicy] = useState("allow"),
     [openTabs, setOpenTabs] = useState([]),
     [browserOpen, setBrowserOpen] = useState(false);
   const [files, setFiles] = useState([]),
@@ -232,7 +231,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
   }, [file?.path, current?.id]);
   const [prompt, setPrompt] = useState(""),
     [consent, setConsent] = useState(false),
-    [searchConsent, setSearchConsent] = useState(false),
     [partial, setPartial] = useState(""),
     [events, setEvents] = useState([]);
   const [scheduleAt, setScheduleAt] = useState(""),
@@ -322,7 +320,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
       setWrite(w.permissions.grants["filesystem.write"]);
       setGitWrite(w.permissions.grants["git.write"] === true);
       setWriteScopeText((w.writeScope || []).join(", "));
-      setSearchPolicy(w.searchPolicy || "allow");
       const log = await api(`/api/workspaces/${id}/events`);
       if (selectedId.current === id) setEvents(log.events);
       return w;
@@ -466,7 +463,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
           revision: current.revision,
           requestId: crypto.randomUUID(),
           externalConsent: consent,
-          ...(current.searchPolicy === "ask" ? { searchConsent } : {}),
           limits: { maxRounds: rounds, timeoutMs: minutes * 60000 },
           resumeOnRestart,
           ...(resumeRunId ? { resumeRunId } : {}),
@@ -474,7 +470,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
         setPrompt("");
         setAttachments([]);
         setResumeRunId("");
-        setSearchConsent(false);
         if (ticket === generation.current) await refresh(id);
         return;
       }
@@ -487,7 +482,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
           revision: current.revision,
           requestId: crypto.randomUUID(),
           externalConsent: consent,
-          ...(current.searchPolicy === "ask" ? { searchConsent } : {}),
           limits: { maxRounds: rounds, timeoutMs: minutes * 60000 },
           resumeOnRestart,
           ...(resumeRunId ? { resumeRunId } : {}),
@@ -868,20 +862,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         允许发送任务与所读文件给模型（仅首次确认）
                       </label>
                     )}
-                    {current.searchPolicy === "ask" && (
-                      <label
-                        className="workspace-checkbox wb-consent"
-                        title="本工作区设置了搜索前确认：勾选后本任务允许 Agent 联网搜索"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={searchConsent}
-                          onChange={(e) => setSearchConsent(e.target.checked)}
-                          disabled={busy}
-                        />
-                        🌐 允许本任务联网搜索
-                      </label>
-                    )}
                     <div className="wb-composer-actions">
                       <button
                         className="wb-model-shortcut"
@@ -1157,18 +1137,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         />
                         独立授权 Git 提交（不依赖“完全批准”档位）
                       </label>
-                      <label>
-                        联网搜索权限
-                        <select
-                          value={searchPolicy}
-                          disabled={busy || running}
-                          onChange={(e) => setSearchPolicy(e.target.value)}
-                        >
-                          <option value="allow">允许（默认，免配置）</option>
-                          <option value="ask">每个任务发送时勾选确认</option>
-                          <option value="deny">禁用联网搜索</option>
-                        </select>
-                      </label>
                       <button
                         className="secondary"
                         disabled={busy || running}
@@ -1200,7 +1168,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                               writeScope: scopeEntries.length
                                 ? scopeEntries
                                 : null,
-                              searchPolicy,
                             });
                             await refresh();
                           })

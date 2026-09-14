@@ -682,15 +682,6 @@ export class WorkspaceService {
         body.writeScope === null
           ? null
           : this.#normalizeWriteScope(id, body.writeScope);
-    let searchPolicy;
-    if (body.searchPolicy !== undefined) {
-      check(
-        ["allow", "ask", "deny"].includes(body.searchPolicy),
-        "INVALID_INPUT",
-        "搜索权限必须是 allow、ask 或 deny",
-      );
-      searchPolicy = body.searchPolicy;
-    }
     const permissions = new PermissionEngine({ profile, grants }).snapshot();
     return publicWorkspace(
       this.store.update(
@@ -702,12 +693,6 @@ export class WorkspaceService {
             w.writeScope = writeScope;
             this.store.event(id, "manual", "write_scope.changed", {
               writeScope,
-            });
-          }
-          if (body.searchPolicy !== undefined) {
-            w.searchPolicy = searchPolicy;
-            this.store.event(id, "manual", "search_policy.changed", {
-              policy: searchPolicy,
             });
           }
           w.contextEpoch = (w.contextEpoch || 0) + 1;
@@ -1535,7 +1520,6 @@ export class WorkspaceService {
     const run = {
       limits,
       resumeOnRestart: body.resumeOnRestart === true,
-      searchConsent: body.searchConsent === true,
       recoveryAttempts: 0,
       resumes: body.resumeRunId || null,
       inputs: body.resumeRunId
