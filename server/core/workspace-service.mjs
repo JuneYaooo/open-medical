@@ -1275,6 +1275,28 @@ export class WorkspaceService {
     this.store.event(id, "manual", "tool.complete", { tool: body.tool });
     return result;
   }
+  // Inline preview for the results panel: images and PDF only — no SVG or
+  // HTML, so nothing from the workspace can execute in the app origin.
+  previewFile(id, path) {
+    const w = this.store.get(id);
+    new PermissionEngine(w.permissions).require("filesystem.read");
+    // Path protections run before the type check so protected files are
+    // always rejected as PATH_DENIED, never by a mere format mismatch.
+    const files = new WorkspaceFiles(w.root);
+    files.path(path);
+    const extension = path.split(".").at(-1).toLowerCase();
+    const mime = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      webp: "image/webp",
+      gif: "image/gif",
+      pdf: "application/pdf",
+    }[extension];
+    check(mime, "PREVIEW_TYPE", "此格式不支持预览，请下载后查看", 415);
+    const { data } = files.bytes(path, 15_000_000);
+    return { data, mime };
+  }
   revert(id, approvalId, body) {
     check(
       !this.active.has(id) && !this.hasMutation(id),

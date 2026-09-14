@@ -11,6 +11,8 @@ import {
   ArrowUp,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldCheck,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { WorkspaceExtensionsPanel } from "./workspace-extensions";
@@ -168,7 +170,39 @@ export function WorkspacesView({ config, onOpenSettings }) {
     [directory, setDirectory] = useState("."),
     [file, setFile] = useState(null),
     [content, setContent] = useState(""),
-    [newPath, setNewPath] = useState("");
+    [newPath, setNewPath] = useState(""),
+    [preview, setPreview] = useState(null),
+    [officeText, setOfficeText] = useState(""),
+    [officeBusy, setOfficeBusy] = useState(false);
+  // Binary previews (image/PDF) are fetched as blobs with the session token
+  // and rendered from object URLs; nothing untrusted is fetched cross-origin.
+  useEffect(() => {
+    setPreview(null);
+    setOfficeText("");
+    const extension = (file?.path || "").split(".").at(-1)?.toLowerCase();
+    if (!file || !/^(png|jpe?g|webp|gif|pdf)$/.test(extension || ""))
+      return undefined;
+    let url,
+      alive = true;
+    api(
+      `/api/workspaces/${file.workspaceId || current?.id}/file?path=${encodeURIComponent(file.path)}`,
+      { raw: true },
+    )
+      .then((response) => response.blob())
+      .then((blob) => {
+        if (!alive) return;
+        url = URL.createObjectURL(blob);
+        setPreview({
+          kind: extension === "pdf" ? "pdf" : "image",
+          url,
+        });
+      })
+      .catch((e) => alive && setError(e.message));
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [file?.path, current?.id]);
   const [prompt, setPrompt] = useState(""),
     [consent, setConsent] = useState(false),
     [partial, setPartial] = useState(""),
@@ -488,6 +522,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
             onCreate={() => setShowCreate(true)}
             onNewTask={newTask}
             onSettings={onOpenSettings}
+            onWorkspaceSettings={() => current && setView("settings")}
+            model={config?.modelConfigured ? config.model : ""}
             onOrganize={organize}
           />
           {showCreate && (
@@ -639,7 +675,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                   ["browser", Globe, "浏览器"],
                   ["media", Image, "媒体"],
                   ["history", History, "运行记录"],
-                  ["settings", Settings2, "设置"],
                 ].map(([key, Icon, label]) => (
                   <button
                     key={key}
@@ -952,9 +987,160 @@ export function WorkspacesView({ config, onOpenSettings }) {
                   </div>
                   {!config?.modelConfigured && (
                     <span className="wb-model-missing">
-                      尚未连接模型，请打开左侧「设置与模型」。
+                      尚未连接模型，请在左下角「设置」里连接。
                     </span>
                   )}
+                  <details className="wb-auth-editor">
+                    <summary>
+                      <ShieldCheck size={14} />
+                      {(() => {
+                        const modeLabel =
+                          !write || profile === "minimal"
+                            ? "只读模式"
+                            : autoWrite === "full"
+                              ? "完全授权"
+                              : autoWrite === "workspace-write"
+                                ? "自动授权"
+                                : "逐任务批准";
+                        const scopeLabel = writeScopeText.trim()
+                          ? ` · 可写：${writeScopeText.trim()}`
+                          : "";
+                        return `${modeLabel}${scopeLabel}${
+                          gitWrite || autoWrite === "full" ? " · Git 已授权" : ""
+                        }`;
+                      })()}
+                      {(write &&
+                        profile !== "minimal" &&
+                        autoWrite === "full") ||
+                      autoWrite === "full" ? (
+                        <TriangleAlert
+                          size={14}
+                          className="wb-warn-icon"
+                          aria-label="完全授权已开启"
+                          title="完全授权已开启：Agent 将自动应用文件修改并自动提交本地 Git，请仅在可信任务中使用"
+                        />
+                      ) : null}
+                    </summary>
+                    <div className="workspace-authority">
+                      <label>
+                        工具模式
+                        <select
+                          value={profile}
+                          disabled={busy || running}
+                          onChange={(e) => setProfile(e.target.value)}
+                        >
+                          <option value="standard">标准 · 文件与工具</option>
+                          <option value="minimal">极简 · 仅对话</option>
+                          <option value="creator">创作 · 文件草稿</option>
+                          <option value="code">代码 · 修改、测试与子任务</option>
+                        </select>
+                      </label>
+                      <label className="workspace-checkbox">
+                        <input
+                          type="checkbox"
+                          disabled={profile === "minimal" || busy || running}
+                          checked={write}
+                          onChange={(e) => setWrite(e.target.checked)}
+                        />
+                        允许文件修改（默认逐项批准）
+                      </label>
+                      {(config?.domain === "generic" ||
+                        config?.genericWorkspaces) && (
+                        <>
+                          <label className="workspace-checkbox">
+                            <select
+                              className="workspace-select"
+                              value={autoWrite}
+                              disabled={
+                                !write ||
+                                profile === "minimal" ||
+                                busy ||
+                                running
+                              }
+                              onChange={(e) => setAutoWrite(e.target.value)}
+                            >
+                              <option value="review">逐任务批准</option>
+                              <option value="workspace-write">
+                                自动授权 · 工作区内自动应用
+                              </option>
+                              <option value="full">完全授权</option>
+                            </select>
+                            <span>
+                              授权模式：逐项批准 / 工作区自动应用 /
+                              完全授权（自动应用并按下方勾选自动提交 Git，仍校验路径、版本并记录原文）
+                            </span>
+                          </label>
+                          <label className="workspace-checkbox">
+                            <input
+                              type="checkbox"
+                              disabled={
+                                profile === "minimal" || busy || running
+                              }
+                              checked={gitWrite}
+                              onChange={(e) => setGitWrite(e.target.checked)}
+                            />
+                            授权 Agent 提交本地 Git 历史（不包含推送）
+                          </label>
+                          <label className="wb-write-scope">
+                            可写子目录
+                            <input
+                              value={writeScopeText}
+                              disabled={
+                                !write ||
+                                profile === "minimal" ||
+                                busy ||
+                                running
+                              }
+                              placeholder="留空 = 整个工作区；示例：docs, src/lib"
+                              onChange={(e) =>
+                                setWriteScopeText(e.target.value)
+                              }
+                            />
+                            <small>
+                              安全收窄：填写后 Agent
+                              只能修改这些子目录内的文件，其余路径一律只读（密钥文件仍然全局禁止）。
+                            </small>
+                          </label>
+                        </>
+                      )}
+                      <button
+                        className="secondary"
+                        disabled={busy || running}
+                        onClick={() =>
+                          act(async () => {
+                            const scopeEntries = writeScopeText
+                              .split(/[,，\n]/)
+                              .map((entry) => entry.trim())
+                              .filter(Boolean);
+                            await api(base, "PATCH", {
+                              revision: current.revision,
+                              profile,
+                              allowWrite: write,
+                              approvalPolicy:
+                                write &&
+                                autoWrite !== "review" &&
+                                profile !== "minimal"
+                                  ? autoWrite
+                                  : "review",
+                              autoApplyConsent:
+                                write && autoWrite !== "review",
+                              allowGit:
+                                (gitWrite || autoWrite === "full") &&
+                                profile !== "minimal",
+                              gitConsent: gitWrite || autoWrite === "full",
+                              writeScope: scopeEntries.length
+                                ? scopeEntries
+                                : null,
+                            });
+                            setConsent(false);
+                            await refresh();
+                          })
+                        }
+                      >
+                        保存授权
+                      </button>
+                    </div>
+                  </details>
                 </div>
                 {current.messages.length === 0 && !partial && (
                   <div className="desk-suggestions">
@@ -1080,120 +1266,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                   >
                     从当前历史分支
                   </button>
-                  <div className="workspace-authority">
-                    <label>
-                      工具模式
-                      <select
-                        value={profile}
-                        disabled={busy || running}
-                        onChange={(e) => setProfile(e.target.value)}
-                      >
-                        <option value="standard">标准 · 文件与工具</option>
-                        <option value="minimal">极简 · 仅对话</option>
-                        <option value="creator">创作 · 文件草稿</option>
-                        <option value="code">代码 · 修改、测试与子任务</option>
-                      </select>
-                    </label>
-                    <label className="workspace-checkbox">
-                      <input
-                        type="checkbox"
-                        disabled={profile === "minimal" || busy || running}
-                        checked={write}
-                        onChange={(e) => setWrite(e.target.checked)}
-                      />
-                      允许文件修改（默认逐项批准）
-                    </label>
-                    {(config?.domain === "generic" ||
-                      config?.genericWorkspaces) && (
-                      <>
-                        <label className="workspace-checkbox">
-                          <select
-                            className="workspace-select"
-                            value={autoWrite}
-                            disabled={
-                              !write || profile === "minimal" || busy || running
-                            }
-                            onChange={(e) => setAutoWrite(e.target.value)}
-                          >
-                            <option value="review">逐任务批准</option>
-                            <option value="workspace-write">
-                              自动授权 · 工作区内自动应用
-                            </option>
-                            <option value="full">完全授权</option>
-                          </select>
-                          <span>
-                            授权模式：逐项批准 / 工作区自动应用 / 完全授权（自动应用并按下方勾选自动提交 Git，仍校验路径、版本并记录原文）
-                          </span>
-                        </label>
-                        <label className="workspace-checkbox">
-                          <input
-                            type="checkbox"
-                            disabled={profile === "minimal" || busy || running}
-                            checked={gitWrite}
-                            onChange={(e) => setGitWrite(e.target.checked)}
-                          />
-                          授权 Agent 提交本地 Git 历史（不包含推送）
-                        </label>
-                        <label className="wb-write-scope">
-                          可写子目录
-                          <input
-                            value={writeScopeText}
-                            disabled={
-                              !write ||
-                              profile === "minimal" ||
-                              busy ||
-                              running
-                            }
-                            placeholder="留空 = 整个工作区；示例：docs, src/lib"
-                            onChange={(e) => setWriteScopeText(e.target.value)}
-                          />
-                          <small>
-                            安全收窄：填写后 Agent
-                            只能修改这些子目录内的文件，其余路径一律只读（密钥文件仍然全局禁止）。
-                          </small>
-                        </label>
-                      </>
-                    )}
-                    <button
-                      className="secondary"
-                      disabled={busy || running}
-                      onClick={() =>
-                        act(async () => {
-                          const scopeEntries = writeScopeText
-                            .split(/[,，\n]/)
-                            .map((entry) => entry.trim())
-                            .filter(Boolean);
-                          await api(base, "PATCH", {
-                            revision: current.revision,
-                            profile,
-                            allowWrite: write,
-                            approvalPolicy:
-                              write &&
-                              autoWrite !== "review" &&
-                              profile !== "minimal"
-                                ? autoWrite
-                                : "review",
-                            autoApplyConsent:
-                              write && autoWrite !== "review",
-                            allowGit:
-                              (gitWrite || autoWrite === "full") &&
-                              profile !== "minimal",
-                            gitConsent: gitWrite || autoWrite === "full",
-                            writeScope: scopeEntries.length
-                              ? scopeEntries
-                              : null,
-                          });
-                          setConsent(false);
-                          await refresh();
-                        })
-                      }
-                    >
-                      保存授权
-                    </button>
-                  </div>
-                  <p className="workspace-note">
-                    基础模式控制文件与计算权限；高级能力在下方单独授权。重新保存基础授权会关闭高级能力。
-                  </p>
                   <RemoteJobs key={`remote-${current.id}`} current={current} refresh={refresh} />
                   <TeamModels
                     key={`team-${current.id}`}
@@ -1239,7 +1311,15 @@ export function WorkspacesView({ config, onOpenSettings }) {
                                     "/" +
                                     entry.name;
                               if (entry.directory) await list(path);
-                              else {
+                              else if (
+                                /\.(png|jpe?g|webp|gif|pdf)$/i.test(path)
+                              ) {
+                                // Binary preview: the preview effect fetches the
+                                // blob; read_file is text-only.
+                                setFile({ path });
+                                setContent("");
+                                setFileLine(1);
+                              } else {
                                 const result = await api(
                                   base + "/tools",
                                   "POST",
@@ -1292,7 +1372,62 @@ export function WorkspacesView({ config, onOpenSettings }) {
                             引用到对话
                           </button>
                         </div>
-                        <FileEditor
+                        {preview ? (
+                          preview.kind === "image" ? (
+                            <img
+                              className="wb-file-preview"
+                              src={preview.url}
+                              alt={file.path}
+                            />
+                          ) : (
+                            <iframe
+                              className="wb-file-preview"
+                              title={file.path}
+                              src={preview.url}
+                            />
+                          )
+                        ) : /\.(docx|xlsx|pptx)$/i.test(file.path) ? (
+                          <div className="wb-office-preview">
+                            <div className="workspace-toolbar">
+                              <button
+                                className="secondary"
+                                disabled={officeBusy || busy || running}
+                                onClick={() =>
+                                  act(async () => {
+                                    setOfficeBusy(true);
+                                    try {
+                                      const result = await api(
+                                        base + "/tools",
+                                        "POST",
+                                        {
+                                          tool: "document_read",
+                                          arguments: { path: file.path },
+                                        },
+                                      );
+                                      setOfficeText(
+                                        result.text ||
+                                          result.markdown ||
+                                          JSON.stringify(result, null, 2),
+                                      );
+                                    } finally {
+                                      setOfficeBusy(false);
+                                    }
+                                  })
+                                }
+                              >
+                                {officeBusy ? "转换中…" : "转换为文本预览"}
+                              </button>
+                              <small>
+                                Word / Excel / PPT 通过办公文档运行时（Docker）读取
+                              </small>
+                            </div>
+                            {officeText && (
+                              <pre className="wb-office-text">{officeText}</pre>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <FileEditor
                           key={`${current.id}-${file.path}`}
                           content={content}
                           onChange={setContent}
@@ -1335,6 +1470,8 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         >
                           提交修改供批准
                         </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </details>
