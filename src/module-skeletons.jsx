@@ -1,21 +1,9 @@
-import { CalendarClock, FileText, Activity, ClipboardList } from "lucide-react";
+import { FileText, Activity, ClipboardList } from "lucide-react";
 
 // Module landing views for capabilities that roll out in later phases.
 // Each keeps its own file-level component so the phase upgrade replaces
 // this file's export wholesale.
 const MODULES = {
-  followups: {
-    icon: CalendarClock,
-    title: "随访管理",
-    phase: "第三期上线",
-    desc: "按病种/术式的随访计划模板，自动排程提醒，结构化随访记录与逾期追踪。",
-    features: [
-      "随访计划模板：术后 1 周 / 1 月 / 3 月等节点，含复查项目与注意事项",
-      "患者入组后自动展开为定时任务，提醒进入统一提醒中心",
-      "结构化随访记录：结果、事件、依从性、下次计划",
-      "逾期随访自动进入风险提醒",
-    ],
-  },
   cases: {
     icon: FileText,
     title: "病例库",
