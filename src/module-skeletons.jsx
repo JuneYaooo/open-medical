@@ -1,21 +1,9 @@
-import { Activity, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 
 // Module landing views for capabilities that roll out in later phases.
 // Each keeps its own file-level component so the phase upgrade replaces
 // this file's export wholesale.
 const MODULES = {
-  research: {
-    icon: Activity,
-    title: "数据分析",
-    phase: "第四期上线",
-    desc: "面向科研的确定性统计分析：描述统计、组间比较、回归与样本量计算，结果以待复核草稿交付。",
-    features: [
-      "数据集选择：会话材料或本地 CSV",
-      "分析模板：描述统计 / 组间比较 / 回归 / 生存 / 样本量",
-      "沙箱内计算，优先 numpy/scipy，缺失时回退内置实现",
-      "输出表格与图，标注方法学假设，复核后才可确认",
-    ],
-  },
   drg: {
     icon: ClipboardList,
     title: "DRG 测算",
