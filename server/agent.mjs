@@ -22,6 +22,7 @@ import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
+import { searchIcd10 } from "./medical/icd10.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -626,6 +627,14 @@ export function createServer(options = {}) {
           await wechat.send(identifier(b.patientId), b.text),
         );
       }
+      if (path === "/api/icd10" && req.method === "GET")
+        return send(res, 200, {
+          codes: searchIcd10(url.searchParams.get("q"), {
+            limit: url.searchParams.get("limit")
+              ? Number(url.searchParams.get("limit"))
+              : undefined,
+          }),
+        });
       if (path === "/api/patients" && req.method === "GET")
         return send(res, 200, {
           patients: patients.list({
@@ -666,6 +675,8 @@ export function createServer(options = {}) {
         return send(res, 200, followups.ackReminder(identifier(parts[2])));
       if (parts[0] === "api" && parts[1] === "patients" && parts[2]) {
         const pid = identifier(parts[2]);
+        if (parts[3] === "export" && req.method === "GET")
+          return send(res, 200, patients.exportDeidentified(pid));
         if (parts.length === 3) {
           if (req.method === "GET") return send(res, 200, patients.get(pid));
           if (req.method === "PATCH")

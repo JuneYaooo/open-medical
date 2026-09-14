@@ -3540,3 +3540,107 @@ blockquote p {
   background: #eef5e9;
   border-radius: 4px;
 }
+
+/* ---- patient clinical data panel ---- */
+.clinical-panel section {
+  margin-bottom: 16px;
+}
+.clinical-panel h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.clinical-rows {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.clinical-rows li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #3c4a3e;
+  background: #f7f9f4;
+  border-radius: 7px;
+  padding: 6px 10px;
+}
+.clinical-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  position: relative;
+}
+.clinical-add input {
+  border: 1px solid #d7e0d0;
+  border-radius: 7px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12px;
+  width: 150px;
+}
+.clinical-add.clinical-add-med input {
+  width: 110px;
+}
+.icd-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
+  background: white;
+  border: 1px solid #dbe4d3;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #1f40271a;
+  display: grid;
+  padding: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.icd-results button {
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 6px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.icd-results button:hover {
+  background: #eef3ec;
+}
+.allergy-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.hint-tag.allergy {
+  background: #faeceb;
+  border-color: #ecd2cf;
+  color: #a04b3a;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hint-tag.allergy button {
+  border: 0;
+  background: none;
+  color: inherit;
+  display: inline-flex;
+  padding: 0;
+  cursor: pointer;
+}
+.clinical-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}

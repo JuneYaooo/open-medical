@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
 
 // Patient registry: each patient links to one session that acts as the
@@ -84,6 +84,11 @@ export class PatientRegistry {
       groups: optionalStrings(input.groups, "分组", 10, 40),
       tags: optionalStrings(input.tags, "标签", 20, 40),
       note: input.note === undefined ? "" : string(input.note, "备注", 2000),
+      diagnoses: optionalDiagnoses(input.diagnoses),
+      medications: optionalMedications(input.medications),
+      allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
+      labs: optionalLabs(input.labs),
+      visits: optionalVisits(input.visits),
       archived: false,
       sessionId: null,
       revision: 0,
@@ -147,6 +152,14 @@ export class PatientRegistry {
       patient.tags = optionalStrings(input.tags, "标签", 20, 40);
     if (input.note !== undefined)
       patient.note = string(input.note, "备注", 2000);
+    if (input.diagnoses !== undefined)
+      patient.diagnoses = optionalDiagnoses(input.diagnoses);
+    if (input.medications !== undefined)
+      patient.medications = optionalMedications(input.medications);
+    if (input.allergies !== undefined)
+      patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
+    if (input.labs !== undefined) patient.labs = optionalLabs(input.labs);
+    if (input.visits !== undefined) patient.visits = optionalVisits(input.visits);
     if (input.archived !== undefined) {
       check(typeof input.archived === "boolean", "INVALID_INPUT", "归档状态无效");
       patient.archived = input.archived;
@@ -163,6 +176,35 @@ export class PatientRegistry {
     this.store.db
       .prepare("UPDATE patients SET data=? WHERE id=?")
       .run(JSON.stringify(patient), patient.id);
+  }
+  // Research export: identity fields are removed or bucketed; clinical
+  // content stays so cohort summaries remain usable.
+  exportDeidentified(id) {
+    const patient = this.row(id);
+    const pseudoId = `P-${createHash("sha256").update(patient.id).digest("hex").slice(0, 8)}`;
+    const age = patient.birthYear
+      ? new Date().getFullYear() - patient.birthYear
+      : null;
+    return {
+      pseudoId,
+      gender: patient.gender || "unknown",
+      ageBand:
+        age !== null ? `${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9}` : null,
+      diagnoses: patient.diagnoses || [],
+      medications: (patient.medications || []).map((m) => ({
+        name: m.name,
+        ...(m.dose ? { dose: m.dose } : {}),
+        ...(m.frequency ? { frequency: m.frequency } : {}),
+      })),
+      allergies: patient.allergies || [],
+      labs: patient.labs || [],
+      visits: (patient.visits || []).map((v) => ({
+        date: v.date,
+        reason: v.reason,
+      })),
+      exportedAt: new Date().toISOString(),
+      note: "已脱敏：姓名、电话与确切出生年份已移除，仅保留年龄段；导出文件请按机构科研规范管理。",
+    };
   }
   remove(id) {
     const patient = this.row(id);
@@ -414,4 +456,69 @@ function optionalStrings(value, label, maxCount, maxLen) {
   const items = value.map((v) => string(v, label, maxLen).trim()).filter(Boolean);
   check(new Set(items).size === items.length, "INVALID_INPUT", `${label}不能重复`);
   return items;
+}
+const clinicalDate = (value, label) => {
+  const text = string(value, label, 10);
+  check(
+    /^\d{4}-\d{2}-\d{2}$/.test(text) &&
+      !Number.isNaN(Date.parse(text)) &&
+      new Date(text).toISOString().slice(0, 10) === text,
+    "INVALID_INPUT",
+    `${label}须为 YYYY-MM-DD`,
+  );
+  return text;
+};
+function structuredList(value, label, maxCount, build) {
+  if (value === undefined || value === null) return [];
+  check(
+    Array.isArray(value) && value.length <= maxCount,
+    "INVALID_INPUT",
+    `${label}最多 ${maxCount} 条`,
+  );
+  return value.map((item) => {
+    check(
+      item && typeof item === "object" && !Array.isArray(item),
+      "INVALID_INPUT",
+      `${label}格式无效`,
+    );
+    return build(item);
+  });
+}
+function optionalDiagnoses(value) {
+  return structuredList(value, "诊断", 40, (item) => ({
+    code: item.code ? string(item.code, "ICD-10 编码", 20) : "",
+    name: string(item.name, "诊断名称", 120),
+    ...(item.date ? { date: clinicalDate(item.date, "诊断日期") } : {}),
+  }));
+}
+function optionalMedications(value) {
+  return structuredList(value, "用药", 60, (item) => ({
+    name: string(item.name, "药名", 120),
+    ...(item.dose ? { dose: string(item.dose, "剂量", 60) } : {}),
+    ...(item.frequency ? { frequency: string(item.frequency, "频次", 60) } : {}),
+    ...(item.note ? { note: string(item.note, "备注", 200) } : {}),
+  }));
+}
+function optionalLabs(value) {
+  return structuredList(value, "检验", 500, (item) => {
+    const value_ = item.value;
+    check(
+      typeof value_ === "number" && Number.isFinite(value_),
+      "INVALID_INPUT",
+      "检验数值必须为数字",
+    );
+    return {
+      item: string(item.item, "检验项目", 60),
+      value: value_,
+      ...(item.unit ? { unit: string(item.unit, "单位", 30) } : {}),
+      date: clinicalDate(item.date, "检验日期"),
+    };
+  });
+}
+function optionalVisits(value) {
+  return structuredList(value, "就诊", 200, (item) => ({
+    date: clinicalDate(item.date, "就诊日期"),
+    reason: string(item.reason, "就诊事由", 200),
+    ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
+  }));
 }
