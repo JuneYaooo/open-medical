@@ -1174,3 +1174,14 @@ iframe.wb-file-preview {
 .generic-workspaces .desk-composer textarea {
   resize: none;
 }
+
+/* --- Single bottom row: tools + auth + model + send --- */
+.wb-composer-footer .wb-auth-bar {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.wb-composer-footer .wb-auth-bar select {
+  max-width: 150px;
+  text-overflow: ellipsis;
+}

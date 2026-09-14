@@ -834,59 +834,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         list().catch((e) => setError(e.message));
                       }}
                     />
-                    <div className="wb-composer-actions">
-                      <button
-                        className="wb-model-shortcut"
-                        onClick={onOpenSettings}
-                        title="模型连接设置"
-                      >
-                        {config.modelConfigured
-                          ? config.model
-                          : "连接模型"}
-                      </button>
-                      <button
-                        className="secondary"
-                        hidden={
-                          !running &&
-                          !current.runs.some((r) => r.status === "running")
-                        }
-                        onClick={async () => {
-                          try {
-                            await api(base + "/cancel", "POST", {});
-                            abort.current?.abort();
-                            if (!running) await refresh();
-                          } catch (e) {
-                            setError(e.message);
-                          }
-                        }}
-                      >
-                        停止
-                      </button>
-                      <button
-                        className="wb-send"
-                        aria-label="发送任务"
-                        disabled={
-                          busy ||
-                          !prompt.trim() ||
-                                              !config?.modelConfigured
-                        }
-                        title={
-                          !config?.modelConfigured
-                            ? "先连接模型"
-                            : "发送任务"
-                        }
-                        onClick={run}
-                      >
-                        <ArrowUp size={17} />
-                      </button>
-                    </div>
-                  </div>
-                  {!config?.modelConfigured && (
-                    <span className="wb-model-missing">
-                      尚未连接模型，请在左下角「设置」里连接。
-                    </span>
-                  )}
-                  <div className="wb-auth-bar">
+                    <div className="wb-auth-bar">
                     <ShieldCheck size={14} />
                     <select
                       aria-label="授权模式"
@@ -943,6 +891,59 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       </span>
                     )}
                   </div>
+
+                    <div className="wb-composer-actions">
+                      <button
+                        className="wb-model-shortcut"
+                        onClick={onOpenSettings}
+                        title="模型连接设置"
+                      >
+                        {config.modelConfigured
+                          ? config.model
+                          : "连接模型"}
+                      </button>
+                      <button
+                        className="secondary"
+                        hidden={
+                          !running &&
+                          !current.runs.some((r) => r.status === "running")
+                        }
+                        onClick={async () => {
+                          try {
+                            await api(base + "/cancel", "POST", {});
+                            abort.current?.abort();
+                            if (!running) await refresh();
+                          } catch (e) {
+                            setError(e.message);
+                          }
+                        }}
+                      >
+                        停止
+                      </button>
+                      <button
+                        className="wb-send"
+                        aria-label="发送任务"
+                        disabled={
+                          busy ||
+                          !prompt.trim() ||
+                                              !config?.modelConfigured
+                        }
+                        title={
+                          !config?.modelConfigured
+                            ? "先连接模型"
+                            : "发送任务"
+                        }
+                        onClick={run}
+                      >
+                        <ArrowUp size={17} />
+                      </button>
+                    </div>
+                  </div>
+                  {!config?.modelConfigured && (
+                    <span className="wb-model-missing">
+                      尚未连接模型，请在左下角「设置」里连接。
+                    </span>
+                  )}
                 </div>
                 {current.messages.length === 0 && !partial && (
                   <div className="desk-suggestions">
