@@ -944,3 +944,59 @@
   color: #7d858c;
   font-size: 11px;
 }
+
+/* --- Authorization editor under the composer --- */
+.wb-auth-editor {
+  margin-top: 10px;
+  border-top: 1px dashed #333;
+  padding-top: 6px;
+}
+.wb-auth-editor > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #9aa2a8;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.wb-warn-icon {
+  color: #e0a34c;
+  flex-shrink: 0;
+}
+.wb-auth-editor .workspace-authority {
+  margin: 8px 0 4px;
+}
+/* --- File previews in the results panel --- */
+.wb-file-preview {
+  width: 100%;
+  min-height: 320px;
+  max-height: 70vh;
+  border: 1px solid var(--desk-line);
+  border-radius: 10px;
+  background: #0f1214;
+  object-fit: contain;
+}
+iframe.wb-file-preview {
+  min-height: 60vh;
+}
+.wb-office-preview small {
+  color: #7d858c;
+  font-size: 11px;
+}
+.wb-office-text {
+  max-height: 50vh;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+/* --- Sidebar footer entries --- */
+.wb-model-entry {
+  flex: 1;
+  min-width: 0;
+}
+.wb-model-entry .wb-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

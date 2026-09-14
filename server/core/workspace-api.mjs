@@ -27,6 +27,21 @@ export async function workspaceApi({
     const input = await body(req);
     send(res, 200, await track(action === "videos" ? service.advancedMedia.video(id, input) : service.advancedMedia.realtime(id, input))); return true;
   }
+  if (id && action === "file" && req.method === "GET") {
+    // Read-only binary preview for images/PDF; all path protections of
+    // WorkspaceFiles apply and only safe inline types are ever served.
+    const path = url.searchParams.get("path") || "";
+    const { data, mime } = service.previewFile(id, path);
+    res.writeHead(200, {
+      "content-type": mime,
+      "content-disposition": "inline",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'",
+    });
+    res.end(data);
+    return true;
+  }
   if (id && action === "artifacts" && parts[4] && req.method === "GET") {
     const { item, data } = service.artifacts.read(id, parts[4]);
     res.writeHead(200, {

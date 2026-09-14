@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Pencil,
   RotateCcw,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 export function TaskSidebar({
@@ -19,6 +20,8 @@ export function TaskSidebar({
   onCreate,
   onNewTask,
   onSettings,
+  onWorkspaceSettings,
+  model,
   onOrganize,
   disabled,
 }) {
@@ -193,9 +196,21 @@ export function TaskSidebar({
           <Archive size={16} />
           {archive ? "返回任务" : "已归档"}
         </button>
-        <button onClick={onSettings}>
+        <button
+          className="wb-model-entry"
+          onClick={onSettings}
+          title="本机模型连接设置"
+        >
           <Settings2 size={16} />
-          设置与模型
+          <span className="wb-model-name">{model || "连接模型"}</span>
+        </button>
+        <button
+          disabled={!current}
+          onClick={onWorkspaceSettings}
+          title={current ? "当前工作区的计划任务与扩展能力" : "先选择一个工作区"}
+        >
+          <SlidersHorizontal size={16} />
+          工作区
         </button>
       </footer>
     </>
