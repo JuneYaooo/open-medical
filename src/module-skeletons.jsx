@@ -1,21 +1,9 @@
-import { FileText, Activity, ClipboardList } from "lucide-react";
+import { Activity, ClipboardList } from "lucide-react";
 
 // Module landing views for capabilities that roll out in later phases.
 // Each keeps its own file-level component so the phase upgrade replaces
 // this file's export wholesale.
 const MODULES = {
-  cases: {
-    icon: FileText,
-    title: "病例库",
-    phase: "第四期上线",
-    desc: "本地病例库与相似病例搜索：结构化摘要 + 全文检索，为临床决策与科研取例提供参考。",
-    features: [
-      "从患者档案或会话成果一键收入病例库",
-      "结构化摘要：诊断、人口学、关键检验、治疗与结局",
-      "相似病例搜索：结构过滤 + 文本相关性，返回匹配理由",
-      "全部数据仅存本机，科研输出支持脱敏",
-    ],
-  },
   research: {
     icon: Activity,
     title: "数据分析",

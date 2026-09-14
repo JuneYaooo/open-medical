@@ -3801,3 +3801,18 @@ blockquote p {
   gap: 8px;
   flex-shrink: 0;
 }
+
+/* ---- case library ---- */
+.cases-view {
+  width: min(800px, 100%);
+}
+.case-summary {
+  width: 100%;
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  margin: 8px 0;
+  resize: vertical;
+}
