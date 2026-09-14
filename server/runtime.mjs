@@ -11,6 +11,7 @@ import {
 import { PermissionEngine } from "./core/permissions.mjs";
 import { AgentRuntime } from "./core/agent-runtime.mjs";
 import { ToolRegistry } from "./core/tool-registry.mjs";
+import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 
 const {
   system: SYSTEM,
@@ -39,6 +40,7 @@ export class MedicalRuntime {
       maxActive = 3,
       skills = null,
       toolPlugins = [],
+      doctor = null,
       sandbox,
     } = {},
   ) {
@@ -52,6 +54,7 @@ export class MedicalRuntime {
     this.skills = skills;
     this.sandbox = sandbox || new MedicalSandbox();
     this.subagents = new MedicalSubagents({ provider, skills, system: SYSTEM });
+    this.doctor = doctor;
     this.toolPlugins = new Map();
     for (const plugin of toolPlugins) {
       check(
@@ -71,6 +74,15 @@ export class MedicalRuntime {
       );
       this.toolPlugins.set(name, plugin);
     }
+    for (const plugin of doctor ? doctorMemoryTools(doctor) : []) {
+      const name = plugin.definition.function.name;
+      check(
+        !this.toolPlugins.has(name),
+        "PLUGIN_CONFIG",
+        `医疗工具名称重复：${name}`,
+      );
+      this.toolPlugins.set(name, plugin);
+    }
     this.toolDefinitions = [
       ...TOOL_DEFINITIONS,
       ...ORCHESTRATION_TOOLS.filter(
@@ -78,7 +90,7 @@ export class MedicalRuntime {
           t.function.name !== "sandbox_python" ||
           this.sandbox.status().available,
       ),
-      ...toolPlugins.map((p) => p.definition),
+      ...[...this.toolPlugins.values()].map((p) => p.definition),
     ];
   }
   prepare(sessionId, body) {
@@ -465,7 +477,16 @@ export class MedicalRuntime {
         const messages = [
           {
             role: "system",
-            content: `${SYSTEM}\n可用技能：${JSON.stringify(this.skills?.list() || [])}\n可将时间线、检验摘录、用药资料检查委派给独立子代理。沙箱只用于资料计算，计算结果不能自动确认临床结论。\n策略：${JSON.stringify(run.policy)}\n本次材料索引（可用工具读取全文）：${JSON.stringify(manifest)}`,
+            content: [
+              SYSTEM,
+              this.doctor?.digest(),
+              `可用技能：${JSON.stringify(this.skills?.list() || [])}`,
+              "可将时间线、检验摘录、用药资料检查委派给独立子代理。沙箱只用于资料计算，计算结果不能自动确认临床结论。",
+              `策略：${JSON.stringify(run.policy)}`,
+              `本次材料索引（可用工具读取全文）：${JSON.stringify(manifest)}`,
+            ]
+              .filter(Boolean)
+              .join("\n"),
           },
           ...previous,
           { role: "user", content: user.content },
@@ -784,11 +805,23 @@ export class MedicalRuntime {
       decision: body.decision,
       reviewer,
     });
+    if (body.decision === "rejected" && note && this.doctor) {
+      const saved = this.store
+        .get(sessionId)
+        .artifacts.find((a) => a.id === artifactId);
+      if (saved)
+        this.doctor.recordSignal({
+          content: `复核拒绝${saved.type === "observations" ? "检验摘录" : saved.type === "clinical_timeline" ? "时间线" : saved.type === "medication_review" ? "用药核对" : "草稿"}：${note}`,
+          topic: "复核反馈",
+          source: { type: "review_rejected", sessionId, artifactId },
+        });
+    }
     return this.store.get(sessionId).artifacts.find((a) => a.id === artifactId);
   }
 
   editArtifact(sessionId, artifactId, body) {
     const title = string(body.title, "产物标题", 150);
+    let changedNotes = [];
     this.store.mutate(sessionId, (s) => {
       const a = s.artifacts.find((a) => a.id === artifactId);
       check(a, "NOT_FOUND", "产物不存在", 404);
@@ -830,6 +863,7 @@ export class MedicalRuntime {
           const correctionNote = changed
             ? string(e.correctionNote, "修改依据", 1500)
             : a.events[i].correctionNote;
+          if (changed && correctionNote) changedNotes.push(correctionNote);
           return {
             ...a.events[i],
             date,
@@ -887,6 +921,13 @@ export class MedicalRuntime {
       }
     });
     this.store.audit(sessionId, "artifact.edited", { artifactId });
+    if (this.doctor && changedNotes.length)
+      for (const note of changedNotes)
+        this.doctor.recordSignal({
+          content: `修订草稿时补充依据：${note}`,
+          topic: "修订依据",
+          source: { type: "artifact_edited", sessionId, artifactId },
+        });
     return this.store.get(sessionId).artifacts.find((a) => a.id === artifactId);
   }
 }

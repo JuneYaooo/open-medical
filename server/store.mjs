@@ -87,20 +87,27 @@ export class Store {
       CREATE INDEX IF NOT EXISTS follow_ups_due ON follow_ups(status,next_due);
       CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, kind TEXT NOT NULL, due_at INTEGER NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status,due_at);
+      CREATE TABLE IF NOT EXISTS doctor_profile (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS doctor_memories (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, status TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, count INTEGER NOT NULL DEFAULT 1, topic TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS doctor_memories_kind ON doctor_memories(kind,status);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
-      // schema 2 → 3 only adds patient-domain tables; session rows are unchanged.
+      // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
+      // profile/memory tables. Both migrations are additive; session rows are
+      // unchanged.
       const schemaRow = this.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version");
+      const setSchema = (value) =>
+        this.db
+          .prepare("UPDATE meta SET value=? WHERE key=?")
+          .run(value, "schema_version");
       if (!schemaRow)
         this.db
           .prepare("INSERT INTO meta VALUES (?,?)")
-          .run("schema_version", "3");
-      else if (schemaRow.value === "2")
-        this.db
-          .prepare("UPDATE meta SET value=? WHERE key=?")
-          .run("3", "schema_version");
-      else if (schemaRow.value !== "3")
+          .run("schema_version", "4");
+      else if (schemaRow.value === "2" || schemaRow.value === "3")
+        setSchema("4");
+      else if (schemaRow.value !== "4")
         throw new AppError(
           "DATABASE_SCHEMA",
           "数据库版本不兼容；未修改既有会话，请使用匹配的运行时",

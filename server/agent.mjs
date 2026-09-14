@@ -19,6 +19,7 @@ import { MEDICAL_AGENTS } from "./subagents.mjs";
 import { PatientRegistry, composeDigest } from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
+import { DoctorProfile } from "./medical/doctor-profile.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -162,6 +163,7 @@ export function createServer(options = {}) {
     ...options.runtimeOptions,
     skills,
     toolPlugins: options.toolPlugins || [],
+    doctor: options.doctor || new DoctorProfile(store),
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     onNotification: options.onNotification,
@@ -414,6 +416,7 @@ export function createServer(options = {}) {
           },
           ingestConfigured: Boolean(ingestSecret),
           patientsEnabled: true,
+          doctorMemory: runtime.doctor.counts(),
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
@@ -702,6 +705,60 @@ export function createServer(options = {}) {
           }
         }
       }
+      if (parts[0] === "api" && parts[1] === "doctor") {
+        if (parts[2] === "profile" && parts.length === 3) {
+          if (req.method === "GET") return send(res, 200, runtime.doctor.get());
+          if (req.method === "PATCH")
+            return send(res, 200, runtime.doctor.update(await body(req)));
+        }
+        if (parts[2] === "memories") {
+          if (parts.length === 3 && req.method === "GET")
+            return send(res, 200, {
+              memories: runtime.doctor.memories({
+                status: url.searchParams.get("status") || undefined,
+                kind: url.searchParams.get("kind") || undefined,
+              }),
+            });
+          if (parts.length === 3 && req.method === "POST") {
+            const b = await body(req);
+            return send(res, 201, runtime.doctor.addMemory({ ...b, kind: "explicit" }));
+          }
+          if (parts.length === 4 && req.method === "DELETE") {
+            const id = Number(parts[3]);
+            return send(res, 200, runtime.doctor.deleteMemory(id));
+          }
+          if (parts.length === 5) {
+            const id = Number(parts[3]);
+            if (req.method === "POST" && parts[4] === "confirm")
+              return send(res, 200, runtime.doctor.confirmMemory(id));
+            if (req.method === "POST" && parts[4] === "dismiss")
+              return send(res, 200, runtime.doctor.dismissMemory(id));
+            if (req.method === "POST" && parts[4] === "pin")
+              return send(
+                res,
+                200,
+                runtime.doctor.pinMemory(
+                  id,
+                  (await body(req)).pinned === true,
+                ),
+              );
+          }
+        }
+        if (parts[2] === "consolidate" && req.method === "POST") {
+          if (parts.length === 3) return send(res, 200, runtime.doctor.consolidate());
+          if (parts[3] === "model") {
+            const b = await body(req);
+            return send(
+              res,
+              200,
+              await runtime.doctor.modelConsolidate(runtime.provider, {
+                consent: b.externalConsent === true,
+                model: b.model,
+              }),
+            );
+          }
+        }
+      }
       const match = path.match(/^\/api\/chat\/([A-Za-z0-9_-]+)(\/cancel)?$/);
       if (match && req.method === "POST") {
         const id = identifier(match[1]);
@@ -876,6 +933,7 @@ export function createServer(options = {}) {
   server.scheduler = scheduler;
   server.patients = patients;
   server.followups = followups;
+  server.doctor = runtime.doctor;
   server.wechat = wechat;
   server.once("listening", () => {
     scheduler.start();

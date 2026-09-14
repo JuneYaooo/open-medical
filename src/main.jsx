@@ -39,6 +39,8 @@ import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
 import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
+import { ModuleView, MODULE_VIEW_IDS } from "./module-skeletons";
+import { DoctorProfilePanel } from "./doctor-profile";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 const WORKFLOWS = [
   {
@@ -900,26 +902,60 @@ function App() {
           </button>
           <nav className="primary-navigation" aria-label="主导航">
             {[
-              ["workspaces", "通用 Agent", FolderOpen],
-              ["home", "医疗工作台", LayoutDashboard],
-              ["patients", "患者档案", Users],
-              ["tasks", "任务记录", FolderOpen],
-              ["review", "待复核", CheckCheck],
-            ].map(([id, label, Icon]) => (
-              <button
-                key={id}
-                className={view === id ? "active" : ""}
-                aria-current={view === id ? "page" : undefined}
-                onClick={() =>
-                  id === "patients" ? openPatient() : navigate(id)
-                }
-              >
-                <Icon size={17} />
-                <span>{label}</span>
-                {id === "review" && pendingReviews > 0 && (
-                  <em>{pendingReviews}</em>
-                )}
-              </button>
+              [
+                "工作台",
+                [
+                  ["home", "医疗工作台", LayoutDashboard],
+                  ["workspaces", "通用 Agent", FolderOpen],
+                ],
+              ],
+              [
+                "临床",
+                [
+                  ["patients", "患者档案", Users],
+                  ["followups", "随访管理", CalendarClock],
+                  ["cases", "病例库", FileText],
+                ],
+              ],
+              [
+                "知识",
+                [
+                  ["literature", "文献检索", BookOpen],
+                  ["guidelines", "指南库", BookOpen],
+                ],
+              ],
+              [
+                "科研",
+                [
+                  ["research", "数据分析", Activity],
+                  ["drg", "DRG 测算", ClipboardList],
+                ],
+              ],
+              [
+                "系统",
+                [
+                  ["tasks", "任务记录", FolderOpen],
+                  ["review", "待复核", CheckCheck],
+                ],
+              ],
+            ].map(([group, items]) => (
+              <div className="nav-group" key={group}>
+                <p className="nav-group-label">{group}</p>
+                {items.map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    className={view === id ? "active" : ""}
+                    aria-current={view === id ? "page" : undefined}
+                    onClick={() =>
+                      id === "patients" ? openPatient() : navigate(id)
+                    }
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                    {id === "review" && pendingReviews > 0 && <em>{pendingReviews}</em>}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
           <label className="search">
@@ -991,6 +1027,8 @@ function App() {
               initialCreate={patientRoute.create}
               onOpenWorkspace={openTask}
             />
+          ) : MODULE_VIEW_IDS.includes(view) ? (
+            <ModuleView view={view} onView={navigate} />
           ) : view !== "workbench" ? (
             <WorkbenchHome
               key={homeKey}
@@ -1822,10 +1860,26 @@ function App() {
             >
               刷新连接状态
             </button>
+            <button
+              className="secondary"
+              onClick={() => setModal("doctor")}
+            >
+              医生档案与记忆
+            </button>
             <p className="muted">
-              本版本未接入医院身份系统、电子签名、OCR、药物数据库或临床指南库。
+              文献检索、指南库、病例库、科研分析与 DRG
+              测算按模块逐步上线；本版本未接入医院信息系统、电子签名或药物数据库。
             </p>
           </div>
+        </Modal>
+      )}
+      {modal === "doctor" && (
+        <Modal
+          title="医生档案与记忆"
+          onClose={() => setModal(null)}
+          wide
+        >
+          <DoctorProfilePanel config={config} />
         </Modal>
       )}
       {modal === "tasks" && session && (

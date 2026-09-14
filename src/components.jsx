@@ -27,7 +27,7 @@ export function IconButton({ title, children, ...props }) {
 export function Badge({ status }) {
   return <span className={`badge ${status}`}>{STATUS[status] || status}</span>;
 }
-export function Modal({ title, onClose, children }) {
+export function Modal({ title, onClose, children, wide = false }) {
   const ref = useRef();
   useEffect(() => {
     const previous = document.activeElement;
@@ -61,7 +61,7 @@ export function Modal({ title, onClose, children }) {
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <section
-        className="modal"
+        className={`modal ${wide ? "modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}

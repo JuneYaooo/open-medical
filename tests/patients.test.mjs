@@ -442,7 +442,7 @@ test("draft_treatment_review produces a bounded draft artifact through the model
   assert.equal(reviewed.status, 200);
 });
 
-test("schema 2 databases upgrade in place to 3 and remain backup compatible", (t) => {
+test("schema 2 databases upgrade in place and remain backup compatible", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "medical-migration-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, "old.sqlite");
@@ -477,16 +477,23 @@ test("schema 2 databases upgrade in place to 3 and remain backup compatible", (t
     assert.equal(
       store.db.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "3",
+      "4",
     );
-    for (const table of ["patients", "patient_messages", "follow_ups", "reminders"])
+    for (const table of [
+      "patients",
+      "patient_messages",
+      "follow_ups",
+      "reminders",
+      "doctor_profile",
+      "doctor_memories",
+    ])
       store.db.prepare(`SELECT COUNT(*) FROM ${table}`).get();
     const backup = backupDatabase(file, join(dir, "backup.sqlite"));
     const check = new DatabaseSync(backup, { readOnly: true });
     assert.equal(
       check.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "3",
+      "4",
     );
     check.close();
   } finally {
