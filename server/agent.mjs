@@ -25,6 +25,7 @@ import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
+import { ResearchService, researchTools as researchToolPlugins } from "./medical/research.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -170,6 +171,7 @@ export function createServer(options = {}) {
   const guidelines =
     options.guidelines || new GuidelineLibrary(store);
   const cases = options.cases || new CaseLibrary(store);
+  const research = options.research || new ResearchService();
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
@@ -177,6 +179,7 @@ export function createServer(options = {}) {
       ...literatureTools(literature),
       ...guidelineTools(guidelines),
       ...caseTools(cases),
+      ...researchToolPlugins(research),
     ],
     doctor,
   });
@@ -702,6 +705,19 @@ export function createServer(options = {}) {
           return send(res, 201, cases.fromPatient(patient, b));
         }
         return send(res, 201, cases.addCase(b));
+      }
+      if (parts[0] === "api" && parts[1] === "research" && req.method === "POST") {
+        const b = await body(req);
+        const sources = b.sessionId
+          ? store.get(identifier(b.sessionId)).files
+          : [];
+        if (parts[2] === "profile")
+          return send(res, 200, research.profile({ ...b, sources }));
+        if (parts[2] === "test") return send(res, 200, research.test({ ...b, sources }));
+        if (parts[2] === "sample-size")
+          return send(res, 200, research.sampleSize(b));
+        if (parts[2] === "deidentify")
+          return send(res, 200, research.deidentify({ ...b, sources }));
       }
       if (parts[0] === "api" && parts[1] === "cases" && parts[2] === "similar" && req.method === "POST")
         return send(res, 200, cases.similar(await body(req)));

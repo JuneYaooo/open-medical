@@ -45,6 +45,7 @@ import { LiteratureView } from "./literature";
 import { GuidelinesView } from "./guidelines";
 import { FollowupsView } from "./followups";
 import { CasesView } from "./cases";
+import { ResearchView } from "./research";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 const WORKFLOWS = [
   {
@@ -1039,6 +1040,8 @@ function App() {
             <FollowupsView onOpenPatient={(id) => openPatient({ id })} />
           ) : view === "cases" ? (
             <CasesView />
+          ) : view === "research" ? (
+            <ResearchView />
           ) : MODULE_VIEW_IDS.includes(view) ? (
             <ModuleView view={view} onView={navigate} />
           ) : view !== "workbench" ? (

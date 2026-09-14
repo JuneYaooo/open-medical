@@ -3816,3 +3816,24 @@ blockquote p {
   margin: 8px 0;
   resize: vertical;
 }
+
+/* ---- research view ---- */
+.research-view {
+  width: min(860px, 100%);
+}
+.research-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.research-table th,
+.research-table td {
+  text-align: left;
+  border-bottom: 1px solid #e3ead9;
+  padding: 6px 8px;
+}
+.research-table th {
+  color: #5d6c5f;
+  font-weight: 600;
+}
