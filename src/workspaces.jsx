@@ -294,7 +294,15 @@ export function WorkspacesView({ config, onOpenSettings }) {
     setError("");
     setView("chat");
     generation.current++;
-    setConsent(false);
+    setConsent(
+      (() => {
+        try {
+          return localStorage.getItem(`workbench.consent.${id}`) === "1";
+        } catch {
+          return false;
+        }
+      })(),
+    );
     setFile(null);
     setFiles([]);
     setDirectory(".");
@@ -584,73 +592,81 @@ export function WorkspacesView({ config, onOpenSettings }) {
             className={`workspace-detail ${view !== "chat" ? "wb-panel-open" : ""}`}
             style={{ "--wb-panel-width": `${panelWidth}%` }}
           >
-            <div className="workspace-heading">
-              <button
-                className="wb-sidebar-toggle"
-                aria-label="切换侧栏"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-              >
-                {sidebarOpen ? (
-                  <PanelLeftClose size={17} />
-                ) : (
-                  <PanelLeftOpen size={17} />
-                )}
-              </button>
-              <h2>{current.title}</h2>
-              <code>{current.root}</code>
-              <button
-                className="secondary"
-                disabled={
-                  busy ||
-                  running ||
-                  current.runs.some((r) => r.status === "running")
-                }
-                onClick={() =>
-                  act(async () => {
-                    const w = await api(base + "/fork", "POST", {
-                      revision: current.revision,
-                    });
-                    await select(w.id);
-                  })
-                }
-              >
-                从当前历史分支
-              </button>
-            </div>
-            <nav className="desk-tabs" aria-label="工作区视图">
-              {[
-                ["chat", MessageSquare, "对话"],
-                ["files", FolderOpen, "文件与终端"],
-                ["review", FileCheck2, "变更审批"],
-                ["browser", Globe, "浏览器"],
-                ["media", Image, "媒体"],
-                ["history", History, "运行记录"],
-                ["settings", Settings2, "设置"],
-              ].map(([key, Icon, label]) => (
+            <header className="wb-topbar">
+              <div className="wb-topbar-left">
                 <button
-                  key={key}
-                  aria-current={view === key ? "page" : undefined}
-                  onClick={() => {
-                    setView(key);
-                    if (key === "files" && !files.length)
-                      list().catch((e) => setError(e.message));
-                  }}
+                  className="wb-sidebar-toggle"
+                  aria-label="切换侧栏"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
                 >
-                  <Icon size={16} />
-                  {label}
-                  {key === "review" &&
-                    current.approvals.some((a) => a.status === "pending") && (
-                      <span className="desk-count">
-                        {
-                          current.approvals.filter(
-                            (a) => a.status === "pending",
-                          ).length
-                        }
-                      </span>
-                    )}
+                  {sidebarOpen ? (
+                    <PanelLeftClose size={17} />
+                  ) : (
+                    <PanelLeftOpen size={17} />
+                  )}
                 </button>
-              ))}
-            </nav>
+                <h2 title={current.root}>{current.title}</h2>
+                <button
+                  className={`wb-status-chip ${running ? "running" : ""}`}
+                  onClick={onOpenSettings}
+                  title={
+                    config.modelConfigured
+                      ? `${config.provider} · ${config.model} · ${
+                          current.permissions.grants["filesystem.write"]
+                            ? "允许修改"
+                            : "读取模式"
+                        }`
+                      : "打开模型设置"
+                  }
+                >
+                  {running
+                    ? "● 执行中"
+                    : config.modelConfigured
+                      ? `${config.model} · ${
+                          current.permissions.grants["filesystem.write"]
+                            ? "可修改"
+                            : "只读"
+                        }`
+                      : "连接模型"}
+                </button>
+              </div>
+              <nav className="wb-panel-switch" aria-label="工作区视图">
+                {[
+                  ["files", FolderOpen, "文件与终端"],
+                  ["review", FileCheck2, "变更审批"],
+                  ["browser", Globe, "浏览器"],
+                  ["media", Image, "媒体"],
+                  ["history", History, "运行记录"],
+                  ["settings", Settings2, "设置"],
+                ].map(([key, Icon, label]) => (
+                  <button
+                    key={key}
+                    aria-current={view === key ? "page" : undefined}
+                    title={label}
+                    onClick={() => {
+                      if (view === key) setView("chat");
+                      else {
+                        setView(key);
+                        if (key === "files" && !files.length)
+                          list().catch((e) => setError(e.message));
+                      }
+                    }}
+                  >
+                    <Icon size={16} />
+                    {key === "review" &&
+                      current.approvals.some((a) => a.status === "pending") && (
+                        <span className="desk-count">
+                          {
+                            current.approvals.filter(
+                              (a) => a.status === "pending",
+                            ).length
+                          }
+                        </span>
+                      )}
+                  </button>
+                ))}
+              </nav>
+            </header>
             <div className="wb-work-area">
               <section className="workspace-conversation">
                 <div
@@ -661,26 +677,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
                   }}
                 >
-                  <div className="desk-task-status">
-                    <span>
-                      {running
-                        ? "● 正在执行"
-                        : !config.modelConfigured
-                          ? "等待连接模型"
-                          : current.runs.at(-1)
-                            ? `最近任务 · ${stateLabel(current.runs.at(-1).status)}`
-                            : "准备就绪"}
-                    </span>
-                    <span>
-                      {config.modelConfigured
-                        ? `${config.provider} · ${config.model}`
-                        : "尚未连接模型"}{" "}
-                      ·{" "}
-                      {current.permissions.grants["filesystem.write"]
-                        ? "允许修改"
-                        : "读取模式"}
-                    </span>
-                  </div>
                   {current.messages.length === 0 && !partial && (
                     <div className="desk-chat-welcome">
                       <h2>今天想完成什么？</h2>
@@ -690,10 +686,102 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       </p>
                     </div>
                   )}
-                  <details className="desk-run-options">
+                  <div className="desk-messages">
+                    {current.messages.map((m, i) => (
+                      <article
+                        className={`desk-message desk-message-${m.role}`}
+                        key={i}
+                      >
+                        <small>{m.role === "user" ? "你" : "助理"}</small>
+                        <RichMessage text={m.content} onOpenFile={openFile} />
+                      </article>
+                    ))}
+                    {partial && (
+                      <article aria-live="polite">
+                        <small>正在处理</small>
+                        <RichMessage text={partial} onOpenFile={openFile} />
+                      </article>
+                    )}
+                  </div>
+                  <Activity
+                    events={events}
+                    current={current}
+                    running={running}
+                    onReview={() => setView("review")}
+                    onHistory={() => setView("history")}
+                  />
+                  <Artifacts
+                    key={current.id}
+                    current={current}
+                    refresh={refresh}
+                    onDownload={downloadArtifact}
+                    onOpenFile={openFile}
+                  />
+                  <div ref={messagesEnd} />
+                </div>
+                <div className="desk-composer">
+                  <details className="desk-run-options wb-run-compact">
                     <summary>
                       运行选项 · {minutes} 分钟 · 最多 {rounds} 轮
+                      {resumeRunId ? " · 续接检查点" : ""}
                     </summary>
+                    <div className="workspace-authority">
+                      <label>
+                        最多模型轮数
+                        <input
+                          type="number"
+                          min="1"
+                          max="128"
+                          value={rounds}
+                          disabled={running}
+                          onChange={(e) => setRounds(Number(e.target.value))}
+                        />
+                      </label>
+                      <label>
+                        执行时限（分钟）
+                        <input
+                          type="number"
+                          min="1"
+                          max="600"
+                          value={minutes}
+                          disabled={running}
+                          onChange={(e) => setMinutes(Number(e.target.value))}
+                        />
+                      </label>
+                      <label className="workspace-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={background}
+                          disabled={running}
+                          onChange={(e) => setBackground(e.target.checked)}
+                        />
+                        后台执行，关闭页面后继续（应用须运行）
+                      </label>
+                      <label className="workspace-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={resumeOnRestart}
+                          disabled={running}
+                          onChange={(e) => setResumeOnRestart(e.target.checked)}
+                        />
+                        服务重启后自动续接本任务（沿用当前授权和预算，最多恢复 3
+                        次）
+                      </label>
+                      {current.runs.at(-1)?.canResume && !running && (
+                        <label className="workspace-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(resumeRunId)}
+                            onChange={(e) =>
+                              setResumeRunId(
+                                e.target.checked ? current.runs.at(-1).id : "",
+                              )
+                            }
+                          />
+                          使用上次持久化检查点继续；未知工具结果先核查，已完成工具不会重放
+                        </label>
+                      )}
+                    </div>
                     {current.archivedRuns > 0 && (
                       <details>
                         <summary>
@@ -743,98 +831,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         )}
                       </details>
                     )}
-                    <div className="workspace-authority">
-                      <label>
-                        最多模型轮数
-                        <input
-                          type="number"
-                          min="1"
-                          max="128"
-                          value={rounds}
-                          disabled={running}
-                          onChange={(e) => setRounds(Number(e.target.value))}
-                        />
-                      </label>
-                      <label>
-                        执行时限（分钟）
-                        <input
-                          type="number"
-                          min="1"
-                          max="600"
-                          value={minutes}
-                          disabled={running}
-                          onChange={(e) => setMinutes(Number(e.target.value))}
-                        />
-                      </label>
-                      <label className="workspace-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={background}
-                          disabled={running}
-                          onChange={(e) => setBackground(e.target.checked)}
-                        />
-                        后台执行，关闭页面后继续（应用须运行）
-                      </label>
-                      <label className="workspace-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={resumeOnRestart}
-                          disabled={running}
-                          onChange={(e) => setResumeOnRestart(e.target.checked)}
-                        />
-                        服务重启后自动续接本任务（沿用当前授权和预算，最多恢复 3
-                        次）
-                      </label>
-                    </div>
-                    {current.runs.at(-1)?.canResume && !running && (
-                      <label className="workspace-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(resumeRunId)}
-                          onChange={(e) =>
-                            setResumeRunId(
-                              e.target.checked ? current.runs.at(-1).id : "",
-                            )
-                          }
-                        />
-                        使用上次持久化检查点继续；未知工具结果先核查，已完成工具不会重放
-                      </label>
-                    )}
                   </details>
-                  <div className="desk-messages">
-                    {current.messages.map((m, i) => (
-                      <article
-                        className={`desk-message desk-message-${m.role}`}
-                        key={i}
-                      >
-                        <small>{m.role === "user" ? "你" : "助理"}</small>
-                        <RichMessage text={m.content} onOpenFile={openFile} />
-                      </article>
-                    ))}
-                    {partial && (
-                      <article aria-live="polite">
-                        <small>正在处理</small>
-                        <RichMessage text={partial} onOpenFile={openFile} />
-                      </article>
-                    )}
-                  </div>
-                  <Activity
-                    events={events}
-                    current={current}
-                    running={running}
-                    onReview={() => setView("review")}
-                    onHistory={() => setView("history")}
-                  />
-                  <Artifacts
-                    key={current.id}
-                    current={current}
-                    refresh={refresh}
-                    onDownload={downloadArtifact}
-                    onOpenFile={openFile}
-                  />
-                  <div ref={messagesEnd} />
-                </div>
-                <div className="desk-composer">
                   <ComposerTools
                     key={current.id}
                     current={current}
@@ -854,12 +851,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       list().catch((e) => setError(e.message));
                     }}
                   />
-                  <button
-                    className="wb-model-shortcut"
-                    onClick={onOpenSettings}
-                  >
-                    {config.modelConfigured ? config.model : "连接模型"}
-                  </button>
                   <textarea
                     ref={promptRef}
                     aria-label="通用任务"
@@ -868,7 +859,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     placeholder={
                       running
                         ? "补充要求，Agent 会在下一步接收…"
-                        : "描述你想完成的任务…"
+                        : "描述你想完成的任务…（⌘/Ctrl + Enter 发送）"
                     }
                     disabled={busy}
                     onKeyDown={(e) => {
@@ -886,57 +877,82 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       }
                     }}
                   />
-                  <label className="workspace-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={consent}
-                      onChange={(e) => setConsent(e.target.checked)}
-                      disabled={busy}
-                    />
-                    允许本次任务、同授权下的历史及工具读取的文件内容发送给当前模型
-                  </label>
-                  <div className="workspace-toolbar">
-                    {config.modelConfigured && (
-                      <span className="desk-send-hint">
-                        {!consent
-                          ? "勾选上方授权后可发送"
-                          : "⌘ / Ctrl + Enter 发送"}
-                      </span>
-                    )}
-                    <button
-                      className="primary"
-                      disabled={
-                        busy ||
-                        !prompt.trim() ||
-                        !consent ||
-                        !config?.modelConfigured
-                      }
-                      onClick={run}
+                  <div className="wb-composer-footer">
+                    <label
+                      className="workspace-checkbox wb-consent"
+                      title="允许本次任务、同授权下的历史及工具读取的文件内容发送给当前模型"
                     >
-                      <ArrowUp size={16} /> {running ? "追加要求" : "发送任务"}
-                    </button>
-                    <button
-                      className="secondary"
-                      disabled={
-                        !running &&
-                        !current.runs.some((r) => r.status === "running")
-                      }
-                      onClick={async () => {
-                        try {
-                          await api(base + "/cancel", "POST", {});
-                          abort.current?.abort();
-                          if (!running) await refresh();
-                        } catch (e) {
-                          setError(e.message);
+                      <input
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => {
+                          setConsent(e.target.checked);
+                          try {
+                            localStorage.setItem(
+                              `workbench.consent.${current.id}`,
+                              e.target.checked ? "1" : "0",
+                            );
+                          } catch {}
+                        }}
+                        disabled={busy}
+                      />
+                      允许发送任务与所读文件给模型
+                    </label>
+                    <div className="wb-composer-actions">
+                      <button
+                        className="wb-model-shortcut"
+                        onClick={onOpenSettings}
+                        title="模型连接设置"
+                      >
+                        {config.modelConfigured
+                          ? config.model
+                          : "连接模型"}
+                      </button>
+                      <button
+                        className="secondary"
+                        hidden={
+                          !running &&
+                          !current.runs.some((r) => r.status === "running")
                         }
-                      }}
-                    >
-                      停止
-                    </button>
-                    {!config?.modelConfigured && (
-                      <span>尚未连接模型，请打开左侧“设置与模型”。</span>
-                    )}
+                        onClick={async () => {
+                          try {
+                            await api(base + "/cancel", "POST", {});
+                            abort.current?.abort();
+                            if (!running) await refresh();
+                          } catch (e) {
+                            setError(e.message);
+                          }
+                        }}
+                      >
+                        停止
+                      </button>
+                      <button
+                        className="wb-send"
+                        aria-label="发送任务"
+                        disabled={
+                          busy ||
+                          !prompt.trim() ||
+                          !consent ||
+                          !config?.modelConfigured
+                        }
+                        title={
+                          !consent
+                            ? "先勾选发送授权"
+                            : !config?.modelConfigured
+                              ? "先连接模型"
+                              : "发送任务"
+                        }
+                        onClick={run}
+                      >
+                        <ArrowUp size={17} />
+                      </button>
+                    </div>
                   </div>
+                  {!config?.modelConfigured && (
+                    <span className="wb-model-missing">
+                      尚未连接模型，请打开左侧「设置与模型」。
+                    </span>
+                  )}
                 </div>
                 {current.messages.length === 0 && !partial && (
                   <div className="desk-suggestions">
@@ -1044,6 +1060,24 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       此分支继承对话，仍使用同一文件夹；文件未复制，写入需重新授权。
                     </p>
                   )}
+                  <button
+                    className="secondary wb-fork-button"
+                    disabled={
+                      busy ||
+                      running ||
+                      current.runs.some((r) => r.status === "running")
+                    }
+                    onClick={() =>
+                      act(async () => {
+                        const w = await api(base + "/fork", "POST", {
+                          revision: current.revision,
+                        });
+                        await select(w.id);
+                      })
+                    }
+                  >
+                    从当前历史分支
+                  </button>
                   <div className="workspace-authority">
                     <label>
                       工具模式
