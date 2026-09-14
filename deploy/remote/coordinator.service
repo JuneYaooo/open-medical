@@ -1,0 +1,18 @@
+[Unit]
+Description=Open Agent Remote Coordinator
+After=network.target
+
+[Service]
+Type=simple
+User=openagent
+WorkingDirectory=/opt/open-agent
+EnvironmentFile=/etc/open-agent/coordinator.env
+ExecStart=/usr/bin/node scripts/remote-coordinator.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,892 @@
+import { providerConfigured } from "./core/provider-status.mjs";
+import { randomUUID, createHash } from "node:crypto";
+import { MedicalDomain } from "./domains/medical.mjs";
+import { AppError, check, string, identifier } from "./errors.mjs";
+import { MedicalSandbox } from "./sandbox.mjs";
+import {
+  MedicalSubagents,
+  MEDICAL_AGENTS,
+  ORCHESTRATION_TOOLS,
+} from "./subagents.mjs";
+import { PermissionEngine } from "./core/permissions.mjs";
+import { AgentRuntime } from "./core/agent-runtime.mjs";
+import { ToolRegistry } from "./core/tool-registry.mjs";
+
+const {
+  system: SYSTEM,
+  policy: medicalPolicy,
+  sourcesFor,
+  runTool,
+  localWork,
+  toolDefinitions: TOOL_DEFINITIONS,
+} = MedicalDomain;
+const hash = (value) => createHash("sha256").update(value).digest("hex");
+const iso = () => new Date().toISOString();
+export function publicSession(session) {
+  const { runs, ...rest } = session;
+  return {
+    ...rest,
+    runs: runs.map(({ providerMessages: _providerMessages, ...run }) => run),
+  };
+}
+export class MedicalRuntime {
+  constructor(
+    store,
+    provider,
+    {
+      maxRounds = 6,
+      maxContextChars = 80000,
+      maxActive = 3,
+      skills = null,
+      toolPlugins = [],
+      sandbox,
+    } = {},
+  ) {
+    this.store = store;
+    this.provider = provider;
+    this.maxRounds = maxRounds;
+    this.maxContextChars = maxContextChars;
+    this.maxActive = maxActive;
+    this.active = new Map();
+    this.agent = new AgentRuntime({ provider, maxRounds, maxContextChars });
+    this.skills = skills;
+    this.sandbox = sandbox || new MedicalSandbox();
+    this.subagents = new MedicalSubagents({ provider, skills, system: SYSTEM });
+    this.toolPlugins = new Map();
+    for (const plugin of toolPlugins) {
+      check(
+        plugin?.definition?.function?.name &&
+          typeof plugin.execute === "function",
+        "PLUGIN_CONFIG",
+        "医疗工具插件定义无效",
+      );
+      const name = plugin.definition.function.name;
+      check(
+        !this.toolPlugins.has(name) &&
+          ![...TOOL_DEFINITIONS, ...ORCHESTRATION_TOOLS].some(
+            (d) => d.function.name === name,
+          ),
+        "PLUGIN_CONFIG",
+        `医疗工具名称重复：${name}`,
+      );
+      this.toolPlugins.set(name, plugin);
+    }
+    this.toolDefinitions = [
+      ...TOOL_DEFINITIONS,
+      ...ORCHESTRATION_TOOLS.filter(
+        (t) =>
+          t.function.name !== "sandbox_python" ||
+          this.sandbox.status().available,
+      ),
+      ...toolPlugins.map((p) => p.definition),
+    ];
+  }
+  prepare(sessionId, body) {
+    identifier(sessionId);
+    const session = this.store.get(sessionId);
+    check(body && typeof body === "object", "INVALID_INPUT", "请求必须为对象");
+    check(
+      session.kind !== "general",
+      "DOMAIN_MISMATCH",
+      "通用工作区请使用通用运行接口",
+      403,
+    );
+    const message = string(body.message, "消息", 20000);
+    check(
+      !this.active.has(sessionId),
+      "RUN_ACTIVE",
+      "当前会话正在执行，请先停止或等待完成",
+      409,
+    );
+    check(
+      this.active.size < this.maxActive,
+      "CAPACITY",
+      "并行任务达到上限，请稍后再试",
+      429,
+    );
+    if (body.sessionRevision !== undefined)
+      check(
+        body.sessionRevision === session.revision,
+        "REVISION_CONFLICT",
+        "会话资料已更新，请刷新核对后再发送",
+        409,
+      );
+    if (body.model !== undefined) string(body.model, "模型名称", 100);
+    const requestId = identifier(body.requestId || randomUUID());
+    check(
+      !session.runs.some((r) => r.requestId === requestId),
+      "DUPLICATE_REQUEST",
+      "这次请求已经提交，请刷新查看结果",
+      409,
+    );
+    const fileIds = body.fileIds || [];
+    check(
+      Array.isArray(fileIds) &&
+        fileIds.length <= 10 &&
+        fileIds.every((id) => typeof id === "string") &&
+        new Set(fileIds).size === fileIds.length,
+      "INVALID_INPUT",
+      "最多选择 10 个材料",
+    );
+    const files = fileIds.map((id) => {
+      const f = session.files.find((f) => f.id === id);
+      check(f, "SOURCE_NOT_FOUND", "材料不属于当前会话", 404);
+      return f;
+    });
+    const requestedMode = body.mode || "local";
+    check(
+      ["local", "model", "standard", "minimal", "creator", "code"].includes(
+        requestedMode,
+      ),
+      "INVALID_INPUT",
+      "运行方式无效",
+    );
+    // Keep the old local/model protocol while exposing Harness-style single-user
+    // modes. The medical runtime remains the authority over every capability.
+    const mode = ["standard", "creator", "minimal"].includes(requestedMode)
+      ? "model"
+      : requestedMode === "code"
+        ? "local"
+        : requestedMode;
+    const modeProfile = {
+      requested: requestedMode,
+      tools: !["minimal", "code"].includes(requestedMode),
+      sandbox: requestedMode === "code",
+    };
+    const permissions = new PermissionEngine({
+      grants: MedicalDomain.permissionGrants(requestedMode),
+      profile:
+        requestedMode === "minimal"
+          ? "minimal"
+          : requestedMode === "code"
+            ? "code"
+            : requestedMode === "creator"
+              ? "creator"
+              : "standard",
+    });
+    const delegations = body.delegations || [];
+    check(
+      Array.isArray(delegations) &&
+        delegations.length <= 3 &&
+        new Set(delegations).size === delegations.length &&
+        delegations.every((p) => Object.hasOwn(MEDICAL_AGENTS, p)),
+      "AGENT_PROFILE",
+      "请选择最多 3 个不同医疗子代理",
+    );
+    if (body.sandboxCode !== undefined || requestedMode === "code") {
+      check(
+        body.sandboxCode !== undefined,
+        "INVALID_INPUT",
+        "代码模式需要提供受控沙箱代码",
+      );
+      string(body.sandboxCode, "Python 代码", 12000);
+      check(
+        mode === "local" && !delegations.length,
+        "INVALID_INPUT",
+        "手动沙箱任务使用本地方式，不同时委派子代理",
+      );
+      check(
+        this.sandbox.status().available,
+        "SANDBOX_UNAVAILABLE",
+        this.sandbox.status().reason,
+        503,
+      );
+    }
+    check(
+      modeProfile.tools || delegations.length === 0,
+      "MODE_TOOL_DENIED",
+      "当前运行模式不允许委派工具任务",
+      403,
+    );
+    const policy = medicalPolicy(message);
+    if (mode === "model") {
+      check(
+        providerConfigured(this.provider),
+        "MODEL_NOT_CONFIGURED",
+        "服务端尚未配置模型密钥；可以选择本地整理",
+        503,
+      );
+      check(
+        body.externalConsent === true,
+        "CONSENT_REQUIRED",
+        "请先确认本次输入和选中材料可以原文发送给所配置的模型服务",
+        412,
+      );
+    }
+    const user = {
+      id: randomUUID(),
+      role: "user",
+      content: message,
+      createdAt: iso(),
+      fileIds,
+    };
+    const sources = sourcesFor({ ...session, files }, user);
+    const run = {
+      id: randomUUID(),
+      requestId,
+      status: "running",
+      startedAt: iso(),
+      endedAt: null,
+      partial: "",
+      events: [],
+      artifacts: [],
+      policy,
+      mode,
+      modeProfile,
+      permissions: permissions.snapshot(),
+      fileIds,
+      sourceHashes: sources.map((s) => ({ id: s.id, hash: s.hash })),
+      usage: null,
+      error: null,
+      children: [],
+      ...(body.sandboxCode !== undefined
+        ? { sandboxCode: body.sandboxCode }
+        : {}),
+    };
+    const handle = {
+      sessionId,
+      run,
+      user,
+      sources,
+      body: {
+        model: body.model,
+        delegations,
+        sandboxCode: body.sandboxCode,
+        modeProfile,
+        isolatedContext: body.isolatedContext === true,
+      },
+      delegatedCount: 0,
+      controller: new AbortController(),
+    };
+    this.active.set(sessionId, handle);
+    try {
+      this.store.mutate(sessionId, (s) => {
+        s.runs.push(run);
+        s.messages.push({ ...user, runId: run.id });
+        if (s.title === "新的医疗工作") s.title = message.slice(0, 32);
+      });
+      this.store.audit(sessionId, "run.started", {
+        runId: run.id,
+        mode,
+        intent: policy.intent,
+        externalConsent: mode === "model" && body.externalConsent === true,
+      });
+      return handle;
+    } catch (e) {
+      this.active.delete(sessionId);
+      throw e;
+    }
+  }
+  cancel(sessionId) {
+    const handle = this.active.get(sessionId);
+    if (handle)
+      handle.controller.abort(new AppError("CANCELLED", "执行已停止", 409));
+    return Boolean(handle);
+  }
+  async execute(handle, notify = () => {}) {
+    const { sessionId, run, user, sources, controller } = handle;
+    const permissions = new PermissionEngine(run.permissions);
+    let seq = 0;
+    let text = "";
+    let lastPersist = 0,
+      persistedLength = 0;
+    const artifacts = [];
+    const emit = (type, payload = {}) => {
+      const event = {
+        seq: ++seq,
+        type,
+        session_id: sessionId,
+        run_id: run.id,
+        payload,
+        time: iso(),
+      };
+      if (type === "message.delta") text += payload.text || "";
+      this.store.appendEvent(event);
+      const checkpoint =
+        type !== "message.delta" ||
+        Date.now() - lastPersist >= 200 ||
+        text.length - persistedLength >= 2048;
+      if (checkpoint)
+        this.store.mutate(sessionId, (s) => {
+          const saved = s.runs.find((r) => r.id === run.id);
+          saved.partial = text;
+          if (type !== "message.delta") {
+            saved.events.push(event);
+            saved.events = saved.events.slice(-200);
+          }
+        });
+      if (checkpoint) {
+        lastPersist = Date.now();
+        persistedLength = text.length;
+      }
+      try {
+        notify(event);
+      } catch {
+        /* disconnected transport does not lose durable state */
+      }
+    };
+    const childEvent = (type, payload) => {
+      this.store.mutate(sessionId, (s) => {
+        const saved = s.runs.find((r) => r.id === run.id);
+        saved.children ||= [];
+        const index = saved.children.findIndex(
+          (c) => c.id === payload.child.id,
+        );
+        if (index < 0) saved.children.push(payload.child);
+        else saved.children[index] = payload.child;
+      });
+      emit(type, payload);
+    };
+    const delegate = async (profile, task, selected = sources) => {
+      permissions.require("agents.delegate");
+      check(
+        handle.delegatedCount < 3,
+        "AGENT_BUDGET",
+        "父任务最多委派 3 个子代理",
+        422,
+      );
+      handle.delegatedCount++;
+      const child = await this.subagents.run({
+        profile,
+        task,
+        sources: selected,
+        mode: run.mode,
+        model: handle.body.model || this.provider.model,
+        signal: controller.signal,
+        onEvent: childEvent,
+      });
+      if (child.status === "completed") artifacts.push(...child.artifacts);
+      if (child.usage?.total_tokens) {
+        run.usage ||= {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          rounds: 0,
+        };
+        run.usage.total_tokens += child.usage.total_tokens;
+        run.usage.subagent_tokens =
+          (run.usage.subagent_tokens || 0) + child.usage.total_tokens;
+      }
+      return child;
+    };
+    const sandboxRun = async (code) => {
+      permissions.require("sandbox.execute");
+      emit("sandbox.started", {
+        backend: this.sandbox.status().backend,
+        code,
+        sourceIds: sources.map((s) => s.id),
+      });
+      try {
+        const output = await this.sandbox.run({
+          code,
+          sources,
+          signal: controller.signal,
+        });
+        emit("sandbox.completed", { backend: output.backend });
+        return output;
+      } catch (error) {
+        emit("sandbox.failed", {
+          code: error.code || "INTERNAL",
+          error: error instanceof AppError ? error.message : "沙箱执行失败",
+        });
+        throw error;
+      }
+    };
+    try {
+      emit("message.start", {
+        provider: run.mode === "local" ? "local" : this.provider.model,
+      });
+      emit("policy.evaluated", run.policy);
+      controller.signal.throwIfAborted();
+      if (handle.body.sandboxCode !== undefined) {
+        const output = await sandboxRun(handle.body.sandboxCode);
+        emit("message.delta", {
+          text: `沙箱计算结果（待复核）：\n${JSON.stringify(output.result, null, 2)}`,
+        });
+      } else if (handle.body.delegations.length) {
+        const children = await Promise.all(
+          handle.body.delegations.map((profile) =>
+            delegate(profile, user.content),
+          ),
+        );
+        check(
+          children.every((child) => child.status === "completed"),
+          "SUBAGENT_FAILED",
+          "部分子代理未完成，请查看子代理记录；本次联合结果未标记完成",
+          422,
+        );
+        emit("message.delta", {
+          text: children
+            .map((child) => `${child.name}：${child.text}`)
+            .join("\n\n"),
+        });
+      } else if (run.mode === "local") {
+        const work = localWork(run.policy, sources);
+        emit("tool.start", { tool: work.tool, call_id: randomUUID() });
+        const result = runTool(work.tool, work.args, {
+          sources,
+          skills: this.skills,
+          definitions: this.toolDefinitions,
+          plugins: this.toolPlugins,
+        });
+        result.provenance = "local_rule";
+        artifacts.push(result);
+        emit("tool.complete", { tool: work.tool, artifact: result });
+        const message =
+          result.type === "observations"
+            ? `已摘录 ${result.observations.length} 个原文检验数值，保留单位和来源，未进行异常判断。`
+            : result.type === "clinical_timeline"
+              ? `已从本次材料中识别 ${result.events.length} 条带日期的原文事件。请在右侧逐项核对来源后复核。没有完整日期的内容未被推断。`
+              : result.type === "medication_review"
+                ? `已生成用药资料核对表，列出 ${result.missing.length} 类待补充信息。这是资料检查，尚未执行药理、剂量或相互作用核查。`
+                : result.type === "evidence_plan"
+                  ? "已创建循证任务的 PICO 草稿和检索步骤。尚未联网检索；请在产物中补充人群、干预、对照和结局。"
+                  : "已生成可编辑的医疗工作流程草稿。请检查材料范围与人工复核要求。";
+        emit("message.delta", { text: message });
+      } else {
+        let state = this.store.get(sessionId);
+        const previous = state.runs
+          .filter(
+            (r) =>
+              !handle.body.isolatedContext &&
+              r.id !== run.id &&
+              r.status === "completed" &&
+              r.mode === "model" &&
+              (r.fileIds || []).every((id) => run.fileIds.includes(id)),
+          )
+          .flatMap((r) => r.providerMessages || []);
+        const manifest = sources.map((s) => ({
+          id: s.id,
+          name: s.name,
+          lines: s.text.split("\n").length,
+          hash: s.hash,
+          preview: s.text.slice(0, 1000),
+        }));
+        const messages = [
+          {
+            role: "system",
+            content: `${SYSTEM}\n可用技能：${JSON.stringify(this.skills?.list() || [])}\n可将时间线、检验摘录、用药资料检查委派给独立子代理。沙箱只用于资料计算，计算结果不能自动确认临床结论。\n策略：${JSON.stringify(run.policy)}\n本次材料索引（可用工具读取全文）：${JSON.stringify(manifest)}`,
+          },
+          ...previous,
+          { role: "user", content: user.content },
+        ];
+        const start = messages.length - 1;
+        const registry = new ToolRegistry(
+          this.toolDefinitions.map((definition) => ({
+            definition,
+            permission:
+              definition.function.name === "sandbox_python"
+                ? "sandbox.execute"
+                : definition.function.name === "delegate_medical_task"
+                  ? "agents.delegate"
+                  : "tools.execute",
+            execute: async (args) => {
+              const name = definition.function.name;
+              let output;
+              if (name === "delegate_medical_task") {
+                check(
+                  args &&
+                    Object.keys(args).every((k) =>
+                      ["profile", "task", "sourceIds"].includes(k),
+                    ) &&
+                    Array.isArray(args.sourceIds) &&
+                    args.sourceIds.length <= sources.length &&
+                    new Set(args.sourceIds).size === args.sourceIds.length,
+                  "INVALID_TOOL_ARGS",
+                  "子代理参数无效",
+                );
+                const selected = args.sourceIds.map((id) => {
+                  const source = sources.find((s) => s.id === id);
+                  check(
+                    source,
+                    "SOURCE_NOT_FOUND",
+                    "子代理只能读取父任务中的资料",
+                    403,
+                  );
+                  return source;
+                });
+                const child = await delegate(args.profile, args.task, selected);
+                output = {
+                  childId: child.id,
+                  status: child.status,
+                  text: child.text,
+                  artifacts: child.artifacts,
+                  error: child.error,
+                };
+              } else if (name === "sandbox_python") {
+                check(
+                  args &&
+                    Object.keys(args).length === 1 &&
+                    Object.hasOwn(args, "code"),
+                  "INVALID_TOOL_ARGS",
+                  "沙箱只接受 code 参数",
+                );
+                output = await sandboxRun(args.code);
+              } else
+                output = runTool(name, args, {
+                  sources,
+                  skills: this.skills,
+                  definitions: this.toolDefinitions,
+                  plugins: this.toolPlugins,
+                });
+              return output;
+            },
+          })),
+        );
+        const result = await this.agent.run({
+          domain: MedicalDomain,
+          messages,
+          registry,
+          permissions,
+          signal: controller.signal,
+          model: handle.body.model || this.provider.model,
+          emit,
+          onUsage: (usage) => {
+            run.usage ||= {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              rounds: 0,
+            };
+            for (const key of [
+              "prompt_tokens",
+              "completion_tokens",
+              "total_tokens",
+            ]) {
+              if (Number.isFinite(usage[key]) && usage[key] >= 0)
+                run.usage[key] += usage[key];
+            }
+            run.usage.rounds++;
+          },
+          onToolResult: (output) => {
+            if (output?.id) {
+              output.provenance =
+                output.provenance === "local_rule"
+                  ? "local_rule"
+                  : "model_draft";
+              artifacts.push(output);
+            }
+          },
+        });
+        // Keep reasoning/tool messages privately for DeepSeek continuation, not in UI.
+        this.store.mutate(sessionId, (s) => {
+          s.runs.find((r) => r.id === run.id).providerMessages =
+            result.messages.slice(start);
+        });
+      }
+      controller.signal.throwIfAborted();
+      const assistant = {
+        id: randomUUID(),
+        runId: run.id,
+        role: "assistant",
+        content: text,
+        createdAt: iso(),
+        risk: run.policy.risk,
+        status: "completed",
+      };
+      this.store.mutate(sessionId, (s) => {
+        s.messages.push(assistant);
+        s.artifacts.push(...artifacts);
+        const saved = s.runs.find((r) => r.id === run.id);
+        Object.assign(saved, {
+          status: "completed",
+          partial: text,
+          artifacts: artifacts.map((a) => a.id),
+          usage: run.usage,
+          endedAt: iso(),
+        });
+      });
+      this.store.audit(sessionId, "run.completed", {
+        runId: run.id,
+        artifactIds: artifacts.map((a) => a.id),
+      });
+      emit("message.complete", {
+        text,
+        risk: run.policy.risk,
+        artifacts,
+        usage: run.usage,
+        status: "completed",
+      });
+      return { runId: run.id, text, artifacts, status: "completed" };
+    } catch (error) {
+      const cancelled = controller.signal.aborted;
+      const status = cancelled ? "cancelled" : "failed";
+      const message = cancelled
+        ? "执行已停止，已保留部分内容。"
+        : error instanceof AppError
+          ? error.message
+          : error.name === "TimeoutError"
+            ? "模型响应超时，保留的部分内容未标为完成。"
+            : "执行失败，请检查服务配置后重试。";
+      this.store.mutate(sessionId, (s) => {
+        Object.assign(
+          s.runs.find((r) => r.id === run.id),
+          {
+            status,
+            error: message,
+            partial: text,
+            usage: run.usage,
+            endedAt: iso(),
+          },
+        );
+      });
+      this.store.audit(sessionId, `run.${status}`, {
+        runId: run.id,
+        code: cancelled ? "CANCELLED" : error.code || "INTERNAL",
+      });
+      emit(cancelled ? "run.cancelled" : "error", {
+        status,
+        error: message,
+        code: cancelled ? "CANCELLED" : error.code || "INTERNAL",
+      });
+      return { runId: run.id, status, error: message };
+    } finally {
+      if (this.active.get(sessionId) === handle) this.active.delete(sessionId);
+    }
+  }
+  copyMaterials(sessionId, body) {
+    const source = this.store.get(sessionId);
+    check(
+      source.revision === body.sessionRevision,
+      "REVISION_CONFLICT",
+      "原会话资料已更新，请刷新核对",
+      409,
+    );
+    check(
+      Array.isArray(body.fileIds) &&
+        body.fileIds.length > 0 &&
+        body.fileIds.length <= 10 &&
+        new Set(body.fileIds).size === body.fileIds.length,
+      "INVALID_INPUT",
+      "请选择 1–10 份要复制的材料",
+    );
+    const files = body.fileIds.map((id) => {
+      const file = source.files.find((f) => f.id === id);
+      check(file, "SOURCE_NOT_FOUND", "材料不属于当前会话", 404);
+      return {
+        ...file,
+        id: randomUUID(),
+        createdAt: iso(),
+        copiedFrom: { sessionId, fileId: id },
+      };
+    });
+    const session = this.store.create({
+      title: source.title.slice(0, 70) + " · 材料副本",
+      files,
+      copiedFrom: { sessionId, revision: source.revision },
+    });
+    this.store.audit(session.id, "materials.copied", {
+      sourceSessionId: sessionId,
+      count: files.length,
+    });
+    return publicSession(session);
+  }
+  addFile(sessionId, body) {
+    check(
+      !this.active.has(sessionId),
+      "RUN_ACTIVE",
+      "执行期间不能变更材料",
+      409,
+    );
+    const name = string(body.name, "文件名", 180);
+    check(
+      /\.(txt|md|csv|json|pdf)$/i.test(name),
+      "FILE_TYPE",
+      "当前支持 TXT、Markdown、CSV、JSON 和 PDF 抽取文本",
+    );
+    const raw = string(body.text, "文件内容", 50000);
+    check(Buffer.byteLength(raw) <= 200000, "FILE_SIZE", "文件超过 200KB");
+    let extraction;
+    if (/\.pdf$/i.test(name)) {
+      const e = body.extraction;
+      check(
+        e?.type === "pdf_text" &&
+          Number.isInteger(e.pageCount) &&
+          e.pageCount > 0 &&
+          e.pageCount <= 25 &&
+          Array.isArray(e.emptyPages) &&
+          e.emptyPages.length < e.pageCount &&
+          e.emptyPages.every(
+            (p) => Number.isInteger(p) && p >= 1 && p <= e.pageCount,
+          ),
+        "PDF_EXTRACTION",
+        "请通过工作台的 PDF 文字抽取流程导入",
+      );
+      extraction = {
+        type: "pdf_text",
+        pageCount: e.pageCount,
+        emptyPages: e.emptyPages,
+        originalRetained: false,
+      };
+    }
+    const file = {
+      id: randomUUID(),
+      name,
+      text: raw,
+      hash: hash(raw),
+      createdAt: iso(),
+      size: Buffer.byteLength(raw),
+      ...(extraction ? { extraction } : {}),
+    };
+    const session = this.store.get(sessionId);
+    check(session.files.length < 20, "FILE_LIMIT", "每个会话最多 20 份材料");
+    check(
+      !session.files.some((f) => f.hash === file.hash),
+      "DUPLICATE_FILE",
+      "相同内容已在本会话中",
+      409,
+    );
+    this.store.mutate(sessionId, (s) => s.files.push(file));
+    this.store.audit(sessionId, "file.added", {
+      fileId: file.id,
+      hash: file.hash,
+    });
+    return file;
+  }
+  review(sessionId, artifactId, body) {
+    const reviewer = string(body.reviewer, "复核者代号", 80);
+    const note = string(body.note, "复核说明", 3000);
+    check(
+      ["approved", "rejected"].includes(body.decision),
+      "INVALID_INPUT",
+      "复核决定无效",
+    );
+    check(
+      body.attested === true,
+      "REVIEW_REQUIRED",
+      "请确认已检查原文和适用范围",
+      412,
+    );
+    this.store.mutate(sessionId, (s) => {
+      const a = s.artifacts.find((a) => a.id === artifactId);
+      check(a, "NOT_FOUND", "产物不存在", 404);
+      check(
+        a.version === body.version,
+        "REVISION_CONFLICT",
+        "产物已改变，请刷新后复核",
+        409,
+      );
+      a.status = body.decision;
+      a.review = {
+        reviewer,
+        note,
+        at: iso(),
+        attestation: "local_user",
+        reviewedVersion: a.version,
+        decision: body.decision,
+      };
+      a.reviews ||= [];
+      a.reviews.push(a.review);
+      a.version++;
+    });
+    this.store.audit(sessionId, "artifact.reviewed", {
+      artifactId,
+      decision: body.decision,
+      reviewer,
+    });
+    return this.store.get(sessionId).artifacts.find((a) => a.id === artifactId);
+  }
+
+  editArtifact(sessionId, artifactId, body) {
+    const title = string(body.title, "产物标题", 150);
+    this.store.mutate(sessionId, (s) => {
+      const a = s.artifacts.find((a) => a.id === artifactId);
+      check(a, "NOT_FOUND", "产物不存在", 404);
+      check(
+        a.version === body.version,
+        "REVISION_CONFLICT",
+        "产物版本已改变",
+        409,
+      );
+      let events, items, pico;
+      if (body.events !== undefined) {
+        check(
+          a.events &&
+            Array.isArray(body.events) &&
+            body.events.length === a.events.length,
+          "INVALID_INPUT",
+          "事件数量不可改变；请修订现有事件",
+        );
+        events = body.events.map((e, i) => {
+          check(
+            e &&
+              Object.keys(e).every((k) =>
+                ["date", "event", "correctionNote"].includes(k),
+              ),
+            "INVALID_INPUT",
+            "不能替换原文来源",
+          );
+          const date = string(e.date, "事件日期", 20),
+            event = string(e.event, "事件内容", 3000);
+          check(
+            /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+              !Number.isNaN(Date.parse(date)) &&
+              new Date(date).toISOString().slice(0, 10) === date,
+            "INVALID_INPUT",
+            "请填写真实的 YYYY-MM-DD 日期",
+          );
+          const changed =
+            date !== a.events[i].date || event !== a.events[i].event;
+          const correctionNote = changed
+            ? string(e.correctionNote, "修改依据", 1500)
+            : a.events[i].correctionNote;
+          return {
+            ...a.events[i],
+            date,
+            event,
+            dateValid: true,
+            needs_review: true,
+            ...(correctionNote ? { correctionNote } : {}),
+          };
+        });
+      }
+      if (body.items !== undefined) {
+        check(
+          a.items &&
+            Array.isArray(body.items) &&
+            body.items.length > 0 &&
+            body.items.length <= 40,
+          "INVALID_INPUT",
+          "请保留 1–40 条流程条目",
+        );
+        items = body.items.map((item) => string(item, "条目", 2000));
+      }
+      if (a.pico) {
+        pico = {};
+        for (const key of [
+          "population",
+          "intervention",
+          "comparison",
+          "outcome",
+        ])
+          pico[key] = string(body.pico?.[key], key, 300);
+      }
+      a.history ||= [];
+      a.history.push({
+        version: a.version,
+        title: a.title,
+        status: a.status,
+        events: a.events,
+        items: a.items,
+        pico: a.pico,
+        review: a.review,
+        at: iso(),
+      });
+      a.title = title;
+      a.version++;
+      a.status = "draft";
+      delete a.review;
+      if (events) a.events = events;
+      if (items) a.items = items;
+      if (pico) {
+        a.pico = pico;
+        a.query = [pico.population, pico.intervention]
+          .map((v) => '"' + v.replace(/"/g, " ") + '"')
+          .join(" AND ");
+        a.searchUrl = `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(a.query)}`;
+      }
+    });
+    this.store.audit(sessionId, "artifact.edited", { artifactId });
+    return this.store.get(sessionId).artifacts.find((a) => a.id === artifactId);
+  }
+}

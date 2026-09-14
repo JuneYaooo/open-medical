@@ -1,0 +1,20 @@
+[Unit]
+Description=Open Agent Remote Worker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openagent
+WorkingDirectory=/opt/open-agent
+EnvironmentFile=/etc/open-agent/worker.env
+ExecStart=/usr/bin/node scripts/remote-worker.mjs
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

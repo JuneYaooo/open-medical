@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 1,
+  "id": "local-tools",
+  "name": "本地工具示例",
+  "version": "1.0.0",
+  "description": "离线计算与插件开发示例。使用随离线工具包提供的 Node.js 隔离镜像，不读取宿主机文件。",
+  "skills": [
+    {
+      "id": "guide",
+      "path": "SKILL.md"
+    }
+  ],
+  "commands": [
+    {
+      "id": "hello",
+      "description": "验证插件隔离执行",
+      "command": "node /plugin/hello.mjs"
+    }
+  ],
+  "mcpServers": [
+    {
+      "id": "tools",
+      "transport": "stdio",
+      "command": [
+        "node",
+        "/plugin/server.mjs"
+      ]
+    }
+  ]
+}

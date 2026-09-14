@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createWorkspaceServer } from '../server/platform.mjs';
+
+test('model settings authenticate, encrypt, test, activate and survive restart without leaking credentials', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'agent-model-settings-'));
+  const database = join(directory, 'state.sqlite');
+  let auth;
+  const upstream = http.createServer((req, res) => {
+    auth = req.headers.authorization;
+    res.writeHead(200, {'content-type':'text/event-stream'});
+    res.end('data: '+JSON.stringify({choices:[{index:0,delta:{content:'OK'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');
+  });
+  await new Promise((resolve) => upstream.listen(0,'127.0.0.1',resolve));
+  let server;
+  const start = async () => { server = createWorkspaceServer({ database, provider:{provider:'deepseek', model:'initial', baseUrl:'https://api.deepseek.com/v1'} }); await new Promise((resolve) => server.listen(0,'127.0.0.1',resolve)); };
+  t.after(async () => { await server.shutdown(); await new Promise((resolve) => upstream.close(resolve)); rmSync(directory,{recursive:true,force:true}); });
+  await start();
+  const call = async (path, method='GET', body, token=server.token) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method, headers:{'content-type':'application/json','x-agent-token':token}, ...(body?{body:JSON.stringify(body)}:{})});
+    return {status:response.status, data:await response.json()};
+  };
+  assert.equal((await call('/api/model-settings','GET',null,'wrong')).status,401);
+  const config = {provider:'openai-compatible',baseUrl:`http://127.0.0.1:${upstream.address().port}/v1`,model:'fixture',apiKey:'secret-model-test-key',timeoutMs:1000,maxTokens:256};
+  const probe = await call('/api/model-settings/test','POST',config);
+  assert.equal(probe.status,200,JSON.stringify(probe.data));
+  assert.equal(auth,'Bearer secret-model-test-key');
+  assert.equal((await call('/api/model-settings')).data.model,'initial');
+  const saved = await call('/api/model-settings','PUT',config);
+  assert.equal(saved.status,200);
+  assert.equal(saved.data.hasKey,true);
+  assert.equal(JSON.stringify(saved).includes(config.apiKey),false);
+  assert.equal(server.service.provider.model,'fixture');
+  assert.equal(server.service.agent.provider,server.service.provider);
+  assert.equal((await call('/api/model-settings','PUT',{...config,apiKey:'',baseUrl:'https://different.example/v1'})).status,400);
+  assert.equal((await call('/api/model-settings','PUT',{...config,apiKey:'',model:'next'})).status,200);
+  assert.equal((await call('/api/model-settings','PUT',{...config,baseUrl:'http://remote.example/v1'})).status,400);
+  server.service.active.set('busy',{});
+  assert.equal((await call('/api/model-settings','PUT',config)).status,409);
+  server.service.active.clear();
+  const encrypted = server.database.db.prepare('SELECT data FROM agent_credentials').get().data;
+  assert.equal(encrypted.includes(config.apiKey),false);
+  await server.shutdown();
+  assert.equal(readFileSync(database).includes(Buffer.from(config.apiKey)),false);
+  await start();
+  assert.equal((await call('/api/model-settings')).data.model,'next');
+  assert.equal(server.service.provider.apiKey,config.apiKey);
+});
