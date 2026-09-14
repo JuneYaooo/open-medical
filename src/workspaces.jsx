@@ -796,15 +796,19 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder={
                       running
-                        ? "补充要求，Agent 会在下一步接收…"
-                        : "描述你想完成的任务…（⌘/Ctrl + Enter 发送）"
+                        ? "补充要求，Agent 会在下一步接收…（Enter 发送）"
+                        : "描述你想完成的任务…（Enter 发送，Shift+Enter 换行）"
                     }
                     disabled={busy}
                     onKeyDown={(e) => {
+                      // Enter sends, Shift+Enter newlines; never send while an
+                      // IME composition (Chinese input) is confirming a candidate.
+                      const composing =
+                        e.nativeEvent.isComposing || e.keyCode === 229;
                       if (
-                        (e.metaKey || e.ctrlKey) &&
                         e.key === "Enter" &&
-                        !e.nativeEvent.isComposing &&
+                        !e.shiftKey &&
+                        !composing &&
                         !busy &&
                         prompt.trim() &&
                         config?.modelConfigured
