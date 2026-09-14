@@ -34,6 +34,7 @@ const { values, positionals } = parseArgs({
     "expected-head": { type: "string" },
     files: { type: "string" },
     "allow-git": { type: "boolean", default: false },
+    git: { type: "boolean", default: false },
   },
 });
 const command = positionals[0];
@@ -54,8 +55,8 @@ if (
     "commit",
   ].includes(command)
 ) {
-  console.log(
-    `Generic workspace CLI 0.6 (independent of the medical server)\n\ncreate --root=/absolute/directory [--title=name]\nlist\nshow --workspace=id\npermissions --workspace=id --profile=standard [--write]\nrun --workspace=id --message=task --allow-model [--max-rounds=32] [--timeout-minutes=30] [--resume-run-id=id]\napprove --workspace=id --approval=id --revision=N --decision=approve|reject\nfork --workspace=id [--run-id=id]\nevents --workspace=id [--after=N]\nextensions --workspace=id [--config-file=reviewed-config.json]\ntool --workspace=id --tool=memory_search --arguments=JSON\n\ncapabilities --workspace=id\nworktree --workspace=id --branch=agent/name --expected-head=SHA --allow-git\ncommit --workspace=id --expected-head=SHA --message=summary --files=JSON --allow-git\n\nAll commands accept --database=/absolute/path.sqlite. Models use AI_PROVIDER and provider environment variables. File writes always require approval.`,
+    console.log(
+      `Generic workspace CLI 0.6 (independent of the medical server)\n\ncreate --root=/absolute/directory [--title=name]\nlist\nshow --workspace=id\npermissions --workspace=id --profile=standard|code [--write] [--approval=review|workspace-write|full] [--git]\nrun --workspace=id --message=task --allow-model [--max-rounds=32] [--timeout-minutes=30] [--resume-run-id=id]\napprove --workspace=id --approval=id --revision=N --decision=approve|reject\nfork --workspace=id [--run-id=id]\nevents --workspace=id [--after=N]\nextensions --workspace=id [--config-file=reviewed-config.json]\ntool --workspace=id --tool=memory_search --arguments=JSON\n\ncapabilities --workspace=id\nworktree --workspace=id --branch=agent/name --expected-head=SHA --allow-git\ncommit --workspace=id --expected-head=SHA --message=summary --files=JSON --allow-git\n\nAll commands accept --database=/absolute/path.sqlite. Models use AI_PROVIDER and provider environment variables. --approval=workspace-write/full 自动应用文件修改（full 同时授予本地 Git 提交，需 --git 或 --approval=full）。`,
   );
 } else {
   let database, service;
@@ -98,7 +99,13 @@ if (
       result = service.update(id, {
         revision: service.get(id).revision,
         profile: values.profile,
-        allowWrite: values.write,
+        allowWrite: values.write || values.approval !== undefined,
+        ...(values.approval
+          ? { approvalPolicy: values.approval, autoApplyConsent: true }
+          : {}),
+        ...(values.git
+          ? { allowGit: true, gitConsent: true }
+          : {}),
       });
     if (command === "approve")
       result = service.decide(id, values.approval, {
