@@ -35,13 +35,24 @@ try {
     git(["commit", "-m", `nightly auto-save ${new Date().toISOString().slice(0, 10)}`]);
     record(`committed on ${branch}`);
   } else record(`nothing to commit on ${branch}`);
-  // Pull first so a diverged remote (e.g. web edits) never blocks the push.
+  // Rebase onto the remote first so diverged history (e.g. web edits) never
+  // blocks the push; a brand-new remote branch simply has nothing to rebase on.
+  git(["fetch", "origin"]);
+  const remoteBranch = `origin/${branch}`;
+  let hasRemote = "";
   try {
-    git(["pull", "--rebase", "--autostash", "origin", branch]);
-  } catch (error) {
-    git(["rebase", "--abort"]);
-    throw new Error(`pull --rebase failed, rebase aborted: ${error.message}`);
+    hasRemote = git(["rev-parse", "--verify", "--quiet", remoteBranch]);
+  } catch {
+    hasRemote = ""; // remote branch not created yet
   }
+  if (hasRemote) {
+    try {
+      git(["pull", "--rebase", "--autostash", "origin", branch]);
+    } catch (error) {
+      git(["rebase", "--abort"]);
+      throw new Error(`pull --rebase failed, rebase aborted: ${error.message}`);
+    }
+  } else record(`no remote branch ${remoteBranch} yet; creating it`);
   git(["push", "-u", "origin", branch]);
   record(`pushed ${branch} -> origin`);
 } catch (error) {
