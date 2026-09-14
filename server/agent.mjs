@@ -23,6 +23,7 @@ import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
+import { RiskEngine } from "./medical/risk-rules.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -197,6 +198,7 @@ export function createServer(options = {}) {
     runtime,
     options.followupOptions,
   );
+  const risks = new RiskEngine(store, followups);
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -430,6 +432,7 @@ export function createServer(options = {}) {
           doctorMemory: runtime.doctor.counts(),
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
           guidelines: { enabled: true, count: guidelines.list().length },
+          riskAlerts: risks.counts(),
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
@@ -651,6 +654,31 @@ export function createServer(options = {}) {
               : undefined,
           }),
         });
+      if (path === "/api/risk-alerts" && req.method === "GET")
+        return send(res, 200, {
+          alerts: risks.list({
+            patientId: url.searchParams.get("patientId") || undefined,
+            status: url.searchParams.get("status") || undefined,
+          }),
+          counts: risks.counts(),
+        });
+      if (path === "/api/risk-alerts/evaluate" && req.method === "POST")
+        return send(res, 200, risks.evaluateAll());
+      if (
+        parts[0] === "api" &&
+        parts[1] === "risk-alerts" &&
+        parts.length === 4 &&
+        ["ack", "resolve", "reopen"].includes(parts[3]) &&
+        req.method === "POST"
+      ) {
+        const status =
+          parts[3] === "ack"
+            ? "acknowledged"
+            : parts[3] === "resolve"
+              ? "resolved"
+              : "active";
+        return send(res, 200, risks.setStatus(parts[2], status));
+      }
       if (path === "/api/icd10" && req.method === "GET")
         return send(res, 200, {
           codes: searchIcd10(url.searchParams.get("q"), {
@@ -703,8 +731,11 @@ export function createServer(options = {}) {
           return send(res, 200, patients.exportDeidentified(pid));
         if (parts.length === 3) {
           if (req.method === "GET") return send(res, 200, patients.get(pid));
-          if (req.method === "PATCH")
-            return send(res, 200, patients.update(pid, await body(req)));
+          if (req.method === "PATCH") {
+            const updated = patients.update(pid, await body(req));
+            risks.evaluatePatient(pid);
+            return send(res, 200, updated);
+          }
           if (req.method === "DELETE") {
             patients.remove(pid);
             return send(res, 200, { ok: true });
@@ -1058,6 +1089,7 @@ export function createServer(options = {}) {
   server.doctor = runtime.doctor;
   server.literature = literature;
   server.guidelines = guidelines;
+  server.risks = risks;
   server.wechat = wechat;
   server.once("listening", () => {
     scheduler.start();

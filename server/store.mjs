@@ -95,6 +95,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS guideline_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id TEXT NOT NULL, ord INTEGER NOT NULL, start_line INTEGER NOT NULL, end_line INTEGER NOT NULL, text TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS guideline_chunks_doc ON guideline_chunks(doc_id,ord);
       CREATE TABLE IF NOT EXISTS followup_plans (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS risk_alerts (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, rule_key TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS risk_alerts_key ON risk_alerts(patient_id,rule_key);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.
