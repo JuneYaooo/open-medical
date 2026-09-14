@@ -97,6 +97,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS followup_plans (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS risk_alerts (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, rule_key TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS risk_alerts_key ON risk_alerts(patient_id,rule_key);
+      CREATE TABLE IF NOT EXISTS case_library (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.

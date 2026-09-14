@@ -24,6 +24,7 @@ import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
+import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -168,12 +169,14 @@ export function createServer(options = {}) {
     options.literature || new LiteratureService(store);
   const guidelines =
     options.guidelines || new GuidelineLibrary(store);
+  const cases = options.cases || new CaseLibrary(store);
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
     toolPlugins: options.toolPlugins || [
       ...literatureTools(literature),
       ...guidelineTools(guidelines),
+      ...caseTools(cases),
     ],
     doctor,
   });
@@ -433,6 +436,7 @@ export function createServer(options = {}) {
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
           guidelines: { enabled: true, count: guidelines.list().length },
           riskAlerts: risks.counts(),
+          cases: cases.counts(),
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
@@ -678,6 +682,32 @@ export function createServer(options = {}) {
               ? "resolved"
               : "active";
         return send(res, 200, risks.setStatus(parts[2], status));
+      }
+      if (path === "/api/cases" && req.method === "GET")
+        return send(
+          res,
+          200,
+          cases.list({
+            query: url.searchParams.get("query") || undefined,
+            diagnosis: url.searchParams.get("diagnosis") || undefined,
+            limit: url.searchParams.get("limit")
+              ? Number(url.searchParams.get("limit"))
+              : undefined,
+          }),
+        );
+      if (path === "/api/cases" && req.method === "POST") {
+        const b = await body(req);
+        if (b.patientId && !b.diagnosis) {
+          const patient = patients.get(identifier(b.patientId));
+          return send(res, 201, cases.fromPatient(patient, b));
+        }
+        return send(res, 201, cases.addCase(b));
+      }
+      if (parts[0] === "api" && parts[1] === "cases" && parts[2] === "similar" && req.method === "POST")
+        return send(res, 200, cases.similar(await body(req)));
+      if (parts[0] === "api" && parts[1] === "cases" && parts.length === 3) {
+        if (req.method === "GET") return send(res, 200, cases.get(parts[2]));
+        if (req.method === "DELETE") return send(res, 200, cases.removeCase(parts[2]));
       }
       if (path === "/api/icd10" && req.method === "GET")
         return send(res, 200, {
@@ -1090,6 +1120,7 @@ export function createServer(options = {}) {
   server.literature = literature;
   server.guidelines = guidelines;
   server.risks = risks;
+  server.cases = cases;
   server.wechat = wechat;
   server.once("listening", () => {
     scheduler.start();
