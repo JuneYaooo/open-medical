@@ -205,6 +205,19 @@ export class AgentTeam {
         ),
       ),
     ];
+    // A subagent's write list must stay inside the workspace write scope;
+    // assertWriteScope re-verifies each proposal at execution time.
+    if (Array.isArray(w.writeScope))
+      check(
+        writePaths.every((p) =>
+          w.writeScope.some(
+            (scope) => p === scope || p.startsWith(scope + "/"),
+          ),
+        ),
+        "WRITE_SCOPE",
+        "子代理写入清单超出工作区可写范围",
+        403,
+      );
     check(
       dependsOn.every((id) => this.jobs.has(id)),
       "AGENT_DEPENDENCY",
