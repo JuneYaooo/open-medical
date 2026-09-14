@@ -3422,3 +3422,121 @@ blockquote p {
 .icon-link:hover {
   background: #eef3ec;
 }
+
+/* ---- guideline library view ---- */
+.guidelines-view {
+  width: min(760px, 100%);
+}
+.guideline-import {
+  border: 1px solid #dbe4d3;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.guideline-import h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.guideline-meta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.guideline-meta-row input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.guideline-import-actions {
+  display: flex;
+  gap: 8px;
+}
+.guideline-match {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #3c4a3e;
+  background: #f6f8f3;
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.guideline-match .line-no,
+.guideline-line .line-no {
+  display: inline-block;
+  min-width: 34px;
+  margin-right: 8px;
+  color: #93a294;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.guidelines-list-title {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+.guideline-docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.guideline-docs li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guideline-doc {
+  flex: 1;
+  border: 1px solid #e3ead9;
+  border-radius: 10px;
+  background: white;
+  padding: 9px 12px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+.guideline-doc b {
+  font-size: 13px;
+  color: #243b2d;
+}
+.guideline-doc small {
+  color: #7c8a7d;
+  font-size: 11px;
+}
+.guideline-doc:hover {
+  border-color: #b8cfbc;
+}
+.guidelines-reader-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.guidelines-reader-head h1 {
+  font-size: 18px;
+  margin: 0;
+}
+.guidelines-text {
+  background: #fbfcfa;
+  border: 1px solid #e3ead9;
+  border-radius: 10px;
+  padding: 12px 14px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.guideline-line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #3c4a3e;
+}
+.guideline-line.matched {
+  background: #eef5e9;
+  border-radius: 4px;
+}
