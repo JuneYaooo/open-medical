@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   Globe,
@@ -23,11 +23,6 @@ import { api } from "./agent-runtime";
 import { sseFrames } from "../shared/sse.mjs";
 import "./workspaces.css";
 import { MediaPanel } from "./workbench/media";
-const InteractiveTerminal = lazy(() =>
-  import("./workbench/interactive-terminal").then((m) => ({
-    default: m.InteractiveTerminal,
-  })),
-);
 import { TeamModels } from "./workbench/team-models";
 import { RemoteJobs } from "./workbench/remote-jobs";
 import { DesktopPanel } from "./workbench/desktop-control";
@@ -38,7 +33,6 @@ import { RichMessage } from "./workbench/message";
 import { DiffView } from "./workbench/diff";
 import { Activity } from "./workbench/activity";
 import { ComposerTools } from "./workbench/composer-tools";
-import { TerminalPanel } from "./workbench/terminal";
 import { Artifacts } from "./workbench/artifacts";
 import "./workbench/workbench.css";
 
@@ -699,7 +693,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
               </div>
               <nav className="wb-panel-switch" aria-label="工作区视图">
                 {[
-                  ["files", FolderOpen, "文件与终端"],
+                  ["files", FolderOpen, "文件"],
                   ["review", FileCheck2, "变更审批"],
                   ["browser", Globe, "浏览器"],
                   ["media", Image, "媒体"],
@@ -1095,7 +1089,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       {
                         media: "图片与音视频",
                         browser: "浏览器预览",
-                        files: "文件与终端",
+                        files: "文件预览",
                         review: "变更审批",
                         history: "运行记录",
                         settings: "工作区设置",
@@ -1620,23 +1614,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     </section>
                   )}
                 </div>
-                <div hidden={view !== "files"}>
-                  {view === "files" && (
-                    <Suspense fallback={<p>正在载入交互终端…</p>}>
-                      {" "}
-                      <InteractiveTerminal
-                        key={`pty-${current.id}`}
-                        current={current}
-                        disabled={busy || running}
-                      />{" "}
-                    </Suspense>
-                  )}
-                  <TerminalPanel
-                    key={`terminal-${current.id}`}
-                    current={current}
-                    running={running}
-                    onSettings={() => setView("settings")}
-                  />
+                <div hidden={view !== "settings"}>
                   <WorkspaceDevelopment
                     key={`development-${current.id}`}
                     current={current}
@@ -1645,9 +1623,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     refresh={refresh}
                     select={select}
                   />
-                </div>
-
-                <div hidden={view !== "settings"}>
                   <details className="workspace-schedules">
                     <summary>计划任务</summary>
                     <p>
