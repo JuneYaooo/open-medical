@@ -627,6 +627,30 @@ export function createServer(options = {}) {
           await wechat.send(identifier(b.patientId), b.text),
         );
       }
+      if (path === "/api/followup-plans" && req.method === "GET")
+        return send(res, 200, { plans: followups.listPlans() });
+      if (path === "/api/followup-plans" && req.method === "POST")
+        return send(res, 201, followups.createPlan(await body(req)));
+      if (
+        parts[0] === "api" &&
+        parts[1] === "followup-plans" &&
+        parts.length === 3 &&
+        req.method === "DELETE"
+      )
+        return send(res, 200, followups.removePlan(parts[2]));
+      if (
+        parts[0] === "api" &&
+        parts[1] === "followups" &&
+        parts[2] === "overview" &&
+        req.method === "GET"
+      )
+        return send(res, 200, {
+          jobs: followups.overview({
+            limit: url.searchParams.get("limit")
+              ? Number(url.searchParams.get("limit"))
+              : undefined,
+          }),
+        });
       if (path === "/api/icd10" && req.method === "GET")
         return send(res, 200, {
           codes: searchIcd10(url.searchParams.get("q"), {
@@ -711,6 +735,12 @@ export function createServer(options = {}) {
             return send(res, 200, { jobs: followups.list(pid) });
           if (parts.length === 4 && req.method === "POST")
             return send(res, 201, followups.create(pid, await body(req)));
+          if (parts.length === 5 && parts[4] === "apply" && req.method === "POST")
+            return send(
+              res,
+              201,
+              followups.applyTemplate(pid, await body(req)),
+            );
           if (parts.length === 5) {
             const job = followups.row(parts[4]);
             check(

@@ -88,14 +88,18 @@ export class FollowUpManager {
       "INVALID_INPUT",
       "首次随访时间须在未来一年以内",
     );
-    const intervalDays = input.intervalDays;
-    check(
-      Number.isInteger(intervalDays) &&
-        intervalDays >= 1 &&
-        intervalDays <= 3650,
-      "INVALID_INPUT",
-      "随访间隔须为 1–3650 天",
-    );
+    const once = input.once === true;
+    let intervalDays = null;
+    if (!once) {
+      intervalDays = input.intervalDays;
+      check(
+        Number.isInteger(intervalDays) &&
+          intervalDays >= 1 &&
+          intervalDays <= 3650,
+        "INVALID_INPUT",
+        "随访间隔须为 1–3650 天",
+      );
+    }
     const checklist = (input.checklist || []).map((item) =>
       string(item, "随访条目", 500),
     );
@@ -110,6 +114,7 @@ export class FollowUpManager {
       sessionId: patient.sessionId,
       name: string(input.name, "随访名称", 100),
       intervalDays,
+      once,
       checklist,
       externalConsent: input.externalConsent === true,
       nextDue: firstDueAt,
@@ -125,9 +130,173 @@ export class FollowUpManager {
       .run(job.id, patientId, job.status, job.nextDue, JSON.stringify(job));
     this.store.audit(patient.sessionId, "followup.created", {
       followUpId: job.id,
+      once,
       externalConsent: job.externalConsent,
     });
     return job;
+  }
+  // ---- plan templates (followup_plans) ----
+  planRow(id) {
+    identifier(id);
+    this.listPlans(); // seeds built-in templates on first use
+    const row = this.store.db
+      .prepare("SELECT data FROM followup_plans WHERE id=?")
+      .get(id);
+    check(row, "NOT_FOUND", "随访模板不存在", 404);
+    return JSON.parse(row.data);
+  }
+  listPlans() {
+    if (
+      !this.store.db.prepare("SELECT id FROM followup_plans LIMIT 1").get()
+    )
+      for (const plan of BUILTIN_PLANS)
+        this.store.db
+          .prepare("INSERT INTO followup_plans VALUES (?,?)")
+          .run(plan.id, JSON.stringify(plan));
+    return this.store.db
+      .prepare("SELECT data FROM followup_plans")
+      .all()
+      .map((row) => JSON.parse(row.data))
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+  createPlan(input) {
+    check(
+      input && typeof input === "object" && !Array.isArray(input),
+      "INVALID_INPUT",
+      "模板参数无效",
+    );
+    const nodes = structuredClone(input.nodes || []);
+    check(
+      Array.isArray(nodes) && nodes.length >= 1 && nodes.length <= 12,
+      "INVALID_INPUT",
+      "模板须包含 1–12 个随访节点",
+    );
+    const plan = {
+      id: randomUUID(),
+      builtin: false,
+      name: string(input.name, "模板名称", 100),
+      disease: input.disease ? string(input.disease, "适用病种", 120) : "",
+      nodes: nodes.map((node) => {
+        check(
+          node && Number.isInteger(node.offsetDays) && node.offsetDays >= 0,
+          "INVALID_INPUT",
+          "节点 offsetDays 须为非负整数",
+        );
+        const items = (node.items || []).map((item) =>
+          string(item, "随访条目", 500),
+        );
+        check(items.length <= 10, "INVALID_INPUT", "每节点最多 10 条条目");
+        return {
+          offsetDays: node.offsetDays,
+          title: string(node.title, "节点标题", 100),
+          items,
+        };
+      }),
+      createdAt: this.now(),
+    };
+    this.store.db
+      .prepare("INSERT INTO followup_plans VALUES (?,?)")
+      .run(plan.id, JSON.stringify(plan));
+    return plan;
+  }
+  removePlan(id) {
+    const plan = this.planRow(id);
+    check(
+      !plan.builtin,
+      "PLAN_BUILTIN",
+      "内置模板不能删除",
+      409,
+    );
+    this.store.db.prepare("DELETE FROM followup_plans WHERE id=?").run(id);
+    return { ok: true };
+  }
+  // Enroll a patient into a plan template: each node becomes a one-shot
+  // follow-up job at start + offsetDays. Overdue nodes are clamped to now
+  // so they surface as due instead of silently firing in the past.
+  applyTemplate(patientId, { planId, startDate, externalConsent } = {}) {
+    const plan = this.planRow(planId);
+    const patient = this.patientRow(patientId);
+    check(
+      !patient.archived,
+      "PATIENT_ARCHIVED",
+      "已归档患者不能应用随访模板",
+      409,
+    );
+    const text = string(startDate, "开始日期", 10);
+    check(
+      /^\d{4}-\d{2}-\d{2}$/.test(text) && Number.isFinite(Date.parse(text)),
+      "INVALID_INPUT",
+      "开始日期须为 YYYY-MM-DD",
+    );
+    let start = Date.parse(text);
+    check(
+      start >= this.now() - 86400000 && start <= this.now() + 366 * 86400000,
+      "INVALID_INPUT",
+      "开始日期须在昨天到未来一年之间",
+    );
+    const jobs = [];
+    for (const node of plan.nodes) {
+      let nextDue = start + node.offsetDays * 86400000;
+      if (nextDue <= this.now()) nextDue = this.now() + 60000;
+      const job = {
+        id: randomUUID(),
+        patientId,
+        sessionId: patient.sessionId,
+        name: `${plan.name} · ${node.title}`,
+        intervalDays: null,
+        once: true,
+        checklist: node.items,
+        externalConsent: externalConsent === true,
+        nextDue,
+        status: "active",
+        revision: 0,
+        createdAt: new Date(this.now()).toISOString(),
+        history: [],
+        lastError: null,
+        activeRunId: null,
+      };
+      this.store.db
+        .prepare("INSERT INTO follow_ups VALUES (?,?,?,?,?)")
+        .run(job.id, patientId, job.status, job.nextDue, JSON.stringify(job));
+      jobs.push(job);
+    }
+    this.store.audit(patient.sessionId, "followup.template_applied", {
+      planId,
+      jobs: jobs.length,
+    });
+    return jobs;
+  }
+  // Cross-patient schedule overview for the follow-up management view.
+  overview({ limit = 200 } = {}) {
+    check(
+      Number.isInteger(limit) && limit > 0 && limit <= 500,
+      "INVALID_INPUT",
+      "分页参数无效",
+    );
+    return this.store.db
+      .prepare(
+        `SELECT f.data AS job, p.data AS patient FROM follow_ups f
+         LEFT JOIN patients p ON p.id=f.patient_id
+         WHERE f.status IN ('active','running','paused')
+         ORDER BY f.next_due ASC LIMIT ?`,
+      )
+      .all(limit)
+      .map((row) => {
+        const job = JSON.parse(row.job);
+        const patient = row.patient ? JSON.parse(row.patient) : null;
+        return {
+          id: job.id,
+          patientId: job.patientId,
+          patientName: patient?.name || "已删除",
+          name: job.name,
+          once: job.once === true,
+          intervalDays: job.intervalDays,
+          checklist: job.checklist,
+          status: job.status,
+          nextDue: job.nextDue,
+          revision: job.revision,
+        };
+      });
   }
   update(id, { revision, status }) {
     const job = this.row(id);
@@ -143,6 +312,12 @@ export class FollowUpManager {
       "仅支持恢复或暂停随访计划",
     );
     check(job.status !== "running", "RUN_ACTIVE", "请先停止当前随访执行", 409);
+    check(
+      !(job.once && job.status === "completed"),
+      "PLAN_COMPLETED",
+      "单次随访已完成，无需恢复",
+      409,
+    );
     if (status === "active") {
       const patient = this.patientRow(job.patientId);
       check(
@@ -331,6 +506,7 @@ export class FollowUpManager {
     job.activeRunId = null;
     job.lastError = result.error || null;
     if (result.status !== "completed") job.status = "paused";
+    else if (job.once) job.status = "completed";
     else {
       const interval = job.intervalDays * 86400000;
       job.nextDue +=
@@ -393,3 +569,80 @@ export class FollowUpManager {
     return { ok: true };
   }
 }
+
+const item = (text) => text;
+// Built-in plan templates seeded on first use; nodes become one-shot jobs.
+const BUILTIN_PLANS = [
+  {
+    id: "builtin_hypertension",
+    builtin: true,
+    name: "高血压慢病随访",
+    disease: "I10 原发性高血压",
+    createdAt: 0,
+    nodes: [
+      {
+        offsetDays: 30,
+        title: "1 个月随访",
+        items: [item("家庭血压记录"), item("服药依从性"), item("不良反应")],
+      },
+      {
+        offsetDays: 90,
+        title: "3 个月随访",
+        items: [item("血压达标评估"), item("血钾与肾功能"), item("血脂")],
+      },
+      {
+        offsetDays: 180,
+        title: "6 个月评估",
+        items: [item("年度心血管风险评估"), item("靶器官损害筛查")],
+      },
+    ],
+  },
+  {
+    id: "builtin_diabetes",
+    builtin: true,
+    name: "2 型糖尿病随访",
+    disease: "E11 2 型糖尿病",
+    createdAt: 0,
+    nodes: [
+      {
+        offsetDays: 30,
+        title: "1 个月随访",
+        items: [item("血糖监测记录"), item("用药与低血糖事件")],
+      },
+      {
+        offsetDays: 90,
+        title: "3 个月随访",
+        items: [item("糖化血红蛋白"), item("体重与腰围")],
+      },
+      {
+        offsetDays: 180,
+        title: "6 个月并发症筛查",
+        items: [item("眼底检查"), item("尿微量白蛋白"), item("足部检查")],
+      },
+    ],
+  },
+  {
+    id: "builtin_postop",
+    builtin: true,
+    name: "术后随访",
+    disease: "外科术后通用",
+    createdAt: 0,
+    nodes: [
+      {
+        offsetDays: 7,
+        title: "术后 1 周",
+        items: [item("伤口愈合情况"), item("体温与疼痛")],
+      },
+      {
+        offsetDays: 30,
+        title: "术后 1 个月",
+        items: [item("血常规与生化复查"), item("功能恢复评估")],
+      },
+      {
+        offsetDays: 90,
+        title: "术后 3 个月",
+        items: [item("影像学复查"), item("肿瘤标志物（如适用）")],
+      },
+    ],
+  },
+];
