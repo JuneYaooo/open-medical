@@ -1,0 +1,472 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  CalendarClock,
+  CheckCheck,
+  ClipboardList,
+  FileText,
+  FolderOpen,
+  History,
+  Loader2,
+  MessageSquare,
+  Search,
+  Stethoscope,
+  UserPlus,
+} from "lucide-react";
+import { api } from "./agent-runtime";
+
+export const MEDICAL_WORKFLOWS = [
+  {
+    id: "timeline",
+    title: "整理病历",
+    icon: History,
+    category: "clinical",
+    desc: "把零散记录整理成就诊时间线",
+    output: "病历时间线 · 原文来源",
+    prompt: "请将本次材料整理为病历时间线，保留原文来源和待确认信息。",
+  },
+  {
+    id: "observations",
+    title: "摘录检验",
+    icon: Activity,
+    category: "clinical",
+    desc: "提取检验数值，保留单位与出处",
+    output: "指标摘录 · 对照原文",
+    prompt: "请摘录本次材料的检验数值，保留单位和原始出处，不进行异常判断。",
+  },
+  {
+    id: "medication",
+    title: "核对用药资料",
+    icon: ClipboardList,
+    category: "clinical",
+    desc: "找出用药记录中的缺失信息",
+    output: "用药信息清单 · 待核对项",
+    prompt: "请整理这份用药材料，列出需要专业人员核对的信息和缺失字段。",
+  },
+  {
+    id: "followup",
+    title: "安排随访",
+    icon: CalendarClock,
+    category: "clinical",
+    desc: "为患者设置时间、清单和提醒",
+    output: "患者随访计划",
+    prompt: "",
+  },
+  {
+    id: "evidence",
+    title: "准备循证检索",
+    icon: BookOpen,
+    category: "research",
+    desc: "从材料提炼问题，准备检索策略",
+    output: "PICO · 检索式 · 核查步骤",
+    prompt: "请根据材料建立循证检索任务，整理 PICO、检索式与证据核查步骤。",
+  },
+];
+const dateLabel = (value) =>
+  new Date(value).toLocaleDateString("zh-CN", {
+    month: "short",
+    day: "numeric",
+  });
+
+export function WorkbenchHome({
+  view,
+  config,
+  sessions,
+  onStart,
+  onOpenTask,
+  onPatient,
+  onView,
+  onRefresh,
+  onReconnect,
+}) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [category, setCategory] = useState("clinical");
+  const [flowId, setFlowId] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [patientId, setPatientId] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const inputRef = useRef(null);
+  const selectedFlow = MEDICAL_WORKFLOWS.find((flow) => flow.id === flowId);
+  const isFollowup = flowId === "followup";
+  const isHome = view === "home";
+  useEffect(() => {
+    let live = true;
+    const refresh = async () => {
+      try {
+        const [people, todo, inbox] = await Promise.all([
+          api("/api/patients"),
+          api("/api/reminders"),
+          api("/api/inbox"),
+        ]);
+        if (live) {
+          setData({
+            patients: people.patients,
+            reminders: todo.reminders,
+            inbox: inbox.messages,
+          });
+          setError("");
+        }
+      } catch (err) {
+        if (live) setError(err.message);
+      }
+    };
+    refresh();
+    const timer = setInterval(() => {
+      if (!document.hidden) {
+        refresh();
+        onRefresh().catch(() => {});
+      }
+    }, 15000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [view, reloadKey]);
+  const patients = data?.patients || [];
+  const selectedPatient = patients.find((patient) => patient.id === patientId);
+  const reviewCount = sessions.reduce((sum, task) => sum + task.reviewCount, 0);
+  const followupCount = patients.reduce(
+    (sum, patient) => sum + (patient.counts?.dueFollowups || 0),
+    0,
+  );
+  const tasks = sessions.filter(
+    (task) =>
+      (view !== "review" || task.reviewCount > 0) &&
+      task.title.toLowerCase().includes(query.toLowerCase()),
+  );
+  const chooseFlow = (flow) => {
+    setFlowId(flow.id);
+    setPrompt(flow.prompt);
+    inputRef.current?.focus();
+  };
+  const submit = async (e) => {
+    e.preventDefault();
+    if (starting) return;
+    setError("");
+    if (patientId && !selectedPatient) {
+      setError("所选患者已不可用，请重新选择。");
+      return;
+    }
+    if (isFollowup) {
+      if (selectedPatient)
+        onPatient({ id: selectedPatient.id, tab: "followups" });
+      return;
+    }
+    if (!prompt.trim()) return;
+    setStarting(true);
+    try {
+      await onStart({
+        prompt: prompt.trim(),
+        patient: selectedPatient,
+        title: selectedFlow?.title || prompt.trim().slice(0, 32),
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStarting(false);
+    }
+  };
+  const taskList = (limit) => (
+    <div className="hub-task-list">
+      {tasks.slice(0, limit).map((task) => (
+        <button
+          className="hub-task-row"
+          key={task.id}
+          onClick={() =>
+            onOpenTask(task.id, {
+              tab: view === "review" ? "results" : "materials",
+            })
+          }
+        >
+          <span className="hub-task-icon">
+            {view === "review" ? (
+              <CheckCheck size={18} />
+            ) : (
+              <MessageSquare size={18} />
+            )}
+          </span>
+          <span className="hub-task-name">
+            <b>{task.title}</b>
+            <small>
+              {task.patientId
+                ? patients.find((p) => p.id === task.patientId)?.name ||
+                  "患者工作区"
+                : "独立任务"}{" "}
+              · {dateLabel(task.updatedAt)}
+            </small>
+          </span>
+          <span
+            className={`hub-task-state ${task.reviewCount ? "pending" : ""}`}
+          >
+            {task.running
+              ? "执行中"
+              : task.reviewCount
+                ? `${task.reviewCount} 份待复核`
+                : task.messageCount
+                  ? "查看记录"
+                  : "待开始"}
+          </span>
+          <ArrowUpRight size={15} />
+        </button>
+      ))}
+      {!tasks.length && (
+        <div className="hub-empty">
+          <FolderOpen size={23} />
+          <b>
+            {query
+              ? "没有找到匹配的任务"
+              : view === "review"
+                ? "目前没有待复核的成果"
+                : "你的第一项医疗任务，从这里开始"}
+          </b>
+          <p>
+            {query
+              ? "尝试其他关键词。"
+              : view === "review"
+                ? "生成的草稿会汇集到这里，核对原文后再记录复核结果。"
+                : "选择上方场景，或直接描述需要整理的材料。"}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <main id="main" className="workbench-hub">
+      <div className="hub-page-head">
+        <span>
+          {isHome
+            ? "个人工作空间"
+            : view === "review"
+              ? "成果 / 待复核"
+              : "工作空间 / 任务记录"}
+        </span>
+        <span>
+          {new Date().toLocaleDateString("zh-CN", {
+            month: "long",
+            day: "numeric",
+            weekday: "long",
+          })}
+        </span>
+      </div>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}{" "}
+          <button
+            className="text-button"
+            onClick={() => {
+              onReconnect()
+                .then(() => setReloadKey((value) => value + 1))
+                .catch((err) => setError(err.message));
+            }}
+          >
+            刷新连接
+          </button>
+        </p>
+      )}
+      {isHome ? (
+        <>
+          <section className="hub-intro">
+            <div className="hub-intro-mark">
+              <Stethoscope size={25} />
+            </div>
+            <span className="hub-kicker">你的医疗工作伙伴</span>
+            <h1>今天，想完成什么工作？</h1>
+            <p>从病历到随访，让每一份材料都有去处。</p>
+          </section>
+          <form className="hub-composer" onSubmit={submit}>
+            <div className="hub-composer-caption">
+              <span>{selectedFlow ? selectedFlow.title : "开始一项任务"}</span>
+              {selectedFlow && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFlowId("");
+                    setPrompt("");
+                  }}
+                >
+                  清除场景
+                </button>
+              )}
+            </div>
+            {isFollowup ? (
+              <div className="hub-followup-prompt">
+                <CalendarClock size={21} />
+                <div>
+                  <b>继续安排这位患者的随访</b>
+                  <p>选择患者，进入随访计划设置时间、间隔与核查清单。</p>
+                </div>
+              </div>
+            ) : (
+              <textarea
+                ref={inputRef}
+                aria-label="医疗任务内容"
+                placeholder="例如：把这位患者的就诊记录整理成时间线，标出需要补充的信息…"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={3}
+                maxLength={12000}
+              />
+            )}
+            <div className="hub-composer-controls">
+              <label className="hub-patient-picker">
+                <Stethoscope size={15} />
+                <select
+                  aria-label="任务关联患者"
+                  value={patientId}
+                  onChange={(e) => setPatientId(e.target.value)}
+                  disabled={!data || starting}
+                >
+                  <option value="">
+                    {isFollowup ? "请选择患者" : "独立任务 · 不关联患者"}
+                  </option>
+                  {patients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name}
+                      {patient.archived ? "（已归档）" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="hub-add-patient"
+                onClick={() => onPatient({ create: true })}
+              >
+                <UserPlus size={15} />
+                建档
+              </button>
+              <button
+                className="hub-start"
+                disabled={
+                  !config ||
+                  starting ||
+                  (isFollowup ? !selectedPatient : !prompt.trim())
+                }
+              >
+                {starting ? (
+                  <Loader2 size={16} className="spin" />
+                ) : isFollowup ? (
+                  "进入随访"
+                ) : (
+                  "准备任务"
+                )}
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </form>
+          <p className="hub-composer-hint">
+            {selectedPatient
+              ? `沿用「${selectedPatient.name}」的病例材料，进入后可核对本次范围。`
+              : "先准备任务，再添加材料；生成结果后由你复核。"}
+          </p>
+          <section className="hub-scenarios" aria-label="医疗工作场景">
+            <div className="hub-section-head">
+              <h2>从常用场景开始</h2>
+              <div className="hub-category" aria-label="场景分类">
+                <button
+                  aria-pressed={category === "clinical"}
+                  className={category === "clinical" ? "active" : ""}
+                  onClick={() => setCategory("clinical")}
+                >
+                  临床与患者
+                </button>
+                <button
+                  aria-pressed={category === "research"}
+                  className={category === "research" ? "active" : ""}
+                  onClick={() => setCategory("research")}
+                >
+                  循证准备
+                </button>
+              </div>
+            </div>
+            <div className="hub-scene-grid">
+              {MEDICAL_WORKFLOWS.filter(
+                (flow) => flow.category === category,
+              ).map((flow) => (
+                <button
+                  key={flow.id}
+                  className={`hub-scene ${flow.id === flowId ? "selected" : ""}`}
+                  aria-pressed={flow.id === flowId}
+                  onClick={() => chooseFlow(flow)}
+                >
+                  <span className="hub-scene-icon">
+                    <flow.icon size={20} />
+                  </span>
+                  <b>{flow.title}</b>
+                  <p>{flow.desc}</p>
+                  <small>
+                    {flow.output}
+                    <ArrowUpRight size={14} />
+                  </small>
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="hub-attention" aria-label="需要关注">
+            <button onClick={() => onView("review")}>
+              <CheckCheck size={18} />
+              <span>待复核成果</span>
+              <b>{reviewCount}</b>
+              <ArrowRight size={14} />
+            </button>
+            <button onClick={() => onPatient({})}>
+              <CalendarClock size={18} />
+              <span>到期随访</span>
+              <b>{data ? followupCount : "—"}</b>
+              <ArrowRight size={14} />
+            </button>
+            <button onClick={() => onPatient({})}>
+              <FileText size={18} />
+              <span>待办提醒</span>
+              <b>{data ? data.reminders.length : "—"}</b>
+              <ArrowRight size={14} />
+            </button>
+          </section>
+          <section className="hub-recent">
+            <div className="hub-section-head">
+              <h2>继续最近的工作</h2>
+              <button className="text-button" onClick={() => onView("tasks")}>
+                查看全部 <ArrowRight size={13} />
+              </button>
+            </div>
+            {taskList(4)}
+          </section>
+        </>
+      ) : (
+        <section className="hub-history">
+          <span className="hub-kicker">
+            {view === "review"
+              ? "每一份成果，都经过你的判断"
+              : "材料、过程与成果，一起保留"}
+          </span>
+          <h1>{view === "review" ? "待复核" : "任务记录"}</h1>
+          <p>
+            {view === "review"
+              ? `${reviewCount} 份草稿待复核。进入工作区，对照来源、修订内容并记录复核结果。`
+              : "继续处理已有任务，患者相关任务始终沿用各自的病例工作区。"}
+          </p>
+          <label className="hub-history-search">
+            <Search size={16} />
+            <input
+              aria-label="搜索任务记录"
+              placeholder="搜索任务名称"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          {taskList(tasks.length)}
+        </section>
+      )}
+      <footer className="hub-footer">
+        <span className="hub-status-dot" />
+        本机保存 <span>·</span> AI 成果待复核 <span>·</span> 外部模型按次授权
+      </footer>
+    </main>
+  );
+}
