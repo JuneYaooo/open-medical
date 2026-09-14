@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, AtSign, X, FileText } from "lucide-react";
+import { Paperclip, AtSign, Plus, X, FileText } from "lucide-react";
 import { api } from "../agent-runtime";
 import { importMaterial } from "../import-material";
 export function ComposerTools({
@@ -13,7 +13,8 @@ export function ComposerTools({
   onSkill,
 }) {
   const file = useRef(null),
-    [loading, setLoading] = useState(false);
+    [loading, setLoading] = useState(false),
+    [open, setOpen] = useState(false);
   const alive = useRef(true),
     importing = useRef(false);
   const [skills, setSkills] = useState(null);
@@ -118,25 +119,49 @@ export function ComposerTools({
       />
       <button
         type="button"
-        title="添加材料（也可直接拖拽或粘贴文件）"
+        className="wb-tools-toggle"
+        title="添加材料 / 引用文件 / 选择技能（也可直接拖拽或粘贴文件）"
+        aria-expanded={open}
         disabled={disabled || loading}
-        onClick={() => file.current.click()}
+        onClick={() => setOpen(!open)}
       >
-        <Paperclip size={15} />
-        {loading ? "读取中…" : "材料"}
+        <Plus size={15} />
       </button>
-      <button type="button" title="引用工作区文件" disabled={disabled} onClick={onMention}>
-        <AtSign size={15} />
-        引用
-      </button>
-      <button
-        type="button"
-        title="选择项目技能"
-        disabled={disabled || current.runs.some((r) => r.status === "running")}
-        onClick={loadSkills}
-      >
-        技能
-      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            title="添加材料（也可直接拖拽或粘贴文件）"
+            disabled={disabled || loading}
+            onClick={() => file.current.click()}
+          >
+            <Paperclip size={15} />
+            {loading ? "读取中…" : "材料"}
+          </button>
+          <button
+            type="button"
+            title="引用工作区文件"
+            disabled={disabled}
+            onClick={() => {
+              onMention();
+              setOpen(false);
+            }}
+          >
+            <AtSign size={15} />
+            引用
+          </button>
+          <button
+            type="button"
+            title="选择项目技能"
+            disabled={
+              disabled || current.runs.some((r) => r.status === "running")
+            }
+            onClick={loadSkills}
+          >
+            技能
+          </button>
+        </>
+      )}
       {skills && (
         <select
           aria-label="选择项目技能"
