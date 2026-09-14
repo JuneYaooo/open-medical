@@ -121,3 +121,27 @@ test("brave search is preferred over keyless engines when a key is present", asy
   assert.deepEqual(used, ["api.search.brave.com"]); // never touched bing/ddg
 });
 
+
+test("permittedURL allows workspace-local files and nothing beyond", async () => {
+  const { permittedURL } = await import("../server/core/browser-tools.mjs");
+  const root = "/tmp/omw-root";
+  const inside = "file:///tmp/omw-root/site/index.html";
+  assert.equal(permittedURL(inside, [], root), inside);
+  // Traversal-style encodings that escape the root are rejected.
+  assert.throws(
+    () => permittedURL("file:///tmp/omw-root/../../etc/passwd", [], root),
+    { code: "BROWSER_ORIGIN" },
+  );
+  assert.throws(() => permittedURL("file:///etc/hosts", [], root), {
+    code: "BROWSER_ORIGIN",
+  });
+  assert.throws(() => permittedURL("file:///tmp/omw-other/x.html", [], root), {
+    code: "BROWSER_ORIGIN",
+  });
+  // Without a root, local browsing is entirely disabled.
+  assert.throws(() => permittedURL(inside, []), { code: "BROWSER_ORIGIN" });
+  // Remote origins still require explicit authorization.
+  assert.throws(() => permittedURL("https://example.com/", [], root), {
+    code: "BROWSER_ORIGIN",
+  });
+});

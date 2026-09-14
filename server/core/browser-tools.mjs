@@ -1,8 +1,51 @@
 import { chromium } from "playwright-core";
 import { check } from "../errors.mjs";
+import { resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
 
-export function permittedURL(input, origins) {
+// Local-only fallbacks so self-verification works without any configuration.
+const browserCandidates = () =>
+  process.env.AGENT_BROWSER_EXECUTABLE
+    ? [process.env.AGENT_BROWSER_EXECUTABLE]
+    : process.platform === "darwin"
+      ? [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/Applications/Chromium.app/Contents/MacOS/Chromium",
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        ]
+      : process.platform === "win32"
+        ? [
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+          ]
+        : [
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+          ];
+
+export function permittedURL(input, origins, root) {
   const url = new URL(input);
+  // Workspace-local files are allowed for self-verification: contained to the
+  // authorized root, with every WorkspaceFiles path protection applied by the
+  // caller before turning the path into a file:// URL.
+  if (url.protocol === "file:") {
+    check(
+      typeof root === "string" && root.length > 1,
+      "BROWSER_ORIGIN",
+      "本地文件浏览仅限授权工作区内的文件",
+      403,
+    );
+    const target = resolve(decodeURIComponent(url.pathname));
+    check(
+      target === root || target.startsWith(root + sep),
+      "BROWSER_ORIGIN",
+      "本地文件浏览仅限授权工作区内的文件",
+      403,
+    );
+    return url.href;
+  }
   check(
     ["http:", "https:"].includes(url.protocol) &&
       !url.username &&
@@ -17,7 +60,7 @@ export function permittedURL(input, origins) {
 export class BrowserTools {
   constructor({
     factory,
-    executablePath = process.env.AGENT_BROWSER_EXECUTABLE,
+    executablePath = browserCandidates().find(existsSync),
   } = {}) {
     this.factory = factory;
     this.executablePath = executablePath;
@@ -30,10 +73,10 @@ export class BrowserTools {
       reason:
         this.factory || this.executablePath
           ? undefined
-          : "桌面版内置 Chromium；命令行版需指定 AGENT_BROWSER_EXECUTABLE",
+          : "未找到可用的本机浏览器（Chrome / Edge / Chromium）",
     };
   }
-  async get(owner, origins) {
+  async get(owner, origins, root) {
     const existing = this.pages.get(owner);
     if (existing) {
       check(
@@ -65,7 +108,7 @@ export class BrowserTools {
       });
       await context.route("**/*", (route) => {
         try {
-          permittedURL(route.request().url(), origins);
+          permittedURL(route.request().url(), origins, root);
           return route.continue();
         } catch {
           return route.abort("blockedbyclient");
@@ -133,9 +176,9 @@ export class BrowserTools {
     this.pages.set(owner, { driver, origins: [...origins] });
     return driver;
   }
-  async navigate(owner, origins, url) {
-    const target = permittedURL(url, origins),
-      driver = await this.get(owner, origins);
+  async navigate(owner, origins, url, root) {
+    const target = permittedURL(url, origins, root),
+      driver = await this.get(owner, origins, root);
     return driver.navigate(target);
   }
   async snapshot(owner, origins) {
