@@ -230,9 +230,16 @@ export function WorkspacesView({ config, onOpenSettings }) {
     };
   }, [file?.path, current?.id]);
   const [prompt, setPrompt] = useState(""),
-    [consent, setConsent] = useState(false),
     [partial, setPartial] = useState(""),
     [events, setEvents] = useState([]);
+  // Auto-grow within a cap: starts at one line, follows content, stops at a
+  // readable maximum and scrolls beyond that.
+  useEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 260) + "px";
+  }, [prompt, current?.id]);
   const [scheduleAt, setScheduleAt] = useState(""),
     [cron, setCron] = useState(""),
     [timezone, setTimezone] = useState(
@@ -355,15 +362,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
     setError("");
     setView("chat");
     generation.current++;
-    setConsent(
-      (() => {
-        try {
-          return localStorage.getItem(`workbench.consent.${id}`) === "1";
-        } catch {
-          return false;
-        }
-      })(),
-    );
     setFile(null);
     setFiles([]);
     setOpenTabs([]);
@@ -403,7 +401,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
     }
     if (
       !prompt.trim() ||
-      !consent ||
       !config?.modelConfigured ||
       busy ||
       streaming
@@ -426,12 +423,11 @@ export function WorkspacesView({ config, onOpenSettings }) {
         await api(base + "/steer", "POST", {
           runId: current.runs.find((r) => r.status === "running")?.id,
           message: taskText,
-          externalConsent: consent,
+          externalConsent: true,
           requestId: crypto.randomUUID(),
         });
         setPrompt("");
         setAttachments([]);
-        setConsent(false);
         await refresh();
       } catch (e) {
         setError(e.message);
@@ -446,7 +442,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
     setRunning(true);
     setError("");
     setPartial("");
-    setConsent(false);
     const controller = new AbortController();
     abort.current = controller;
     try {
@@ -462,7 +457,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
           message: task,
           revision: current.revision,
           requestId: crypto.randomUUID(),
-          externalConsent: consent,
+          externalConsent: true,
           limits: { maxRounds: rounds, timeoutMs: minutes * 60000 },
           resumeOnRestart,
           ...(resumeRunId ? { resumeRunId } : {}),
@@ -481,7 +476,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
           message: task,
           revision: current.revision,
           requestId: crypto.randomUUID(),
-          externalConsent: consent,
+          externalConsent: true,
           limits: { maxRounds: rounds, timeoutMs: minutes * 60000 },
           resumeOnRestart,
           ...(resumeRunId ? { resumeRunId } : {}),
@@ -794,25 +789,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                       上次任务被中断，勾选后从检查点继续
                     </label>
                   )}
-                  <ComposerTools
-                    key={current.id}
-                    current={current}
-                    onSkill={(id) => {
-                      setPrompt(
-                        (p) => p + `\n请使用技能 ${id}，先读取该技能说明。\n`,
-                      );
-                      promptRef.current?.focus();
-                    }}
-                    attachments={attachments}
-                    setAttachments={setAttachments}
-                    disabled={busy}
-                    error={attachmentError}
-                    setError={setAttachmentError}
-                    onMention={() => {
-                      setView("files");
-                      list().catch((e) => setError(e.message));
-                    }}
-                  />
                   <textarea
                     ref={promptRef}
                     aria-label="通用任务"
@@ -831,7 +807,6 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         !e.nativeEvent.isComposing &&
                         !busy &&
                         prompt.trim() &&
-                        consent &&
                         config?.modelConfigured
                       ) {
                         e.preventDefault();
@@ -840,28 +815,25 @@ export function WorkspacesView({ config, onOpenSettings }) {
                     }}
                   />
                   <div className="wb-composer-footer">
-                    {!consent && (
-                      <label
-                        className="workspace-checkbox wb-consent"
-                        title="允许本次任务、同授权下的历史及工具读取的文件内容发送给当前模型（首次确认后不再提示）"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={consent}
-                          onChange={(e) => {
-                            setConsent(e.target.checked);
-                            try {
-                              localStorage.setItem(
-                                `workbench.consent.${current.id}`,
-                                e.target.checked ? "1" : "0",
-                              );
-                            } catch {}
-                          }}
-                          disabled={busy}
-                        />
-                        允许发送任务与所读文件给模型（仅首次确认）
-                      </label>
-                    )}
+                    <ComposerTools
+                      key={current.id}
+                      current={current}
+                      onSkill={(id) => {
+                        setPrompt(
+                          (p) => p + `\n请使用技能 ${id}，先读取该技能说明。\n`,
+                        );
+                        promptRef.current?.focus();
+                      }}
+                      attachments={attachments}
+                      setAttachments={setAttachments}
+                      disabled={busy}
+                      error={attachmentError}
+                      setError={setAttachmentError}
+                      onMention={() => {
+                        setView("files");
+                        list().catch((e) => setError(e.message));
+                      }}
+                    />
                     <div className="wb-composer-actions">
                       <button
                         className="wb-model-shortcut"
@@ -896,15 +868,12 @@ export function WorkspacesView({ config, onOpenSettings }) {
                         disabled={
                           busy ||
                           !prompt.trim() ||
-                          !consent ||
-                          !config?.modelConfigured
+                                              !config?.modelConfigured
                         }
                         title={
-                          !consent
-                            ? "先勾选发送授权"
-                            : !config?.modelConfigured
-                              ? "先连接模型"
-                              : "发送任务"
+                          !config?.modelConfigured
+                            ? "先连接模型"
+                            : "发送任务"
                         }
                         onClick={run}
                       >
