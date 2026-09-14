@@ -1000,3 +1000,119 @@ iframe.wb-file-preview {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- Simplified auth dropdown bar --- */
+.wb-auth-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #333;
+  color: #9aa2a8;
+  font-size: 11px;
+}
+.wb-auth-bar select {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #1d2226;
+  color: #dfe5e9;
+  border: 1px solid #3a4046;
+}
+.wb-auth-scope {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #7d858c;
+}
+/* --- Simple file browser: breadcrumb + grid + tabs --- */
+.wb-file-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 10px 0;
+  font-size: 12px;
+}
+.wb-file-breadcrumb button {
+  background: transparent;
+  border: 0;
+  color: #9ab;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.wb-file-breadcrumb button:hover {
+  background: #23282d;
+  color: #fff;
+}
+.wb-file-breadcrumb button:not(:last-child)::after {
+  content: "/";
+  margin-left: 8px;
+  color: #555;
+}
+.wb-file-refresh {
+  margin-left: auto;
+}
+.wb-file-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.wb-file-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c7ccd1;
+  font-size: 12.5px;
+  text-align: left;
+}
+.wb-file-row:hover {
+  background: #23282d;
+}
+.wb-file-row.active {
+  background: #2a3138;
+  color: #fff;
+}
+.wb-file-row.dir span {
+  color: #8fb8d8;
+}
+.wb-file-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--desk-line);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+.wb-file-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #3a4046;
+  border-radius: 8px;
+  background: #1d2226;
+  color: #9aa2a8;
+  padding: 4px 8px;
+  font-size: 11.5px;
+}
+.wb-file-tabs button.active {
+  color: #fff;
+  border-color: #5a636b;
+  background: #2a3138;
+}
+.wb-tab-close {
+  display: flex;
+  border-radius: 4px;
+  padding: 1px;
+}
+.wb-tab-close:hover {
+  background: #444;
+  color: #fff;
+}
