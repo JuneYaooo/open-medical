@@ -3029,3 +3029,274 @@ blockquote p {
   gap: 7px;
   margin: 5px 0 15px;
 }
+
+/* ---- grouped navigation (clinical workbench upgrade) ---- */
+.nav-group {
+  display: grid;
+  gap: 2px;
+}
+.nav-group + .nav-group {
+  margin-top: 12px;
+}
+.nav-group-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #93a294;
+  margin: 0 0 2px;
+  padding: 0 13px;
+}
+.modal-wide {
+  width: min(760px, 100%);
+}
+
+/* ---- doctor profile & memory panel ---- */
+.doctor-panel {
+  display: grid;
+  gap: 22px;
+}
+.doctor-section h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.doctor-field {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+  font-size: 12px;
+  color: #4d5c50;
+}
+.doctor-field input {
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.doctor-list {
+  border: 1px solid #e3ead9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.doctor-list legend {
+  font-size: 12px;
+  color: #4d5c50;
+  padding: 0 4px;
+}
+.doctor-list-row {
+  display: flex;
+  gap: 6px;
+  margin: 5px 0;
+}
+.doctor-list-row input {
+  flex: 1;
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+}
+.doctor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.doctor-digest {
+  background: #f4f7ef;
+  border: 1px dashed #cdddd2;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+}
+.doctor-add {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.doctor-add input {
+  flex: 1;
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.doctor-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.doctor-tabs button {
+  border: 1px solid #dbe4d3;
+  background: white;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12px;
+  color: #4d5c50;
+}
+.doctor-tabs button.active {
+  background: #e1ebe1;
+  border-color: #b8cfbc;
+  color: #245740;
+  font-weight: 600;
+}
+.doctor-tabs button em {
+  font-style: normal;
+  margin-left: 5px;
+  background: #d2e1d1;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+.doctor-consolidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.doctor-consent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #4d5c50;
+}
+.doctor-memories {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.memory {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e3ead9;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.memory.memory-confirmed {
+  border-color: #b8cfbc;
+  background: #f3f8f1;
+}
+.memory.memory-pending {
+  border-color: #e4d5a8;
+  background: #fbf7ea;
+}
+.memory.memory-dismissed {
+  opacity: 0.55;
+}
+.memory-main p {
+  margin: 0;
+  font-size: 13px;
+}
+.memory-main small {
+  color: #7c8a7d;
+  font-size: 11px;
+}
+.memory-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.memory-empty {
+  border: 1px dashed #d7e0d0;
+  border-radius: 10px;
+  padding: 14px;
+  color: #7c8a7d;
+  font-size: 12px;
+}
+.icon-button.danger {
+  color: #a04b3a;
+}
+
+/* ---- module landing views ---- */
+.module-view {
+  display: grid;
+  place-items: start center;
+  padding: 48px 20px;
+  overflow: auto;
+}
+.module-card {
+  width: min(680px, 100%);
+  background: white;
+  border: 1px solid #e0e9d6;
+  border-radius: 16px;
+  padding: 30px 32px;
+  box-shadow: 0 10px 40px #1f402714;
+}
+.module-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.module-head h1 {
+  font-size: 20px;
+  margin: 0;
+}
+.module-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #e1ebe1;
+  color: #245740;
+}
+.module-phase {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #7c8a7d;
+}
+.module-desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #3c4a3e;
+}
+.module-features {
+  margin: 14px 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  color: #4d5c50;
+}
+.module-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.module-note {
+  margin-top: 14px;
+  font-size: 11px;
+  color: #93a294;
+}
+.form-error {
+  color: #a04b3a;
+  background: #faeceb;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.form-notice {
+  color: #245740;
+  background: #e9f3e7;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
