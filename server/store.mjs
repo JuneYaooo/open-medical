@@ -90,10 +90,12 @@ export class Store {
       CREATE TABLE IF NOT EXISTS doctor_profile (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS doctor_memories (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, status TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, count INTEGER NOT NULL DEFAULT 1, topic TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS doctor_memories_kind ON doctor_memories(kind,status);
+      CREATE TABLE IF NOT EXISTS literature_cache (key TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
-      // profile/memory tables. Both migrations are additive; session rows are
-      // unchanged.
+      // profile/memory tables; later versions add knowledge-domain tables.
+      // All migrations are additive; session rows are unchanged.
+      const SCHEMA_VERSION = "5";
       const schemaRow = this.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version");
@@ -104,10 +106,10 @@ export class Store {
       if (!schemaRow)
         this.db
           .prepare("INSERT INTO meta VALUES (?,?)")
-          .run("schema_version", "4");
-      else if (schemaRow.value === "2" || schemaRow.value === "3")
-        setSchema("4");
-      else if (schemaRow.value !== "4")
+          .run("schema_version", SCHEMA_VERSION);
+      else if (Number(schemaRow.value) < Number(SCHEMA_VERSION))
+        setSchema(SCHEMA_VERSION);
+      else if (schemaRow.value !== SCHEMA_VERSION)
         throw new AppError(
           "DATABASE_SCHEMA",
           "数据库版本不兼容；未修改既有会话，请使用匹配的运行时",

@@ -28,18 +28,6 @@ const MODULES = {
       "全部数据仅存本机，科研输出支持脱敏",
     ],
   },
-  literature: {
-    icon: BookOpen,
-    title: "文献检索",
-    phase: "第二期上线",
-    desc: "接入 PubMed 与 Europe PMC 公开接口的医学文献检索，结果可作为会话材料进入循证流程。",
-    features: [
-      "PubMed E-utilities / Europe PMC 检索，按年份与出版类型过滤",
-      "证据等级提示（Meta 分析 / RCT / 队列等，仅为提示非结论）",
-      "开放获取全文一键并入会话资料，保留 SHA-256 出处",
-      "引用导出（RIS / BibTeX）与深入循证工作流",
-    ],
-  },
   guidelines: {
     icon: BookOpen,
     title: "指南库",
