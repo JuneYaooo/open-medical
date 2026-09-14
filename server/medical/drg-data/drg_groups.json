@@ -1,0 +1,38 @@
+{
+  "version": "CHS-DRG 1.1 常见病组示例（代表性 ADRG 与权重，仅供参考，可导入覆盖）",
+  "updated": "2026-09",
+  "disclaimer": "权重（RW）为公开资料整理的代表性示例值；各统筹区实际权重与费率不同，请通过导入功能使用本地数据。",
+  "ccSuffixNote": "每个 ADRG 按并发症严重程度分为三档：MCC（严重并发症）/ CC（一般并发症）/ QY（不伴），对应 DRG 码与权重见 drgs。",
+  "ccLevels": {
+    "mcc": "伴严重并发症或合并症",
+    "cc": "伴一般并发症或合并症",
+    "none": "不伴并发症或合并症"
+  },
+  "adrgs": [
+    { "code": "ER1", "mdc": "04", "type": "medical", "name": "呼吸系统感染/炎症", "drgs": { "mcc": { "code": "ER11", "rw": 1.17 }, "cc": { "code": "ER13", "rw": 0.85 }, "none": { "code": "ER15", "rw": 0.6 } } },
+    { "code": "EY2", "mdc": "04", "type": "surgical", "name": "肺部大手术", "procedures": ["32.4", "32.5", "32.6"], "drgs": { "mcc": { "code": "EY21", "rw": 1.85 }, "cc": { "code": "EY23", "rw": 1.42 }, "none": { "code": "EY25", "rw": 1.12 } } },
+    { "code": "ET2", "mdc": "04", "type": "surgical", "name": "气管切开伴呼吸支持", "procedures": ["31.1", "96.0"], "drgs": { "mcc": { "code": "ET21", "rw": 2.6 }, "cc": { "code": "ET23", "rw": 2.05 }, "none": { "code": "ET25", "rw": 1.6 } } },
+    { "code": "FR2", "mdc": "05", "type": "medical", "name": "心力衰竭及心律失常", "drgs": { "mcc": { "code": "FR21", "rw": 0.95 }, "cc": { "code": "FR23", "rw": 0.75 }, "none": { "code": "FR25", "rw": 0.55 } } },
+    { "code": "FM1", "mdc": "05", "type": "surgical", "name": "经皮冠状动脉介入", "procedures": ["36.0", "36.06", "36.07", "00.66", "00.4"], "drgs": { "mcc": { "code": "FM11", "rw": 1.75 }, "cc": { "code": "FM13", "rw": 1.2 }, "none": { "code": "FM15", "rw": 0.9 } } },
+    { "code": "FS2", "mdc": "05", "type": "surgical", "name": "心脏瓣膜手术", "procedures": ["35.2"], "drgs": { "mcc": { "code": "FS21", "rw": 3.2 }, "cc": { "code": "FS23", "rw": 2.6 }, "none": { "code": "FS25", "rw": 2.1 } } },
+    { "code": "BR2", "mdc": "01", "type": "medical", "name": "脑血管病", "drgs": { "mcc": { "code": "BR21", "rw": 0.9 }, "cc": { "code": "BR23", "rw": 0.72 }, "none": { "code": "BR25", "rw": 0.55 } } },
+    { "code": "GS2", "mdc": "06", "type": "surgical", "name": "胃部分切除术", "procedures": ["43.6", "43.7", "44.5"], "drgs": { "mcc": { "code": "GS21", "rw": 1.6 }, "cc": { "code": "GS23", "rw": 1.3 }, "none": { "code": "GS25", "rw": 1.05 } } },
+    { "code": "GZ1", "mdc": "06", "type": "medical", "name": "胃肠出血", "drgs": { "mcc": { "code": "GZ11", "rw": 0.85 }, "cc": { "code": "GZ13", "rw": 0.65 }, "none": { "code": "GZ15", "rw": 0.5 } } },
+    { "code": "HC2", "mdc": "07", "type": "surgical", "name": "胆囊切除术", "procedures": ["51.2", "51.23", "51.24"], "drgs": { "mcc": { "code": "HC21", "rw": 0.95 }, "cc": { "code": "HC23", "rw": 0.75 }, "none": { "code": "HC25", "rw": 0.58 } } },
+    { "code": "HS1", "mdc": "07", "type": "medical", "name": "肝胆胰系统疾病（内科）", "drgs": { "mcc": { "code": "HS11", "rw": 1.05 }, "cc": { "code": "HS13", "rw": 0.8 }, "none": { "code": "HS15", "rw": 0.6 } } },
+    { "code": "IP2", "mdc": "08", "type": "surgical", "name": "髋膝关节置换", "procedures": ["81.5", "81.51", "81.52", "81.53"], "drgs": { "mcc": { "code": "IP21", "rw": 2.2 }, "cc": { "code": "IP23", "rw": 1.8 }, "none": { "code": "IP25", "rw": 1.5 } } },
+    { "code": "IJ1", "mdc": "08", "type": "medical", "name": "肌肉骨骼疾病（内科）", "drgs": { "mcc": { "code": "IJ11", "rw": 0.8 }, "cc": { "code": "IJ13", "rw": 0.62 }, "none": { "code": "IJ15", "rw": 0.48 } } },
+    { "code": "ES1", "mdc": "10", "type": "medical", "name": "糖尿病及内分泌疾病", "drgs": { "mcc": { "code": "ES11", "rw": 0.7 }, "cc": { "code": "ES13", "rw": 0.55 }, "none": { "code": "ES15", "rw": 0.45 } } },
+    { "code": "LR1", "mdc": "11", "type": "medical", "name": "肾功能衰竭", "drgs": { "mcc": { "code": "LR11", "rw": 1.3 }, "cc": { "code": "LR13", "rw": 1.0 }, "none": { "code": "LR15", "rw": 0.8 } } },
+    { "code": "LS2", "mdc": "11", "type": "surgical", "name": "泌尿系统结石手术", "procedures": ["55.0", "55.1", "56.0", "98.5"], "drgs": { "mcc": { "code": "LS21", "rw": 0.9 }, "cc": { "code": "LS23", "rw": 0.7 }, "none": { "code": "LS25", "rw": 0.55 } } },
+    { "code": "OS1", "mdc": "14", "type": "surgical", "name": "剖宫产", "procedures": ["74.1", "74.2", "74.99"], "drgs": { "mcc": { "code": "OS11", "rw": 0.78 }, "cc": { "code": "OS13", "rw": 0.66 }, "none": { "code": "OS15", "rw": 0.55 } } },
+    { "code": "OR1", "mdc": "14", "type": "medical", "name": "阴道分娩", "drgs": { "mcc": { "code": "OR11", "rw": 0.6 }, "cc": { "code": "OR13", "rw": 0.52 }, "none": { "code": "OR15", "rw": 0.45 } } },
+    { "code": "SS1", "mdc": "18", "type": "medical", "name": "败血症及重症感染", "drgs": { "mcc": { "code": "SS11", "rw": 1.6 }, "cc": { "code": "SS13", "rw": 1.2 }, "none": { "code": "SS15", "rw": 0.9 } } }
+  ],
+  "mccPrefixes": [
+    "I21", "I50", "J96", "J18", "N18.4", "N18.5", "C78", "C79", "E87.1", "K72", "A41", "S06", "I63", "I61", "G40", "J80", "K85", "O14", "P22"
+  ],
+  "ccPrefixes": [
+    "I10", "I48", "I20", "I25", "E11", "E78", "E79", "N18.1", "N18.2", "N18.3", "D64", "J44", "J45", "K70", "B18", "K76", "I80", "D69", "E86", "E87.5", "Z49", "T81"
+  ]
+}

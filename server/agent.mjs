@@ -26,6 +26,7 @@ import { searchIcd10 } from "./medical/icd10.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 import { ResearchService, researchTools as researchToolPlugins } from "./medical/research.mjs";
+import { DrgService, drgTools } from "./medical/drg.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -172,6 +173,8 @@ export function createServer(options = {}) {
     options.guidelines || new GuidelineLibrary(store);
   const cases = options.cases || new CaseLibrary(store);
   const research = options.research || new ResearchService();
+  const drg = options.drg || new DrgService(store);
+  drg.load().catch(() => {});
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
@@ -180,6 +183,7 @@ export function createServer(options = {}) {
       ...guidelineTools(guidelines),
       ...caseTools(cases),
       ...researchToolPlugins(research),
+      ...drgTools(drg),
     ],
     doctor,
   });
@@ -439,6 +443,7 @@ export function createServer(options = {}) {
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
           guidelines: { enabled: true, count: guidelines.list().length },
           riskAlerts: risks.counts(),
+          drg: { enabled: true, ...drg.settings() },
           cases: cases.counts(),
           wechat: { enabled: wechat.enabled },
         });
@@ -705,6 +710,20 @@ export function createServer(options = {}) {
           return send(res, 201, cases.fromPatient(patient, b));
         }
         return send(res, 201, cases.addCase(b));
+      }
+      if (parts[0] === "api" && parts[1] === "drg") {
+        await drg.load();
+        if (parts[2] === "group" && req.method === "POST")
+          return send(res, 200, await drg.group(await body(req)));
+        if (parts[2] === "batch" && req.method === "POST")
+          return send(res, 200, await drg.batchAnalyze(await body(req)));
+        if (parts[2] === "settings") {
+          if (req.method === "GET") return send(res, 200, drg.settings());
+          if (req.method === "POST")
+            return send(res, 200, drg.updateSettings(await body(req)));
+        }
+        if (parts[2] === "import" && req.method === "POST")
+          return send(res, 200, drg.importWeights((await body(req)).weights));
       }
       if (parts[0] === "api" && parts[1] === "research" && req.method === "POST") {
         const b = await body(req);
@@ -1136,6 +1155,7 @@ export function createServer(options = {}) {
   server.literature = literature;
   server.guidelines = guidelines;
   server.risks = risks;
+  server.drg = drg;
   server.cases = cases;
   server.wechat = wechat;
   server.once("listening", () => {
