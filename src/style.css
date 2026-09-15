@@ -3940,3 +3940,30 @@ blockquote p {
   font-weight: 600;
   border-bottom-color: #245740;
 }
+
+/* ---- clinical quick-reference view ---- */
+.clinical-ref-view {
+  width: min(860px, 100%);
+}
+.scale-form {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+.scale-item {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #3c4a3e;
+}
+.scale-item span {
+  color: #4d5c50;
+}
+.scale-item select,
+.scale-item input {
+  border: 1px solid #d7e0d0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  background: white;
+}

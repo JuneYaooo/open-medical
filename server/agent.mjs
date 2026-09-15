@@ -27,7 +27,18 @@ import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 import { ResearchService, researchTools as researchToolPlugins } from "./medical/research.mjs";
 import { DrgService, drgTools } from "./medical/drg.mjs";
-import { evaluateMedicationSafety } from "./medical/med-safety.mjs";
+import {
+  evaluateMedicationSafety,
+  assessAdverseReaction,
+  specialPopulationCautions,
+} from "./medical/med-safety.mjs";
+import {
+  calculateScale,
+  listScales,
+  scaleTools,
+} from "./medical/scales.mjs";
+import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
+import { searchIcd9 } from "./medical/icd9.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -176,6 +187,15 @@ export function createServer(options = {}) {
   const research = options.research || new ResearchService();
   const drg = options.drg || new DrgService(store);
   drg.load().catch(() => {});
+  const medicationSafetyCheck = (args) => {
+    const result = evaluateMedicationSafety(args);
+    if (Array.isArray(args?.populations) && args.populations.length)
+      result.populationCautions = specialPopulationCautions({
+        medications: args.medications,
+        populations: args.populations,
+      });
+    return result;
+  };
   const runtime = new MedicalRuntime(store, provider, {
     ...options.runtimeOptions,
     skills,
@@ -191,19 +211,61 @@ export function createServer(options = {}) {
           function: {
             name: "medication_safety_check",
             description:
-              "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药）。内置规则集非穷尽，结果为提示性草稿。",
+              "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药），可选 populations 做特殊人群（妊娠/儿童/肾功能不全/肝功能不全/老年）提示。内置规则集非穷尽，结果为提示性草稿。",
             parameters: {
               type: "object",
               properties: {
                 medications: { type: "array", items: { type: "string" } },
                 allergies: { type: "array", items: { type: "string" } },
+                populations: { type: "array", items: { type: "string" } },
               },
               required: ["medications"],
               additionalProperties: false,
             },
           },
         },
-        execute: (args) => evaluateMedicationSafety(args),
+        execute: (args) => medicationSafetyCheck(args),
+      },
+      {
+        definition: {
+          type: "function",
+          function: {
+            name: "assess_adverse_reaction",
+            description:
+              "把当前用药清单与临床表现做匹配，筛查可能的药物不良反应（内置常见药组知识表）。提示性筛查，非因果判定。",
+            parameters: {
+              type: "object",
+              properties: {
+                medications: { type: "array", items: { type: "string" } },
+                findings: { type: "string" },
+              },
+              required: ["medications", "findings"],
+              additionalProperties: false,
+            },
+          },
+        },
+        execute: (args) => assessAdverseReaction(args),
+      },
+      ...scaleTools(),
+      {
+        definition: {
+          type: "function",
+          function: {
+            name: "lab_knowledge_search",
+            description:
+              "查询常见检验指标的意义速查（升高/降低的常见原因与建议核查项）。参考范围以报告单为准。",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string" },
+                limit: { type: "integer" },
+              },
+              required: ["query"],
+              additionalProperties: false,
+            },
+          },
+        },
+        execute: (args) => searchLabKnowledge(args),
       },
     ],
     doctor,
@@ -465,6 +527,8 @@ export function createServer(options = {}) {
           guidelines: { enabled: true, count: guidelines.list().length },
           riskAlerts: risks.counts(),
           medSafety: { enabled: true },
+          scales: { enabled: true, count: listScales().length },
+          labKnowledge: { enabled: true, count: "常见指标内置" },
           drg: { enabled: true, ...drg.settings() },
           cases: cases.counts(),
           wechat: { enabled: wechat.enabled },
@@ -734,7 +798,42 @@ export function createServer(options = {}) {
         return send(res, 201, cases.addCase(b));
       }
       if (path === "/api/med-safety" && req.method === "POST")
-        return send(res, 200, evaluateMedicationSafety(await body(req)));
+        return send(res, 200, medicationSafetyCheck(await body(req)));
+      if (path === "/api/adr-assess" && req.method === "POST")
+        return send(res, 200, assessAdverseReaction(await body(req)));
+      if (path === "/api/med-cautions" && req.method === "POST")
+        return send(res, 200, specialPopulationCautions(await body(req)));
+      if (path === "/api/scales" && req.method === "GET")
+        return send(res, 200, { scales: listScales() });
+      if (
+        parts[0] === "api" &&
+        parts[1] === "scales" &&
+        parts.length === 4 &&
+        parts[3] === "calculate" &&
+        req.method === "POST"
+      ) {
+        const b = await body(req);
+        return send(res, 200, calculateScale(parts[2], b.answers || {}));
+      }
+      if (path === "/api/lab-knowledge" && req.method === "GET")
+        return send(
+          res,
+          200,
+          searchLabKnowledge({
+            query: url.searchParams.get("q") || undefined,
+            limit: url.searchParams.get("limit")
+              ? Number(url.searchParams.get("limit"))
+              : undefined,
+          }),
+        );
+      if (path === "/api/icd9" && req.method === "GET")
+        return send(res, 200, {
+          codes: searchIcd9(url.searchParams.get("q"), {
+            limit: url.searchParams.get("limit")
+              ? Number(url.searchParams.get("limit"))
+              : undefined,
+          }),
+        });
       if (parts[0] === "api" && parts[1] === "drg") {
         await drg.load();
         if (parts[2] === "group" && req.method === "POST")
