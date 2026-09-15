@@ -1,26 +1,46 @@
 import { AppError, check } from "../errors.mjs";
 
-// Local-only embedding client for the guideline knowledge base. Same
-// security contract as semantic memory: the embedding service must be on
-// the loopback interface — medical material never leaves the machine for
-// indexing. Providers: ollama (/api/embed) or any OpenAI-compatible
-// /embeddings server.
-const DEFAULTS = {
-  provider: process.env.MEDICAL_EMBEDDING_PROVIDER || "ollama",
-  url:
-    process.env.MEDICAL_EMBEDDING_URL ||
-    "http://127.0.0.1:11434",
-  model: process.env.MEDICAL_EMBEDDING_MODEL || "bge-m3",
+// Embedding service for the guideline knowledge base. Three modes:
+// - cloud  : free hosted API (default: SiliconFlow BAAI/bge-m3 — free tier,
+//            OpenAI-compatible). HTTPS + API key required. Only PUBLIC
+//            knowledge text (guideline chunks, search terms) is sent —
+//            patient materials are never embedded remotely.
+// - local  : Ollama on loopback, for fully-offline preference.
+// - none   : no embedder — knowledge search degrades to full-text matching.
+const CLOUD_DEFAULTS = {
+  provider: "siliconflow",
+  url: "https://api.siliconflow.cn/v1",
+  model: "BAAI/bge-m3",
 };
+const LOCAL_DEFAULTS = {
+  provider: "ollama",
+  url: "http://127.0.0.1:11434",
+  model: "bge-m3",
+};
+
+export function resolveEmbeddingConfig(options = {}) {
+  const apiKey =
+    options.apiKey ?? process.env.MEDICAL_EMBEDDING_KEY ?? "";
+  const envUrl = options.url ?? process.env.MEDICAL_EMBEDDING_URL;
+  const envModel = options.model ?? process.env.MEDICAL_EMBEDDING_MODEL;
+  const provider =
+    options.provider ?? process.env.MEDICAL_EMBEDDING_PROVIDER ?? undefined;
+  // A key means cloud; no key means the local loopback path.
+  const base = apiKey ? CLOUD_DEFAULTS : LOCAL_DEFAULTS;
+  return {
+    apiKey: typeof apiKey === "string" ? apiKey : "",
+    provider: provider || base.provider,
+    url: envUrl || base.url,
+    model: envModel || base.model,
+    mode: apiKey ? "cloud" : "local",
+  };
+}
 
 export class EmbeddingService {
   constructor(options = {}) {
-    this.config = {
-      provider: options.provider || DEFAULTS.provider,
-      url: options.url || DEFAULTS.url,
-      model: options.model || DEFAULTS.model,
-    };
-    this.fetchImpl = options.fetchImpl || fetch;
+    this.config = resolveEmbeddingConfig(options);
+    this.embedFn = options.embedFn || null; // test injection point
+    this.fetchImpl = options.fetchImpl || null;
   }
   available() {
     return Boolean(this.config.url && this.config.model);
@@ -31,7 +51,14 @@ export class EmbeddingService {
     return this.config.model;
   }
   status() {
-    return { enabled: this.available(), ...this.config };
+    return {
+      enabled: this.available(),
+      mode: this.config.mode,
+      provider: this.config.provider,
+      url: this.config.mode === "cloud" ? this.config.url : undefined,
+      model: this.config.model,
+      hasKey: Boolean(this.config.apiKey),
+    };
   }
   async embed(inputs, signal) {
     check(Array.isArray(inputs) && inputs.length >= 1, "INVALID_INPUT", "嵌入输入不能为空");
@@ -47,25 +74,44 @@ export class EmbeddingService {
     } catch {
       throw new AppError("EMBEDDING_CONFIG", "嵌入服务地址无效", 400);
     }
-    check(
-      ["http:", "https:"].includes(url.protocol) &&
+    const remote = this.config.mode === "cloud";
+    if (remote) {
+      check(
+        url.protocol === "https:",
+        "EMBEDDING_CONFIG",
+        "云端嵌入服务必须使用 HTTPS",
+      );
+      check(
+        Boolean(this.config.apiKey),
+        "EMBEDDING_CONFIG",
+        "云端嵌入服务需要配置 API Key",
+      );
+    } else {
+      check(
         ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname),
-      "EMBEDDING_CONFIG",
-      "嵌入服务必须位于本机（回环地址），不能配置云端 URL",
-    );
+        "EMBEDDING_CONFIG",
+        "本地嵌入服务必须位于回环地址",
+      );
+    }
+    const isOllama = this.config.provider === "ollama";
     const endpoint = new URL(
-      this.config.provider === "ollama" ? "api/embed" : "embeddings",
+      isOllama ? "api/embed" : "embeddings",
       url.href.endsWith("/") ? url : url.href + "/",
     );
     let response;
     try {
-      response = await this.fetchImpl(endpoint, {
+      response = await (this.fetchImpl || fetch)(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.config.apiKey
+            ? { Authorization: `Bearer ${this.config.apiKey}` }
+            : {}),
+        },
         body: JSON.stringify({
           model: this.config.model,
           input: inputs,
-          ...(this.config.provider === "ollama" ? { truncate: false } : {}),
+          ...(isOllama ? { truncate: false } : {}),
         }),
         signal: signal
           ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
@@ -74,16 +120,15 @@ export class EmbeddingService {
     } catch (error) {
       throw new AppError(
         "EMBEDDING_UNAVAILABLE",
-        `本地嵌入服务不可达（${error.name === "TimeoutError" ? "超时" : "连接失败"}）；知识检索自动回退为全文匹配`,
+        `嵌入服务不可达（${error.name === "TimeoutError" ? "超时" : "连接失败"}）；知识检索自动回退为全文匹配`,
         502,
       );
     }
     check(response.ok, "EMBEDDING_SERVICE", `嵌入服务返回 ${response.status}`, 502);
     const data = await response.json();
-    const vectors =
-      this.config.provider === "ollama"
-        ? data.embeddings
-        : data.data
+    const vectors = isOllama
+      ? data.embeddings
+      : data.data
             ?.sort((a, b) => a.index - b.index)
             .map((d) => d.embedding);
     check(
