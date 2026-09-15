@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./agent-runtime";
 import { Search, Loader2, FilePlus, Copy, ExternalLink, Check } from "lucide-react";
 
@@ -6,6 +6,7 @@ import { Search, Loader2, FilePlus, Copy, ExternalLink, Check } from "lucide-rea
 // server. Only the query text leaves the machine; imports land as session
 // materials with SHA-256 provenance.
 export function LiteratureView({ onOpenTask }) {
+  const [specialty, setSpecialty] = useState("");
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("pubmed");
   const [yearFrom, setYearFrom] = useState("");
@@ -18,23 +19,32 @@ export function LiteratureView({ onOpenTask }) {
   const [imported, setImported] = useState({});
   const [copied, setCopied] = useState("");
 
-  const runSearch = async (event) => {
+  useEffect(() => {
+    api("/api/doctor/profile")
+      .then((profile) => setSpecialty(profile.fields?.specialty || ""))
+      .catch(() => {});
+  }, []);
+  const runSearch = async (event, options = {}) => {
     event?.preventDefault();
-    if (!query.trim()) return;
+    const searchQuery = options.query ?? query;
+    if (!searchQuery.trim()) return;
     setBusy(true);
     setError("");
     try {
       const params = new URLSearchParams({
-        query,
-        source,
+        query: searchQuery,
+        source: options.source || source,
         limit: "15",
       });
+      if (options.sort) params.set("sort", options.sort);
+      if (options.source) setSource(options.source);
       if (yearFrom) params.set("yearFrom", yearFrom);
       if (yearTo) params.set("yearTo", yearTo);
       const value = await api(`/api/literature/search?${params}`);
       setResults(value);
       setAbstracts({});
       setExpanded({});
+      if (options.query !== undefined) setQuery(searchQuery);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,6 +112,22 @@ export function LiteratureView({ onOpenTask }) {
             <p className="module-phase">PubMed · Europe PMC · 检索结果本地缓存 6 小时</p>
           </div>
         </div>
+        {specialty && (
+          <button
+            className="secondary"
+            style={{ marginBottom: 10 }}
+            onClick={(event) =>
+              runSearch(event, {
+                query: specialty,
+                source: "europepmc",
+                sort: "date",
+              })
+            }
+            disabled={busy}
+          >
+            查我领域最新文献：{specialty}
+          </button>
+        )}
         <form className="literature-form" onSubmit={runSearch}>
           <input
             className="literature-query"

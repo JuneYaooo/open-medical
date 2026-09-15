@@ -23,9 +23,13 @@ test("medication safety: allergy match, interactions and duplicates", () => {
   assert.ok(result.allergyMatches.every((m) => m.severity === "critical"));
   const keys = result.interactions.map((i) => i.ruleKey);
   assert.ok(keys.includes("int_aspirin_warfarin"));
-  assert.equal(result.duplicates.length, 1);
-  assert.equal(result.duplicates[0].count, 2);
-  assert.ok(result.total >= 4);
+  // Cross-form duplicates: aspirin (tablet + plain) and metoprolol (three
+  // spellings) both collapse to one substance each.
+  assert.equal(result.duplicates.length, 2);
+  const dupNames = result.duplicates.map((d) => d.medication).sort();
+  assert.deepEqual(dupNames, ["美托洛尔", "阿司匹林"].sort());
+  assert.equal(result.duplicates.find((d) => d.medication === "美托洛尔").count, 3);
+  assert.ok(result.total >= 5);
   assert.match(result.note, /非穷尽/);
 });
 
@@ -51,6 +55,29 @@ test("medication safety: MAOI+SSRI flagged critical", () => {
   });
   assert.equal(result.interactions[0].severity, "critical");
   assert.ok(INTERACTION_PAIRS.length >= 5);
+});
+
+test("drug alias canonicalization: brand names hit interactions and duplicates", () => {
+  // 拜阿司匹灵 is brand aspirin: interaction fires without the literal word.
+  const brand = evaluateMedicationSafety({
+    medications: ["拜阿司匹灵", "华法林钠片"],
+  });
+  assert.ok(brand.interactions.some((i) => i.ruleKey === "int_aspirin_warfarin"));
+  assert.equal(brand.normalized.includes("阿司匹林"), true);
+  // Brand + generic of the same substance is a duplicate.
+  const dup = evaluateMedicationSafety({
+    medications: ["拜阿司匹灵", "阿司匹林肠溶片"],
+  });
+  assert.equal(dup.duplicates.length, 1);
+  assert.equal(dup.duplicates[0].medication, "阿司匹林");
+  assert.equal(dup.duplicates[0].count, 2);
+  // Brand aspirin matches an aspirin allergy.
+  const allergy = evaluateMedicationSafety({
+    medications: ["拜阿司匹灵"],
+    allergies: ["阿司匹林"],
+  });
+  assert.equal(allergy.allergyMatches.length, 1);
+  assert.equal(allergy.allergyMatches[0].matchedGeneric, "阿司匹林");
 });
 
 test("med-safety REST endpoint and agent tool registration", async (t) => {

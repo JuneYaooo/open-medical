@@ -893,6 +893,7 @@ export function createServer(options = {}) {
               yearFrom: numberParam("yearFrom"),
               yearTo: numberParam("yearTo"),
               limit: numberParam("limit"),
+              sort: url.searchParams.get("sort") || undefined,
             }),
           );
         if (parts[2] === "article" && req.method === "GET")
