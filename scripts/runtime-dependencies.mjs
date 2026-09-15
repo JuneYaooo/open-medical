@@ -15,6 +15,7 @@ export const runtimeDependencies = [
   "tar-stream",
   "cron-parser",
   "@lancedb/lancedb",
+  "apache-arrow",
 ];
 export async function bundleRuntimeDependencies(root, target) {
   const copied = new Set();
