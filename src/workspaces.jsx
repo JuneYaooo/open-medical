@@ -52,12 +52,23 @@ const stateLabel = (value) =>
     recovering: "等待恢复",
   })[value] || value;
 
-export function WorkspacesView({ config, onOpenSettings, embedded = false }) {
+export function WorkspacesView({
+  config,
+  onOpenSettings,
+  embedded = false,
+  initialWorkspaceId = "",
+  initialCreate = false,
+}) {
   const [view, setView] = useState("chat");
   const [showCreate, setShowCreate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [attachments, setAttachments] = useState([]),
     [attachmentError, setAttachmentError] = useState("");
+  useEffect(() => {
+    if (initialCreate) setShowCreate(true);
+    else if (initialWorkspaceId) select(initialWorkspaceId);
+     
+  }, []);
   const selectedId = useRef(null),
     drafts = useRef(new Map()),
     messagesEnd = useRef(null),

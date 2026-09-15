@@ -485,7 +485,9 @@ function App() {
     [mode, setMode] = useState("local"),
     [consent, setConsent] = useState(false);
   const [team, setTeam] = useState(false);
-  const [view, setView] = useState("workspaces");
+  const [view, setView] = useState("home");
+  const [workspaceTarget, setWorkspaceTarget] = useState(null);
+  const [wsList, setWsList] = useState([]);
   const [patientRoute, setPatientRoute] = useState({});
   const [homeKey, setHomeKey] = useState(0);
   const [loading, setLoading] = useState(true),
@@ -524,8 +526,12 @@ function App() {
     []
   ).filter((id) => session?.files.some((f) => f.id === id));
   const refreshList = async () => {
-    const value = await api("/api/sessions");
+    const [value, ws] = await Promise.all([
+      api("/api/sessions"),
+      api("/api/workspaces").catch(() => ({ workspaces: [] })),
+    ]);
     setSessions(value.sessions);
+    setWsList(ws.workspaces || []);
     return value.sessions;
   };
   const load = async (id) => {
@@ -804,6 +810,10 @@ function App() {
     setNotice("");
     refreshList().catch((err) => setError(err.message));
   };
+  const openWorkspaces = (target = {}) => {
+    setWorkspaceTarget(target);
+    setView("workspaces");
+  };
   const openPatient = (route = {}) => {
     setPatientRoute(route);
     navigate("patients");
@@ -973,6 +983,34 @@ function App() {
             />
           </label>
           <p className="nav-label">
+            项目任务 <span>{wsList.length}</span>
+          </p>
+          <nav className="sessions" aria-label="项目任务">
+            {wsList
+              .filter((item) =>
+                item.title.toLowerCase().includes(query.toLowerCase()),
+              )
+              .slice(0, 6)
+              .map((item) => (
+                <button
+                  className={`session ${view === "workspaces" && workspaceTarget?.id === item.id ? "active" : ""}`}
+                  key={item.id}
+                  onClick={() => openWorkspaces({ id: item.id })}
+                >
+                  <FolderOpen size={14} />
+                  <span>
+                    <b>{item.title}</b>
+                    <small>{item.running ? "执行中" : "项目工作区"}</small>
+                  </span>
+                </button>
+              ))}
+            {!wsList.length && (
+              <p className="sidebar-empty">
+                在医疗工作台选择「项目任务」即可创建。
+              </p>
+            )}
+          </nav>
+          <p className="nav-label">
             最近任务 <span>{sessions.length}</span>
           </p>
           <nav className="sessions" aria-label="最近任务">
@@ -1041,7 +1079,12 @@ function App() {
             ))}
           </nav>
           {view === "workspaces" ? (
-            <WorkspacesView key={homeKey} config={config} />
+            <WorkspacesView
+              key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
+              config={config}
+              initialWorkspaceId={workspaceTarget?.id || ""}
+              initialCreate={Boolean(workspaceTarget?.create)}
+            />
           ) : view === "patients" ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}`}
@@ -1077,6 +1120,7 @@ function App() {
               onView={navigate}
               onRefresh={refreshList}
               onReconnect={init}
+              onOpenProjects={openWorkspaces}
             />
           ) : (
             <div className="shell">

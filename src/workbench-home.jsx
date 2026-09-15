@@ -189,6 +189,7 @@ export function WorkbenchHome({
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("clinical");
+  const [taskType, setTaskType] = useState("medical");
   const [flowId, setFlowId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [patientId, setPatientId] = useState("");
@@ -421,6 +422,23 @@ export function WorkbenchHome({
               />
             )}
             <div className="hub-composer-controls">
+              <div className="hub-task-type" role="tablist" aria-label="任务类型">
+                <button
+                  aria-pressed={taskType === "medical"}
+                  className={taskType === "medical" ? "active" : ""}
+                  onClick={() => setTaskType("medical")}
+                >
+                  医疗任务
+                </button>
+                <button
+                  aria-pressed={taskType === "project"}
+                  className={taskType === "project" ? "active" : ""}
+                  onClick={() => setTaskType("project")}
+                >
+                  项目任务
+                </button>
+              </div>
+              {taskType === "medical" && (
               <label className="hub-patient-picker">
                 <Stethoscope size={15} />
                 <select
@@ -440,6 +458,8 @@ export function WorkbenchHome({
                   ))}
                 </select>
               </label>
+              )}
+              {taskType === "medical" && (
               <button
                 type="button"
                 className="hub-add-patient"
@@ -448,6 +468,7 @@ export function WorkbenchHome({
                 <UserPlus size={15} />
                 建档
               </button>
+              )}
               <button
                 className="hub-start"
                 disabled={
@@ -458,6 +479,8 @@ export function WorkbenchHome({
               >
                 {starting ? (
                   <Loader2 size={16} className="spin" />
+                ) : taskType === "project" ? (
+                  "打开项目工作区"
                 ) : isFollowup ? (
                   "进入随访"
                 ) : (
@@ -472,20 +495,6 @@ export function WorkbenchHome({
               ? `沿用「${selectedPatient.name}」的病例材料，进入后可核对本次范围。`
               : "先准备任务，再添加材料；生成结果后由你复核。"}
           </p>
-          <section className="hub-workspace-entry" aria-label="项目工作区">
-            <button onClick={() => onView("workspaces")}>
-              <span className="hub-scene-icon">
-                <FolderOpen size={20} />
-              </span>
-              <div className="hub-workspace-text">
-                <b>项目工作区</b>
-                <small>
-                  通用 Agent 内核：文件夹项目、附件、运行权限与模型切换。与医疗场景共用同一运行时。
-                </small>
-              </div>
-              <ArrowUpRight size={16} />
-            </button>
-          </section>
           <section className="hub-scenarios" aria-label="医疗工作场景">
             <div className="hub-section-head">
               <h2>从常用场景开始</h2>
