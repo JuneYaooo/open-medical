@@ -96,6 +96,7 @@ function send(res, status, data) {
   res.end(JSON.stringify(data));
 }
 function errorResponse(res, error) {
+  if (!(error instanceof AppError)) console.error("服务内部错误:", error?.stack || error);
   send(res, error instanceof AppError ? error.status : 500, {
     error: error instanceof AppError ? error.message : "服务发生错误",
     code: error.code || "INTERNAL",
