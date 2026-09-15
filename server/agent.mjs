@@ -39,6 +39,7 @@ import {
 } from "./medical/scales.mjs";
 import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
 import { searchIcd9 } from "./medical/icd9.mjs";
+import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -292,6 +293,8 @@ export function createServer(options = {}) {
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
+  const pending = new PendingActions(store, patients, followups, cases);
+  runtime.registerPlugins(pendingActionTools(pending));
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -801,6 +804,30 @@ export function createServer(options = {}) {
         return send(res, 200, medicationSafetyCheck(await body(req)));
       if (path === "/api/adr-assess" && req.method === "POST")
         return send(res, 200, assessAdverseReaction(await body(req)));
+      if (path === "/api/pending-actions" && req.method === "GET")
+        return send(res, 200, {
+          actions: pending.list({
+            patientId: url.searchParams.get("patientId") || undefined,
+            status: url.searchParams.get("status") || undefined,
+          }),
+          counts: pending.counts({
+            patientId: url.searchParams.get("patientId") || undefined,
+          }),
+        });
+      if (
+        parts[0] === "api" &&
+        parts[1] === "pending-actions" &&
+        parts.length === 4 &&
+        ["confirm", "reject"].includes(parts[3]) &&
+        req.method === "POST"
+      )
+        return send(
+          res,
+          200,
+          parts[3] === "confirm"
+            ? pending.confirm(parts[2])
+            : pending.reject(parts[2]),
+        );
       if (path === "/api/med-cautions" && req.method === "POST")
         return send(res, 200, specialPopulationCautions(await body(req)));
       if (path === "/api/scales" && req.method === "GET")

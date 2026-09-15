@@ -93,6 +93,25 @@ export class MedicalRuntime {
       ...[...this.toolPlugins.values()].map((p) => p.definition),
     ];
   }
+  // Late registration for plugins that need services constructed after the
+  // runtime (e.g. write-back proposals depending on patients/followups).
+  registerPlugins(plugins) {
+    for (const plugin of plugins) {
+      check(
+        plugin?.definition?.function?.name && typeof plugin.execute === "function",
+        "PLUGIN_CONFIG",
+        "医疗工具插件定义无效",
+      );
+      const name = plugin.definition.function.name;
+      check(
+        !this.toolPlugins.has(name),
+        "PLUGIN_CONFIG",
+        `医疗工具名称重复：${name}`,
+      );
+      this.toolPlugins.set(name, plugin);
+      this.toolDefinitions.push(plugin.definition);
+    }
+  }
   prepare(sessionId, body) {
     identifier(sessionId);
     const session = this.store.get(sessionId);

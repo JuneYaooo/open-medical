@@ -99,7 +99,7 @@ test("similar case search: scoring with diagnosis weight and match reasons", asy
   assert.ok(match.reasons.some((reason) => reason.startsWith("诊断匹配")));
   assert.ok(match.reasons.some((reason) => reason.startsWith("年龄接近")));
   assert.ok(match.reasons.some((reason) => reason.startsWith("术语命中")));
-  assert.match(similar.note, /参考/);
+  assert.match(similar.note, /提出假设/);
 
   const empty = (await f.json("/api/cases/similar", "POST", {
     caseText: "外星病原体感染",

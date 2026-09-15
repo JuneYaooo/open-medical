@@ -484,6 +484,16 @@ function structuredList(value, label, maxCount, build) {
     return build(item);
   });
 }
+// Normalized clinical-field validation shared with the agent proposal flow.
+export function validateClinicalInput(input = {}) {
+  return {
+    ...(input.diagnoses !== undefined ? { diagnoses: optionalDiagnoses(input.diagnoses) } : {}),
+    ...(input.medications !== undefined ? { medications: optionalMedications(input.medications) } : {}),
+    ...(input.allergies !== undefined ? { allergies: optionalStrings(input.allergies, "过敏史", 20, 120) } : {}),
+    ...(input.labs !== undefined ? { labs: optionalLabs(input.labs) } : {}),
+    ...(input.visits !== undefined ? { visits: optionalVisits(input.visits) } : {}),
+  };
+}
 function optionalDiagnoses(value) {
   return structuredList(value, "诊断", 40, (item) => ({
     code: item.code ? string(item.code, "ICD-10 编码", 20) : "",
