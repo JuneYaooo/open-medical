@@ -231,6 +231,34 @@ export function GuidelinesView() {
           </button>
         </form>
 
+        {hits && hits.rag && (hits.rag.stale || hits.rag.embeddedChunks > 0) && (
+          <p className="muted" style={{ fontSize: 12, margin: "4px 0" }}>
+            知识库索引：{hits.rag.embeddedChunks} 块向量 · 模型 {hits.rag.currentModel || "未索引"}
+            {hits.rag.stale ? " · 检测到旧模型向量，建议重建" : ""}
+          </p>
+        )}
+        {hits && hits.rag && hits.rag.stale && (
+          <button
+            className="secondary"
+            style={{ marginBottom: 10 }}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                const value = await api("/api/guidelines/reindex", "POST", {});
+                setNotice(`已重建向量索引：${value.docs} 份指南 / ${value.chunks} 块 / 模型 ${value.model}`);
+                await refresh();
+              } catch (err) {
+                setError(err.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+            disabled={busy}
+          >
+            重建向量索引
+          </button>
+        )}
         {hits && (
           <ul className="literature-results">
             {hits.map((hit) => (

@@ -1128,6 +1128,8 @@ export function createServer(options = {}) {
           return send(res, 200, { documents: guidelines.list() });
         if (parts.length === 2 && req.method === "POST")
           return send(res, 201, await guidelines.addDocument(await body(req)));
+        if (parts[2] === "reindex" && req.method === "POST")
+          return send(res, 200, await guidelines.reindex());
         if (parts[2] === "search" && req.method === "GET") {
           const yearRaw = url.searchParams.get("year");
           return send(

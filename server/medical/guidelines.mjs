@@ -15,11 +15,20 @@ export class GuidelineLibrary {
     this.embedder = embedder; // { available(), embed(inputs) } — optional
   }
   ragStatus() {
-    const vectors = this.store.db
-      .prepare("SELECT COUNT(*) n FROM guideline_chunk_vectors")
-      .get()?.n || 0;
+    const rows = this.store.db
+      .prepare(
+        "SELECT model, COUNT(*) n FROM guideline_chunk_vectors GROUP BY model",
+      )
+      .all();
+    const current = this.embedder?.model || null;
+    const indexedModels = rows.map((row) => row.model);
+    const stale =
+      rows.length > 0 && current !== null && !indexedModels.includes(current);
     return {
-      embeddedChunks: vectors,
+      embeddedChunks: rows.reduce((sum, row) => sum + row.n, 0),
+      indexedModels,
+      currentModel: current,
+      stale,
       embedder: this.embedder ? this.embedder.status() : { enabled: false },
     };
   }
@@ -96,11 +105,12 @@ export class GuidelineLibrary {
       try {
         const vectors = await this.embedder.embed(chunks.map((chunk) => chunk.text.slice(0, 4000)));
         const insertVector = this.store.db.prepare(
-          "INSERT INTO guideline_chunk_vectors(doc_id,ord,dim,vector) VALUES (?,?,?,?)",
+          "INSERT INTO guideline_chunk_vectors(doc_id,ord,model,dim,vector) VALUES (?,?,?,?,?)",
         );
+        const modelTag = this.embedder.model || "unknown";
         this.store.db.exec("BEGIN IMMEDIATE");
         for (const [index, chunk] of chunks.entries())
-          insertVector.run(doc.id, chunk.ord, vectors[index].length, JSON.stringify(vectors[index]));
+          insertVector.run(doc.id, chunk.ord, modelTag, vectors[index].length, JSON.stringify(vectors[index]));
         this.store.db.exec("COMMIT");
         embedded = vectors.length;
       } catch {
@@ -145,19 +155,23 @@ export class GuidelineLibrary {
     // Vector similarity pass (RAG): cosine over chunk embeddings, merged
     // with the text score. Unavailable embeddings degrade silently.
     const vectorScores = new Map();
+    let vectorStale = false;
     if (this.embedder?.available()) {
       try {
         const [queryVector] = await this.embedder.embed([text]);
         const rows = this.store.db
           .prepare(
-            "SELECT v.doc_id, v.ord, v.vector FROM guideline_chunk_vectors v",
+            "SELECT doc_id, ord, model, vector FROM guideline_chunk_vectors WHERE model=?",
           )
-          .all();
+          .all(this.embedder.model);
+        vectorStale =
+          this.store.db
+            .prepare("SELECT COUNT(*) n FROM guideline_chunk_vectors WHERE model<>?")
+            .get(this.embedder.model)?.n > 0;
         const cosine = (await import("./embeddings.mjs")).cosineSimilarity;
         for (const row of rows) {
           const score = cosine(queryVector, JSON.parse(row.vector));
-          const key = `${row.doc_id}:${row.ord}`;
-          vectorScores.set(key, score);
+          vectorScores.set(`${row.doc_id}:${row.ord}`, score);
         }
       } catch {
         // degrade silently to text-only
@@ -219,12 +233,60 @@ export class GuidelineLibrary {
         (b.vectorScore || 0) * 40 + b.score - ((a.vectorScore || 0) * 40 + a.score) ||
         a.startLine - b.startLine,
     );
+    const rag = this.ragStatus();
     return {
       query: text,
       count: results.length,
       hits: results.slice(0, limit),
-      rag: this.ragStatus(),
-      note: "指南检索结果为本地混合检索（向量语义 + 全文匹配），引用时请核对原文行号；指南内容不构成处方或剂量建议。",
+      rag: { ...rag, stale: rag.stale || vectorStale },
+      note:
+        "指南检索结果为本地混合检索（向量语义 + 全文匹配），引用时请核对原文行号；指南内容不构成处方或剂量建议。" +
+        (rag.stale || vectorStale
+          ? " 嵌入模型已变更：部分向量为旧模型所建，建议执行重建索引。"
+          : ""),
+    };
+  }
+  // Re-embed every stored document with the current embedder model.
+  async reindex() {
+    check(
+      this.embedder?.available(),
+      "EMBEDDING_UNAVAILABLE",
+      "未配置本地嵌入服务，无法重建向量索引",
+      502,
+    );
+    const docs = this.store.db
+      .prepare("SELECT data FROM guideline_docs")
+      .all()
+      .map((row) => JSON.parse(row.data));
+    let chunks = 0;
+    const insertVector = this.store.db.prepare(
+      "INSERT INTO guideline_chunk_vectors(doc_id,ord,model,dim,vector) VALUES (?,?,?,?,?)",
+    );
+    for (const doc of docs) {
+      const pieces = chunkify(doc.text);
+      const vectors = await this.embedder.embed(
+        pieces.map((chunk) => chunk.text.slice(0, 4000)),
+      );
+      this.store.db.exec("BEGIN IMMEDIATE");
+      this.store.db
+        .prepare("DELETE FROM guideline_chunk_vectors WHERE doc_id=?")
+        .run(doc.id);
+      for (const [index, chunk] of pieces.entries())
+        insertVector.run(
+          doc.id,
+          chunk.ord,
+          this.embedder.model,
+          vectors[index].length,
+          JSON.stringify(vectors[index]),
+        );
+      this.store.db.exec("COMMIT");
+      chunks += pieces.length;
+    }
+    return {
+      docs: docs.length,
+      chunks,
+      model: this.embedder.model,
+      ...this.ragStatus(),
     };
   }
   readLines(id, startLine, endLine) {
