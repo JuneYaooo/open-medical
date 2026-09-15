@@ -89,8 +89,14 @@ export class LiteratureService {
     yearFrom,
     yearTo,
     limit = 10,
+    sort = "relevance",
   } = {}) {
     const text = this.normalizeQuery(query);
+    check(
+      ["relevance", "date"].includes(sort),
+      "INVALID_INPUT",
+      "排序仅支持 relevance 或 date",
+    );
     check(
       ["pubmed", "europepmc"].includes(source),
       "INVALID_INPUT",
@@ -113,13 +119,13 @@ export class LiteratureService {
     const from = year(yearFrom);
     const to = year(yearTo);
     check(!from || !to || from <= to, "INVALID_INPUT", "年份区间无效");
-    const cacheKey = JSON.stringify(["search", source, text, from, to, limit]);
+    const cacheKey = JSON.stringify(["search", source, text, from, to, limit, sort]);
     const cached = this.cacheGet(cacheKey);
     if (cached) return { ...cached, cached: true };
     const articles =
       source === "pubmed"
-        ? await this.searchPubMed(text, from, to, limit)
-        : await this.searchEurope(text, from, to, limit);
+        ? await this.searchPubMed(text, from, to, limit, sort)
+        : await this.searchEurope(text, from, to, limit, sort);
     const result = {
       source,
       query: text,
@@ -130,13 +136,13 @@ export class LiteratureService {
     this.cacheSet(cacheKey, result);
     return result;
   }
-  async searchPubMed(text, from, to, limit) {
+  async searchPubMed(text, from, to, limit, sort = "relevance") {
     const terms = [text];
     if (from || to)
       terms.push(
         `(${from || 1800}:${to || new Date().getFullYear()}[dp])`,
       );
-    const searchUrl = `${PUBMED}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(terms.join(" AND "))}&retmax=${limit}&retmode=json&sort=relevance`;
+    const searchUrl = `${PUBMED}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(terms.join(" AND "))}&retmax=${limit}&retmode=json&sort=${sort === "date" ? "pub_date" : "relevance"}`;
     const searchResult = await this.request(searchUrl, { throttle: true });
     const ids = searchResult?.esearchresult?.idlist || [];
     if (!ids.length) return [];
@@ -164,13 +170,14 @@ export class LiteratureService {
       })
       .filter(Boolean);
   }
-  async searchEurope(text, from, to, limit) {
+  async searchEurope(text, from, to, limit, sort = "relevance") {
     const terms = [text];
     if (from || to)
       terms.push(
         `FIRST_PDATE:[${from || 1800} TO ${to || new Date().getFullYear()}]`,
       );
-    const url = `${EUROPEPMC}/search?query=${encodeURIComponent(terms.join(" AND "))}&format=json&pageSize=${limit}&resultType=lite`;
+    const sortParam = sort === "date" ? "&sort=P_PDATE_D%20desc" : "";
+    const url = `${EUROPEPMC}/search?query=${encodeURIComponent(terms.join(" AND "))}&format=json&pageSize=${limit}&resultType=lite${sortParam}`;
     const result = await this.request(url);
     return (result?.resultList?.result || []).map((item) => ({
       pmid: item.pmid || null,

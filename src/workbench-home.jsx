@@ -24,6 +24,16 @@ import { api } from "./agent-runtime";
 
 export const MEDICAL_WORKFLOWS = [
   {
+    id: "intake-full",
+    title: "收治病例全流程",
+    icon: ClipboardList,
+    category: "clinical",
+    desc: "时间线、检验摘录、用药核查、复核清单一次完成",
+    output: "成套草稿 · 环环相扣待复核",
+    prompt:
+      "请对本次材料完成收治整理全流程，依次调用工具并保留原文出处：1) extract_clinical_timeline 生成时间线；2) extract_observations 摘录检验数值；3) 整理当前用药清单与过敏史，调用 medication_safety_check 做确定性核查；4) 用 make_review_checklist 生成需要医生逐项核对的清单。所有产物均为待复核草稿，材料缺失的信息标注「待补充」，不要推断诊断。",
+  },
+  {
     id: "timeline",
     title: "整理病历",
     icon: History,
