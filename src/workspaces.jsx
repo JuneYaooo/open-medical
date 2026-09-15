@@ -52,7 +52,7 @@ const stateLabel = (value) =>
     recovering: "等待恢复",
   })[value] || value;
 
-export function WorkspacesView({ config, onOpenSettings }) {
+export function WorkspacesView({ config, onOpenSettings, embedded = false }) {
   const [view, setView] = useState("chat");
   const [showCreate, setShowCreate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -639,20 +639,22 @@ export function WorkspacesView({ config, onOpenSettings }) {
   }
   return (
     <main className="generic-workspaces" id="main">
-      <header>
-        <div>
-          <span className="workspace-kicker">本地工作区</span>
-          <h1>通用 Agent 工作区</h1>
-          <p>选择一个文件夹开始。读取限定在授权目录内，修改先查看、再批准。</p>
-        </div>
-        <button
-          className="secondary"
-          disabled={busy || running}
-          onClick={() => act(() => refresh())}
-        >
-          刷新
-        </button>
-      </header>
+      {!embedded && (
+        <header>
+          <div>
+            <span className="workspace-kicker">本地工作区</span>
+            <h1>通用 Agent 工作区</h1>
+            <p>选择一个文件夹开始。读取限定在授权目录内，修改先查看、再批准。</p>
+          </div>
+          <button
+            className="secondary"
+            disabled={busy || running}
+            onClick={() => act(() => refresh())}
+          >
+            刷新
+          </button>
+        </header>
+      )}
       {error && (
         <p className="workspace-error" role="alert">
           {error}
@@ -663,6 +665,7 @@ export function WorkspacesView({ config, onOpenSettings }) {
       >
         <aside className="workspace-picker">
           <TaskSidebar
+            hideBrand={embedded}
             items={items}
             current={current}
             disabled={busy || streaming}

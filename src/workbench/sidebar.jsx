@@ -24,6 +24,7 @@ export function TaskSidebar({
   model,
   onOrganize,
   disabled,
+  hideBrand = false,
 }) {
   const [query, setQuery] = useState(""),
     [archive, setArchive] = useState(false),
@@ -131,10 +132,12 @@ export function TaskSidebar({
   }
   return (
     <>
-      <div className="desk-brand">
-        <MessageSquare size={20} />
-        <strong>Open Agent</strong>
-      </div>
+      {!hideBrand && (
+        <div className="desk-brand">
+          <MessageSquare size={20} />
+          <strong>Open Agent</strong>
+        </div>
+      )}
       <button className="desk-new" onClick={onCreate} disabled={disabled}>
         <Plus size={16} />
         连接项目

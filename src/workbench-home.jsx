@@ -7,7 +7,10 @@ import {
   CalendarClock,
   CheckCheck,
   ClipboardList,
+  FileHeart,
   FileText,
+  ShieldCheck,
+  FlaskConical,
   FolderOpen,
   AlertTriangle,
   History,
@@ -55,6 +58,46 @@ export const MEDICAL_WORKFLOWS = [
     desc: "为患者设置时间、清单和提醒",
     output: "患者随访计划",
     prompt: "",
+  },
+  {
+    id: "record-draft",
+    title: "生成病历草稿",
+    icon: FileHeart,
+    category: "clinical",
+    desc: "口述或粘贴的零散信息，整理成结构化病历草稿",
+    output: "门诊病历草稿 · 主诉/现病史/查体/计划",
+    prompt:
+      "请根据我口述或粘贴的就诊信息，生成一份结构化门诊病历草稿（主诉、现病史、既往史、查体、辅助检查、初步诊断意向、处理计划）。所有内容标注为待医生核对；材料中没有的信息明确写「待补充」，不要编造查体阳性发现或诊断。",
+  },
+  {
+    id: "med-safety",
+    title: "用药安全核查",
+    icon: ShieldCheck,
+    category: "clinical",
+    desc: "配伍禁忌、相互作用、过敏与重复用药提示",
+    output: "用药安全提示清单 · 内置规则（非穷尽）",
+    prompt:
+      "请从材料中提取当前用药清单和过敏史，调用 medication_safety_check 工具做确定性核查（过敏匹配、相互作用、重复用药），把工具结果整理成安全提示清单。内置规则集非穷尽，结果为提示性草稿，需药师或医生复核。",
+  },
+  {
+    id: "patient-edu",
+    title: "患教大白话",
+    icon: MessageSquare,
+    category: "clinical",
+    desc: "把诊疗方案或说明书转成患者能懂的语言",
+    output: "患教材料草稿 · 通俗解释",
+    prompt:
+      "请把材料中的诊疗方案/用药说明改写为患者能看懂的患教材料：避免专业术语、用类比解释、列出用药时间表和需要立即就医的警示信号。结尾注明「本材料为医生生成的参考，具体遵医嘱」。",
+  },
+  {
+    id: "lab-read",
+    title: "检验报告解读",
+    icon: FlaskConical,
+    category: "clinical",
+    desc: "对照报告内参考范围，标记异常项并生成解读草稿",
+    output: "异常项清单 · 解读草稿（待复核）",
+    prompt:
+      "请提取检验报告中的项目、结果、单位和报告内打印的参考范围，标记超出参考范围的项目，并逐项生成通俗解读草稿。只使用报告内信息，不引入外部判断；结论标注为待医生结合临床复核。",
   },
   {
     id: "evidence",

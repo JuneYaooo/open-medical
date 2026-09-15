@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../errors.mjs";
+import { evaluateMedicationSafety } from "./med-safety.mjs";
 
 // Deterministic, data-driven risk rules evaluated against the structured
 // clinical fields of a patient record. Alerts are advisory only: they never
@@ -60,35 +61,6 @@ const LAB_RULES = [
     trend: "creatinine",
     title: "肌酐较前次明显升高",
     message: "肌酐 {value}{unit}（前值 {previous}{unit}，{date}），升幅超过 50%，警惕急性肾损伤。",
-  },
-];
-
-// Each pair matches when some medication name contains the first fragment
-// and another (different) medication contains the second one.
-const INTERACTION_PAIRS = [
-  {
-    key: "int_aspirin_warfarin",
-    a: "阿司匹林",
-    b: "华法林",
-    severity: "warning",
-    title: "抗栓药物联用",
-    message: "阿司匹林与华法林联用会增加出血风险，请核对适应证与监测计划。",
-  },
-  {
-    key: "int_digoxin_furosemide",
-    a: "地高辛",
-    b: "呋塞米",
-    severity: "warning",
-    title: "洋地黄与排钾利尿剂联用",
-    message: "呋塞米可致低钾而增加洋地黄中毒风险，建议监测血钾与地高辛浓度。",
-  },
-  {
-    key: "int_simvastatin_clarithromycin",
-    a: "辛伐他汀",
-    b: "克拉霉素",
-    severity: "warning",
-    title: "他汀与大环内酯类联用",
-    message: "克拉霉素显著升高他汀血药浓度，横纹肌溶解风险增加。",
   },
 ];
 
@@ -200,47 +172,34 @@ export class RiskEngine {
   }
   medicationAlerts(patient) {
     const alerts = [];
-    const meds = (patient.medications || []).map((m) => m.name);
-    const allergies = patient.allergies || [];
-    for (const allergy of allergies) {
-      const needle = allergy.toLowerCase();
-      const hit = meds.find((name) => name.toLowerCase().includes(needle));
-      if (hit)
-        alerts.push({
-          ruleKey: `med_allergy_${allergy}`,
-          severity: "critical",
-          title: "用药与过敏史匹配",
-          message: `用药「${hit}」与过敏史「${allergy}」匹配，请立即核对。`,
-          evidence: [{ medication: hit, allergy }],
-        });
-    }
-    for (const pair of INTERACTION_PAIRS) {
-      const hasA = meds.find((name) => name.toLowerCase().includes(pair.a.toLowerCase()));
-      const hasB = meds.find((name) => name.toLowerCase().includes(pair.b.toLowerCase()));
-      if (hasA && hasB)
-        alerts.push({
-          ruleKey: pair.key,
-          severity: pair.severity,
-          title: pair.title,
-          message: pair.message,
-          evidence: [{ medication: hasA }, { medication: hasB }],
-        });
-    }
-    // Duplicate therapy: identical base names appearing more than once.
-    const seen = new Map();
-    for (const name of meds) {
-      const key = name.toLowerCase();
-      seen.set(key, (seen.get(key) || 0) + 1);
-    }
-    for (const [name, count] of seen)
-      if (count > 1)
-        alerts.push({
-          ruleKey: `med_duplicate_${name}`,
-          severity: "warning",
-          title: "重复用药",
-          message: `「${name}」出现 ${count} 次，请核对是否重复开具。`,
-          evidence: [{ medication: name, count }],
-        });
+    const result = evaluateMedicationSafety({
+      medications: patient.medications || [],
+      allergies: patient.allergies || [],
+    });
+    for (const match of result.allergyMatches)
+      alerts.push({
+        ruleKey: `med_allergy_${match.allergy}`,
+        severity: "critical",
+        title: "用药与过敏史匹配",
+        message: match.message,
+        evidence: [{ medication: match.medication, allergy: match.allergy }],
+      });
+    for (const interaction of result.interactions)
+      alerts.push({
+        ruleKey: interaction.ruleKey,
+        severity: interaction.severity,
+        title: interaction.title,
+        message: interaction.message,
+        evidence: interaction.medications.map((medication) => ({ medication })),
+      });
+    for (const duplicate of result.duplicates)
+      alerts.push({
+        ruleKey: `med_duplicate_${duplicate.medication}`,
+        severity: "warning",
+        title: "重复用药",
+        message: duplicate.message,
+        evidence: [{ medication: duplicate.medication, count: duplicate.count }],
+      });
     return alerts;
   }
   followupAlerts(patient, now) {

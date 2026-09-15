@@ -27,6 +27,7 @@ import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 import { ResearchService, researchTools as researchToolPlugins } from "./medical/research.mjs";
 import { DrgService, drgTools } from "./medical/drg.mjs";
+import { evaluateMedicationSafety } from "./medical/med-safety.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -184,6 +185,26 @@ export function createServer(options = {}) {
       ...caseTools(cases),
       ...researchToolPlugins(research),
       ...drgTools(drg),
+      {
+        definition: {
+          type: "function",
+          function: {
+            name: "medication_safety_check",
+            description:
+              "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药）。内置规则集非穷尽，结果为提示性草稿。",
+            parameters: {
+              type: "object",
+              properties: {
+                medications: { type: "array", items: { type: "string" } },
+                allergies: { type: "array", items: { type: "string" } },
+              },
+              required: ["medications"],
+              additionalProperties: false,
+            },
+          },
+        },
+        execute: (args) => evaluateMedicationSafety(args),
+      },
     ],
     doctor,
   });
@@ -443,6 +464,7 @@ export function createServer(options = {}) {
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
           guidelines: { enabled: true, count: guidelines.list().length },
           riskAlerts: risks.counts(),
+          medSafety: { enabled: true },
           drg: { enabled: true, ...drg.settings() },
           cases: cases.counts(),
           wechat: { enabled: wechat.enabled },
@@ -711,6 +733,8 @@ export function createServer(options = {}) {
         }
         return send(res, 201, cases.addCase(b));
       }
+      if (path === "/api/med-safety" && req.method === "POST")
+        return send(res, 200, evaluateMedicationSafety(await body(req)));
       if (parts[0] === "api" && parts[1] === "drg") {
         await drg.load();
         if (parts[2] === "group" && req.method === "POST")

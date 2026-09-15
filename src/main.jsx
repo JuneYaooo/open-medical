@@ -910,8 +910,8 @@ function App() {
               [
                 "工作台",
                 [
-                  ["home", "医疗工作台", LayoutDashboard],
                   ["workspaces", "通用 Agent", FolderOpen],
+                  ["home", "医疗场景", LayoutDashboard],
                 ],
               ],
               [
@@ -1021,8 +1021,28 @@ function App() {
           </button>
         </aside>
         <div className="product-content">
+          <nav className="scenario-tabs" aria-label="场景快捷切换">
+            {[
+              ["workspaces", "通用 Agent", view === "workspaces"],
+              ["home", "场景工作台", view === "home"],
+              ["patients", "临床", ["patients", "followups", "cases"].includes(view)],
+              ["literature", "知识", ["literature", "guidelines"].includes(view)],
+              ["research", "科研", ["research", "drg"].includes(view)],
+            ].map(([target, label, active]) => (
+              <button
+                key={target}
+                className={active ? "active" : ""}
+                aria-pressed={active}
+                onClick={() =>
+                  target === "patients" ? openPatient() : navigate(target)
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
           {view === "workspaces" ? (
-            <WorkspacesView key={homeKey} config={config} />
+            <WorkspacesView key={homeKey} config={config} embedded />
           ) : view === "patients" ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}`}
