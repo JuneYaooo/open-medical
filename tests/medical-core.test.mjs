@@ -197,6 +197,7 @@ test("skill registry discovers medical instructions and rejects path or extra ar
       "evidence-planning",
       "guideline-application",
       "handoff-record",
+      "knowledge-base",
       "lab-interpretation",
       "medical-record",
       "medication-review",
