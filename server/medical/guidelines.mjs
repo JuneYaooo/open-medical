@@ -10,22 +10,22 @@ const sha256 = (value) =>
   createHash("sha256").update(value).digest("hex");
 
 export class GuidelineLibrary {
-  constructor(store, embedder = null) {
+  constructor(store, embedder = null, vectorStore = null) {
     this.store = store;
-    this.embedder = embedder; // { available(), embed(inputs) } — optional
+    this.embedder = embedder; // { available(), model, embed(inputs) } — optional
+    this.vectorStore = vectorStore; // LanceVectorStore — optional
   }
-  ragStatus() {
-    const rows = this.store.db
-      .prepare(
-        "SELECT model, COUNT(*) n FROM guideline_chunk_vectors GROUP BY model",
-      )
-      .all();
+  async ragStatus() {
+    const stats = this.vectorStore
+      ? await this.vectorStore.stats()
+      : { backend: "none", chunks: 0, models: [] };
     const current = this.embedder?.model || null;
-    const indexedModels = rows.map((row) => row.model);
+    const indexedModels = stats.models.map((m) => m.model);
     const stale =
-      rows.length > 0 && current !== null && !indexedModels.includes(current);
+      stats.chunks > 0 && current !== null && !indexedModels.includes(current);
     return {
-      embeddedChunks: rows.reduce((sum, row) => sum + row.n, 0),
+      backend: stats.backend,
+      embeddedChunks: stats.chunks,
       indexedModels,
       currentModel: current,
       stale,
@@ -99,19 +99,29 @@ export class GuidelineLibrary {
       throw error;
     }
     // Best-effort RAG indexing: ingestion never fails when the local
-    // embedding service is down — search degrades to full-text matching.
+    // embedding service or vector store is unavailable — search degrades
+    // to full-text matching.
     let embedded = 0;
-    if (this.embedder?.available()) {
+    if (this.embedder?.available() && this.vectorStore) {
       try {
-        const vectors = await this.embedder.embed(chunks.map((chunk) => chunk.text.slice(0, 4000)));
-        const insertVector = this.store.db.prepare(
-          "INSERT INTO guideline_chunk_vectors(doc_id,ord,model,dim,vector) VALUES (?,?,?,?,?)",
+        const vectors = await this.embedder.embed(
+          chunks.map((chunk) => chunk.text.slice(0, 4000)),
         );
-        const modelTag = this.embedder.model || "unknown";
-        this.store.db.exec("BEGIN IMMEDIATE");
-        for (const [index, chunk] of chunks.entries())
-          insertVector.run(doc.id, chunk.ord, modelTag, vectors[index].length, JSON.stringify(vectors[index]));
-        this.store.db.exec("COMMIT");
+        await this.vectorStore.upsertDoc(
+          doc.id,
+          this.embedder.model,
+          chunks.map((chunk, index) => ({
+            doc_id: doc.id,
+            ord: chunk.ord,
+            title: doc.title,
+            org: doc.org,
+            year: doc.year,
+            start_line: chunk.startLine,
+            end_line: chunk.endLine,
+            text: chunk.text.slice(0, 2000),
+            vector: vectors[index],
+          })),
+        );
         embedded = vectors.length;
       } catch {
         embedded = 0;
@@ -156,23 +166,19 @@ export class GuidelineLibrary {
     // with the text score. Unavailable embeddings degrade silently.
     const vectorScores = new Map();
     let vectorStale = false;
-    if (this.embedder?.available()) {
+    if (this.embedder?.available() && this.vectorStore) {
       try {
         const [queryVector] = await this.embedder.embed([text]);
-        const rows = this.store.db
-          .prepare(
-            "SELECT doc_id, ord, model, vector FROM guideline_chunk_vectors WHERE model=?",
-          )
-          .all(this.embedder.model);
+        const rag = await this.vectorStore.stats();
         vectorStale =
-          this.store.db
-            .prepare("SELECT COUNT(*) n FROM guideline_chunk_vectors WHERE model<>?")
-            .get(this.embedder.model)?.n > 0;
-        const cosine = (await import("./embeddings.mjs")).cosineSimilarity;
-        for (const row of rows) {
-          const score = cosine(queryVector, JSON.parse(row.vector));
-          vectorScores.set(`${row.doc_id}:${row.ord}`, score);
-        }
+          rag.chunks > 0 && !rag.models.some((m) => m.model === this.embedder.model);
+        const vectorHits = await this.vectorStore.search(
+          this.embedder.model,
+          queryVector,
+          20,
+        );
+        for (const hit of vectorHits)
+          vectorScores.set(`${hit.docId}:${hit.ord}`, hit.score);
       } catch {
         // degrade silently to text-only
       }
@@ -222,7 +228,8 @@ export class GuidelineLibrary {
           endLine: chunk.end_line,
           score,
           vectorScore: vectorScore === undefined ? null : Math.round(vectorScore * 1000) / 1000,
-          matchedVia: vectorScore !== undefined && score < vectorScore * 40 ? "vector" : "text",
+          matchedVia:
+            vectorScore >= 0.9 ? (score >= 1 ? "hybrid" : "vector") : "text",
           matches: matched,
           snippet: lines.slice(0, 4).join("\n").slice(0, 500),
         });
@@ -233,7 +240,7 @@ export class GuidelineLibrary {
         (b.vectorScore || 0) * 40 + b.score - ((a.vectorScore || 0) * 40 + a.score) ||
         a.startLine - b.startLine,
     );
-    const rag = this.ragStatus();
+    const rag = await this.ragStatus();
     return {
       query: text,
       count: results.length,
@@ -259,34 +266,34 @@ export class GuidelineLibrary {
       .all()
       .map((row) => JSON.parse(row.data));
     let chunks = 0;
-    const insertVector = this.store.db.prepare(
-      "INSERT INTO guideline_chunk_vectors(doc_id,ord,model,dim,vector) VALUES (?,?,?,?,?)",
-    );
     for (const doc of docs) {
       const pieces = chunkify(doc.text);
       const vectors = await this.embedder.embed(
         pieces.map((chunk) => chunk.text.slice(0, 4000)),
       );
-      this.store.db.exec("BEGIN IMMEDIATE");
-      this.store.db
-        .prepare("DELETE FROM guideline_chunk_vectors WHERE doc_id=?")
-        .run(doc.id);
-      for (const [index, chunk] of pieces.entries())
-        insertVector.run(
-          doc.id,
-          chunk.ord,
-          this.embedder.model,
-          vectors[index].length,
-          JSON.stringify(vectors[index]),
-        );
-      this.store.db.exec("COMMIT");
+      await this.vectorStore.upsertDoc(
+        doc.id,
+        this.embedder.model,
+        pieces.map((chunk, index) => ({
+          doc_id: doc.id,
+          ord: chunk.ord,
+          title: doc.title,
+          org: doc.org,
+          year: doc.year,
+          start_line: chunk.startLine,
+          end_line: chunk.endLine,
+          text: chunk.text.slice(0, 2000),
+          vector: vectors[index],
+        })),
+      );
       chunks += pieces.length;
     }
+    await this.vectorStore.dropOtherModels(this.embedder.model);
     return {
       docs: docs.length,
       chunks,
       model: this.embedder.model,
-      ...this.ragStatus(),
+      ...(await this.ragStatus()),
     };
   }
   readLines(id, startLine, endLine) {

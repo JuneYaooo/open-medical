@@ -83,7 +83,7 @@ test("guideline knowledge base: RAG ingest and hybrid search via injected embedd
   const tool = f.server.runtime.toolPlugins.get("guideline_search");
   const hits = await tool.execute({ query: "妊娠 高血压" });
   assert.equal(hits.count, 1);
-  assert.equal(hits.hits[0].matchedVia, "vector");
+  assert.ok(["vector", "hybrid"].includes(hits.hits[0].matchedVia));
   assert.ok(hits.hits[0].vectorScore > 0.9);
   assert.ok(hits.rag.embeddedChunks >= 1);
 });

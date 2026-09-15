@@ -1,8 +1,9 @@
 import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { readFile, stat } from "node:fs/promises";
-import { resolve, dirname, extname } from "node:path";
+import { resolve, dirname, extname, join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { WebSocketServer } from "ws";
@@ -44,6 +45,7 @@ import { PendingActions, pendingActionTools } from "./medical/pending-actions.mj
 import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
 import { EmbeddingService } from "./medical/embeddings.mjs";
+import { LanceVectorStore } from "./medical/vector-store.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -199,8 +201,15 @@ export function createServer(options = {}) {
     followups: () => followups,
     cases: () => cases,
   });
+  // Each runtime instance owns an isolated vector index directory; tests
+  // (:memory:) get a per-instance temp dir so tables never leak across.
+  const vectorDir =
+    databasePath === ":memory:"
+      ? mkdtempSync(join(tmpdir(), "omw-vec-"))
+      : join(dirname(databasePath), "vector-index");
+  const vectorStore = LanceVectorStore.create(vectorDir);
   const guidelines =
-    options.guidelines || new GuidelineLibrary(store, embedder);
+    options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
   const cases = options.cases || new CaseLibrary(store);
   const research = options.research || new ResearchService();
   const drg = options.drg || new DrgService(store);
@@ -584,7 +593,7 @@ export function createServer(options = {}) {
           guidelines: {
             enabled: true,
             count: guidelines.list().length,
-            rag: guidelines.ragStatus(),
+            rag: await guidelines.ragStatus(),
           },
           riskAlerts: risks.counts(),
           medSafety: { enabled: true },
@@ -1409,6 +1418,8 @@ export function createServer(options = {}) {
     await workspaces.scheduler.drain();
     await workspaces.recovery.drain();
     await workspaces.extensions.close();
+    if (databasePath === ":memory:")
+      rmSync(vectorDir, { recursive: true, force: true });
     await followups.drain();
     sockets.close();
     store.close();

@@ -14,6 +14,7 @@ export const runtimeDependencies = [
   "ml-matrix",
   "tar-stream",
   "cron-parser",
+  "@lancedb/lancedb",
 ];
 export async function bundleRuntimeDependencies(root, target) {
   const copied = new Set();
