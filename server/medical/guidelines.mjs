@@ -6,6 +6,7 @@ import { check, string } from "../errors.mjs";
 // search returns chunk hits with document + line provenance so guideline
 // answers can cite the original text like every other medical artifact.
 const CHUNK_LINES = 60;
+export const KNOWLEDGE_KINDS = ["指南", "书籍", "资料", "文献", "其他"];
 const sha256 = (value) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -53,8 +54,17 @@ export class GuidelineLibrary {
       })
       .sort((a, b) => b.createdAt - a.createdAt);
   }
-  async addDocument({ title, org = "", year, text, source = "local", fileName = "" } = {}) {
-    const name = string(title, "指南标题", 150);
+  async addDocument({
+    title,
+    org = "",
+    year,
+    text,
+    source = "local",
+    fileName = "",
+    kind = "指南",
+    collection = "默认知识库",
+  } = {}) {
+    const name = string(title, "文档标题", 150);
     const body = string(text, "指南全文", 500000);
     check(
       body.length >= 100,
@@ -66,6 +76,10 @@ export class GuidelineLibrary {
       title: name,
       org: org ? string(org, "机构", 80) : "",
       year: optionalYear(year),
+      kind: kind ? string(kind, "类别", 20) : "指南",
+      collection: collection
+        ? string(collection, "所属知识库", 60)
+        : "默认知识库",
       source: string(source, "来源", 40),
       fileName: fileName ? string(fileName, "文件名", 180) : "",
       sha256: sha256(body),
@@ -144,7 +158,7 @@ export class GuidelineLibrary {
   // Deterministic local search: every term must appear inside the chunk;
   // score is the total occurrence count. Works for Chinese without a
   // tokenizer (substring matching over a small local corpus).
-  async search({ query, org, year, limit = 8 } = {}) {
+  async search({ query, org, year, kind, collection, limit = 8 } = {}) {
     const text = string(query, "检索词", 200);
     const terms = text
       .split(/\s+/)
@@ -161,7 +175,11 @@ export class GuidelineLibrary {
       .all()
       .map((row) => JSON.parse(row.data))
       .filter((doc) => !org || !doc.org || doc.org.toLowerCase().includes(String(org).toLowerCase()))
-      .filter((doc) => !year || doc.year === year);
+      .filter((doc) => !year || doc.year === year)
+      .filter((doc) => !kind || (doc.kind || "指南") === kind)
+      .filter(
+        (doc) => !collection || (doc.collection || "默认知识库") === collection,
+      );
     // Vector similarity pass (RAG): cosine over chunk embeddings, merged
     // with the text score. Unavailable embeddings degrade silently.
     const vectorScores = new Map();
@@ -247,7 +265,7 @@ export class GuidelineLibrary {
       hits: results.slice(0, limit),
       rag: { ...rag, stale: rag.stale || vectorStale },
       note:
-        "指南检索结果为本地混合检索（向量语义 + 全文匹配），引用时请核对原文行号；指南内容不构成处方或剂量建议。" +
+        "知识库检索为本地混合检索（向量语义 + 全文匹配），引用时请核对原文行号；知识库内容不构成处方或剂量建议。" +
         (rag.stale || vectorStale
           ? " 嵌入模型已变更：部分向量为旧模型所建，建议执行重建索引。"
           : ""),
@@ -320,7 +338,7 @@ export class GuidelineLibrary {
   }
 }
 
-export function guidelineTools(library) {
+export function knowledgeTools(library) {
   const definition = (name, description, properties, required = []) => ({
     type: "function",
     function: {
@@ -339,10 +357,12 @@ export function guidelineTools(library) {
   return [
     {
       definition: definition(
-        "guideline_search",
-        "在本地指南库中检索临床指南条文，返回带文档名与行号出处的原文块。仅搜索本地已导入的指南。",
+        "knowledge_search",
+        "在本地医学知识库中检索（指南/书籍/资料等全部类别），返回带文档名与行号出处的原文块。回答医学问题前优先检索。",
         {
           query: textDef,
+          kind: textDef,
+          collection: textDef,
           org: textDef,
           year: intDef,
           limit: intDef,
@@ -353,21 +373,46 @@ export function guidelineTools(library) {
     },
     {
       definition: definition(
-        "guideline_list",
-        "列出本地指南库中的全部指南文档（标题、机构、年份）。",
-        {},
+        "knowledge_list",
+        "列出本地医学知识库中的全部文档（标题、类别、所属知识库、机构、年份）。",
+        {
+          kind: textDef,
+          collection: textDef,
+        },
         [],
       ),
-      execute: () => ({ documents: library.list() }),
+      execute: (args) => ({
+        documents: library.list({
+          kind: args.kind,
+          collection: args.collection,
+        }),
+      }),
     },
     {
       definition: definition(
-        "guideline_read",
-        "按行区间读取本地指南库中某文档的原文，用于核对引用。",
+        "knowledge_read",
+        "按行区间读取本地知识库中某文档的原文，用于核对引用。",
         { docId: textDef, startLine: intDef, endLine: intDef },
         ["docId", "startLine", "endLine"],
       ),
       execute: (args) => library.readLines(args.docId, args.startLine, args.endLine),
+    },
+    {
+      definition: definition(
+        "knowledge_ingest",
+        "把一份指南/书籍/资料全文存入本地医学知识库（自动分块并向量化索引）。仅当用户明确要求入库或已确认保存时调用；入库前请说明来源。",
+        {
+          title: textDef,
+          text: textDef,
+          kind: textDef,
+          collection: textDef,
+          org: textDef,
+          year: intDef,
+          fileName: textDef,
+        },
+        ["title", "text"],
+      ),
+      execute: (args) => library.addDocument(args),
     },
   ];
 }

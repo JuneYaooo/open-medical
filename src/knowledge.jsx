@@ -12,7 +12,7 @@ import {
 
 // Local guideline library: import PDFs/Markdown (text extracted in the
 // browser), full-text search with line provenance, and an inline reader.
-export function GuidelinesView() {
+export function KnowledgeView() {
   const [docs, setDocs] = useState([]);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState(null);
@@ -20,12 +20,12 @@ export function GuidelinesView() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(null); // {name, text} awaiting metadata
-  const [meta, setMeta] = useState({ title: "", org: "", year: "" });
+  const [meta, setMeta] = useState({ title: "", org: "", year: "", kind: "指南", collection: "" });
   const [reader, setReader] = useState(null); // {doc, highlight}
   const fileRef = useRef();
 
   const refresh = async () => {
-    const value = await api("/api/guidelines");
+    const value = await api("/api/knowledge");
     setDocs(value.documents);
     return value.documents;
   };
@@ -60,8 +60,10 @@ export function GuidelinesView() {
     setBusy(true);
     setError("");
     try {
-      await api("/api/guidelines", "POST", {
+      await api("/api/knowledge", "POST", {
         title: meta.title || pending.name,
+        kind: meta.kind || "指南",
+        collection: meta.collection || undefined,
         org: meta.org || undefined,
         year: meta.year ? Number(meta.year) : undefined,
         text: pending.text,
@@ -83,7 +85,7 @@ export function GuidelinesView() {
     setError("");
     try {
       const value = await api(
-        `/api/guidelines/search?q=${encodeURIComponent(query)}&limit=12`,
+        `/api/knowledge/search?q=${encodeURIComponent(query)}&limit=12`,
       );
       setHits(value.hits);
     } catch (err) {
@@ -95,7 +97,7 @@ export function GuidelinesView() {
   const removeDoc = async (id) => {
     setError("");
     try {
-      await api(`/api/guidelines/${id}`, "DELETE");
+      await api(`/api/knowledge/${id}`, "DELETE");
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -104,7 +106,7 @@ export function GuidelinesView() {
   const openReader = async (docId, highlight) => {
     setError("");
     try {
-      const doc = await api(`/api/guidelines/${docId}`);
+      const doc = await api(`/api/knowledge/${docId}`);
       setReader({ doc, highlight: highlight || null });
     } catch (err) {
       setError(err.message);
@@ -158,8 +160,8 @@ export function GuidelinesView() {
       <section className="module-card guidelines-view">
         <div className="module-head">
           <div>
-            <h1>指南库</h1>
-            <p className="module-phase">本地导入 · 全文检索 · 行号出处</p>
+            <h1>知识库</h1>
+            <p className="module-phase">指南 · 书籍 · 资料 · 全类别文档</p>
           </div>
         </div>
         {error && (
@@ -172,18 +174,52 @@ export function GuidelinesView() {
         {pending ? (
           <div className="guideline-import">
             <h3>确认导入：{pending.name}</h3>
+            <div className="guideline-meta-row">
+              <select
+                value={meta.kind || "指南"}
+                onChange={(e) => setMeta({ ...meta, kind: e.target.value })}
+              >
+                {["指南", "书籍", "资料", "文献", "其他"].map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={meta.collection || ""}
+                placeholder="所属知识库（可留空为默认库）"
+                onChange={(e) => setMeta({ ...meta, collection: e.target.value })}
+              />
+            </div>
             <p className="muted">
               已提取 {pending.text.length} 字符文本。
             </p>
             <div className="guideline-meta-row">
               <input
                 value={meta.title}
-                placeholder="指南标题"
+                placeholder="文档标题"
                 onChange={(e) => setMeta({ ...meta, title: e.target.value })}
+              />
+              <select
+                value={meta.kind}
+                onChange={(e) => setMeta({ ...meta, kind: e.target.value })}
+              >
+                {["指南", "书籍", "资料", "文献", "其他"].map((k) => (
+                  <option key={k} value={k}>
+                    类别：{k}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={meta.collection}
+                placeholder="所属知识库（可留空）"
+                onChange={(e) =>
+                  setMeta({ ...meta, collection: e.target.value })
+                }
               />
               <input
                 value={meta.org}
-                placeholder="机构（如 中华医学会）"
+                placeholder="机构/作者（可选）"
                 onChange={(e) => setMeta({ ...meta, org: e.target.value })}
               />
               <input
@@ -245,7 +281,7 @@ export function GuidelinesView() {
               setBusy(true);
               setError("");
               try {
-                const value = await api("/api/guidelines/reindex", "POST", {});
+                const value = await api("/api/knowledge/reindex", "POST", {});
                 setNotice(`已重建向量索引：${value.docs} 份指南 / ${value.chunks} 块 / 模型 ${value.model}`);
                 await refresh();
               } catch (err) {
@@ -304,7 +340,8 @@ export function GuidelinesView() {
               <button className="guideline-doc" onClick={() => openReader(doc.id)}>
                 <b>{doc.title}</b>
                 <small>
-                  {doc.org || "未标注机构"}
+                  {doc.kind || "资料"}
+                  {doc.org ? ` · ${doc.org}` : ""}
                   {doc.year ? ` · ${doc.year}` : ""} · {doc.chunkCount} 个索引块
                 </small>
               </button>

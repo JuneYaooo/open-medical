@@ -23,7 +23,7 @@ import { FollowUpManager } from "./followups.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
-import { GuidelineLibrary, guidelineTools } from "./medical/guidelines.mjs";
+import { GuidelineLibrary, knowledgeTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
@@ -271,7 +271,7 @@ export function createServer(options = {}) {
     },
     ...doctorMemoryTools(doctor),
       ...literatureTools(literature),
-      ...guidelineTools(guidelines),
+      ...knowledgeTools(guidelines),
       ...caseTools(cases),
       ...drgTools(drg),
       {
@@ -613,7 +613,7 @@ export function createServer(options = {}) {
           patientsEnabled: true,
           doctorMemory: runtime.doctor.counts(),
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
-          guidelines: {
+          knowledge: {
             enabled: true,
             count: guidelines.list().length,
             rag: await guidelines.ragStatus(),
@@ -1155,20 +1155,24 @@ export function createServer(options = {}) {
           return send(res, 201, { file, article });
         }
       }
-      if (parts[0] === "api" && parts[1] === "guidelines") {
-        if (parts.length === 2 && req.method === "GET")
+      const knowledgeRoutes =
+        parts[0] === "api" &&
+        (parts[1] === "knowledge" || parts[1] === "guidelines");
+      if (knowledgeRoutes) {
+        const sub = parts.slice(2);
+        if (sub.length === 0 && req.method === "GET")
           return send(res, 200, { documents: guidelines.list() });
-        if (parts.length === 2 && req.method === "POST")
+        if (sub.length === 0 && req.method === "POST")
           return send(res, 201, await guidelines.addDocument(await body(req)));
-        if (parts[2] === "reindex" && req.method === "POST")
-          return send(res, 200, await guidelines.reindex());
-        if (parts[2] === "search" && req.method === "GET") {
+        if (sub[0] === "search" && req.method === "GET") {
           const yearRaw = url.searchParams.get("year");
           return send(
             res,
             200,
             await guidelines.search({
               query: url.searchParams.get("q") || undefined,
+              kind: url.searchParams.get("kind") || undefined,
+              collection: url.searchParams.get("collection") || undefined,
               org: url.searchParams.get("org") || undefined,
               year: yearRaw ? Number(yearRaw) : undefined,
               limit: url.searchParams.get("limit")
@@ -1177,11 +1181,12 @@ export function createServer(options = {}) {
             }),
           );
         }
-        if (parts.length === 3 && parts[2] !== "search") {
-          const docId = parts[2];
-          if (req.method === "GET") return send(res, 200, guidelines.get(docId));
+        if (sub[0] === "reindex" && req.method === "POST")
+          return send(res, 200, await guidelines.reindex());
+        if (sub.length === 1 && sub[0] !== "search") {
+          if (req.method === "GET") return send(res, 200, guidelines.get(sub[0]));
           if (req.method === "DELETE")
-            return send(res, 200, guidelines.removeDocument(docId));
+            return send(res, 200, guidelines.removeDocument(sub[0]));
         }
       }
       if (parts[0] === "api" && parts[1] === "doctor") {
