@@ -10,8 +10,18 @@ const sha256 = (value) =>
   createHash("sha256").update(value).digest("hex");
 
 export class GuidelineLibrary {
-  constructor(store) {
+  constructor(store, embedder = null) {
     this.store = store;
+    this.embedder = embedder; // { available(), embed(inputs) } — optional
+  }
+  ragStatus() {
+    const vectors = this.store.db
+      .prepare("SELECT COUNT(*) n FROM guideline_chunk_vectors")
+      .get()?.n || 0;
+    return {
+      embeddedChunks: vectors,
+      embedder: this.embedder ? this.embedder.status() : { enabled: false },
+    };
   }
   docRow(id) {
     check(typeof id === "string" && id, "INVALID_INPUT", "文档编号无效");
@@ -34,7 +44,7 @@ export class GuidelineLibrary {
       })
       .sort((a, b) => b.createdAt - a.createdAt);
   }
-  addDocument({ title, org = "", year, text, source = "local", fileName = "" } = {}) {
+  async addDocument({ title, org = "", year, text, source = "local", fileName = "" } = {}) {
     const name = string(title, "指南标题", 150);
     const body = string(text, "指南全文", 500000);
     check(
@@ -79,8 +89,26 @@ export class GuidelineLibrary {
       this.store.db.exec("ROLLBACK");
       throw error;
     }
+    // Best-effort RAG indexing: ingestion never fails when the local
+    // embedding service is down — search degrades to full-text matching.
+    let embedded = 0;
+    if (this.embedder?.available()) {
+      try {
+        const vectors = await this.embedder.embed(chunks.map((chunk) => chunk.text.slice(0, 4000)));
+        const insertVector = this.store.db.prepare(
+          "INSERT INTO guideline_chunk_vectors(doc_id,ord,dim,vector) VALUES (?,?,?,?)",
+        );
+        this.store.db.exec("BEGIN IMMEDIATE");
+        for (const [index, chunk] of chunks.entries())
+          insertVector.run(doc.id, chunk.ord, vectors[index].length, JSON.stringify(vectors[index]));
+        this.store.db.exec("COMMIT");
+        embedded = vectors.length;
+      } catch {
+        embedded = 0;
+      }
+    }
     const { text: _text, ...rest } = doc;
-    return { ...rest, chunkCount: chunks.length };
+    return { ...rest, chunkCount: chunks.length, embedded };
   }
   removeDocument(id) {
     this.docRow(id);
@@ -96,7 +124,7 @@ export class GuidelineLibrary {
   // Deterministic local search: every term must appear inside the chunk;
   // score is the total occurrence count. Works for Chinese without a
   // tokenizer (substring matching over a small local corpus).
-  search({ query, org, year, limit = 8 } = {}) {
+  async search({ query, org, year, limit = 8 } = {}) {
     const text = string(query, "检索词", 200);
     const terms = text
       .split(/\s+/)
@@ -114,6 +142,27 @@ export class GuidelineLibrary {
       .map((row) => JSON.parse(row.data))
       .filter((doc) => !org || !doc.org || doc.org.toLowerCase().includes(String(org).toLowerCase()))
       .filter((doc) => !year || doc.year === year);
+    // Vector similarity pass (RAG): cosine over chunk embeddings, merged
+    // with the text score. Unavailable embeddings degrade silently.
+    const vectorScores = new Map();
+    if (this.embedder?.available()) {
+      try {
+        const [queryVector] = await this.embedder.embed([text]);
+        const rows = this.store.db
+          .prepare(
+            "SELECT v.doc_id, v.ord, v.vector FROM guideline_chunk_vectors v",
+          )
+          .all();
+        const cosine = (await import("./embeddings.mjs")).cosineSimilarity;
+        for (const row of rows) {
+          const score = cosine(queryVector, JSON.parse(row.vector));
+          const key = `${row.doc_id}:${row.ord}`;
+          vectorScores.set(key, score);
+        }
+      } catch {
+        // degrade silently to text-only
+      }
+    }
     const results = [];
     const selectChunks = this.store.db.prepare(
       "SELECT ord,start_line,end_line,text FROM guideline_chunks WHERE doc_id=? ORDER BY ord ASC",
@@ -137,7 +186,9 @@ export class GuidelineLibrary {
           }
           score += occurrences;
         }
-        if (missing || !score) continue;
+        const vectorKey = `${doc.id}:${chunk.ord}`;
+        const vectorScore = vectorScores.get(vectorKey);
+        if (missing || (!score && vectorScore === undefined)) continue;
         const lines = chunk.text.split("\n");
         const matched = lines
           .map((line, i) => ({ line, i }))
@@ -156,17 +207,24 @@ export class GuidelineLibrary {
           startLine: chunk.start_line,
           endLine: chunk.end_line,
           score,
+          vectorScore: vectorScore === undefined ? null : Math.round(vectorScore * 1000) / 1000,
+          matchedVia: vectorScore !== undefined && score < vectorScore * 40 ? "vector" : "text",
           matches: matched,
           snippet: lines.slice(0, 4).join("\n").slice(0, 500),
         });
       }
     }
-    results.sort((a, b) => b.score - a.score || a.startLine - b.startLine);
+    results.sort(
+      (a, b) =>
+        (b.vectorScore || 0) * 40 + b.score - ((a.vectorScore || 0) * 40 + a.score) ||
+        a.startLine - b.startLine,
+    );
     return {
       query: text,
       count: results.length,
       hits: results.slice(0, limit),
-      note: "指南检索结果为本地全文匹配，引用时请核对原文行号；指南内容不构成处方或剂量建议。",
+      rag: this.ragStatus(),
+      note: "指南检索结果为本地混合检索（向量语义 + 全文匹配），引用时请核对原文行号；指南内容不构成处方或剂量建议。",
     };
   }
   readLines(id, startLine, endLine) {

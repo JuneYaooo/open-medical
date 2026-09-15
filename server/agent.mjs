@@ -43,6 +43,7 @@ import { searchIcd9 } from "./medical/icd9.mjs";
 import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
 import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
+import { EmbeddingService } from "./medical/embeddings.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -192,8 +193,14 @@ export function createServer(options = {}) {
   const doctor = options.doctor || new DoctorProfile(store);
   const literature =
     options.literature || new LiteratureService(store);
+  const embedder = options.embedder || new EmbeddingService();
+  const pending = new PendingActions(store, {
+    patients: () => patients,
+    followups: () => followups,
+    cases: () => cases,
+  });
   const guidelines =
-    options.guidelines || new GuidelineLibrary(store);
+    options.guidelines || new GuidelineLibrary(store, embedder);
   const cases = options.cases || new CaseLibrary(store);
   const research = options.research || new ResearchService();
   const drg = options.drg || new DrgService(store);
@@ -208,6 +215,28 @@ export function createServer(options = {}) {
     return result;
   };
   const knowledgeToolPlugins = [
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "guideline_ingest",
+          description:
+            "把一份指南/共识/规范全文存入本地医疗知识库（自动分块并向量化索引）。仅当用户明确要求入库或已确认保存时调用；入库前请说明来源。",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              text: { type: "string" },
+              org: { type: "string" },
+              year: { type: "integer" },
+            },
+            required: ["title", "text"],
+            additionalProperties: false,
+          },
+        },
+      },
+      execute: (args) => guidelines.addDocument(args),
+    },
     ...doctorMemoryTools(doctor),
       ...literatureTools(literature),
       ...guidelineTools(guidelines),
@@ -287,7 +316,9 @@ export function createServer(options = {}) {
     doctor,
   });
   const workspaces = new WorkspaceService(store.db, provider, {
-    domain: createMedicalWorkspaceDomain({ plugins: knowledgeToolPlugins }),
+    domain: createMedicalWorkspaceDomain({
+      plugins: [...knowledgeToolPlugins, ...pendingActionTools(pending)],
+    }),
     onNotification: options.onNotification,
     sandbox: runtime.sandbox,
     chooseDirectory: options.chooseDirectory,
@@ -309,7 +340,6 @@ export function createServer(options = {}) {
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
-  const pending = new PendingActions(store, patients, followups, cases);
   runtime.registerPlugins(pendingActionTools(pending));
   const swapProvider = (next) => {
     provider = next;
@@ -551,7 +581,11 @@ export function createServer(options = {}) {
           patientsEnabled: true,
           doctorMemory: runtime.doctor.counts(),
           literature: { enabled: true, sources: ["pubmed", "europepmc"] },
-          guidelines: { enabled: true, count: guidelines.list().length },
+          guidelines: {
+            enabled: true,
+            count: guidelines.list().length,
+            rag: guidelines.ragStatus(),
+          },
           riskAlerts: risks.counts(),
           medSafety: { enabled: true },
           scales: { enabled: true, count: listScales().length },
@@ -561,33 +595,6 @@ export function createServer(options = {}) {
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
-      const medicalModeMatch =
-        path.match(/^\/api\/workspaces\/([A-Za-z0-9_-]+)\/medical$/);
-      if (medicalModeMatch && req.method === "POST") {
-        check(
-          workspaces.domain?.systemFor,
-          "INVALID_INPUT",
-          "当前内核不支持医疗能力",
-          400,
-        );
-        check(
-          !workspaces.active.has(medicalModeMatch[1]),
-          "RUN_ACTIVE",
-          "执行期间不能更改模式",
-          409,
-        );
-        const enabledInput = (await body(req)).enabled;
-        check(
-          typeof enabledInput === "boolean",
-          "INVALID_INPUT",
-          "enabled 必须为布尔值",
-        );
-        return send(
-          res,
-          200,
-          workspaces.setModeFlag(medicalModeMatch[1], "medical", enabledInput),
-        );
-      }
       if (
         await workspaceApi({
           service: workspaces,
@@ -1120,13 +1127,13 @@ export function createServer(options = {}) {
         if (parts.length === 2 && req.method === "GET")
           return send(res, 200, { documents: guidelines.list() });
         if (parts.length === 2 && req.method === "POST")
-          return send(res, 201, guidelines.addDocument(await body(req)));
+          return send(res, 201, await guidelines.addDocument(await body(req)));
         if (parts[2] === "search" && req.method === "GET") {
           const yearRaw = url.searchParams.get("year");
           return send(
             res,
             200,
-            guidelines.search({
+            await guidelines.search({
               query: url.searchParams.get("q") || undefined,
               org: url.searchParams.get("org") || undefined,
               year: yearRaw ? Number(yearRaw) : undefined,

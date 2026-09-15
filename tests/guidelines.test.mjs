@@ -22,9 +22,9 @@ const newLibrary = (t) => {
   return new GuidelineLibrary(store);
 };
 
-test("guideline document: add with chunking, sha dedupe, list and remove", (t) => {
+test("guideline document: add with chunking, sha dedupe, list and remove", async (t) => {
   const library = newLibrary(t);
-  const doc = library.addDocument({
+  const doc = await library.addDocument({
     title: "中国高血压防治指南 2024",
     org: "中华医学会",
     year: 2024,
@@ -35,7 +35,7 @@ test("guideline document: add with chunking, sha dedupe, list and remove", (t) =
   assert.ok(doc.chunkCount >= 1);
   assert.equal(doc.sha256, doc.sha256.toLowerCase());
 
-  assert.throws(
+  await assert.rejects(
     () => library.addDocument({ title: "重复", text: SAMPLE }),
     (err) => err.code === "CONFLICT",
   );
@@ -52,15 +52,15 @@ test("guideline document: add with chunking, sha dedupe, list and remove", (t) =
   assert.equal(library.list().length, 0);
 });
 
-test("guideline search: Chinese substring terms, org/year filters, provenance lines", (t) => {
+test("guideline search: Chinese substring terms, org/year filters, provenance lines", async (t) => {
   const library = newLibrary(t);
-  library.addDocument({
+  await library.addDocument({
     title: "中国高血压防治指南 2024",
     org: "中华医学会",
     year: 2024,
     text: SAMPLE,
   });
-  library.addDocument({
+  await library.addDocument({
     title: "NICE hypertension guideline 2019",
     org: "NICE",
     year: 2019,
@@ -72,28 +72,28 @@ test("guideline search: Chinese substring terms, org/year filters, provenance li
     ].join("\n"),
   });
 
-  const hits = library.search({ query: "随访 血压" });
+  const hits = await library.search({ query: "随访 血压" });
   assert.equal(hits.count, 1);
   assert.equal(hits.hits[0].docTitle, "中国高血压防治指南 2024");
   assert.ok(hits.hits[0].startLine >= 1);
   assert.ok(hits.hits[0].matches.length >= 1);
   assert.ok(hits.hits[0].matches[0].lineNo >= 1);
 
-  const english = library.search({ query: "blood pressure treatment" });
+  const english = await library.search({ query: "blood pressure treatment" });
   assert.equal(english.count, 1);
   assert.equal(english.hits[0].org, "NICE");
 
-  const filtered = library.search({ query: "随访", org: "NICE" });
+  const filtered = await library.search({ query: "随访", org: "NICE" });
   assert.equal(filtered.count, 0);
-  const byYear = library.search({ query: "随访", year: 2019 });
+  const byYear = await library.search({ query: "随访", year: 2019 });
   assert.equal(byYear.count, 0);
 
-  assert.throws(() => library.search({ query: "  " }), /必须是 1–200 字符/);
+  await assert.rejects(() => library.search({ query: "  " }), /必须是 1–200 字符/);
 });
 
-test("guideline readLines enforces ranges and returns original text", (t) => {
+test("guideline readLines enforces ranges and returns original text", async (t) => {
   const library = newLibrary(t);
-  const doc = library.addDocument({ title: "指南", text: SAMPLE });
+  const doc = await library.addDocument({ title: "指南", text: SAMPLE });
   const lines = SAMPLE.split("\n");
   const read = library.readLines(doc.id, 4, 5);
   assert.deepEqual(read.lines, lines.slice(3, 5));
@@ -114,7 +114,7 @@ test("guideline readLines enforces ranges and returns original text", (t) => {
 
 test("guideline agent tools: search/list/read execute and skip validation upfront", async (t) => {
   const library = newLibrary(t);
-  library.addDocument({ title: "高血压指南", org: "中华医学会", year: 2024, text: SAMPLE });
+  await library.addDocument({ title: "高血压指南", org: "中华医学会", year: 2024, text: SAMPLE });
   const tools = guidelineTools(library);
   assert.deepEqual(
     tools.map((tool) => tool.definition.function.name),

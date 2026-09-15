@@ -10,11 +10,20 @@ import { validateClinicalInput } from "../patients.mjs";
 const TYPES = ["patient-update", "followup-create", "case-save"];
 
 export class PendingActions {
-  constructor(store, patients, followups, cases) {
+  // services are accessor functions (e.g. () => patients) so the registry
+  // can be constructed before the runtime-dependent registries exist.
+  constructor(store, services) {
     this.store = store;
-    this.patients = patients;
-    this.followups = followups;
-    this.cases = cases;
+    this.services = services;
+  }
+  get patients() {
+    return this.services.patients();
+  }
+  get followups() {
+    return this.services.followups();
+  }
+  get cases() {
+    return this.services.cases();
   }
   row(id) {
     check(typeof id === "string" && id, "INVALID_INPUT", "提案编号无效");
