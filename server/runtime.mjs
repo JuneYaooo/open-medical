@@ -11,7 +11,6 @@ import {
 import { PermissionEngine } from "./core/permissions.mjs";
 import { AgentRuntime } from "./core/agent-runtime.mjs";
 import { ToolRegistry } from "./core/tool-registry.mjs";
-import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 
 const {
   system: SYSTEM,
@@ -69,15 +68,6 @@ export class MedicalRuntime {
           ![...TOOL_DEFINITIONS, ...ORCHESTRATION_TOOLS].some(
             (d) => d.function.name === name,
           ),
-        "PLUGIN_CONFIG",
-        `医疗工具名称重复：${name}`,
-      );
-      this.toolPlugins.set(name, plugin);
-    }
-    for (const plugin of doctor ? doctorMemoryTools(doctor) : []) {
-      const name = plugin.definition.function.name;
-      check(
-        !this.toolPlugins.has(name),
         "PLUGIN_CONFIG",
         `医疗工具名称重复：${name}`,
       );

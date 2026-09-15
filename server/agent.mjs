@@ -41,6 +41,8 @@ import {
 import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
 import { searchIcd9 } from "./medical/icd9.mjs";
 import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
+import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
+import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -205,14 +207,11 @@ export function createServer(options = {}) {
       });
     return result;
   };
-  const runtime = new MedicalRuntime(store, provider, {
-    ...options.runtimeOptions,
-    skills,
-    toolPlugins: options.toolPlugins || [
+  const knowledgeToolPlugins = [
+    ...doctorMemoryTools(doctor),
       ...literatureTools(literature),
       ...guidelineTools(guidelines),
       ...caseTools(cases),
-      ...researchToolPlugins(research),
       ...drgTools(drg),
       {
         definition: {
@@ -276,10 +275,19 @@ export function createServer(options = {}) {
         },
         execute: (args) => searchLabKnowledge(args),
       },
+  ];
+
+  const runtime = new MedicalRuntime(store, provider, {
+    ...options.runtimeOptions,
+    skills,
+    toolPlugins: options.toolPlugins || [
+      ...knowledgeToolPlugins,
+      ...researchToolPlugins(research),
     ],
     doctor,
   });
   const workspaces = new WorkspaceService(store.db, provider, {
+    domain: createMedicalWorkspaceDomain({ plugins: knowledgeToolPlugins }),
     onNotification: options.onNotification,
     sandbox: runtime.sandbox,
     chooseDirectory: options.chooseDirectory,
@@ -553,6 +561,33 @@ export function createServer(options = {}) {
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
+      const medicalModeMatch =
+        path.match(/^\/api\/workspaces\/([A-Za-z0-9_-]+)\/medical$/);
+      if (medicalModeMatch && req.method === "POST") {
+        check(
+          workspaces.domain?.systemFor,
+          "INVALID_INPUT",
+          "当前内核不支持医疗能力",
+          400,
+        );
+        check(
+          !workspaces.active.has(medicalModeMatch[1]),
+          "RUN_ACTIVE",
+          "执行期间不能更改模式",
+          409,
+        );
+        const enabledInput = (await body(req)).enabled;
+        check(
+          typeof enabledInput === "boolean",
+          "INVALID_INPUT",
+          "enabled 必须为布尔值",
+        );
+        return send(
+          res,
+          200,
+          workspaces.setModeFlag(medicalModeMatch[1], "medical", enabledInput),
+        );
+      }
       if (
         await workspaceApi({
           service: workspaces,
