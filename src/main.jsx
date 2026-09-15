@@ -46,6 +46,7 @@ import { FollowupsView } from "./followups";
 import { CasesView } from "./cases";
 import { ResearchView } from "./research";
 import { DrgView } from "./drg";
+import { ClinicalRefView } from "./clinical-ref";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 const WORKFLOWS = [
   {
@@ -918,6 +919,7 @@ function App() {
                 "临床",
                 [
                   ["patients", "患者档案", Users],
+                  ["clinical-ref", "临床速查", Stethoscope],
                   ["followups", "随访管理", CalendarClock],
                   ["cases", "病例库", FileText],
                 ],
@@ -1025,7 +1027,7 @@ function App() {
             {[
               ["workspaces", "通用 Agent", view === "workspaces"],
               ["home", "场景工作台", view === "home"],
-              ["patients", "临床", ["patients", "followups", "cases"].includes(view)],
+              ["patients", "临床", ["patients", "clinical-ref", "followups", "cases"].includes(view)],
               ["literature", "知识", ["literature", "guidelines"].includes(view)],
               ["research", "科研", ["research", "drg"].includes(view)],
             ].map(([target, label, active]) => (
@@ -1056,6 +1058,8 @@ function App() {
             <LiteratureView onOpenTask={openTask} />
           ) : view === "guidelines" ? (
             <GuidelinesView />
+          ) : view === "clinical-ref" ? (
+            <ClinicalRefView />
           ) : view === "followups" ? (
             <FollowupsView onOpenPatient={(id) => openPatient({ id })} />
           ) : view === "cases" ? (

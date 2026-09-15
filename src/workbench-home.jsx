@@ -110,6 +110,46 @@ export const MEDICAL_WORKFLOWS = [
       "请提取检验报告中的项目、结果、单位和报告内打印的参考范围，标记超出参考范围的项目，并逐项生成通俗解读草稿。只使用报告内信息，不引入外部判断；结论标注为待医生结合临床复核。",
   },
   {
+    id: "discharge-summary",
+    title: "出院小结草稿",
+    icon: FileText,
+    category: "clinical",
+    desc: "按出院小结结构整理住院经过、出院诊断与随访医嘱",
+    output: "出院小结草稿 · 待医生签署",
+    prompt:
+      "请根据本次住院材料生成出院小结草稿，结构为：入院日期/出院日期（缺失标待补充）、入院诊断、出院诊断、住院经过摘要（调用 extract_clinical_timeline 提取关键节点）、出院时情况、出院带药（含用法，调用用药清单整理并做 medication_safety_check 核查）、出院注意事项与随访计划（复诊时间、复查项目）。全部为待医生核对签署的草稿，缺失信息标「待补充」。",
+  },
+  {
+    id: "handoff",
+    title: "值班交班记录",
+    icon: CalendarClock,
+    category: "clinical",
+    desc: "接班医生视角的患者要点与夜间注意清单",
+    output: "交班要点 · 夜间观察清单",
+    prompt:
+      "请把材料整理为值班交班记录草稿：患者一览（床号/姓名/诊断，缺失标待补充）、目前问题清单（按优先级）、近 24 小时关键事件（调用 extract_clinical_timeline 与 extract_observations）、当前用药与需关注的相互作用（调用 medication_safety_check）、夜间需要重点观察的项目与预警信号、危急值与处理预案。面向接班医生，简洁条目化。",
+  },
+  {
+    id: "adr-screen",
+    title: "不良反应筛查",
+    icon: ShieldCheck,
+    category: "clinical",
+    desc: "用药与表现匹配可疑药物反应，附 Naranjo 因果评估",
+    output: "可疑反应清单 · 因果评估建议",
+    prompt:
+      "请从材料整理当前用药清单和可疑临床表现，调用 assess_adverse_reaction 做不良反应匹配筛查；对每条疑似关联，建议医生用 medical_scale_calculate（scaleId=naranjo）完成 Naranjo 因果评估。结果为提示性筛查，不构成因果判定，需结合用药时间线核实。",
+  },
+  {
+    id: "case-report",
+    title: "个案报告写作",
+    icon: FileText,
+    category: "research",
+    desc: "按 CARE 框架从病例材料生成个案报告草稿",
+    output: "个案报告草稿 · 结构化段落",
+    prompt:
+      "请基于病例材料（或病例库中引用的病例）按 CARE 框架生成个案报告草稿：标题建议、摘要（背景/病例要点/结论）、引言、病例资料（主诉/现病史/查体/辅助检查/诊疗经过，调用 extract_clinical_timeline 与 extract_observations 并保留出处）、讨论要点（提示可结合文献检索补充证据）、结论。全部为草稿，患者信息需脱敏，发表前需按目标期刊要求核对。",
+  },
+  {
     id: "evidence",
     title: "准备循证检索",
     icon: BookOpen,
