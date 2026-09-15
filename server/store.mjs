@@ -93,7 +93,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS literature_cache (key TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS guideline_docs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS guideline_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id TEXT NOT NULL, ord INTEGER NOT NULL, start_line INTEGER NOT NULL, end_line INTEGER NOT NULL, text TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS guideline_chunk_vectors (doc_id TEXT NOT NULL, ord INTEGER NOT NULL, dim INTEGER NOT NULL, vector TEXT NOT NULL, PRIMARY KEY(doc_id, ord));
+      CREATE TABLE IF NOT EXISTS guideline_chunk_vectors (doc_id TEXT NOT NULL, ord INTEGER NOT NULL, model TEXT NOT NULL DEFAULT '', dim INTEGER NOT NULL, vector TEXT NOT NULL, PRIMARY KEY(doc_id, ord, model));
       CREATE INDEX IF NOT EXISTS guideline_chunks_doc ON guideline_chunks(doc_id,ord);
       CREATE TABLE IF NOT EXISTS followup_plans (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS risk_alerts (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, rule_key TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
@@ -102,6 +102,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS pending_actions (id TEXT PRIMARY KEY, type TEXT NOT NULL, patient_id TEXT, status TEXT NOT NULL, payload TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_actions_patient ON pending_actions(patient_id,status);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      // Vectors carry their embedding model; pre-model tables are derived
+      // data and are simply rebuilt by reindex.
+      const vectorCols = this.db.prepare("PRAGMA table_info(guideline_chunk_vectors)").all();
+      if (vectorCols.length && !vectorCols.some((c) => c.name === "model")) {
+        this.db.exec("DROP TABLE guideline_chunk_vectors");
+        this.db.exec(
+          "CREATE TABLE guideline_chunk_vectors (doc_id TEXT NOT NULL, ord INTEGER NOT NULL, model TEXT NOT NULL DEFAULT '', dim INTEGER NOT NULL, vector TEXT NOT NULL, PRIMARY KEY(doc_id, ord, model))",
+        );
+      }
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.
       // All migrations are additive; session rows are unchanged.

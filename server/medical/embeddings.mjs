@@ -10,7 +10,7 @@ const DEFAULTS = {
   url:
     process.env.MEDICAL_EMBEDDING_URL ||
     "http://127.0.0.1:11434",
-  model: process.env.MEDICAL_EMBEDDING_MODEL || "nomic-embed-text",
+  model: process.env.MEDICAL_EMBEDDING_MODEL || "bge-m3",
 };
 
 export class EmbeddingService {
@@ -24,6 +24,11 @@ export class EmbeddingService {
   }
   available() {
     return Boolean(this.config.url && this.config.model);
+  }
+  // Vector provenance: chunks are tagged with the embedding model so
+  // vectors from different models are never compared.
+  get model() {
+    return this.config.model;
   }
   status() {
     return { enabled: this.available(), ...this.config };

@@ -499,6 +499,7 @@ function optionalDiagnoses(value) {
     code: item.code ? string(item.code, "ICD-10 编码", 20) : "",
     name: string(item.name, "诊断名称", 120),
     ...(item.date ? { date: clinicalDate(item.date, "诊断日期") } : {}),
+    ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
   }));
 }
 function optionalMedications(value) {
@@ -507,6 +508,7 @@ function optionalMedications(value) {
     ...(item.dose ? { dose: string(item.dose, "剂量", 60) } : {}),
     ...(item.frequency ? { frequency: string(item.frequency, "频次", 60) } : {}),
     ...(item.note ? { note: string(item.note, "备注", 200) } : {}),
+    ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
   }));
 }
 function optionalLabs(value) {
@@ -522,6 +524,7 @@ function optionalLabs(value) {
       value: value_,
       ...(item.unit ? { unit: string(item.unit, "单位", 30) } : {}),
       date: clinicalDate(item.date, "检验日期"),
+      ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
     };
   });
 }

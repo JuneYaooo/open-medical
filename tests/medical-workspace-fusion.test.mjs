@@ -63,6 +63,7 @@ test("guideline knowledge base: RAG ingest and hybrid search via injected embedd
   f.server.guidelines.embedder = {
     available: () => true,
     status: () => ({ enabled: true, provider: "stub" }),
+    model: "stub-v1",
     embed: async (inputs) =>
       inputs.map((text) => [
         text.includes("高血压") ? 1 : 0,
@@ -85,4 +86,66 @@ test("guideline knowledge base: RAG ingest and hybrid search via injected embedd
   assert.equal(hits.hits[0].matchedVia, "vector");
   assert.ok(hits.hits[0].vectorScore > 0.9);
   assert.ok(hits.rag.embeddedChunks >= 1);
+});
+
+test("embedding model provenance: stale vectors detected and reindex rebuilds", async (t) => {
+  const f = await fixture(t);
+  const service = f.server.runtime.toolPlugins.get("guideline_ingest");
+  f.server.guidelines.embedder = {
+    available: () => true,
+    status: () => ({ enabled: true, provider: "stub" }),
+    model: "model-a",
+    embed: async (inputs) => inputs.map((text) => [text.length, 1]),
+  };
+  await service.execute({
+    title: "模型溯源测试指南",
+    text: "这是一个用于验证向量模型版本管理的足够长的测试文本。高血压患者收缩压增高的场合应重复测量并评估靶器官损害，结合既往病史与在用药物情况综合判断，必要时安排动态血压监测以明确诊断，并按指南启动降压治疗与随访。",
+    org: "测试",
+    year: 2025,
+  });
+
+  // Doctor switches the embedding model: old vectors become stale.
+  f.server.guidelines.embedder.model = "model-b";
+  const staleSearch = await f.server.runtime.toolPlugins
+    .get("guideline_search")
+    .execute({ query: "收缩压" });
+  assert.equal(staleSearch.rag.stale, true);
+  assert.ok(staleSearch.rag.indexedModels.includes("model-a"));
+  // Text matching still works during staleness (graceful degradation).
+  assert.equal(staleSearch.count, 1);
+
+  // Reindex rebuilds every chunk under the current model.
+  const reindexed = await f.server.guidelines.reindex();
+  assert.equal(reindexed.model, "model-b");
+  assert.equal(reindexed.stale, false);
+  const freshSearch = await f.server.runtime.toolPlugins
+    .get("guideline_search")
+    .execute({ query: "收缩压" });
+  assert.equal(freshSearch.rag.stale, false);
+  assert.ok(freshSearch.rag.indexedModels.includes("model-b"));
+  assert.ok(!freshSearch.rag.indexedModels.includes("model-a"));
+});
+
+test("patients: clinical items accept provenance source fields", async (t) => {
+  const f = await fixture(t);
+  const created = await f.json("/api/patients", "POST", {
+    name: "溯源患者",
+    diagnoses: [
+      { code: "I10", name: "原发性高血压", source: "门诊病历.txt L12" },
+    ],
+    medications: [{ name: "氨氯地平", dose: "5mg", source: "出院小结 L4" }],
+    labs: [
+      {
+        item: "血钾",
+        value: 3.2,
+        unit: "mmol/L",
+        date: "2025-09-01",
+        source: "检验报告.txt L3",
+      },
+    ],
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.data.diagnoses[0].source, "门诊病历.txt L12");
+  assert.equal(created.data.labs[0].source, "检验报告.txt L3");
+  assert.equal(created.data.medications[0].source, "出院小结 L4");
 });
