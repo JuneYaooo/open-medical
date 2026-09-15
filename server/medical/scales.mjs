@@ -198,6 +198,78 @@ export const SCALES = [
     },
   },
   {
+    id: "adr-five-point",
+    name: "药物不良反应五分法因果评价",
+    category: "药物警戒",
+    desc: "中国药物警戒常用的因果评价（肯定有关/很可能有关/可能有关/可能无关/无关），依据时间关系、已知反应、去激发与再激发证据确定。",
+    items: [
+      { key: "time", label: "用药与反应有合理的时间关系", type: "select", choices: [
+        choice("是", 0), choice("否", 0), choice("不确定", 0),
+      ] },
+      { key: "known", label: "反应符合该药已知的作用机制/特性/已知不良反应", type: "select", choices: [
+        choice("是", 0), choice("否", 0), choice("不确定", 0),
+      ] },
+      { key: "dechallenge", label: "去激发（停药或减量后反应好转）", type: "select", choices: [
+        choice("阳性（好转）", 0), choice("阴性（未好转）", 0), choice("未做/不确定", 0),
+      ] },
+      { key: "rechallenge", label: "再激发（再次用药后反应再现）", type: "select", choices: [
+        choice("阳性（再现）", 0), choice("阴性（未再现）", 0), choice("未做/不确定", 0),
+      ] },
+      { key: "otherCause", label: "有其他合理原因可解释该反应", type: "select", choices: [
+        choice("是", 0), choice("否", 0), choice("不确定", 0),
+      ] },
+    ],
+    evaluate(answers) {
+      const need = (key, label) => {
+        const value = answers[key];
+        if (value === undefined)
+          throw new AppError("INVALID_INPUT", `「${label}」请选择：是/否/不确定 或对应选项`);
+        return value;
+      };
+      const time = need("time", this.items[0].label);
+      const known = need("known", this.items[1].label);
+      const dechallenge = need("dechallenge", this.items[2].label);
+      const rechallenge = need("rechallenge", this.items[3].label);
+      const otherCause = need("otherCause", this.items[4].label);
+      const dechallengePositive = dechallenge === "阳性（好转）";
+      const rechallengePositive = rechallenge === "阳性（再现）";
+      const otherNo = otherCause === "否";
+      let level;
+      if (time === "否") level = "无关";
+      else if (
+        time === "是" && known === "是" && dechallengePositive &&
+        rechallengePositive && otherNo
+      )
+        level = "肯定有关";
+      else if (
+        time === "是" && known === "是" && dechallengePositive &&
+        !rechallengePositive && otherNo
+      )
+        level = "很可能有关";
+      else if (
+        dechallenge !== "阳性（好转）" && !rechallengePositive && otherCause === "是"
+      )
+        level = "可能无关";
+      else level = "可能有关";
+      const twoPoint = ["肯定有关", "很可能有关", "可能有关"].includes(level)
+        ? "相关"
+        : "不相关";
+      const detail = [
+        { item: "时间关系", answer: time, points: 0 },
+        { item: "已知反应", answer: known, points: 0 },
+        { item: "去激发", answer: dechallenge, points: 0 },
+        { item: "再激发", answer: rechallenge, points: 0 },
+        { item: "其他原因", answer: otherCause, points: 0 },
+      ];
+      return {
+        score: level,
+        level,
+        interpretation: `五分法：${level}；二分法：${twoPoint}。去激发/再激发证据变化会改变分级，请随新证据重新评估。`,
+        detail,
+      };
+    },
+  },
+  {
     id: "naranjo",
     name: "Naranjo 药物不良反应因果评估",
     category: "药物警戒",

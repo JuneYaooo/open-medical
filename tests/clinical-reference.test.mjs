@@ -63,6 +63,35 @@ test("scales: CrCl Cockcroft-Gault and list completeness", () => {
     assert.ok(ids.includes(id), id);
 });
 
+test("scales: ADR five-point causality follows dechallenge/rechallenge evidence", () => {
+  const base = { time: "是", known: "是", dechallenge: "阳性（好转）", otherCause: "否" };
+  const definite = calculateScale("adr-five-point", {
+    ...base, rechallenge: "阳性（再现）",
+  });
+  assert.equal(definite.level, "肯定有关");
+  assert.equal(definite.interpretation.includes("相关"), true);
+  const probable = calculateScale("adr-five-point", {
+    ...base, rechallenge: "未做/不确定",
+  });
+  assert.equal(probable.level, "很可能有关");
+  const possible = calculateScale("adr-five-point", {
+    time: "是", known: "否", dechallenge: "未做/不确定", rechallenge: "未做/不确定", otherCause: "否",
+  });
+  assert.equal(possible.level, "可能有关");
+  const unrelated = calculateScale("adr-five-point", {
+    time: "否", known: "是", dechallenge: "阳性（好转）", rechallenge: "未做/不确定", otherCause: "否",
+  });
+  assert.equal(unrelated.level, "无关");
+  assert.equal(unrelated.interpretation.includes("不相关"), true);
+  const otherExplanation = calculateScale("adr-five-point", {
+    time: "是", known: "是", dechallenge: "未做/不确定", rechallenge: "未做/不确定", otherCause: "是",
+  });
+  assert.equal(otherExplanation.level, "可能无关");
+  assert.throws(() => calculateScale("adr-five-point", { time: "是" }), (err) => err.code === "INVALID_INPUT");
+  // 12 scales now.
+  assert.ok(listScales().length >= 12);
+});
+
 test("lab knowledge: alias search and disclaimer", () => {
   const byAlias = searchLabKnowledge({ query: "wbc" });
   assert.equal(byAlias.entries[0].name, "白细胞计数 WBC");

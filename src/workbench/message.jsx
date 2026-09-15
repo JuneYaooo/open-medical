@@ -1,13 +1,66 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Copy, Check, FileText } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 
+// Decision-flow blocks from the clinical-decision-flow skill render as SVG.
+// mermaid is lazy-loaded only when a flowchart actually appears.
+function MermaidBlock({ chart }) {
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "neutral",
+        });
+        const rendered = await mermaid.render(
+          "mmd-" + Math.random().toString(36).slice(2),
+          chart,
+        );
+        if (live) setSvg(rendered.svg);
+      } catch (err) {
+        if (live) setError(err.message || String(err));
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [chart]);
+  if (error)
+    return (
+      <div className="wb-code">
+        <pre>{chart}</pre>
+        <p className="muted">流程图渲染失败（保留源码）：{error}</p>
+      </div>
+    );
+  if (!svg)
+    return (
+      <div className="wb-code">
+        <pre>{chart}</pre>
+        <p className="muted">流程图渲染中…</p>
+      </div>
+    );
+  return <div className="wb-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
 function CodeBlock({ children }) {
+  const codeChild = Array.isArray(children) ? children[0] : children;
+  const className = String(codeChild?.props?.className || "");
+  const isMermaid = className.includes("language-mermaid");
+  const raw = codeChild?.props?.children;
+  const mermaidChart = isMermaid
+    ? String(Array.isArray(raw) ? raw.join("") : raw || "").replace(/\n$/, "")
+    : "";
   const ref = useRef(null),
     [copied, setCopied] = useState(false);
+  if (isMermaid) return <MermaidBlock chart={mermaidChart} />;
   return (
     <div className="wb-code">
       <button
