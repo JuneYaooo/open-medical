@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { PermissionEngine } from "../server/core/permissions.mjs";
 import { fixture } from "./helpers.mjs";
 
-// Full UI+capability fusion: the project workspace IS the medical surface.
-// A per-workspace 医疗能力 permission adds the medical toolset and
-// provenance discipline; full project permissions stay untouched.
-test("workspace medical capability: toggle persists and registry gains medical tools", async (t) => {
+// Full fusion: the project workspace always carries the medical capability.
+// The model auto-dispatches (patient materials -> provenance-traced
+// proposals; guideline files -> RAG knowledge base); no manual switch.
+test("project workspaces always carry medical tools alongside full permissions", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "omw-fusion-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const f = await fixture(t, { database: join(dir, "medical.sqlite") });
@@ -23,30 +23,15 @@ test("workspace medical capability: toggle persists and registry gains medical t
   assert.equal(created.status, 201);
   const wsId = created.data.id;
 
-  const names = (runId) =>
-    f.server.workspaces
-      .registry(wsId, runId)
-      .definitions(perms)
-      .map((d) => d.function.name);
+  const names = f.server.workspaces
+    .registry(wsId, "run-check")
+    .definitions(perms)
+    .map((d) => d.function.name);
 
-  // Default: no medical tools, full project permissions intact.
-  const before = names("run-before");
-  assert.ok(!before.includes("guideline_search"));
-  assert.ok(before.includes("read_file"));
-  assert.ok(before.includes("list_directory"));
-
-  // Enable medical capability.
-  const toggled = await f.json(`/api/workspaces/${wsId}/medical`, "POST", {
-    enabled: true,
-  });
-  assert.equal(toggled.status, 200);
-  assert.equal(toggled.data.modeFlags.medical, true);
-
-  const after = names("run-after");
   for (const tool of [
     "literature_search",
     "guideline_search",
-    "guideline_read",
+    "guideline_ingest",
     "medical_scale_calculate",
     "lab_knowledge_search",
     "assess_adverse_reaction",
@@ -54,62 +39,50 @@ test("workspace medical capability: toggle persists and registry gains medical t
     "similar_case_search",
     "drg_group",
     "doctor_memory_get",
+    "patient_record_propose",
   ])
-    assert.ok(after.includes(tool), `缺少医疗工具 ${tool}`);
-  // Project permissions are untouched by the medical layer.
-  assert.ok(after.includes("read_file"));
-  assert.ok(after.includes("list_directory"));
+    assert.ok(names.includes(tool), `缺少医疗工具 ${tool}`);
+  for (const tool of ["read_file", "list_directory"])
+    assert.ok(names.includes(tool), `缺少项目工具 ${tool}`);
 
-  // Record reflects the flag for the UI.
-  const refreshed = (await f.json(`/api/workspaces/${wsId}`)).data;
-  assert.equal(refreshed.modeFlags.medical, true);
-
-  // System prompt gains the medical discipline only for medical workspaces.
-  assert.ok(
-    f.server.workspaces.systemFor({ modeFlags: { medical: true } }).includes("已开启医疗能力"),
-  );
-  assert.ok(
-    !f.server.workspaces.systemFor({}).includes("已开启医疗能力"),
-  );
-
-  // Disable removes the medical tools again.
-  await f.json(`/api/workspaces/${wsId}/medical`, "POST", { enabled: false });
-  const disabled = names("run-disabled");
-  assert.ok(!disabled.includes("guideline_search"));
-  assert.ok(disabled.includes("read_file"));
+  // The medical auto-dispatch discipline is always part of the system prompt.
+  const system = f.server.workspaces.systemFor({});
+  assert.ok(system.includes("自动调度"));
+  assert.ok(system.includes("patient_record_propose"));
+  assert.ok(system.includes("guideline_ingest"));
 });
 
-test("medical mode toggle rejects during active runs and invalid payloads", async (t) => {
+test("guideline knowledge base: RAG ingest and hybrid search via injected embedder", async (t) => {
   const f = await fixture(t);
-  const dir = mkdtempSync(join(tmpdir(), "omw-fusion2-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const created = await f.json("/api/workspaces", "POST", {
-    title: "守卫工作区",
-    root: dir,
-    directoryConsent: true,
-  });
-  const wsId = created.data.id;
+  const boot = (await f.json("/api/bootstrap")).data;
+  assert.ok(boot.guidelines.rag);
 
-  const bad = await f.json(`/api/workspaces/${wsId}/medical`, "POST", {
-    enabled: "yes",
-  });
-  assert.equal(bad.status, 400);
+  // Ingest through the agent tool with a deterministic embedder stub:
+  // vectors encode keyword presence so semantic search is predictable.
+  const service = f.server.runtime.toolPlugins.get("guideline_ingest");
+  f.server.guidelines.embedder = {
+    available: () => true,
+    status: () => ({ enabled: true, provider: "stub" }),
+    embed: async (inputs) =>
+      inputs.map((text) => [
+        text.includes("高血压") ? 1 : 0,
+        text.includes("妊娠") ? 1 : 0,
+        text.includes("抗凝") ? 1 : 0,
+      ]),
+  };
 
-  // Simulate an active run -> 409.
-  f.server.workspaces.active.set(wsId, {});
-  const blocked = await f.json(`/api/workspaces/${wsId}/medical`, "POST", {
-    enabled: true,
+  const saved = await service.execute({
+    title: "妊娠高血压诊疗要点",
+    text: "妊娠期高血压诊断与治疗规范（测试文本）。重度妊娠期高血压患者收缩压≥160mmHg 或舒张压≥110mmHg 时，应在医生指导下尽快启动降压治疗；降压药物选择需兼顾胎儿安全性，避免使用血管紧张素转换酶抑制剂与血管紧张素受体拮抗剂。终止妊娠的时机应由产科医生结合孕周与病情综合评估。本规范为测试用途的示例文本，用于验证知识库分块与向量化索引流程，包含足量字符以满足导入校验要求。",
+    org: "测试学会",
+    year: 2025,
   });
-  assert.equal(blocked.status, 409);
-  f.server.workspaces.active.delete(wsId);
-  const ok = await f.json(`/api/workspaces/${wsId}/medical`, "POST", {
-    enabled: true,
-  });
-  assert.equal(ok.status, 200);
-});
+  assert.equal(saved.embedded, saved.chunkCount);
 
-test("bootstrap still reports generic kernel identity for the fused domain", async (t) => {
-  const f = await fixture(t);
-  const health = (await f.json("/api/agent/health")).data;
-  assert.equal(health.genericWorkspaces, true);
+  const tool = f.server.runtime.toolPlugins.get("guideline_search");
+  const hits = await tool.execute({ query: "妊娠 高血压" });
+  assert.equal(hits.count, 1);
+  assert.equal(hits.hits[0].matchedVia, "vector");
+  assert.ok(hits.hits[0].vectorScore > 0.9);
+  assert.ok(hits.rag.embeddedChunks >= 1);
 });

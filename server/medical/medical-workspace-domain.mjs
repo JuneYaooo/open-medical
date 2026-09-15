@@ -1,32 +1,27 @@
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 
-// Medical capability layered on the generic workspace kernel. The domain
-// keeps the generic identity and full project permissions; when a workspace
-// enables the medical mode flag it gains the medical toolset and a
-// provenance/precision discipline block in the system prompt.
+// Medical capability layered on the generic workspace kernel — always on,
+// automatically dispatched: the model decides when a task involves medical
+// work and reaches for the medical toolset; the discipline block keeps
+// outputs provenance-traced, precise and draft-only. Full project
+// permissions are untouched.
 export const MEDICAL_WORKSPACE_DISCIPLINE = `
-本工作区已开启医疗能力。涉及患者材料或医学问题时适用以下纪律：
-- 医学结论性输出一律为待专业医生复核的草稿；不得输出替代医生判断的最终诊疗结论。
-- 引用指南、文献、病历或检验内容必须标注来源（文档名、页码或行号）；工具没返回的事实不得编造。
-- 数值保留原始精度与单位；保留"疑似""考虑""待确认"等限定词，不把描述升级为确定结论。
-- 优先用医疗工具取事实：literature_search（文献）、guideline_search（指南）、medical_scale_calculate（量表）、lab_knowledge_search（检验意义）、assess_adverse_reaction（不良反应筛查）、medication_safety_check（用药核查）、similar_case_search（相似病例）。工具查不到就如实说明。
-- 用药与检验数据涉及具体患者时，建议用 patient_record_propose 提交档案变更提案，由医生确认后写入。`;
+本工作台具备医疗领域能力，按任务自动调度，无需用户要求：
+- 用户上传或提及患者资料时：主动读取并整理为结构化患者信息（诊断、用药、过敏、检验，保留文件名与行号溯源），用 patient_record_propose 提交档案存储提案，由医生确认后写入患者档案；整理结果同时以可溯源的时间线/清单呈现在回复中。
+- 用户上传指南/共识文件，或要求建立医学知识库时：读取全文，向用户复述将入库的标题与来源；用户确认后调用 guideline_ingest 入库（自动分块并向量化索引）。之后回答医学问题前先用 guideline_search 检索知识库。
+- 用户要求联网补充指南/文献时：用 web_search/web_fetch 获取候选，向用户展示标题与来源并确认，再调用 guideline_ingest 存入知识库。
+- 医学问题先查知识库与文献工具取事实；所有医学结论性输出为待专业医生复核的草稿，引用必须带来源（文档名、页码或行号），不编造。`;
 
 export function createMedicalWorkspaceDomain({ plugins }) {
   return defineDomain({
     // Keeps the generic kernel identity: same execution limits, same
     // context management, full project permissions.
     id: "generic",
-    system: GenericDomain.system,
+    system: `${GenericDomain.system}\n${MEDICAL_WORKSPACE_DISCIPLINE}`,
     limits: GenericDomain.limits,
     contextManagement: true,
     allowAutoFileWrites: true,
-    systemFor: (workspace) =>
-      workspace?.modeFlags?.medical
-        ? `${GenericDomain.system}\n${MEDICAL_WORKSPACE_DISCIPLINE}`
-        : GenericDomain.system,
-    registerTools: ({ registry, workspace }) => {
-      if (!workspace?.modeFlags?.medical) return;
+    registerTools: ({ registry }) => {
       for (const plugin of plugins)
         registry.register({
           permission: "tools.execute",

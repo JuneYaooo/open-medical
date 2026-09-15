@@ -1153,33 +1153,6 @@ export function WorkspacesView({
                       </button>
                     )}
                   </section>
-                  <section className="desk-model-settings">
-                    <div>
-                      <span className="desk-settings-label">医疗能力</span>
-                      <h3>{current.medicalMode ? "已开启" : "未开启"}</h3>
-                      <p>
-                        开启后本工作区可调用医疗工具（文献 / 指南 / 量表 / 检验 /
-                        不良反应 / 病例 / DRG /
-                        用药核查），医学结论按待复核草稿与来源纪律输出；完整项目权限不受影响。
-                      </p>
-                    </div>
-                    <button
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        act(async () => {
-                          await api(
-                            `/api/workspaces/${current.id}/medical`,
-                            "POST",
-                            { enabled: !current.medicalMode },
-                          );
-                          await refresh(current.id);
-                        })
-                      }
-                    >
-                      {current.medicalMode ? "关闭医疗能力" : "开启医疗能力"}
-                    </button>
-                  </section>
                   <p className="desk-settings-help">
                     模型连接是本机全局设置；医疗能力、文件权限与扩展配置只作用于当前工作区。
                   </p>
