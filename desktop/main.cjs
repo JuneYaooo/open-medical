@@ -23,8 +23,7 @@ const {
   copyFileSync,
 } = require("node:fs");
 const { parseEnv } = require("node:util");
-const { spawn, execFile } = require("node:child_process");
-const { promisify } = require("node:util");
+const { spawn } = require("node:child_process");
 
 const productName = "Open Medical Workbench";
 app.setName(productName);
@@ -183,13 +182,14 @@ async function start() {
         }
       } catch {}
   const configuration = join(dataDirectory, "model.env");
-  // The desktop and generic daemon share one workspace database. Migrate the
-  // pre-0.8 desktop database once, before either service opens SQLite.
+  // The desktop hosts the medical workbench runtime in-process with its own
+  // database in the shared directory; the generic daemon (platform.mjs)
+  // keeps its platform.sqlite beside it, untouched.
   const sharedDirectory = join(homedir(), ".open-medical-workbench");
   mkdirSync(sharedDirectory, { recursive: true, mode: 0o700 });
   const sharedDatabase = smokeTest
     ? join(dataDirectory, "medical.sqlite")
-    : join(sharedDirectory, "platform.sqlite");
+    : join(sharedDirectory, "medical.sqlite");
   const legacyDatabase = join(dataDirectory, "medical.sqlite");
   if (!existsSync(sharedDatabase) && existsSync(legacyDatabase)) {
     require("node:fs").copyFileSync(legacyDatabase, sharedDatabase);
@@ -219,50 +219,10 @@ async function start() {
     if (!process.env.AGENT_BROWSER_EXECUTABLE)
       process.env.AGENT_BROWSER_EXECUTABLE =
         browserCandidates.find(existsSync) || "";
-    const connection = await require("./daemon-connection.cjs").connect({
-      directory: sharedDirectory,
-      root,
-    });
-    origin = connection.origin;
-    let statuses = new Map();
-    const notifications = setInterval(async () => {
-      try {
-        const bootstrap = await (
-          await fetch(origin + "/api/bootstrap", {
-            signal: AbortSignal.timeout(2000),
-          })
-        ).json();
-        const data = await (
-          await fetch(origin + "/api/workspaces", {
-            headers: { "x-medical-token": bootstrap.token },
-            signal: AbortSignal.timeout(2000),
-          })
-        ).json();
-        for (const task of data.workspaces || []) {
-          if (
-            statuses.get(task.id) === "running" &&
-            !task.running &&
-            (!window || !window.isFocused()) &&
-            Notification.isSupported()
-          )
-            new Notification({
-              title: task.title,
-              body:
-                task.status === "completed"
-                  ? "任务已完成"
-                  : "任务已停止，请查看结果",
-            }).show();
-        }
-        statuses = new Map(
-          (data.workspaces || []).map((task) => [
-            task.id,
-            task.running ? "running" : task.status,
-          ]),
-        );
-      } catch {}
-    }, 3000);
-    notifications.unref();
-  } else {
+  }
+  // Boot the medical workbench runtime in-process; the window loads this
+  // local server only, so patient data never leaves the machine.
+  {
     const { createServer } = await import(
       pathToFileURL(join(root, "server/agent.mjs"))
     );
@@ -322,24 +282,10 @@ async function start() {
       window.focus();
     } else if (origin) openWindow();
   };
+  // The app hosts its own runtime; before-quit shuts it down. The generic
+  // daemon (platform.mjs), if running, is independent and stays untouched.
   const stopDaemonAndQuit = async () => {
-    app.quit();
-    try {
-      await promisify(execFile)(
-        process.execPath,
-        [
-          join(root, "scripts/agent-daemon.mjs"),
-          "stop",
-          "--directory",
-          join(homedir(), ".open-medical-workbench"),
-        ],
-        {
-          timeout: 20000,
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-          windowsHide: true,
-        },
-      );
-    } catch {}
+    await app.quit();
   };
   if (!smokeTest && existsSync(icon(process.platform === "darwin" ? "icon_16.png" : "icon_32.png"))) {
     try {
@@ -370,7 +316,7 @@ async function start() {
           { role: "unhide", label: "显示" },
           { type: "separator" },
           { label: "退出并停止后台服务", click: stopDaemonAndQuit },
-          { role: "quit", label: "退出窗口（后台任务继续）" },
+          { role: "quit", label: "退出应用" },
         ],
       },
       {
