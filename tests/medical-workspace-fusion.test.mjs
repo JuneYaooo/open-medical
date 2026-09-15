@@ -40,10 +40,18 @@ test("project workspaces always carry medical tools alongside full permissions",
     "drg_group",
     "doctor_memory_get",
     "patient_record_propose",
+    "knowledge_base_status",
   ])
     assert.ok(names.includes(tool), `缺少医疗工具 ${tool}`);
   for (const tool of ["read_file", "list_directory"])
     assert.ok(names.includes(tool), `缺少项目工具 ${tool}`);
+
+  // Status tool reports docs + embedder mode with actionable advice.
+  const status = await f.server.runtime.toolPlugins
+    .get("knowledge_base_status")
+    .execute({});
+  assert.ok(status.docs >= 0);
+  assert.ok(status.advice.length > 10);
 
   // The medical auto-dispatch discipline is always part of the system prompt.
   const system = f.server.workspaces.systemFor({});

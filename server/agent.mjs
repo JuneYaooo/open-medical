@@ -229,6 +229,28 @@ export function createServer(options = {}) {
       definition: {
         type: "function",
         function: {
+          name: "knowledge_base_status",
+          description:
+            "查看医学知识库当前状态：文档数、向量索引块数、嵌入方式（云端/本地 Ollama/未配置）与模型。用于在用户想建知识库时给出准确的环境建议。",
+          parameters: { type: "object", properties: {}, additionalProperties: false },
+        },
+      },
+      execute: async () => {
+        const rag = await guidelines.ragStatus();
+        const docs = guidelines.list().length;
+        const advice =
+          rag.embedder.mode === "cloud"
+            ? "云端嵌入已配置，可直接入库与语义检索。"
+            : rag.embedder.provider === "ollama" && rag.embedder.enabled
+              ? "本地 Ollama 嵌入已启用（bge-m3 约需 1–2GB 可用内存）；如不想占用本机资源，可改用硅基流动免费 Key。"
+              : "尚未配置嵌入服务：语义检索不可用，已回退全文匹配。可让用户二选一：① 硅基流动免费 Key（零本机占用，siliconflow.cn 注册）填入 MEDICAL_EMBEDDING_KEY；② 本机 Ollama（ollama pull bge-m3，约需 2GB 内存）。";
+        return { docs, ...rag, advice };
+      },
+    },
+    {
+      definition: {
+        type: "function",
+        function: {
           name: "guideline_ingest",
           description:
             "把一份指南/共识/规范全文存入本地医疗知识库（自动分块并向量化索引）。仅当用户明确要求入库或已确认保存时调用；入库前请说明来源。",
