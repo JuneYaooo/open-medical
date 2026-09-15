@@ -3908,3 +3908,35 @@ blockquote p {
 .drg-result .risk {
   color: #a04b3a;
 }
+
+/* ---- scenario quick tabs (merged workbench) ---- */
+.product-content {
+  display: flex;
+  flex-direction: column;
+}
+.scenario-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 18px 0;
+  border-bottom: 1px solid #e3ead9;
+  background: #fbfcfa;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.scenario-tabs button {
+  border: 0;
+  background: none;
+  padding: 8px 16px 10px;
+  font-size: 13px;
+  color: #5d6c5f;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.scenario-tabs button:hover {
+  color: #245740;
+}
+.scenario-tabs button.active {
+  color: #245740;
+  font-weight: 600;
+  border-bottom-color: #245740;
+}
