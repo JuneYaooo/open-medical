@@ -48,6 +48,7 @@ import { ResearchView } from "./research";
 import { DrgView } from "./drg";
 import { ClinicalRefView } from "./clinical-ref";
 import { IconButton, Badge, Modal, STATUS } from "./components";
+import { ModelSettings } from "./model-settings";
 const WORKFLOWS = [
   {
     id: "observations",
@@ -910,10 +911,7 @@ function App() {
             {[
               [
                 "工作台",
-                [
-                  ["workspaces", "通用 Agent", FolderOpen],
-                  ["home", "医疗场景", LayoutDashboard],
-                ],
+                [["home", "医疗工作台", LayoutDashboard]],
               ],
               [
                 "临床",
@@ -1025,8 +1023,7 @@ function App() {
         <div className="product-content">
           <nav className="scenario-tabs" aria-label="场景快捷切换">
             {[
-              ["workspaces", "通用 Agent", view === "workspaces"],
-              ["home", "场景工作台", view === "home"],
+              ["home", "医疗工作台", view === "home" || view === "workspaces"],
               ["patients", "临床", ["patients", "clinical-ref", "followups", "cases"].includes(view)],
               ["literature", "知识", ["literature", "guidelines"].includes(view)],
               ["research", "科研", ["research", "drg"].includes(view)],
@@ -1044,7 +1041,7 @@ function App() {
             ))}
           </nav>
           {view === "workspaces" ? (
-            <WorkspacesView key={homeKey} config={config} embedded />
+            <WorkspacesView key={homeKey} config={config} />
           ) : view === "patients" ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}`}
@@ -1417,6 +1414,16 @@ function App() {
                           模型辅助{!config?.modelConfigured ? " · 未配置" : ""}
                         </option>
                       </select>
+                      <button
+                        className="secondary"
+                        title="切换模型（沿用通用 Agent 的模型设置）"
+                        disabled={busy}
+                        onClick={() => setModal("model")}
+                      >
+                        {config?.modelConfigured
+                          ? `${config.provider || "model"} · ${config.model}`
+                          : "配置模型"}
+                      </button>
                       <span className="composer-spacer" />
                       {busy ? (
                         <button
@@ -1905,11 +1912,27 @@ function App() {
             >
               医生档案与记忆
             </button>
+            <button
+              className="secondary"
+              onClick={() => setModal("model")}
+            >
+              切换模型
+            </button>
             <p className="muted">
               文献检索、指南库、病例库、科研分析与 DRG
               测算按模块逐步上线；本版本未接入医院信息系统、电子签名或药物数据库。
             </p>
           </div>
+        </Modal>
+      )}
+      {modal === "model" && (
+        <Modal title="切换模型" onClose={() => setModal(null)}>
+          <ModelSettings
+            onClose={() => setModal(null)}
+            onSaved={async () => {
+              await init();
+            }}
+          />
         </Modal>
       )}
       {modal === "doctor" && (

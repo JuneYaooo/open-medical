@@ -1,5 +1,6 @@
 import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
+import { homedir } from "node:os";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +41,7 @@ import {
 import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
 import { searchIcd9 } from "./medical/icd9.mjs";
 import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
+import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -149,14 +151,18 @@ export function exportMarkdown(session) {
   return lines.join("\n");
 }
 export function createServer(options = {}) {
-  const store =
-    options.store ||
-    new Store(
-      options.database ||
-        process.env.MEDICAL_DATABASE ||
-        resolve(ROOT, "data", "medical.sqlite"),
-    );
-  const provider =
+  const databasePath =
+    options.database ||
+    process.env.MEDICAL_DATABASE ||
+    resolve(ROOT, "data", "medical.sqlite");
+  const store = options.store || new Store(databasePath);
+  // Credential vault lives beside the database; :memory: (tests) uses a
+  // per-user temp directory so the repo never receives a key file.
+  const vaultDir =
+    databasePath === ":memory:"
+      ? resolve(homedir(), ".open-medical-workbench", "tmp-keys")
+      : dirname(databasePath);
+  const initialProvider =
     options.provider ||
     createProvider({
       provider:
@@ -171,6 +177,8 @@ export function createServer(options = {}) {
       maxTokens: options.maxTokens,
       timeoutMs: options.timeoutMs,
     });
+  const models = new ModelSettings(store.db, vaultDir, initialProvider);
+  let provider = models.provider();
   const skills =
     options.skills ||
     new SkillRegistry([
@@ -295,6 +303,14 @@ export function createServer(options = {}) {
   const risks = new RiskEngine(store, followups);
   const pending = new PendingActions(store, patients, followups, cases);
   runtime.registerPlugins(pendingActionTools(pending));
+  const swapProvider = (next) => {
+    provider = next;
+    runtime.provider = provider;
+    runtime.agent.provider = provider;
+    runtime.subagents.provider = provider;
+    workspaces.provider = provider;
+    workspaces.agent.provider = provider;
+  };
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -830,6 +846,24 @@ export function createServer(options = {}) {
         );
       if (path === "/api/med-cautions" && req.method === "POST")
         return send(res, 200, specialPopulationCautions(await body(req)));
+      if (path === "/api/model-settings") {
+        if (req.method === "GET") return send(res, 200, models.public());
+        if (req.method === "PUT") {
+          const input = await body(req);
+          check(
+            runtime.active.size === 0 && workspaces.active.size === 0,
+            "MODEL_BUSY",
+            "有任务正在运行，请等待结束后切换模型",
+            409,
+          );
+          swapProvider(models.save(models.candidate(input)));
+          return send(res, 200, models.public());
+        }
+      }
+      if (path === "/api/model-settings/test" && req.method === "POST") {
+        const input = await body(req);
+        return send(res, 200, await track(models.test(models.candidate(input))));
+      }
       if (path === "/api/scales" && req.method === "GET")
         return send(res, 200, { scales: listScales() });
       if (

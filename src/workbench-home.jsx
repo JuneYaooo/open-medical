@@ -472,6 +472,20 @@ export function WorkbenchHome({
               ? `沿用「${selectedPatient.name}」的病例材料，进入后可核对本次范围。`
               : "先准备任务，再添加材料；生成结果后由你复核。"}
           </p>
+          <section className="hub-workspace-entry" aria-label="项目工作区">
+            <button onClick={() => onView("workspaces")}>
+              <span className="hub-scene-icon">
+                <FolderOpen size={20} />
+              </span>
+              <div className="hub-workspace-text">
+                <b>项目工作区</b>
+                <small>
+                  通用 Agent 内核：文件夹项目、附件、运行权限与模型切换。与医疗场景共用同一运行时。
+                </small>
+              </div>
+              <ArrowUpRight size={16} />
+            </button>
+          </section>
           <section className="hub-scenarios" aria-label="医疗工作场景">
             <div className="hub-section-head">
               <h2>从常用场景开始</h2>
