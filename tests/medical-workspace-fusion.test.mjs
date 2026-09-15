@@ -30,8 +30,8 @@ test("project workspaces always carry medical tools alongside full permissions",
 
   for (const tool of [
     "literature_search",
-    "guideline_search",
-    "guideline_ingest",
+    "knowledge_search",
+    "knowledge_ingest",
     "medical_scale_calculate",
     "lab_knowledge_search",
     "assess_adverse_reaction",
@@ -57,17 +57,17 @@ test("project workspaces always carry medical tools alongside full permissions",
   const system = f.server.workspaces.systemFor({});
   assert.ok(system.includes("自动调度"));
   assert.ok(system.includes("patient_record_propose"));
-  assert.ok(system.includes("guideline_ingest"));
+  assert.ok(system.includes("knowledge_ingest"));
 });
 
 test("guideline knowledge base: RAG ingest and hybrid search via injected embedder", async (t) => {
   const f = await fixture(t);
   const boot = (await f.json("/api/bootstrap")).data;
-  assert.ok(boot.guidelines.rag);
+  assert.ok(boot.knowledge.rag);
 
   // Ingest through the agent tool with a deterministic embedder stub:
   // vectors encode keyword presence so semantic search is predictable.
-  const service = f.server.runtime.toolPlugins.get("guideline_ingest");
+  const service = f.server.runtime.toolPlugins.get("knowledge_ingest");
   f.server.guidelines.embedder = {
     available: () => true,
     status: () => ({ enabled: true, provider: "stub" }),
@@ -88,7 +88,7 @@ test("guideline knowledge base: RAG ingest and hybrid search via injected embedd
   });
   assert.equal(saved.embedded, saved.chunkCount);
 
-  const tool = f.server.runtime.toolPlugins.get("guideline_search");
+  const tool = f.server.runtime.toolPlugins.get("knowledge_search");
   const hits = await tool.execute({ query: "妊娠 高血压" });
   assert.equal(hits.count, 1);
   assert.ok(["vector", "hybrid"].includes(hits.hits[0].matchedVia));
@@ -98,7 +98,7 @@ test("guideline knowledge base: RAG ingest and hybrid search via injected embedd
 
 test("embedding model provenance: stale vectors detected and reindex rebuilds", async (t) => {
   const f = await fixture(t);
-  const service = f.server.runtime.toolPlugins.get("guideline_ingest");
+  const service = f.server.runtime.toolPlugins.get("knowledge_ingest");
   f.server.guidelines.embedder = {
     available: () => true,
     status: () => ({ enabled: true, provider: "stub" }),
@@ -115,7 +115,7 @@ test("embedding model provenance: stale vectors detected and reindex rebuilds", 
   // Doctor switches the embedding model: old vectors become stale.
   f.server.guidelines.embedder.model = "model-b";
   const staleSearch = await f.server.runtime.toolPlugins
-    .get("guideline_search")
+    .get("knowledge_search")
     .execute({ query: "收缩压" });
   assert.equal(staleSearch.rag.stale, true);
   assert.ok(staleSearch.rag.indexedModels.includes("model-a"));
@@ -127,7 +127,7 @@ test("embedding model provenance: stale vectors detected and reindex rebuilds", 
   assert.equal(reindexed.model, "model-b");
   assert.equal(reindexed.stale, false);
   const freshSearch = await f.server.runtime.toolPlugins
-    .get("guideline_search")
+    .get("knowledge_search")
     .execute({ query: "收缩压" });
   assert.equal(freshSearch.rag.stale, false);
   assert.ok(freshSearch.rag.indexedModels.includes("model-b"));

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Store } from "../server/store.mjs";
-import { GuidelineLibrary, guidelineTools } from "../server/medical/guidelines.mjs";
+import { GuidelineLibrary, knowledgeTools } from "../server/medical/guidelines.mjs";
 
 const SAMPLE = [
   "中国高血压防治指南（2024 年修订版）测试文本。",
@@ -115,10 +115,10 @@ test("guideline readLines enforces ranges and returns original text", async (t) 
 test("guideline agent tools: search/list/read execute and skip validation upfront", async (t) => {
   const library = newLibrary(t);
   await library.addDocument({ title: "高血压指南", org: "中华医学会", year: 2024, text: SAMPLE });
-  const tools = guidelineTools(library);
+  const tools = knowledgeTools(library);
   assert.deepEqual(
     tools.map((tool) => tool.definition.function.name),
-    ["guideline_search", "guideline_list", "guideline_read"],
+    ["knowledge_search", "knowledge_list", "knowledge_read", "knowledge_ingest"],
   );
   const hits = await tools[0].execute({ query: "糖尿病 血压" });
   assert.equal(hits.count, 1);
@@ -131,7 +131,7 @@ test("guideline agent tools: search/list/read execute and skip validation upfron
 test("guideline API: import via REST, search endpoint, delete, bootstrap count", async (t) => {
   const { fixture } = await import("./helpers.mjs");
   const f = await fixture(t);
-  const created = await f.json("/api/guidelines", "POST", {
+  const created = await f.json("/api/knowledge", "POST", {
     title: "中国高血压防治指南 2024",
     org: "中华医学会",
     year: 2024,
@@ -147,11 +147,12 @@ test("guideline API: import via REST, search endpoint, delete, bootstrap count",
   assert.ok(search.data.hits[0].docTitle.includes("高血压"));
 
   const boot = (await f.json("/api/bootstrap")).data;
-  assert.equal(boot.guidelines.count, 1);
-  assert.ok(boot.tools.includes("guideline_search"));
+  assert.equal(boot.knowledge.count, 1);
+  assert.ok(boot.tools.includes("knowledge_search"));
+  assert.ok(boot.tools.includes("knowledge_ingest"));
 
-  const full = await f.json(`/api/guidelines/${doc.id}`);
+  const full = await f.json(`/api/knowledge/${doc.id}`);
   assert.ok(full.data.lineCount >= 10);
-  assert.equal((await f.json(`/api/guidelines/${doc.id}`, "DELETE")).data.ok, true);
-  assert.equal((await f.json("/api/guidelines")).data.documents.length, 0);
+  assert.equal((await f.json(`/api/knowledge/${doc.id}`, "DELETE")).data.ok, true);
+  assert.equal((await f.json("/api/knowledge")).data.documents.length, 0);
 });

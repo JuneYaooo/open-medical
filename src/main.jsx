@@ -41,7 +41,7 @@ import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
-import { GuidelinesView } from "./guidelines";
+import { KnowledgeView } from "./knowledge";
 import { FollowupsView } from "./followups";
 import { CasesView } from "./cases";
 import { ResearchView } from "./research";
@@ -936,7 +936,7 @@ function App() {
                 "知识",
                 [
                   ["literature", "文献检索", BookOpen],
-                  ["guidelines", "指南库", BookOpen],
+                  ["knowledge", "知识库", BookOpen],
                 ],
               ],
               [
@@ -1063,7 +1063,7 @@ function App() {
             {[
               ["home", "医疗工作台", view === "home" || view === "workspaces"],
               ["patients", "临床", ["patients", "clinical-ref", "followups", "cases"].includes(view)],
-              ["literature", "知识", ["literature", "guidelines"].includes(view)],
+              ["literature", "知识", ["literature", "knowledge"].includes(view)],
               ["research", "科研", ["research", "drg"].includes(view)],
             ].map(([target, label, active]) => (
               <button
@@ -1096,8 +1096,8 @@ function App() {
             />
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
-          ) : view === "guidelines" ? (
-            <GuidelinesView />
+          ) : view === "knowledge" ? (
+            <KnowledgeView />
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
           ) : view === "followups" ? (
