@@ -26,4 +26,5 @@ description: 指南应用：从本地指南库检索推荐意见，带行号出�
 ## 向量索引维护
 - 知识库向量绑定嵌入模型（默认 bge-m3，可经 MEDICAL_EMBEDDING_MODEL 环境变量更换为 qwen3-embedding 等）；更换模型后旧向量自动标记为陈旧，检索仍可用（全文匹配兜底）并提示重建。
 - 重建调用 REST `POST /api/guidelines/reindex`（或在指南库界面点「重建向量索引」），完成后告知医生新的模型与块数。
-- 用户询问嵌入方案时：本地免费推荐 qwen3-embedding（质量最强）与 bge-m3（均衡多语言），均为 Ollama 可拉取；nomic-embed-text 偏英文不推荐用于中文医疗。
+- 嵌入方案优先级：① 配置了 MEDICAL_EMBEDDING_KEY → 云端免费 API（默认硅基流动 BAAI/bge-m3，永久免费额度）；② 本机 Ollama → 本地模型（qwen3-embedding 质量最强 / bge-m3 均衡）；③ 都没有 → 全文匹配兜底。nomic-embed-text 偏英文，不推荐用于中文医疗。
+- 隐私边界：只有公开的指南/知识文本与检索词会进入嵌入服务；患者资料永远只在本机处理，不入知识库、不上云。
