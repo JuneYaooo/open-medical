@@ -11,6 +11,7 @@ import {
 import { PermissionEngine } from "./core/permissions.mjs";
 import { AgentRuntime } from "./core/agent-runtime.mjs";
 import { ToolRegistry } from "./core/tool-registry.mjs";
+import { compactContext } from "./core/context-manager.mjs";
 
 const {
   system: SYSTEM,
@@ -22,6 +23,43 @@ const {
 } = MedicalDomain;
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const iso = () => new Date().toISOString();
+// 咨询问答在本地规则模式下的降级回答：内置指标速查 + 模式引导，而不是工作流草稿。
+const consultationNotice = (result) => {
+  const entries = (result?.entries || []).slice(0, 4);
+  return [
+    "这是一条咨询提问。当前为本地规则模式（不调用模型），只能给出内置检验指标速查，无法针对具体情况解答：",
+    ...entries.map(
+      (e) =>
+        `· ${e.name}（参考范围 ${e.ref} ${e.unit}）升高：${e.high}；降低：${e.low}`,
+    ),
+    ...(entries.length ? [] : ["内置速查未覆盖这个问题。"]),
+    "配置模型密钥并把运行方式切换为「智能模式」后重新发送，即可获得针对具体情况的解答。出现胸痛、呼吸困难、意识改变等急症表现时，请立即就医。",
+    result?.note || "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+// Compaction and oversized tool results are archived verbatim; the model
+// pages the original text back through this tool. Execution is wired to the
+// session scope in the registry (not runTool), like delegate/sandbox.
+const ARCHIVE_TOOL = {
+  type: "function",
+  function: {
+    name: "read_context_archive",
+    description:
+      "按字符范围读取被压缩或归档的会话历史/大型工具结果原文（压缩摘要与归档提示中会给出 archiveId）。只能读取当前会话的归档。",
+    parameters: {
+      type: "object",
+      properties: {
+        archiveId: { type: "string" },
+        offset: { type: "integer", minimum: 0 },
+        limit: { type: "integer", minimum: 1, maximum: 16000 },
+      },
+      required: ["archiveId"],
+      additionalProperties: false,
+    },
+  },
+};
 export function publicSession(session) {
   const { runs, ...rest } = session;
   return {
@@ -34,8 +72,9 @@ export class MedicalRuntime {
     store,
     provider,
     {
-      maxRounds = 6,
+      maxRounds = 8,
       maxContextChars = 80000,
+      maxToolCalls = 8,
       maxActive = 3,
       skills = null,
       toolPlugins = [],
@@ -47,9 +86,15 @@ export class MedicalRuntime {
     this.provider = provider;
     this.maxRounds = maxRounds;
     this.maxContextChars = maxContextChars;
+    this.maxToolCalls = maxToolCalls;
     this.maxActive = maxActive;
     this.active = new Map();
-    this.agent = new AgentRuntime({ provider, maxRounds, maxContextChars });
+    this.agent = new AgentRuntime({
+      provider,
+      maxRounds,
+      maxContextChars,
+      maxToolCalls,
+    });
     this.skills = skills;
     this.sandbox = sandbox || new MedicalSandbox();
     this.subagents = new MedicalSubagents({ provider, skills, system: SYSTEM });
@@ -80,6 +125,7 @@ export class MedicalRuntime {
           t.function.name !== "sandbox_python" ||
           this.sandbox.status().available,
       ),
+      ARCHIVE_TOOL,
       ...[...this.toolPlugins.values()].map((p) => p.definition),
     ];
   }
@@ -143,11 +189,11 @@ export class MedicalRuntime {
     const fileIds = body.fileIds || [];
     check(
       Array.isArray(fileIds) &&
-        fileIds.length <= 10 &&
+        fileIds.length <= 100 &&
         fileIds.every((id) => typeof id === "string") &&
         new Set(fileIds).size === fileIds.length,
       "INVALID_INPUT",
-      "最多选择 10 个材料",
+      "最多选择 100 个材料",
     );
     const files = fileIds.map((id) => {
       const f = session.files.find((f) => f.id === id);
@@ -194,6 +240,31 @@ export class MedicalRuntime {
       "AGENT_PROFILE",
       "请选择最多 3 个不同医疗子代理",
     );
+    // 用户以 @ 明确固定的技能；未指定时由模型在 SYSTEM 引导下自动路由。
+    const pinnedSkills = body.skills || [];
+    check(
+      Array.isArray(pinnedSkills) &&
+        pinnedSkills.length <= 3 &&
+        new Set(pinnedSkills).size === pinnedSkills.length &&
+        pinnedSkills.every((s) => typeof s === "string"),
+      "INVALID_INPUT",
+      "最多固定 3 个技能",
+    );
+    if (pinnedSkills.length) {
+      check(
+        this.skills,
+        "SKILL_NOT_CONFIGURED",
+        "技能注册表未配置",
+        503,
+      );
+      const known = new Set(this.skills.list().map((s) => s.id));
+      check(
+        pinnedSkills.every((id) => known.has(id)),
+        "SKILL_NOT_FOUND",
+        "指定的技能不存在",
+        400,
+      );
+    }
     if (body.sandboxCode !== undefined || requestedMode === "code") {
       check(
         body.sandboxCode !== undefined,
@@ -256,6 +327,7 @@ export class MedicalRuntime {
       modeProfile,
       permissions: permissions.snapshot(),
       fileIds,
+      ...(pinnedSkills.length ? { skills: pinnedSkills } : {}),
       sourceHashes: sources.map((s) => ({ id: s.id, hash: s.hash })),
       usage: null,
       error: null,
@@ -272,6 +344,7 @@ export class MedicalRuntime {
       body: {
         model: body.model,
         delegations,
+        skills: pinnedSkills,
         sandboxCode: body.sandboxCode,
         modeProfile,
         isolatedContext: body.isolatedContext === true,
@@ -290,6 +363,7 @@ export class MedicalRuntime {
         runId: run.id,
         mode,
         intent: policy.intent,
+        skills: pinnedSkills,
         externalConsent: mode === "model" && body.externalConsent === true,
       });
       return handle;
@@ -443,26 +517,37 @@ export class MedicalRuntime {
         });
       } else if (run.mode === "local") {
         const work = localWork(run.policy, sources);
-        emit("tool.start", { tool: work.tool, call_id: randomUUID() });
-        const result = runTool(work.tool, work.args, {
-          sources,
-          skills: this.skills,
-          definitions: this.toolDefinitions,
-          plugins: this.toolPlugins,
-        });
-        result.provenance = "local_rule";
-        artifacts.push(result);
-        emit("tool.complete", { tool: work.tool, artifact: result });
+        const known = this.toolDefinitions.some(
+          (d) => d.function.name === work.tool,
+        );
+        const result = known
+          ? runTool(work.tool, work.args, {
+              sources,
+              skills: this.skills,
+              definitions: this.toolDefinitions,
+              plugins: this.toolPlugins,
+            })
+          : null;
+        if (result) {
+          emit("tool.start", { tool: work.tool, call_id: randomUUID() });
+          if (result.id) {
+            result.provenance = "local_rule";
+            artifacts.push(result);
+          }
+          emit("tool.complete", { tool: work.tool, artifact: result });
+        }
         const message =
-          result.type === "observations"
+          result?.type === "observations"
             ? `已摘录 ${result.observations.length} 个原文检验数值，保留单位和来源，未进行异常判断。`
-            : result.type === "clinical_timeline"
+            : result?.type === "clinical_timeline"
               ? `已从本次材料中识别 ${result.events.length} 条带日期的原文事件。请在右侧逐项核对来源后复核。没有完整日期的内容未被推断。`
-              : result.type === "medication_review"
+              : result?.type === "medication_review"
                 ? `已生成用药资料核对表，列出 ${result.missing.length} 类待补充信息。这是资料检查，尚未执行药理、剂量或相互作用核查。`
-                : result.type === "evidence_plan"
+                : result?.type === "evidence_plan"
                   ? "已创建循证任务的 PICO 草稿和检索步骤。尚未联网检索；请在产物中补充人群、干预、对照和结局。"
-                  : "已生成可编辑的医疗工作流程草稿。请检查材料范围与人工复核要求。";
+                  : run.policy.intent === "consultation"
+                    ? consultationNotice(result)
+                    : "已生成可编辑的医疗工作流程草稿。请检查材料范围与人工复核要求。";
         emit("message.delta", { text: message });
       } else {
         let state = this.store.get(sessionId);
@@ -476,12 +561,14 @@ export class MedicalRuntime {
               (r.fileIds || []).every((id) => run.fileIds.includes(id)),
           )
           .flatMap((r) => r.providerMessages || []);
+        // Retrieval replaces wholesale stuffing: a large selection ships
+        // name/size only; the model pulls fragments via search/read tools.
         const manifest = sources.map((s) => ({
           id: s.id,
           name: s.name,
           lines: s.text.split("\n").length,
           hash: s.hash,
-          preview: s.text.slice(0, 1000),
+          ...(sources.length <= 8 ? { preview: s.text.slice(0, 1000) } : {}),
         }));
         const messages = [
           {
@@ -490,7 +577,14 @@ export class MedicalRuntime {
               SYSTEM,
               this.doctor?.digest(),
               `可用技能：${JSON.stringify(this.skills?.list() || [])}`,
+              ...(handle.body.skills?.length
+                ? [
+                    `用户通过 @ 明确固定了技能：${JSON.stringify(handle.body.skills)}。先 read_skill 阅读这些技能并按其执行，无需再自行选择模板。`,
+                  ]
+                : []),
               "可将时间线、检验摘录、用药资料检查委派给独立子代理。沙箱只用于资料计算，计算结果不能自动确认临床结论。",
+              "选中材料已建立可检索索引：语义检索用 semantic_material_search，关键词检索用 search_materials，按行读原文用 read_source。检索工具未返回不代表材料中没有相关内容。",
+              "当上下文被压缩时，摘要中会给出 archiveId，用 read_context_archive 分段取回原文。",
               `策略：${JSON.stringify(run.policy)}`,
               `本次材料索引（可用工具读取全文）：${JSON.stringify(manifest)}`,
             ]
@@ -552,6 +646,13 @@ export class MedicalRuntime {
                   "沙箱只接受 code 参数",
                 );
                 output = await sandboxRun(args.code);
+              } else if (name === "read_context_archive") {
+                output = this.store.readArchive(
+                  sessionId,
+                  args?.archiveId,
+                  args?.offset === undefined ? 0 : args.offset,
+                  args?.limit === undefined ? 8000 : args.limit,
+                );
               } else
                 output = runTool(name, args, {
                   sources,
@@ -563,6 +664,24 @@ export class MedicalRuntime {
             },
           })),
         );
+        const addUsage = (usage) => {
+          run.usage ||= {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            rounds: 0,
+          };
+          for (const key of [
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+          ]) {
+            if (Number.isFinite(usage[key]) && usage[key] >= 0)
+              run.usage[key] += usage[key];
+          }
+          run.usage.rounds++;
+        };
+        const archiveFor = (data) => this.store.archive(sessionId, run.id, data);
         const result = await this.agent.run({
           domain: MedicalDomain,
           messages,
@@ -571,23 +690,21 @@ export class MedicalRuntime {
           signal: controller.signal,
           model: handle.body.model || this.provider.model,
           emit,
-          onUsage: (usage) => {
-            run.usage ||= {
-              prompt_tokens: 0,
-              completion_tokens: 0,
-              total_tokens: 0,
-              rounds: 0,
-            };
-            for (const key of [
-              "prompt_tokens",
-              "completion_tokens",
-              "total_tokens",
-            ]) {
-              if (Number.isFinite(usage[key]) && usage[key] >= 0)
-                run.usage[key] += usage[key];
-            }
-            run.usage.rounds++;
-          },
+          onUsage: addUsage,
+          // 会话超过预算时自动压缩：保留最近对话，更早历史摘要化，原文
+          // 归档后可经 read_context_archive 分段读回（同一预算约束）。
+          compact: (compacting) =>
+            compactContext({
+              messages: compacting,
+              provider: this.provider,
+              model: handle.body.model || this.provider.model,
+              maxChars: this.maxContextChars,
+              signal: controller.signal,
+              onUsage: addUsage,
+              archive: archiveFor,
+            }),
+          // 超预算 35% 的单个工具结果整体归档，模型按需读回。
+          offload: archiveFor,
           onToolResult: (output) => {
             if (output?.id) {
               output.provenance =
@@ -685,10 +802,10 @@ export class MedicalRuntime {
     check(
       Array.isArray(body.fileIds) &&
         body.fileIds.length > 0 &&
-        body.fileIds.length <= 10 &&
+        body.fileIds.length <= 100 &&
         new Set(body.fileIds).size === body.fileIds.length,
       "INVALID_INPUT",
-      "请选择 1–10 份要复制的材料",
+      "请选择 1–100 份要复制的材料",
     );
     const files = body.fileIds.map((id) => {
       const file = source.files.find((f) => f.id === id);
@@ -724,8 +841,8 @@ export class MedicalRuntime {
       "FILE_TYPE",
       "当前支持 TXT、Markdown、CSV、JSON 和 PDF 抽取文本",
     );
-    const raw = string(body.text, "文件内容", 50000);
-    check(Buffer.byteLength(raw) <= 200000, "FILE_SIZE", "文件超过 200KB");
+    const raw = string(body.text, "文件内容", 400000);
+    check(Buffer.byteLength(raw) <= 2000000, "FILE_SIZE", "文件超过 2MB");
     let extraction;
     if (/\.pdf$/i.test(name)) {
       const e = body.extraction;
@@ -733,7 +850,7 @@ export class MedicalRuntime {
         e?.type === "pdf_text" &&
           Number.isInteger(e.pageCount) &&
           e.pageCount > 0 &&
-          e.pageCount <= 25 &&
+          e.pageCount <= 300 &&
           Array.isArray(e.emptyPages) &&
           e.emptyPages.length < e.pageCount &&
           e.emptyPages.every(
@@ -759,7 +876,7 @@ export class MedicalRuntime {
       ...(extraction ? { extraction } : {}),
     };
     const session = this.store.get(sessionId);
-    check(session.files.length < 20, "FILE_LIMIT", "每个会话最多 20 份材料");
+    check(session.files.length < 100, "FILE_LIMIT", "每个会话最多 100 份材料");
     check(
       !session.files.some((f) => f.hash === file.hash),
       "DUPLICATE_FILE",

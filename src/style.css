@@ -499,6 +499,7 @@ small {
   margin: 13px 0;
 }
 .composer-wrap {
+  position: relative;
   flex-shrink: 0;
   padding: 8px 27px 18px;
   background: #fff;
@@ -2268,40 +2269,8 @@ blockquote p {
 .app-navigation .new-session:hover {
   background: #215b49;
 }
-.primary-navigation {
-  display: grid;
-  gap: 3px;
-  margin: 20px 0 15px;
-}
-.primary-navigation button {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  border: 0;
-  background: transparent;
-  padding: 11px 13px;
-  color: #6e7c73;
-  font-size: 13px;
-  text-align: left;
-}
-.primary-navigation button:hover {
-  background: #e9eee7;
-}
-.primary-navigation button.active {
-  background: #e1ebe1;
-  color: #245740;
-  font-weight: 600;
-}
-.primary-navigation button em {
-  margin-left: auto;
-  font-size: 10px;
-  font-style: normal;
-  background: #d2e1d1;
-  border-radius: 4px;
-  padding: 2px 5px;
-}
 .app-navigation .search {
-  margin: 12px 9px 20px;
+  margin: 14px 4px 6px;
 }
 .app-navigation .nav-label {
   font-size: 10px;
@@ -3916,29 +3885,141 @@ blockquote p {
 }
 .scenario-tabs {
   display: flex;
+  align-items: center;
   gap: 4px;
-  padding: 10px 18px 0;
-  border-bottom: 1px solid #e3ead9;
-  background: #fbfcfa;
+  margin: 12px 20px 0;
+  padding: 5px;
+  background: #ffffffd9;
+  backdrop-filter: blur(10px);
+  border: 1px solid #e0e8da;
+  border-radius: 14px;
+  box-shadow: 0 8px 22px #24382b14;
   flex-shrink: 0;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+.scenario-tabs::-webkit-scrollbar {
+  display: none;
 }
 .scenario-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 0;
-  background: none;
-  padding: 8px 16px 10px;
+  background: transparent;
+  padding: 8px 13px;
   font-size: 13px;
-  color: #5d6c5f;
-  border-bottom: 2px solid transparent;
+  color: #4c5a50;
+  border-radius: 10px;
   white-space: nowrap;
 }
+.scenario-tabs button em {
+  font-size: 10px;
+  font-style: normal;
+  background: #d2e1d1;
+  color: #245740;
+  border-radius: 5px;
+  padding: 1px 5px;
+}
 .scenario-tabs button:hover {
+  background: #eef3ea;
   color: #245740;
 }
 .scenario-tabs button.active {
-  color: #245740;
+  background: #245740;
+  color: #fff;
   font-weight: 600;
-  border-bottom-color: #245740;
+}
+.scenario-tabs button.active em {
+  background: #ffffff33;
+  color: #fff;
+}
+
+/* ---- @ skill mention menu + pinned chips ---- */
+.mention-menu {
+  position: absolute;
+  left: 27px;
+  right: 27px;
+  bottom: calc(100% - 4px);
+  z-index: 24;
+  background: #fff;
+  border: 1px solid #d6e1d2;
+  border-radius: 12px;
+  box-shadow: 0 14px 38px #1d332426;
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.mention-title,
+.mention-empty {
+  font-size: 11px;
+  color: #859186;
+  padding: 5px 9px 7px;
+  margin: 0;
+}
+.mention-menu > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: #29372d;
+}
+.mention-menu > button.active {
+  background: #edf3ea;
+}
+.mention-menu > button svg {
+  margin-top: 3px;
+  color: #6e7c73;
+  flex-shrink: 0;
+}
+.mention-menu > button b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.mention-menu > button small {
+  display: block;
+  font-size: 11px;
+  color: #77857a;
+  margin-top: 2px;
+}
+.skill-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 27px 8px;
+}
+.skill-chips small {
+  font-size: 10px;
+  color: #859186;
+}
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #e7f0e5;
+  color: #245740;
+  border: 1px solid #cfe0cc;
+  border-radius: 999px;
+  padding: 4px 6px 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.skill-chip button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: #4c7a5f;
+  padding: 2px;
+  border-radius: 999px;
+}
+.skill-chip button:hover {
+  background: #cfe0cc;
 }
 
 /* ---- clinical quick-reference view ---- */

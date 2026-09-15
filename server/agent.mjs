@@ -46,6 +46,10 @@ import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
 import { EmbeddingService } from "./medical/embeddings.mjs";
 import { LanceVectorStore } from "./medical/vector-store.mjs";
+import {
+  MaterialLibrary,
+  materialSearchTools,
+} from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -72,7 +76,7 @@ async function body(req) {
   const chunks = [];
   for await (const part of req) {
     bytes += part.length;
-    check(bytes <= 1024 * 1024, "BODY_LIMIT", "请求超过 1MB", 413);
+    check(bytes <= 8 * 1024 * 1024, "BODY_LIMIT", "请求超过 8MB", 413);
     chunks.push(part);
   }
   try {
@@ -209,6 +213,11 @@ export function createServer(options = {}) {
       ? mkdtempSync(join(tmpdir(), "omw-vec-"))
       : join(dirname(databasePath), "vector-index");
   const vectorStore = LanceVectorStore.create(vectorDir);
+  // Materials get their own LanceDB namespace so knowledge-base stats and
+  // model-tagged tables never mix with session material vectors.
+  const materialVectors = LanceVectorStore.create(join(vectorDir, "materials"));
+  const materials =
+    options.materials || new MaterialLibrary(embedder, materialVectors);
   const guidelines =
     options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
   const cases = options.cases || new CaseLibrary(store);
@@ -225,6 +234,7 @@ export function createServer(options = {}) {
     return result;
   };
   const knowledgeToolPlugins = [
+    ...materialSearchTools(materials),
     {
       definition: {
         type: "function",
@@ -338,7 +348,17 @@ export function createServer(options = {}) {
       },
   ];
 
+  // Context budgets are env-tunable; explicit options.runtimeOptions wins.
+  const envNumber = (name, fallback) => {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  };
   const runtime = new MedicalRuntime(store, provider, {
+    maxContextChars: envNumber("MEDICAL_CONTEXT_BUDGET", 80000),
+    maxRounds: envNumber("MEDICAL_MAX_ROUNDS", 8),
+    maxToolCalls: envNumber("MEDICAL_MAX_TOOL_CALLS", 8),
     ...options.runtimeOptions,
     skills,
     toolPlugins: options.toolPlugins || [
@@ -618,6 +638,10 @@ export function createServer(options = {}) {
             count: guidelines.list().length,
             rag: await guidelines.ragStatus(),
           },
+          materials: {
+            enabled: true,
+            semantic: embedder.available(),
+          },
           riskAlerts: risks.counts(),
           medSafety: { enabled: true },
           scales: { enabled: true, count: listScales().length },
@@ -714,6 +738,8 @@ export function createServer(options = {}) {
               "此会话是患者病例工作区，请在患者管理中删除患者档案",
               409,
             );
+            for (const file of session.files)
+              materials.remove(file.id).catch(() => {});
             store.delete(id);
             return send(res, 200, { ok: true });
           }
@@ -731,8 +757,13 @@ export function createServer(options = {}) {
           return send(res, 201, runtime.copyMaterials(id, forkBody));
         }
         if (parts[3] === "files") {
-          if (parts.length === 4 && req.method === "POST")
-            return send(res, 201, runtime.addFile(id, await body(req)));
+          if (parts.length === 4 && req.method === "POST") {
+            const file = runtime.addFile(id, await body(req));
+            // Index for semantic retrieval in the background; keyword search
+            // works immediately either way.
+            materials.ingest(file).catch(() => {});
+            return send(res, 201, file);
+          }
           if (parts.length === 5 && req.method === "DELETE") {
             check(
               !runtime.active.has(id),
@@ -752,6 +783,7 @@ export function createServer(options = {}) {
               "此材料已被执行记录引用。可取消勾选以排除后续任务；如需清除全部资料，请删除会话。",
               409,
             );
+            materials.remove(parts[4]).catch(() => {});
             store.mutate(id, (s) => {
               s.files = s.files.filter((f) => f.id !== parts[4]);
             });
@@ -1413,6 +1445,7 @@ export function createServer(options = {}) {
   server.store = store;
   server.runtime = runtime;
   server.workspaces = workspaces;
+  server.materials = materials;
   server.token = secret;
   server.scheduler = scheduler;
   server.patients = patients;

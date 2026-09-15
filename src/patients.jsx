@@ -223,7 +223,7 @@ export function PatientsView({
           mode,
           delegations,
           externalConsent: mode === "model" ? consent : undefined,
-          fileIds: session.files.slice(0, 10).map((f) => f.id),
+          fileIds: session.files.map((f) => f.id),
         },
         (event) => setProgress(eventText(event) || progress),
       );

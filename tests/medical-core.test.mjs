@@ -9,6 +9,66 @@ test("policy routes intents without emergency interception and marks medication 
   assert.equal(medicalPolicy("设计胸痛科普工作流").intent, "medical_product");
   assert.equal(medicalPolicy("整理随访材料").mustEscalate, undefined);
 });
+test("health questions route to consultation with low risk, not workflow drafts", () => {
+  const policy = medicalPolicy("血糖有点高，男生 27岁，怎么办");
+  assert.equal(policy.intent, "consultation");
+  assert.equal(policy.risk, "low");
+  assert.equal(policy.requiresClinicianReview, false);
+  assert.equal(medicalPolicy("血糖高需要吃药吗").intent, "consultation");
+  assert.equal(medicalPolicy("这个指标说明什么？").intent, "consultation");
+  // 整理类任务即使用问号结尾也不应被当成咨询
+  assert.equal(
+    medicalPolicy("帮我把这段就诊记录整理成时间线").intent,
+    "record_structuring",
+  );
+});
+test("consultation local work asks the lab knowledge plugin instead of build_workflow", () => {
+  const message = {
+    id: "m",
+    name: "本轮输入",
+    hash: "h",
+    text: "血糖有点高，男生 27岁，怎么办",
+  };
+  const work = localWork(medicalPolicy(message.text), [message]);
+  assert.equal(work.tool, "lab_knowledge_search");
+  assert.ok(work.args.query.length <= 100);
+  assert.match(work.args.query, /血糖/);
+  assert.notEqual(work.tool, "build_workflow");
+  const definition = {
+    type: "function",
+    function: {
+      name: "lab_knowledge_search",
+      description: "检验指标速查插件",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" }, limit: { type: "integer" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const result = runTool(work.tool, work.args, {
+    sources: [message],
+    definitions: [definition],
+    plugins: new Map([
+      [
+        "lab_knowledge_search",
+        {
+          definition,
+          execute: (args) => ({ query: args.query, entries: [], count: 0 }),
+        },
+      ],
+    ]),
+  });
+  assert.match(result.query, /血糖/);
+});
+test("consultation work with a real lab knowledge entry returns interpretation leads", async () => {
+  const { searchLabKnowledge } = await import("../server/medical/lab-knowledge.mjs");
+  const hit = searchLabKnowledge({ query: "血糖" });
+  assert.ok(hit.count >= 1);
+  assert.ok(hit.entries[0].high.length > 0);
+  assert.match(hit.note, /医生/);
+});
 test("timeline extracts real source lines, sorts dates and flags impossible dates", () => {
   const sources = [
     {

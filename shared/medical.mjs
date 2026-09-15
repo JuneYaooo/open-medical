@@ -6,6 +6,7 @@ export const INTENTS = {
   record_structuring: "病历时间线",
   evidence_planning: "循证规划",
   medication_safety: "用药复核",
+  consultation: "咨询问答",
   medical_product: "工作流程",
   general_medical_work: "资料整理",
 };
@@ -22,14 +23,23 @@ export function medicalPolicy(input = "") {
           ? "observations"
           : /病历|病史|病例|随访|时间线|就诊/.test(text)
             ? "record_structuring"
-            : /产品|需求|功能|验收|工作流/.test(text)
-              ? "medical_product"
-              : "general_medical_work";
+            : /怎么办|怎么处理|怎么改善|怎么调理|怎么回事|如何|什么原因|为什么|严重吗|正不正常|要不要|需不需要|能不能|可不可以|行不行|吗\s*[?？]?$|[?？]|咨询|问一下/.test(
+                  text,
+                )
+              ? "consultation"
+              : /产品|需求|功能|验收|工作流/.test(text)
+                ? "medical_product"
+                : "general_medical_work";
   return {
     version: POLICY_VERSION,
     intent,
-    risk: intent === "medication_safety" ? "high" : "medium",
-    requiresClinicianReview: true,
+    risk:
+      intent === "medication_safety"
+        ? "high"
+        : intent === "consultation"
+          ? "low"
+          : "medium",
+    requiresClinicianReview: intent !== "consultation",
     limitations: [
       "模型输出为待核查草稿",
       "发送到外部模型的内容为原文，发送前请自行确认材料范围。",

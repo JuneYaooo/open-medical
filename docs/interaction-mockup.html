@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Medical 工作台 · 交互重设计稿 v1.1（2026-09-15）</title>
+<style>
+  :root{
+    --accent:#28735b; --accent-deep:#1d5947; --accent-soft:#e7f2ee; --accent-line:#bcd8cd;
+    --ink:#1f2a26; --muted:#68766f; --border:#e2e8e4; --paper:#ffffff; --bg:#f4f6f5;
+    --amber:#b7791f; --amber-soft:#fdf3e2; --red:#c0392b; --red-soft:#fbeeec;
+    --blue:#2b6cb0; --blue-soft:#e8f0fa;
+    --r:10px; --r-sm:7px;
+    font-size:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    background:#eef1ef; color:var(--ink); padding:36px 0 80px;
+  }
+  .page{width:1220px; margin:0 auto;}
+  /* ============ 文档头 ============ */
+  .doc-head{margin-bottom:28px;}
+  .doc-head h1{font-size:26px; letter-spacing:.5px;}
+  .doc-head .sub{color:var(--muted); margin-top:8px; line-height:1.7;}
+  .doc-head .sub b{color:var(--ink);}
+  .doc-head .ref{display:inline-block; margin-top:10px; font-size:12px; color:var(--muted);
+    background:#fff; border:1px solid var(--border); border-radius:99px; padding:4px 12px; margin-right:6px;}
+  h2.screen-title{font-size:19px; margin:46px 0 6px; display:flex; align-items:center; gap:10px;}
+  h2.screen-title .no{background:var(--accent); color:#fff; font-size:13px; border-radius:6px;
+    width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;}
+  .screen-intent{color:var(--muted); line-height:1.7; margin-bottom:14px; max-width:920px;}
+  .screen-intent b{color:var(--accent-deep);}
+
+  /* ============ 标注 ============ */
+  .screen-wrap{position:relative;}
+  .pin{position:absolute; z-index:50; width:22px; height:22px; border-radius:50%;
+    background:#e0523f; color:#fff; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 3px rgba(224,82,63,.22);}
+  .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin:14px 2px 0;}
+  .legend span{font-size:12.5px; color:var(--muted);}
+  .legend b{color:#e0523f; margin-right:4px; font-weight:700;}
+
+  /* ============ 窗口框 ============ */
+  .window{background:var(--bg); border:1px solid #d6ded9; border-radius:14px; overflow:hidden;
+    box-shadow:0 12px 34px rgba(31,42,38,.10);}
+  .win-bar{height:34px; background:#e9edeb; border-bottom:1px solid #dbe2de;
+    display:flex; align-items:center; padding:0 14px; gap:6px;}
+  .win-bar i{width:11px; height:11px; border-radius:50%; display:inline-block;}
+  .win-bar i:nth-child(1){background:#f36b5f;} .win-bar i:nth-child(2){background:#f4bd4f;} .win-bar i:nth-child(3){background:#5fc26d;}
+  .win-bar .addr{flex:1; text-align:center; font-size:11.5px; color:var(--muted);}
+
+  /* ============ 应用外壳 ============ */
+  .app{display:grid; grid-template-columns:236px minmax(0,1fr) 352px; grid-template-rows:48px minmax(0,1fr); min-height:700px;}
+  .topbar{grid-column:1/4; height:48px; background:var(--paper); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:12px; padding:0 16px;}
+  .brand{display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; color:var(--accent-deep);}
+  .brand .logo{width:22px; height:22px; border-radius:6px; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:12px;}
+  .pill{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border);
+    background:var(--paper); border-radius:99px; padding:4px 12px; font-size:12px; color:var(--ink);}
+  .pill .dot{width:7px; height:7px; border-radius:50%; background:var(--accent);}
+  .pill.local{background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-deep);}
+  .mode-chip{display:inline-flex; align-items:center; gap:6px; border-radius:99px; padding:4px 12px;
+    font-size:12px; border:1px solid var(--accent-line); background:var(--accent-soft); color:var(--accent-deep); font-weight:600;}
+  .mode-chip.caret::after{content:"▾"; font-size:10px; opacity:.7;}
+  .ctx-meter{display:flex; align-items:center; gap:10px; margin-left:auto;}
+  .meter{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted);}
+  .meter .bar{width:46px; height:5px; border-radius:99px; background:#e6ebe8; overflow:hidden;}
+  .meter .bar i{display:block; height:100%; border-radius:99px; background:var(--accent);}
+  .meter .bar i.warn{background:var(--amber);}
+  .icon-btn{width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:#fff;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:14px;}
+
+  /* ============ 左栏 ============ */
+  .lnav{background:#fbfcfb; border-right:1px solid var(--border); padding:12px 10px 12px; display:flex; flex-direction:column; gap:12px; overflow:hidden;}
+  .btn-new{background:var(--accent); color:#fff; border:none; border-radius:9px; padding:9px 12px;
+    font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;}
+  .lnav-group{font-size:11px; color:var(--muted); letter-spacing:1px; padding:0 6px; display:flex; justify-content:space-between; align-items:center;}
+  .lnav-group .bdg{background:var(--amber-soft); color:var(--amber); border-radius:99px; padding:1px 7px; font-size:10.5px; letter-spacing:0;}
+  .task-item{display:flex; gap:8px; padding:7px 8px; border-radius:8px; align-items:flex-start;}
+  .task-item.active{background:#eef4f1; border:1px solid var(--accent-line);}
+  .task-item:not(.active){border:1px solid transparent;}
+  .task-item .st{width:8px; height:8px; border-radius:50%; margin-top:4px; flex:none;}
+  .st.review{background:var(--amber);} .st.run{background:var(--blue);} .st.done{background:#5aa88c;} .st.idle{background:#c2ccc7;}
+  .task-item .t{font-size:12.5px; line-height:1.35;}
+  .task-item .m{font-size:11px; color:var(--muted); margin-top:2px;}
+  .pt-item{display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px; font-size:12.5px;}
+  .pt-item:hover{background:#f0f4f2;}
+  .pt-item .avatar{width:24px; height:24px; border-radius:50%; background:var(--accent-soft); color:var(--accent-deep);
+    display:flex; align-items:center; justify-content:center; font-size:11px; flex:none;}
+  .pt-item .sub{color:var(--muted); font-size:11px; margin-left:auto;}
+  .lnav-foot{margin-top:auto; border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:2px;}
+  .navlink{font-size:12.5px; color:var(--muted); padding:6px 8px; border-radius:8px; display:flex; gap:8px; align-items:center;}
+  .navlink:hover{background:#f0f4f2; color:var(--ink);}
+
+  /* ============ 中栏 ============ */
+  .center{display:flex; flex-direction:column; min-width:0; background:var(--bg);}
+  .conv-head{background:var(--paper); border-bottom:1px solid var(--border); padding:12px 20px 0;}
+  .conv-head .row1{display:flex; align-items:center; gap:10px;}
+  .conv-head h3{font-size:15px;}
+  .conv-head .back{font-size:12px; color:var(--muted);}
+  .stage{display:flex; gap:0; margin-top:11px;}
+  .stage .stg{font-size:11.5px; color:var(--muted); padding:6px 14px 9px; position:relative; display:flex; align-items:center; gap:6px;}
+  .stage .stg.on{color:var(--accent-deep); font-weight:600; border-bottom:2px solid var(--accent);}
+  .stage .stg.off{border-bottom:2px solid transparent;}
+  .messages{flex:1; overflow:hidden; padding:16px 22px; display:flex; flex-direction:column; gap:12px;}
+  .msg{display:flex; gap:10px; max-width:92%;}
+  .msg .who{width:26px; height:26px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:11px;}
+  .msg.user{align-self:flex-end; flex-direction:row-reverse;}
+  .msg.user .who{background:#3d4a45; color:#fff;}
+  .msg.ai .who{background:var(--accent); color:#fff;}
+  .bubble{border-radius:12px; padding:10px 13px; font-size:13px; line-height:1.75;}
+  .msg.user .bubble{background:var(--accent); color:#fff; border-top-right-radius:4px;}
+  .msg.ai .bubble{background:var(--paper); border:1px solid var(--border); border-top-left-radius:4px;}
+  .bubble .at{background:rgba(255,255,255,.22); border-radius:4px; padding:0 4px; font-weight:600;}
+  /* 步骤流 */
+  .steps{background:var(--paper); border:1px solid var(--border); border-radius:12px; padding:9px 12px; font-size:12px; color:var(--muted); max-width:92%;}
+  .steps .head{display:flex; align-items:center; gap:8px; color:var(--ink); font-weight:600; font-size:12.5px;}
+  .steps .head .chev{margin-left:auto; color:var(--muted); font-size:10px;}
+  .steps ul{list-style:none; margin-top:7px; display:flex; flex-direction:column; gap:5px;}
+  .steps li{display:flex; gap:7px; align-items:baseline;}
+  .steps li .ok{color:#5aa88c;} .steps li .warn{color:var(--amber);}
+  .steps li .tool{color:var(--accent-deep); font-weight:600;}
+  .steps li .ms{margin-left:auto; color:#9aa7a1; font-size:11px;}
+  /* 引用气泡 */
+  .cite{display:inline-flex; align-items:center; gap:5px; background:var(--accent-soft); border:1px solid var(--accent-line);
+    color:var(--accent-deep); border-radius:6px; padding:1px 8px; font-size:11.5px; margin:2px 3px 0 0; cursor:pointer;}
+  .warn-line{background:var(--amber-soft); border:1px solid #ecd9b7; color:#7c5310; border-radius:8px;
+    padding:7px 10px; font-size:12px; margin-top:8px; line-height:1.6;}
+  /* 产物卡 */
+  .artifact{border:1px solid var(--accent-line); background:linear-gradient(180deg,#fbfdfc,#f3f8f6);
+    border-radius:12px; padding:12px 14px; max-width:92%; align-self:flex-start; width:520px;}
+  .artifact .a-head{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600;}
+  .badge{font-size:10.5px; border-radius:99px; padding:2px 8px; font-weight:600;}
+  .badge.draft{background:var(--amber-soft); color:var(--amber);}
+  .badge.ok{background:var(--accent-soft); color:var(--accent-deep);}
+  .badge.no{background:var(--red-soft); color:var(--red);}
+  .badge.run{background:var(--blue-soft); color:var(--blue);}
+  .artifact .a-meta{font-size:11px; color:var(--muted); margin-top:3px;}
+  .artifact .a-sum{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.65;}
+  .artifact .a-actions{display:flex; gap:8px; margin-top:10px;}
+  .btn{border-radius:8px; font-size:12.5px; padding:6px 14px; border:1px solid var(--border); background:#fff; color:var(--ink); cursor:pointer;}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+  .btn.ghost{border:none; color:var(--accent-deep); background:transparent;}
+  /* Composer */
+  .composer{background:var(--paper); border-top:1px solid var(--border); padding:12px 20px 13px;}
+  .ctx-chips{display:flex; gap:6px; margin-bottom:8px; align-items:center;}
+  .chip{display:inline-flex; align-items:center; gap:5px; background:var(--accent-soft); border:1px solid var(--accent-line);
+    color:var(--accent-deep); font-size:11.5px; border-radius:99px; padding:3px 10px;}
+  .chip.gray{background:#f0f3f1; border-color:var(--border); color:var(--muted);}
+  .chip .x{opacity:.55;}
+  .input-line{display:flex; align-items:center; gap:10px; border:1.5px solid var(--accent-line); border-radius:12px;
+    background:#fff; padding:9px 12px;}
+  .input-line .txt{flex:1; color:#33413b; font-size:13px;}
+  .input-line .txt .caret{display:inline-block; width:1.5px; height:14px; background:var(--accent); vertical-align:-2px; margin-left:1px;}
+  .send{width:30px; height:30px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px;}
+  .composer-foot{display:flex; align-items:center; gap:14px; margin-top:8px; font-size:11.5px; color:var(--muted);}
+  .sym{background:#f0f3f1; border-radius:5px; padding:1px 6px; color:var(--ink); font-weight:600; margin-right:3px;}
+  .composer-foot .right{margin-left:auto; display:flex; align-items:center; gap:10px;}
+  /* 右栏 */
+  .rpanel{background:var(--paper); border-left:1px solid var(--border); display:flex; flex-direction:column; min-width:0;}
+  .rtabs{display:flex; border-bottom:1px solid var(--border); padding:0 12px;}
+  .rtab{font-size:12.5px; padding:11px 10px 9px; color:var(--muted); border-bottom:2px solid transparent; display:flex; gap:5px; align-items:center;}
+  .rtab.on{color:var(--accent-deep); font-weight:600; border-bottom-color:var(--accent);}
+  .rtab .n{background:#eef1ef; border-radius:99px; font-size:10.5px; padding:0 6px; color:var(--muted);}
+  .rbody{padding:12px; display:flex; flex-direction:column; gap:10px; overflow:hidden;}
+  .rcard{border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#fff;}
+  .rcard .r-t{font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:6px;}
+  .rcard .r-m{font-size:11px; color:var(--muted); margin-top:3px;}
+  .rcard .r-a{margin-top:7px; display:flex; gap:6px;}
+  .mini-btn{font-size:11px; border-radius:6px; border:1px solid var(--accent-line); color:var(--accent-deep);
+    background:var(--accent-soft); padding:3px 9px;}
+  .mini-btn.plain{background:#fff; border-color:var(--border); color:var(--muted);}
+  .hit-line{font-size:11.5px; color:var(--muted); background:#f6f8f7; border-left:2px solid var(--accent-line);
+    padding:5px 8px; border-radius:0 6px 6px 0; margin-top:6px; line-height:1.6;}
+  .hit-line mark{background:#ffe9a8; color:inherit; border-radius:2px; padding:0 1px;}
+
+  /* ============ 验收视图（屏幕2） ============ */
+  .accept{flex:1; display:grid; grid-template-columns:minmax(0,1fr) 268px; min-height:0;}
+  .accept-main{display:flex; flex-direction:column; min-width:0;}
+  .accept-bar{background:var(--paper); border-bottom:1px solid var(--border); padding:11px 20px; display:flex; align-items:center; gap:10px;}
+  .accept-bar h3{font-size:14.5px;}
+  .seg{margin-left:auto; display:flex; background:#eef1ef; border-radius:9px; padding:3px;}
+  .seg span{font-size:12px; color:var(--muted); padding:4px 12px; border-radius:7px;}
+  .seg span.on{background:#fff; color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.08);}
+  .diff-body{flex:1; overflow:hidden; padding:14px 22px; font-size:12.5px; line-height:1.8;}
+  .doc-title{font-size:14px; font-weight:700; text-align:center; margin-bottom:10px;}
+  .dl{color:#9aa7a1; font-size:10.5px; margin-right:8px; user-select:none;}
+  .row-add{background:#e9f5ee; border-radius:4px; padding:1px 6px; margin:1px 0;}
+  .row-del{background:var(--red-soft); border-radius:4px; padding:1px 6px; margin:1px 0; color:#8d443b; text-decoration:line-through;}
+  .row-same{padding:1px 6px; color:#41504a;}
+  .src-tag{display:inline-flex; align-items:center; font-size:10px; background:var(--accent-soft); color:var(--accent-deep);
+    border-radius:4px; padding:0 5px; margin-left:6px; vertical-align:1px; cursor:pointer;}
+  .accept-side{border-left:1px solid var(--border); background:#fbfcfb; padding:12px; display:flex; flex-direction:column; gap:10px;}
+  .check-item{display:flex; gap:7px; font-size:12px; align-items:flex-start; line-height:1.5;}
+  .check-item .ic{flex:none;} .check-item.ok .ic{color:#5aa88c;} .check-item.miss .ic{color:var(--amber);}
+  .check-item.miss .fix{margin-left:auto; flex:none;}
+  .review-bar{border-top:1px solid var(--border); background:var(--paper); padding:11px 16px; display:flex; gap:10px; align-items:center;}
+  .review-bar input{border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; width:120px; color:var(--ink);}
+  .review-bar .note{font-size:11px; color:var(--muted); line-height:1.5;}
+  .review-bar .acts{margin-left:auto; display:flex; gap:8px;}
+  .btn.danger{background:#fff; border-color:#e5c4bf; color:var(--red);}
+
+  /* ============ Goal 卡（屏幕3） ============ */
+  .goal{border:1.5px solid var(--accent-line); background:linear-gradient(180deg,#f6fbf9,#eef6f2);
+    border-radius:12px; padding:12px 14px; max-width:92%; width:560px; align-self:flex-start;}
+  .goal .g-head{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;}
+  .goal .g-meta{font-size:11px; color:var(--muted); margin-top:2px;}
+  .goal ul{list-style:none; margin-top:9px; display:flex; flex-direction:column; gap:6px; font-size:12.5px;}
+  .goal li{display:flex; gap:8px; align-items:baseline;}
+  .goal li .g-ok{color:#5aa88c; font-weight:700;}
+  .goal li .g-run{color:var(--blue); font-weight:700;}
+  .goal li .g-todo{color:#b3beb8;}
+  .goal li .ev{color:var(--muted); font-size:11px; margin-left:auto;}
+  .goal .g-foot{margin-top:10px; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--muted);}
+
+  /* ============ 工具面板（屏幕4） ============ */
+  .tool-panel{width:100%; border-left:1px solid var(--accent-line); background:#fff; display:flex; flex-direction:column;}
+  .tool-head{padding:12px 14px 10px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px;}
+  .tool-head b{font-size:13.5px;}
+  .tool-head .from{font-size:11px; color:var(--muted); margin-left:auto;}
+  .tool-body{padding:12px 14px; display:flex; flex-direction:column; gap:9px; font-size:12.5px;}
+  .q-row{display:flex; align-items:center; gap:8px;}
+  .q-row .q{color:var(--muted); width:150px; flex:none; font-size:11.5px; line-height:1.4;}
+  .opts{display:flex; gap:4px;}
+  .opt{border:1px solid var(--border); border-radius:6px; font-size:11px; padding:3px 8px; color:var(--muted);}
+  .opt.on{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+  .score{background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:10px; padding:10px 12px;}
+  .score .s-num{font-size:22px; font-weight:800; color:var(--accent-deep);}
+  .score .s-t{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.6;}
+
+  /* ============ 患者速览卡（屏幕2） ============ */
+  .pcard{border:1px solid var(--accent-line); border-radius:12px 12px 0 0; background:#fff; overflow:hidden; width:100%;}
+  .p-head{display:flex; align-items:center; gap:10px; padding:10px 14px; background:linear-gradient(180deg,#f6fbf9,#eef6f2); border-bottom:1px solid var(--border);}
+  .p-ava{width:34px; height:34px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; flex:none;}
+  .p-id b{font-size:13.5px;} .p-id span{font-size:11px; color:var(--muted); display:block; margin-top:1px;}
+  .p-head .badges{margin-left:auto; display:flex; gap:6px; align-items:center; flex:none;}
+  .p-grid{display:grid; grid-template-columns:190px 1fr 150px;}
+  .p-col{padding:10px 12px 12px; border-right:1px solid var(--border); font-size:11.5px; min-width:0;}
+  .p-col:last-child{border-right:none;}
+  .p-col h5{font-size:10.5px; color:var(--muted); letter-spacing:1px; margin-bottom:8px; font-weight:600;}
+  .med-chip{display:inline-block; background:#f0f4f2; border:1px solid var(--border); border-radius:6px; padding:2px 7px; margin:0 4px 5px 0; font-size:11px; color:var(--ink);}
+  .vital{margin-bottom:9px;}
+  .vital .row1{display:flex; align-items:baseline; gap:5px;}
+  .vital .row2{display:flex; align-items:center; gap:6px; margin-top:2px;}
+  .vital b{font-size:15px;}
+  .vital .u{font-size:10px; color:var(--muted);}
+  .vital svg{flex:none;}
+  .vital .d{font-size:10.5px; color:var(--accent-deep); font-weight:600;}
+  .tl{list-style:none;} .tl li{display:flex; gap:6px; font-size:10.5px; color:var(--muted); margin-bottom:6px; align-items:baseline; line-height:1.5;}
+  .tl li i{width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; align-self:center;}
+  .p-actions{display:flex; gap:8px; padding:9px 12px; border-top:1px solid var(--border); background:#fbfcfb;}
+
+  /* ============ IA 图 ============ */
+  .ia{display:grid; grid-template-columns:1fr 90px 1.35fr; gap:0; align-items:stretch; background:#fff;
+    border:1px solid var(--border); border-radius:14px; padding:22px; }
+  .ia h4{font-size:13px; margin-bottom:10px; color:var(--ink);}
+  .ia .old{display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;}
+  .ia .old span{border:1px dashed #c4cec9; color:var(--muted); border-radius:8px; padding:5px 11px; font-size:12px; background:#fafbfa;}
+  .ia .old span.hot{border:1px solid var(--accent-line); background:var(--accent-soft); color:var(--accent-deep); border-style:solid;}
+  .ia .arrow{display:flex; align-items:center; justify-content:center; color:var(--accent); font-size:24px; font-weight:700;}
+  .ia .new{display:flex; flex-direction:column; gap:8px;}
+  .ia .new .frame{border:1.5px solid var(--accent-line); border-radius:10px; padding:10px 12px; background:#fbfdfc;}
+  .ia .new .frame b{font-size:13px; color:var(--accent-deep);}
+  .ia .new .frame p{font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.6;}
+  .ia .new .row2{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
+  .ia .new .row2 .frame p{margin-top:5px;}
+  .tag-src{display:inline-block; font-size:10.5px; color:#8aa39a; margin-left:6px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-head">
+    <h1>Open Medical 工作台 · 交互重设计稿 v1.1</h1>
+    <div class="sub">
+      2026-09-15 ｜ 对标参考：<b>ZCode</b>（任务驱动 + Goal 证据校验 + @/#//$ 符号体系）、<b>Codex</b>（审批分档 + diff 验收 + 线程迁移）、<b>WorkBuddy</b>（三栏工作台 + 右栏产物验收 + 透明执行步骤流）<br>
+      本页为静态高保真示意，数据均为合成示例，不含真实患者资料。
+    </div>
+    <span class="ref">配套文档：docs/INTERACTION_REDESIGN.md</span><span class="ref">设计原则：对话连一切 · 患者信息第一 · 证据层嵌入 · 交付可验收 · 分档授权 · 上下文可视</span>
+  </div>
+
+  <!-- ================= IA 图 ================= -->
+  <h2 class="screen-title"><span class="no">0</span>信息架构：11 个平级页签 → 1 个工作台 + 3 个支撑面板</h2>
+  <div class="ia">
+    <div class="old">
+      <h4 style="width:100%">现状：功能模块平级铺开，完成任务要跨页跳转</h4>
+      <span>工作台</span><span>患者管理</span><span>随访</span><span>病例库</span><span>临床速查</span>
+      <span>知识库</span><span>文献</span><span>科研</span><span>DRG</span><span>任务记录</span><span>待复核</span>
+      <p style="font-size:11.5px;color:#9aa7a1;line-height:1.7;margin-top:6px">文献页结果要"导入→新建会话→跳转"才能被 AI 使用；知识库检索与对话不互通；临床速查/DRG/科研是与 agent 完全割裂的表单工具页。</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="new">
+      <div class="frame">
+        <b>左栏 · 任务与对象</b><p>任务时间线（患者任务 + 独立任务混合）· 患者列表 · 工具箱收纳（速查/DRG/科研/文献，点开即滑出工具面板）</p>
+      </div>
+      <div class="row2">
+        <div class="frame"><b>中栏 · 对话执行区</b><p>咨询直接答；执行过程 = 可折叠步骤流；文书在对话内出产物卡</p></div>
+        <div class="frame"><b>右栏 · 上下文与产物</b><p>材料 / 知识（检索+引用进对话）/ 产物（草稿队列）</p></div>
+        <div class="frame"><b>验收视图 · 叠加层</b><p>预览 / 与上一版 diff / 出处对照 + 字段清单 + 轻量复核条</p></div>
+      </div>
+      <div class="frame" style="border-style:dashed">
+        <b>全局层 · 顶栏</b><p>患者上下文胶囊 · 模式档位（咨询/文书/计划/自动）· 上下文与预算指示 · 本地数据徽章</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 1 ================= -->
+  <h2 class="screen-title"><span class="no">1</span>主工作台：咨询直接答 + 透明执行 + 引用可溯</h2>
+  <div class="screen-intent">对应日常最高频路径「问一句、答一句、给出处」。借鉴 ZCode 的任务列表与符号输入、WorkBuddy 的三栏与阶段说明、Codex 的步骤透明。医生不切页，问答、证据、产物在同一屏完成。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:38px; left:604px;">1</span>
+    <span class="pin" style="top:38px; left:872px;">2</span>
+    <span class="pin" style="top:38px; left:1006px;">3</span>
+    <span class="pin" style="top:182px; left:186px;">4</span>
+    <span class="pin" style="top:298px; left:330px;">5</span>
+    <span class="pin" style="top:420px; left:330px;">6</span>
+    <span class="pin" style="top:560px; left:330px;">7</span>
+    <span class="pin" style="top:770px; left:780px;">8</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 出院小结草稿 · 张三</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁 · ACS 术后</span>
+          <span class="pill local">◈ 数据本地处理</span>
+          <div class="ctx-meter">
+            <span class="meter"><span class="bar"><i style="width:38%"></i></span>上下文 38%</span>
+            <span class="meter"><span class="bar"><i class="warn" style="width:21%"></i></span>预算 21%</span>
+            <span class="meter">检索 6 篇</span>
+            <span class="icon-btn">⚙</span>
+          </div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日 <span class="bdg">待复核 3 · 随访 2</span></div>
+            <div class="task-item active"><span class="st review"></span><div><div class="t">出院小结草稿</div><div class="m">张三 · v3 待复核</div></div></div>
+            <div class="task-item"><span class="st run"></span><div><div class="t">病历时间线整理</div><div class="m">王五 · 执行中</div></div></div>
+            <div class="task-item"><span class="st done"></span><div><div class="t">随访计划生成</div><div class="m">李四 · 已复核</div></div></div>
+            <div class="task-item"><span class="st idle"></span><div><div class="t">PCI 术后循证检索</div><div class="m">独立任务 · 昨天</div></div></div>
+          </div>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item"><span class="avatar">张</span>张三<span class="sub">ACS 术后</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub">糖尿病</span></div>
+            <div class="pt-item"><span class="avatar">王</span>王五<span class="sub">高血压</span></div>
+          </div>
+          <div class="lnav-foot">
+            <span class="navlink">▦ 工具箱 <span style="color:#9aa7a1;font-size:11px">速查 · DRG · 科研 · 文献</span></span>
+            <span class="navlink">⌂ 首页</span>
+          </div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 任务</span><h3>出院小结草稿</h3><span class="pill" style="padding:2px 10px"><span class="dot"></span>张三</span><span class="badge draft">待复核</span></div>
+            <div class="stage">
+              <span class="stg on">① 准备材料</span><span class="stg on">② 整理生成</span><span class="stg off">③ 复核成果</span>
+            </div>
+          </div>
+          <div class="messages">
+            <div class="msg user"><span class="who">我</span><div class="bubble">张三这次出院小结按 ACS 常规写，重点写用药调整。<span class="at">@出院小结</span></div></div>
+            <div class="steps">
+              <div class="head">已执行 3 步 · 8.4s <span class="chev">▾ 收起</span></div>
+              <ul>
+                <li><span class="ok">✓</span><span class="tool">读取临床资料</span>诊断 / 用药 / 检验 27 条<span class="ms">2.1s</span></li>
+                <li><span class="ok">✓</span><span class="tool">guideline_search</span>命中 6 篇 · 精读 2 篇<span class="ms">4.0s</span></li>
+                <li><span class="warn">⚠</span><span class="tool">medication_safety_check</span>通过 1 项 · 提示 2 项<span class="ms">2.3s</span></li>
+              </ul>
+            </div>
+            <div class="msg ai"><span class="who">医</span>
+              <div class="bubble">已生成出院小结 v3 草稿（右栏可打开验收）。要点：替格瑞洛维持 12 个月，阿托伐他汀调至 40mg；续用美托洛尔。
+                <span class="cite">📄 2024 STEMI 指南 · L120–135</span><span class="cite">📄 用药核查单</span>
+                <div class="warn-line">⚠ 提示：糖皮质激素与美托洛尔合用需关注血压波动，本次方案未涉及，仅作提醒。</div>
+              </div>
+            </div>
+            <div class="artifact">
+              <div class="a-head">📄 出院小结 <span class="badge draft">待复核 · v3</span><span class="badge ok">出处 12 条</span></div>
+              <div class="a-meta">来源：临床资料 + 2 篇指南 · 生成于 14:32 · 耗时 8.4s</div>
+              <div class="a-sum">入院情况 / 住院经过 / 出院诊断 / 出院医嘱已就绪；随访安排缺失 1 项待补。</div>
+              <div class="a-actions"><button class="btn primary">打开验收视图</button><button class="btn ghost">在对话中修订…</button></div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="ctx-chips">
+              <span class="chip"><span class="dot" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>患者：张三 <span class="x">×</span></span>
+              <span class="chip gray">📎 2025-08 出院记录.pdf <span class="x">×</span></span>
+              <span class="chip gray">＋ 添加材料</span>
+            </div>
+            <div class="input-line">
+              <span class="txt">把随访安排补上，按指南建议的复查节点。<span class="caret"></span></span><span class="send">➤</span>
+            </div>
+            <div class="composer-foot">
+              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span>↵ 发送 · Shift+↵ 换行</span><span class="mode-chip caret">咨询模式 · 只读不写</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs">
+            <span class="rtab">材料 <span class="n">3</span></span><span class="rtab on">知识 <span class="n">6</span></span><span class="rtab">产物 <span class="n">2</span></span>
+          </div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">📄 2024 中国 STEMI 诊断治疗指南 <span class="badge ok">精读</span></div>
+              <div class="r-m">知识库 · 心血管 · 2024 · 已建向量索引</div>
+              <div class="hit-line">"PCI 术后双联抗血小板治疗应维持 <mark>12 个月</mark>，高危患者可评估延长…" <b style="color:var(--accent-deep)">L120–135</b></div>
+              <div class="r-a"><span class="mini-btn">引用进对话</span><span class="mini-btn plain">查看原文</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">📄 替格瑞洛说明书（药房）</div>
+              <div class="r-m">机构资料 · 药品 · 更新于 2025-11</div>
+              <div class="hit-line">"应警惕与影响凝血/血压类药物的联合使用…"<b style="color:var(--accent-deep)">L42–48</b></div>
+              <div class="r-a"><span class="mini-btn">引用进对话</span><span class="mini-btn plain">查看原文</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">🔍 在知识库中继续检索…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>患者上下文胶囊：全任务可见，切换患者即切换上下文</span>
+      <span><b>2</b>本地数据徽章：呼应"患者数据不出本机"的产品主张</span>
+      <span><b>3</b>上限三指示器：上下文占用 / token 预算 / 检索命中</span>
+      <span><b>4</b>任务时间线取代 11 个平级页签，状态色点标记</span>
+      <span><b>5</b>执行步骤流：工具名+结果+耗时，可展开（替代纯文本日志）</span>
+      <span><b>6</b>结论带引用气泡，点击跳行号原文高亮（复用现有 reader）</span>
+      <span><b>7</b>产物卡内嵌对话：draft 徽章 + 验收入口</span>
+      <span><b>8</b>符号输入体系：@患者/资料/指南、/命令、$技能；右下角模式档位</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 2：患者速览 ================= -->
+  <h2 class="screen-title"><span class="no">2</span>患者速览卡：@患者 即达，信息一眼可读</h2>
+  <div class="screen-intent">落实<b>「对话连一切功能、患者信息查看第一优先」</b>：对话里 @患者 即唤出速览卡——诊断 / 过敏 / 用药 / 检验趋势 / 关键事件一眼可读；随访、趋势解读、完整档案都从卡上直接发起。患者管理页退为兜底入口，咨询不产文书、不强制流水线。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:150px; left:790px;">1</span>
+    <span class="pin" style="top:310px; left:330px;">2</span>
+    <span class="pin" style="top:400px; left:600px;">3</span>
+    <span class="pin" style="top:595px; left:330px;">4</span>
+    <span class="pin" style="top:658px; left:400px;">5</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 快速咨询 · 张三</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <span class="pill local">◈ 数据本地处理</span>
+          <div class="ctx-meter">
+            <span class="meter"><span class="bar"><i style="width:22%"></i></span>上下文 22%</span>
+            <span class="meter"><span class="bar"><i style="width:8%"></i></span>预算 8%</span>
+            <span class="icon-btn">⚙</span>
+          </div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日</div>
+            <div class="task-item"><span class="st done"></span><div><div class="t">随访计划生成</div><div class="m">李四 · 已复核</div></div></div>
+          </div>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item" style="background:#eef4f1;border:1px solid var(--accent-line);border-radius:8px"><span class="avatar">张</span><b>张三</b><span class="sub">ACS 术后</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub">糖尿病</span></div>
+            <div class="pt-item"><span class="avatar">王</span>王五<span class="sub">高血压</span></div>
+          </div>
+          <div class="lnav-foot">
+            <span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span>
+          </div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 任务</span><h3>快速咨询</h3><span class="pill" style="padding:2px 10px"><span class="dot"></span>张三</span><span class="badge ok">咨询 · 不产文书</span></div>
+          </div>
+          <div class="messages">
+            <div class="msg user"><span class="who">我</span><div class="bubble">最近血压控制得怎么样？<span class="at">@张三</span></div></div>
+            <div class="steps">
+              <div class="head">已执行 2 步 · 2.5s <span class="chev">▾ 收起</span></div>
+              <ul>
+                <li><span class="ok">✓</span><span class="tool">read_patient_profile</span>概览 / 用药 / 过敏史<span class="ms">0.4s</span></li>
+                <li><span class="ok">✓</span><span class="tool">extract_observations</span>血压近 4 周 · 12 条记录<span class="ms">2.1s</span></li>
+              </ul>
+            </div>
+            <div class="msg ai"><span class="who">医</span>
+              <div class="bubble" style="max-width:100%;padding:0;border:none;background:transparent">
+                <div class="pcard">
+                  <div class="p-head">
+                    <span class="p-ava">张</span>
+                    <div class="p-id"><b>张三 · 男 · 67 岁</b><span>ACS 术后（2025-08 PCI）· 高血压 · 2 型糖尿病</span></div>
+                    <div class="badges"><span class="badge no">过敏：青霉素</span><span class="pill local" style="padding:2px 9px">◈ 本地</span></div>
+                  </div>
+                  <div class="p-grid">
+                    <div class="p-col">
+                      <h5>当前用药（4）</h5>
+                      <span class="med-chip">阿司匹林 100mg</span><span class="med-chip">替格瑞洛 90mg</span><span class="med-chip">阿托伐他汀 40mg</span><span class="med-chip">美托洛尔 25mg</span>
+                    </div>
+                    <div class="p-col">
+                      <h5>近期检验</h5>
+                      <div class="vital">
+                        <div class="row1"><b>126</b><span class="u">mmHg · 收缩压</span></div>
+                        <div class="row2"><svg width="44" height="14"><polyline points="0,2 11,4 22,6 33,10 44,12" fill="none" stroke="#28735b" stroke-width="2"/></svg><span class="d">↓ 12 / 4 周</span></div>
+                      </div>
+                      <div class="vital">
+                        <div class="row1"><b>2.1</b><span class="u">mmol/L · LDL-C</span></div>
+                        <div class="row2"><span class="d">达标</span></div>
+                      </div>
+                      <div class="vital">
+                        <div class="row1"><b>6.8%</b><span class="u">糖化血红蛋白</span></div>
+                      </div>
+                    </div>
+                    <div class="p-col">
+                      <h5>关键事件</h5>
+                      <ul class="tl">
+                        <li><i></i>08-12 急诊 PCI</li>
+                        <li><i></i>08-20 出院 · 带药</li>
+                        <li><i></i>09-02 随访 · 肝功正常</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="p-actions">
+                    <button class="mini-btn">让 AI 解读趋势</button>
+                    <button class="mini-btn">生成随访小结</button>
+                    <button class="mini-btn plain">查看完整档案</button>
+                  </div>
+                </div>
+                <div style="padding:10px 13px; border:1px solid var(--border); border-top:none; border-radius:0 0 12px 12px; background:var(--paper); font-size:13px; line-height:1.75">
+                  近 4 周收缩压由 138 降至 <b>126 mmHg</b>，已达标，继续当前方案即可。<span class="cite">📄 09-02 随访记录 · L8–12</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span><span class="chip gray">＋ 添加材料</span></div>
+            <div class="input-line"><span class="txt">把这次的血压趋势写进随访小结。<span class="caret"></span></span><span class="send">➤</span></div>
+            <div class="composer-foot">
+              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span>↵ 发送</span><span class="mode-chip caret">咨询模式 · 只读不写</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs">
+            <span class="rtab on">材料 <span class="n">2</span></span><span class="rtab">知识 <span class="n">3</span></span><span class="rtab">产物 <span class="n">1</span></span>
+          </div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">📝 09-02 随访记录</div>
+              <div class="r-m">随访生成 · 已复核 · 本次咨询引用</div>
+              <div class="r-a"><span class="mini-btn plain">查看</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">📄 2025-08 出院小结 v3</div>
+              <div class="r-m">已复核 · 12 条出处</div>
+              <div class="r-a"><span class="mini-btn plain">查看</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">咨询模式仅引用选中材料与患者档案</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>@患者 即唤出速览卡：对话直达患者信息，不切页（对话连一切）</span>
+      <span><b>2</b>卡头一眼可读：诊断/术后/过敏 + 本地数据徽章</span>
+      <span><b>3</b>检验用数字 + 趋势线表达，优先于表格</span>
+      <span><b>4</b>后续功能（解读/随访/档案）从卡上直接发起</span>
+      <span><b>5</b>回答自带出处（随访记录行号），证据层嵌入对话</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 3 ================= -->
+  <h2 class="screen-title"><span class="no">3</span>验收视图：预览 / diff / 出处对照 + 轻量复核</h2>
+  <div class="screen-intent">把现在的<b>长表单复核</b>升级为 WorkBuddy 式"产物验收"。医生三种看法切换：<b>预览</b>（读成品）、<b>与上一版差异</b>（AI 改了什么）、<b>出处对照</b>（每句来自哪里）；下方字段清单自动核对完整性；复核收敛为一条动作条——退回即自动生成修订指令回到对话。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:55px; left:856px;">1</span>
+    <span class="pin" style="top:210px; left:520px;">2</span>
+    <span class="pin" style="top:200px; left:1006px;">3</span>
+    <span class="pin" style="top:310px; left:1006px;">4</span>
+    <span class="pin" style="top:470px; left:700px;">5</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">验收 · 出院小结 v3 — 张三</div></div>
+      <div class="app" style="grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:480px;">
+        <div class="center" style="background:#f7f9f8;">
+          <div class="accept-bar">
+            <span class="back" style="color:var(--muted);font-size:12px">‹ 返回对话</span>
+            <h3>出院小结 · v3</h3><span class="badge draft">待复核</span>
+            <div class="seg"><span>预览</span><span class="on">与上一版差异 (5)</span><span>出处对照</span></div>
+          </div>
+          <div class="accept">
+            <div class="accept-main">
+              <div class="diff-body">
+                <div class="doc-title">出 院 小 结（草稿 v3 · 与 v2 差异）</div>
+                <div class="row-same"><span class="dl">12</span>入院情况：患者因"突发胸痛 3 小时"入院，心电图示 STEMI，急诊 PCI …</div>
+                <div class="row-same"><span class="dl">13</span>住院经过：术后予双联抗血小板、调脂、控制心室率治疗，病情平稳。</div>
+                <div class="row-del"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；阿托伐他汀 20mg qn；美托洛尔 25mg bid。</div>
+                <div class="row-add"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；<b>替格瑞洛 90mg bid</b>；阿托伐他汀<b style="color:var(--accent-deep)"> 40mg </b>qn；美托洛尔 25mg bid。<span class="src-tag">源 · 指南 L120–135</span></div>
+                <div class="row-add"><span class="dl">15</span>出院诊断：急性 ST 段抬高型心肌梗死（Killip I 级）；PCI 术后。<span class="src-tag">源 · 临床资料</span></div>
+                <div class="row-same"><span class="dl">16</span>复查建议：术后 1/3/6/12 个月门诊复查心电图、血脂、肝肾功能。</div>
+                <div class="row-same"><span class="dl">17</span>康复建议：循序渐进有氧运动，4 周内避免剧烈活动。<span class="src-tag">源 · 临床资料</span></div>
+                <div class="row-del"><span class="dl">18</span>随访：按要求门诊随访。</div>
+                <div class="row-add"><span class="dl">18</span>随访：术后 1 个月复查心血管专科门诊，评估出血风险与用药耐受。<span class="src-tag">源 · 指南 L140</span></div>
+              </div>
+              <div class="review-bar">
+                <input placeholder="复核人代号（选填）">
+                <span class="note">确认后标记为"已复核"，可发起随访安排；退回将自动生成修订指令。</span>
+                <div class="acts"><button class="btn danger">退回修订</button><button class="btn primary">✓ 确认通过</button></div>
+              </div>
+            </div>
+            <div class="accept-side">
+              <div class="lnav-group" style="padding:0">字段校验清单</div>
+              <div class="check-item ok"><span class="ic">✓</span>出院诊断（2 项，与临床资料一致）</div>
+              <div class="check-item ok"><span class="ic">✓</span>出院用药（4 种，已过安全核查）</div>
+              <div class="check-item ok"><span class="ic">✓</span>住院经过（时间线 3 个节点有出处）</div>
+              <div class="check-item miss"><span class="ic">⚠</span>随访时间缺失 1 项 <button class="mini-btn fix">让 AI 补充</button></div>
+              <div class="lnav-group" style="padding:0; margin-top:6px">复核记录</div>
+              <div class="rcard" style="padding:8px 10px">
+                <div class="r-m">v2 → 退回 · "剂量需按指南更新"（14:20）</div>
+                <div class="r-m">v1 → 退回 · "缺出院诊断"（14:05）</div>
+              </div>
+              <div style="font-size:11px;color:#9aa7a1;line-height:1.6;margin-top:auto">复核仅代表院内整理流程状态，不构成电子签名或法律意义的医疗文书签发。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>三视图切换：预览 / 差异 / 出处（diff 参考 Codex 审查视图）</span>
+      <span><b>2</b>逐句"源"角标：来自指南/临床资料，点击展开行号原文</span>
+      <span><b>3</b>字段校验清单：缺项可一键"让 AI 补充"（Goal 式证据清单）</span>
+      <span><b>4</b>复核历史：每次退回原因留痕，形成修订链</span>
+      <span><b>5</b>轻量复核条：替代现有长表单；退回=自动生成修订指令回对话</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 3 ================= -->
+  <h2 class="screen-title"><span class="no">4</span>文书模式 + Goal 长任务：证据式校验、自动续跑到完成</h2>
+  <div class="screen-intent">借鉴 ZCode Goal / Codex goal mode。长文书不再靠医生反复点"继续"：目标卡列出<b>章节清单与完成证据</b>，每轮自动校验（只认已写入内容、已通过的核查），未达标自动续跑；全部达成后自动进入待复核队列。输入框切换为<b>文书模式</b>（允许写，但一切产物都是 draft）。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:150px; left:1006px;">1</span>
+    <span class="pin" style="top:300px; left:540px;">2</span>
+    <span class="pin" style="top:734px; left:790px;">3</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 出院小结 · 张三（自动整理中）</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <div class="ctx-meter">
+            <span class="meter"><span class="bar"><i style="width:64%"></i></span>上下文 64%</span>
+            <span class="meter"><span class="bar"><i style="width:9%"></i></span>预算 9%</span>
+            <span class="meter">本轮第 2 次校验</span>
+            <span class="icon-btn">⚙</span>
+          </div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日</div>
+            <div class="task-item active"><span class="st run"></span><div><div class="t">出院小结（自动整理中）</div><div class="m">张三 · 章节 4/5</div></div></div>
+            <div class="task-item"><span class="st review"></span><div><div class="t">随访计划生成</div><div class="m">李四 · v1 待复核</div></div></div>
+          </div>
+          <div class="lnav-foot">
+            <span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span>
+          </div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 任务</span><h3>出院小结</h3><span class="badge run">自动整理中</span></div>
+            <div class="stage"><span class="stg on">① 准备材料 ✓</span><span class="stg on">② 整理生成（第 2 轮）</span><span class="stg off">③ 复核成果</span></div>
+          </div>
+          <div class="messages">
+            <div class="msg user"><span class="who">我</span><div class="bubble">按科室模板把出院小结完整整理出来，随访部分参照指南。<span class="at">@临床资料</span><span class="at">@2024 STEMI 指南</span></div></div>
+            <div class="goal">
+              <div class="g-head">🎯 目标：出院小结五节完整 · <span class="badge run">第 2 轮校验中</span></div>
+              <div class="g-meta">完成标准：每节写入草稿且通过对应核查 · 只认已保存的草稿内容与核查通过记录</div>
+              <ul>
+                <li><span class="g-ok">✓</span>入院情况<span class="ev">已写入 · 出处 3 条</span></li>
+                <li><span class="g-ok">✓</span>住院经过<span class="ev">已写入 · 时间线 3 节点</span></li>
+                <li><span class="g-ok">✓</span>出院诊断<span class="ev">已写入 · 与临床资料一致</span></li>
+                <li><span class="g-run">●</span>出院医嘱<span class="ev">用药核查第 2 轮…</span></li>
+                <li><span class="g-todo">○</span>随访安排<span class="ev">待上一节通过后开始</span></li>
+              </ul>
+              <div class="g-foot"><span class="mini-btn">暂停</span><span class="mini-btn plain">手动接管</span><span style="margin-left:auto">第 1 轮发现"剂量与指南不一致"已自动修订</span></div>
+            </div>
+            <div class="msg ai"><span class="who">医</span><div class="bubble">第 1 轮校验发现阿托伐他汀剂量与指南推荐不一致，已按 <span class="cite">📄 2024 STEMI 指南 · L120–135</span> 修订为 40mg qn。完成剩余 1 节后进入复核。</div></div>
+          </div>
+          <div class="composer">
+            <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
+            <div class="input-line"><span class="txt" style="color:#9aa7a1">自动整理中，可随时插话调整…</span><span class="send" style="background:#c2ccc7">■</span></div>
+            <div class="composer-foot">
+              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">文书模式 · 产物均为草稿</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab">材料 <span class="n">4</span></span><span class="rtab">知识 <span class="n">2</span></span><span class="rtab on">产物 <span class="n">1</span></span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">📄 出院小结 <span class="badge run">生成中 · v3</span></div>
+              <div class="r-m">4/5 节完成 · 2 轮校验 · 预计 1 分钟</div>
+              <div class="hit-line">出院医嘱：替格瑞洛 90mg bid…<br><span style="color:#9aa7a1">随访安排生成后自动进入"待复核"队列</span></div>
+              <div class="r-a"><span class="mini-btn plain">查看当前草稿</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">完成后将出现在：今日 · 待复核</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>顶栏指示器同步展示校验轮次，长任务不失控</span>
+      <span><b>2</b>目标卡 = 章节 × 证据（只认已写入内容与核查通过记录，借鉴 ZCode Goal）</span>
+      <span><b>3</b>文书模式：可写但产物一律 draft；自动续跑可暂停/手动接管</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 4 ================= -->
+  <h2 class="screen-title"><span class="no">5</span>工具面板：表单工具接入对话，结果可一键变草稿</h2>
+  <div class="screen-intent">现状的临床速查 / DRG / 科研是与 agent 割裂的表单页。新设计把它们收纳进左栏<b>工具箱</b>，点击在右侧<b>滑出工具面板</b>（对话不中断）；工具结果卡可<b>直接生成文书草稿</b>，进入同一套验收闭环——表单起点，对话续写。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:575px; left:180px;">1</span>
+    <span class="pin" style="top:214px; left:1075px;">2</span>
+    <span class="pin" style="top:420px; left:1000px;">3</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 张三 · 危险分层</div></div>
+      <div class="app" style="grid-template-columns:236px minmax(0,1fr) 352px;">
+        <div class="topbar" style="grid-column:1/4"><div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <div class="ctx-meter"><span class="meter"><span class="bar"><i style="width:22%"></i></span>上下文 22%</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日</div>
+            <div class="task-item active"><span class="st idle"></span><div><div class="t">危险分层评估</div><div class="m">张三 · 进行中</div></div></div>
+          </div>
+          <div class="lnav-foot" style="gap:4px">
+            <div class="lnav-group" style="padding:4px 8px 0">工具箱</div>
+            <span class="navlink" style="background:#eef4f1;color:var(--accent-deep);font-weight:600">🧮 临床速查</span>
+            <span class="navlink">📊 DRG 测算</span><span class="navlink">📈 科研统计</span><span class="navlink">📚 文献检索</span>
+          </div>
+        </div>
+        <div class="center">
+          <div class="conv-head"><div class="row1"><span class="back">‹ 任务</span><h3>危险分层评估</h3><span class="pill" style="padding:2px 10px"><span class="dot"></span>张三</span></div></div>
+          <div class="messages">
+            <div class="msg ai"><span class="who">医</span><div class="bubble">已根据临床资料预填 GRACE 评分（年龄、心率、肌酐、Killip 分级），请在右侧确认两项待定项。</div></div>
+            <div class="msg user"><span class="who">我</span><div class="bubble">肌酐按最新的 88μmol/L 算，其他都对。</div></div>
+            <div class="steps">
+              <div class="head">已执行 2 步 <span class="chev">▾</span></div>
+              <ul>
+                <li><span class="ok">✓</span><span class="tool">extract_observations</span>肌酐 88μmol/L · 08-12 检验<span class="ms">1.2s</span></li>
+                <li><span class="ok">✓</span><span class="tool">grace_score</span>计算完成<span class="ms">0.3s</span></li>
+              </ul>
+            </div>
+            <div class="msg ai"><span class="who">医</span><div class="bubble">GRACE 评分 <b>132</b>（高风险，死亡风险 &gt;3%）。建议按指南行早期侵入策略。可生成评估记录供复核归档。<span class="cite">📄 2024 STEMI 指南 · L88–97</span></div></div>
+          </div>
+          <div class="composer">
+            <div class="input-line"><span class="txt" style="color:#9aa7a1">继续追问，或让 AI 生成评估记录…</span><span class="send">➤</span></div>
+            <div class="composer-foot"><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="mode-chip caret">咨询模式</span></div></div>
+          </div>
+        </div>
+        <div class="tool-panel" style="border-left:1px solid var(--border)">
+          <div class="tool-head"><b>🧮 GRACE 评分</b><span class="from">来自 · 工具箱/临床速查</span><span class="icon-btn" style="width:24px;height:24px;margin-left:6px">×</span></div>
+          <div class="tool-body">
+            <div class="q-row"><span class="q">年龄 ≥ 65</span><span class="opts"><span class="opt on">是</span><span class="opt">否</span></span></div>
+            <div class="q-row"><span class="q">心率 ≥ 110</span><span class="opts"><span class="opt on">是</span><span class="opt">否</span></span></div>
+            <div class="q-row"><span class="q">血肌酐 (μmol/L)</span><span class="opts"><span class="opt on">88（自动读入）</span></span></div>
+            <div class="q-row"><span class="q">Killip 分级</span><span class="opts"><span class="opt on">I</span><span class="opt">II</span><span class="opt">III</span><span class="opt">IV</span></span></div>
+            <div class="q-row"><span class="q">ST 段偏移</span><span class="opts"><span class="opt">无</span><span class="opt on">有</span></span></div>
+            <div class="score">
+              <span class="s-num">132</span><span class="badge no" style="margin-left:8px">高风险</span>
+              <div class="s-t">院内死亡风险 &gt;3%，建议早期侵入策略。<br><span style="color:#9aa7a1">评分依据 6 项 · 2 项来自临床资料自动读入</span></div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn primary" style="flex:1">生成评估记录（草稿）</button>
+              <button class="btn">仅回答</button>
+            </div>
+            <div style="font-size:11px;color:#9aa7a1;line-height:1.6">生成后进入与出院小结相同的"待复核"验收流程，可追加减量理由等对话内容。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>工具箱收纳原独立页签，点击滑出面板、对话不中断</span>
+      <span><b>2</b>表单工具自动读入患者数据，减少手工输入</span>
+      <span><b>3</b>工具结果一键"生成评估记录（草稿）"，汇入统一验收闭环</span>
+    </div>
+  </div>
+
+  <div style="margin-top:44px;padding:16px 20px;background:#fff;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--muted);line-height:1.8">
+    <b style="color:var(--ink)">阅读提示</b>：本页为交互设计示意，五个屏幕共同覆盖一条主线——<b style="color:var(--ink)">咨询（屏1）→ 患者信息（屏2）→ 长文书自动整理（屏4）→ 验收复核（屏3）→ 表单工具汇入同一闭环（屏5）</b>。
+    实施拆解、组件规格、与现有代码的迁移路径见 <b>docs/INTERACTION_REDESIGN.md</b>。所有患者、数值、指南引用均为演示用合成数据。
+  </div>
+</div>
+<script>
+  // 预览辅助：URL 带 #shot0..#shot4 时只显示对应章节，便于逐屏核对
+  (function(){
+    const h = location.hash;
+    if (!h.startsWith("#shot")) return;
+    const idx = +h.slice(5);
+    const titles = Array.from(document.querySelectorAll("h2.screen-title"));
+    const blocks = titles.map(t => {
+      const els = [t]; let n = t.nextElementSibling;
+      while (n && !n.classList.contains("screen-title")) { els.push(n); n = n.nextElementSibling; }
+      return els;
+    });
+    document.querySelector(".doc-head").style.display = "";
+    blocks.forEach((els, i) => els.forEach(e => e.style.display = i === idx ? "" : "none"));
+  })();
+</script>
+</body>
+</html>

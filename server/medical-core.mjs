@@ -426,6 +426,21 @@ export function localWork(policy, sources) {
   }
   if (policy.intent === "observations")
     return { tool: "extract_observations", args: {} };
+  if (policy.intent === "consultation") {
+    // 咨询问答在本地规则模式下不做流程草稿；给出内置检验指标速查，
+    // 由运行层决定该工具是否可用（未注册插件时回退为模式引导文案）。
+    return {
+      tool: "lab_knowledge_search",
+      args: {
+        query:
+          sources
+            .map((s) => s.text)
+            .join(" ")
+            .slice(0, 100)
+            .trim() || "常见检验指标",
+      },
+    };
+  }
   return {
     tool: "build_workflow",
     args: {

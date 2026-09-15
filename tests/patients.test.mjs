@@ -477,7 +477,7 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
     assert.equal(
       store.db.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "5",
+      "6",
     );
     for (const table of [
       "patients",
@@ -494,7 +494,7 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
     assert.equal(
       check.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "5",
+      "6",
     );
     check.close();
   } finally {
