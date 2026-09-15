@@ -3967,3 +3967,17 @@ blockquote p {
   font: inherit;
   background: white;
 }
+
+/* ---- mermaid decision flowcharts ---- */
+.wb-mermaid {
+  overflow-x: auto;
+  background: #fbfcfa;
+  border: 1px solid #e3ead9;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 8px 0;
+}
+.wb-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}

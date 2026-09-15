@@ -130,6 +130,16 @@ export const MEDICAL_WORKFLOWS = [
       "请把材料整理为值班交班记录草稿：患者一览（床号/姓名/诊断，缺失标待补充）、目前问题清单（按优先级）、近 24 小时关键事件（调用 extract_clinical_timeline 与 extract_observations）、当前用药与需关注的相互作用（调用 medication_safety_check）、夜间需要重点观察的项目与预警信号、危急值与处理预案。面向接班医生，简洁条目化。",
   },
   {
+    id: "decision-flow",
+    title: "诊疗决策流程图",
+    icon: ClipboardList,
+    category: "clinical",
+    desc: "从指南库提炼决策路径，生成可追溯出处的流程图",
+    output: "mermaid 决策流程图 · 节点出处对照",
+    prompt:
+      "请针对指定病种生成诊疗决策流程图：先用 guideline_search 检索诊断标准、分级与治疗决策条件并用 guideline_read 核对原文，然后按 clinical-decision-flow 技能输出 mermaid 流程图与节点出处对照表。指南库未覆盖的分支标注「需补充来源」，不得凭记忆编造路径。",
+  },
+  {
     id: "adr-screen",
     title: "不良反应筛查",
     icon: ShieldCheck,

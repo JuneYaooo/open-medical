@@ -192,6 +192,7 @@ test("skill registry discovers medical instructions and rejects path or extra ar
     [
       "adr-assessment",
       "case-report",
+      "clinical-decision-flow",
       "discharge-summary",
       "evidence-planning",
       "guideline-application",
