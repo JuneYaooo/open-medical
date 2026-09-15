@@ -9,8 +9,8 @@ import {
   unlinkSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
-import { AppError, check } from "./errors.mjs";
+import { createHash, randomUUID } from "node:crypto";
+import { AppError, check, identifier } from "./errors.mjs";
 
 // Single local user; parameterized queries + SQLite transactions prevent lost updates.
 export class Store {
@@ -99,6 +99,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS risk_alerts (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, rule_key TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS risk_alerts_key ON risk_alerts(patient_id,rule_key);
       CREATE TABLE IF NOT EXISTS case_library (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS context_archives (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, run_id TEXT, hash TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS context_archives_session ON context_archives(session_id);
       CREATE TABLE IF NOT EXISTS pending_actions (id TEXT PRIMARY KEY, type TEXT NOT NULL, patient_id TEXT, status TEXT NOT NULL, payload TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_actions_patient ON pending_actions(patient_id,status);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
@@ -114,7 +116,7 @@ export class Store {
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.
       // All migrations are additive; session rows are unchanged.
-      const SCHEMA_VERSION = "5";
+      const SCHEMA_VERSION = "6";
       const schemaRow = this.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version");
@@ -242,12 +244,53 @@ export class Store {
     this.db.prepare("DELETE FROM sessions WHERE id=?").run(id);
     this.db.prepare("DELETE FROM audit WHERE session_id=?").run(id);
     this.db.prepare("DELETE FROM event_log WHERE session_id=?").run(id);
+    this.db.prepare("DELETE FROM context_archives WHERE session_id=?").run(id);
     if (
       this.db
         .prepare("SELECT name FROM sqlite_master WHERE name='scheduled_jobs'")
         .get()
     )
       this.db.prepare("DELETE FROM scheduled_jobs WHERE session_id=?").run(id);
+  }
+  // Compressed-out conversation history and oversized tool results are
+  // archived verbatim so the model can page them back through
+  // read_context_archive; archives die with their session.
+  archive(sessionId, runId, data) {
+    const serialized = JSON.stringify(data);
+    const archiveId = randomUUID();
+    const hash = createHash("sha256").update(serialized).digest("hex");
+    this.db
+      .prepare(
+        "INSERT INTO context_archives(id,session_id,run_id,hash,created_at,data) VALUES (?,?,?,?,?,?)",
+      )
+      .run(archiveId, sessionId, runId, hash, new Date().toISOString(), serialized);
+    return { id: archiveId, hash, chars: serialized.length };
+  }
+  readArchive(sessionId, archiveId, offset = 0, limit = 8000) {
+    identifier(archiveId);
+    check(
+      Number.isSafeInteger(offset) &&
+        offset >= 0 &&
+        Number.isInteger(limit) &&
+        limit > 0 &&
+        limit <= 16000,
+      "INVALID_INPUT",
+      "归档读取范围无效",
+    );
+    const row = this.db
+      .prepare(
+        "SELECT data FROM context_archives WHERE id=? AND session_id=?",
+      )
+      .get(archiveId, sessionId);
+    check(row, "NOT_FOUND", "归档不存在或不属于当前会话", 404);
+    const chunk = row.data.slice(offset, offset + limit);
+    return {
+      archiveId,
+      total: row.data.length,
+      offset,
+      hasMore: offset + limit < row.data.length,
+      chunk,
+    };
   }
   audit(sessionId, action, detail = {}) {
     this.db

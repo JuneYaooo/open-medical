@@ -417,7 +417,9 @@ export function knowledgeTools(library) {
   ];
 }
 
-function chunkify(text) {
+// Shared deterministic line-window chunker; the material library reuses it
+// so in-memory keyword chunks and indexed vector chunks share ord/line refs.
+export function chunkify(text) {
   const lines = text.split("\n");
   const chunks = [];
   let start = 0;

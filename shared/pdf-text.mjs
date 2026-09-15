@@ -3,10 +3,10 @@
 export async function extractPdfText(
   bytes,
   getDocument,
-  { timeoutMs = 15000, maxPages = 25, maxChars = 50000, pdfOptions = {} } = {},
+  { timeoutMs = 60000, maxPages = 300, maxChars = 400000, pdfOptions = {} } = {},
 ) {
-  if (bytes.byteLength > 5 * 1024 * 1024)
-    throw new Error("PDF 超过 5MB，请拆分后导入");
+  if (bytes.byteLength > 20 * 1024 * 1024)
+    throw new Error("PDF 超过 20MB，请拆分后导入");
   if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-")
     throw new Error("文件不是有效 PDF");
   const task = getDocument({
@@ -32,7 +32,7 @@ export async function extractPdfText(
         if (typeof item.str !== "string") continue;
         value += item.str + (item.hasEOL ? "\n" : " ");
         if (value.length + chars > maxChars)
-          throw new Error("PDF 文本超过 50000 字符，请拆分后导入");
+          throw new Error("PDF 文本超过 400000 字符，请拆分后导入");
       }
       value = value.replace(/[ \t]+\n/g, "\n").trim();
       pages.push({ page: i, text: value });
@@ -51,7 +51,7 @@ export async function extractPdfText(
       )
       .join("\n\n");
     if (text.length > maxChars)
-      throw new Error("PDF 文本超过 50000 字符，请拆分后导入");
+      throw new Error("PDF 文本超过 400000 字符，请拆分后导入");
     return {
       text,
       extraction: {

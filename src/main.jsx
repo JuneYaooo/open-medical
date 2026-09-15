@@ -30,6 +30,7 @@ import {
   ExternalLink,
   PencilLine,
   CalendarClock,
+  AtSign,
 } from "lucide-react";
 import { api, bootstrap, streamTurn, downloadSession } from "./agent-runtime";
 import { artifactLines, INTENTS } from "../shared/medical.mjs";
@@ -93,6 +94,12 @@ const eventLabel = (event) =>
     "sandbox.started": "开始隔离计算",
     "sandbox.completed": "隔离计算完成",
     "sandbox.failed": event.payload?.error,
+    "context.compacting": "上下文接近预算，正在压缩历史",
+    "context.compacted": `历史已压缩${
+      event.payload?.beforeChars
+        ? `（${event.payload.beforeChars} → ${event.payload.afterChars} 字符，原文可按 archiveId 读回）`
+        : ""
+    }`,
     "subagent.queued": `${event.payload?.child?.name}等待执行`,
     "subagent.started": `${event.payload?.child?.name}开始执行`,
     "subagent.tool": `${event.payload?.child?.name}调用 ${event.payload?.tool}`,
@@ -485,6 +492,9 @@ function App() {
     [mode, setMode] = useState("local"),
     [consent, setConsent] = useState(false);
   const [team, setTeam] = useState(false);
+  const [pickedSkills, setPickedSkills] = useState([]),
+    [mention, setMention] = useState(null),
+    [mentionIndex, setMentionIndex] = useState(0);
   const [view, setView] = useState("home");
   const [workspaceTarget, setWorkspaceTarget] = useState(null);
   const [wsList, setWsList] = useState([]);
@@ -511,18 +521,39 @@ function App() {
     endRef = useRef(),
     activeRef = useRef(""),
     generation = useRef(0),
-    sendingRef = useRef(new Set());
+    sendingRef = useRef(new Set()),
+    modeAutoTuned = useRef(false);
   const activeRun = runs[activeId];
   const persistedRunning = session?.runs.findLast(
     (r) => r.status === "running",
   );
   const busy = Boolean(activeRun?.busy || persistedRunning);
+  const skillOptions = config?.skills || [];
+  const mentionMatches = mention
+    ? skillOptions
+        .filter(
+          (skill) =>
+            !pickedSkills.includes(skill.id) &&
+            `${skill.name} ${skill.id} ${skill.description || ""}`
+              .toLowerCase()
+              .includes(mention.query.toLowerCase()),
+        )
+        .slice(0, 8)
+    : [];
+  const pickSkill = (skill) => {
+    setDraft((d) => d.replace(/@[^\s@]{0,20}$/, ""));
+    setPickedSkills((prev) =>
+      prev.includes(skill.id) || prev.length >= 3 ? prev : [...prev, skill.id],
+    );
+    setMention(null);
+    inputRef.current?.focus();
+  };
   const selectedArtifact =
     session?.artifacts.find((a) => a.id === artifactId) ||
     session?.artifacts.at(-1);
   const selectedFileIds = (
     fileSelection[activeId] ||
-    session?.files.slice(0, 10).map((f) => f.id) ||
+    session?.files.map((f) => f.id) ||
     []
   ).filter((id) => session?.files.some((f) => f.id === id));
   const refreshList = async () => {
@@ -561,7 +592,7 @@ function App() {
     setActiveId(id);
     setDraft("");
     setConsent(false);
-    setMode("local");
+    setMode(config?.modelConfigured ? "model" : "local");
     setTeam(false);
     setSidebar(false);
     return load(id);
@@ -572,6 +603,11 @@ function App() {
     try {
       const value = await bootstrap(true);
       setConfig(value);
+      // 已配置模型时默认走智能模式；本地规则只是无模型时的兜底。
+      if (!modeAutoTuned.current) {
+        modeAutoTuned.current = true;
+        setMode(value.modelConfigured ? "model" : "local");
+      }
       const list = await refreshList();
       if (
         activeRef.current &&
@@ -657,7 +693,8 @@ function App() {
     setError("");
     setNotice("");
     setDraft("");
-    setConsent(false);
+    setPickedSkills([]);
+    setMention(null);
     setRuns((prev) => ({
       ...prev,
       [id]: { busy: true, partial: "", events: [] },
@@ -670,12 +707,13 @@ function App() {
           message: text,
           mode,
           externalConsent: consent,
+          skills: pickedSkills,
           delegations: team ? ["timeline", "observations", "medication"] : [],
           ...override,
           sessionRevision: current.revision,
           fileIds: (
             fileSelection[current.id] ||
-            current.files.slice(0, 10).map((f) => f.id)
+            current.files.map((f) => f.id)
           ).filter((id) => current.files.some((f) => f.id === id)),
           requestId: crypto.randomUUID(),
         },
@@ -839,7 +877,7 @@ function App() {
       : await create(title);
     if (!data) throw new Error("任务准备失败，请刷新连接后重试。");
     setDraft(prompt);
-    setMode("local");
+    setMode(config?.modelConfigured ? "model" : "local");
     setTeam(false);
     setConsent(false);
     setTab("materials");
@@ -848,7 +886,7 @@ function App() {
     setNotice(
       patient
         ? `已进入 ${patient.name} 的病例工作区，请核对本次材料。`
-        : "任务已准备好，添加材料后即可开始整理。",
+        : "任务已就绪：咨询类问题可直接发送；整理类任务可先添加材料。",
     );
   };
   const pendingReviews = sessions.reduce(
@@ -917,71 +955,51 @@ function App() {
             <Plus size={17} />
             {view === "workspaces" ? "新建工作区" : "新建任务"}
           </button>
-          <nav className="primary-navigation" aria-label="主导航">
-            {[
-              [
-                "工作台",
-                [["home", "医疗工作台", LayoutDashboard]],
-              ],
-              [
-                "临床",
-                [
-                  ["patients", "患者档案", Users],
-                  ["clinical-ref", "临床速查", Stethoscope],
-                  ["followups", "随访管理", CalendarClock],
-                  ["cases", "病例库", FileText],
-                ],
-              ],
-              [
-                "知识",
-                [
-                  ["literature", "文献检索", BookOpen],
-                  ["knowledge", "知识库", BookOpen],
-                ],
-              ],
-              [
-                "科研",
-                [
-                  ["research", "数据分析", Activity],
-                  ["drg", "DRG 测算", ClipboardList],
-                ],
-              ],
-              [
-                "系统",
-                [
-                  ["tasks", "任务记录", FolderOpen],
-                  ["review", "待复核", CheckCheck],
-                ],
-              ],
-            ].map(([group, items]) => (
-              <div className="nav-group" key={group}>
-                <p className="nav-group-label">{group}</p>
-                {items.map(([id, label, Icon]) => (
-                  <button
-                    key={id}
-                    className={view === id ? "active" : ""}
-                    aria-current={view === id ? "page" : undefined}
-                    onClick={() =>
-                      id === "patients" ? openPatient() : navigate(id)
-                    }
-                  >
-                    <Icon size={17} />
-                    <span>{label}</span>
-                    {id === "review" && pendingReviews > 0 && <em>{pendingReviews}</em>}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </nav>
           <label className="search">
             <Search size={14} />
             <input
-              aria-label="搜索工作任务"
-              placeholder="搜索最近任务"
+              aria-label="搜索历史记录"
+              placeholder="搜索历史记录"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
+          <p className="nav-label">
+            最近任务 <span>{sessions.length}</span>
+          </p>
+          <nav className="sessions" aria-label="最近任务">
+            {sessions
+              .filter((item) =>
+                item.title.toLowerCase().includes(query.toLowerCase()),
+              )
+              .slice(0, 20)
+              .map((item) => (
+                <button
+                  className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
+                  key={item.id}
+                  onClick={() => openTask(item.id)}
+                >
+                  <MessageSquare size={14} />
+                  <span>
+                    <b>{item.title}</b>
+                    <small>
+                      {item.running
+                        ? "执行中"
+                        : item.reviewCount
+                          ? `${item.reviewCount} 份待复核`
+                          : item.patientId
+                            ? "患者工作区"
+                            : "独立任务"}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            {!sessions.length && (
+              <p className="sidebar-empty">
+                任务与成果会保存在这里，随时继续。
+              </p>
+            )}
+          </nav>
           <p className="nav-label">
             项目任务 <span>{wsList.length}</span>
           </p>
@@ -1010,42 +1028,6 @@ function App() {
               </p>
             )}
           </nav>
-          <p className="nav-label">
-            最近任务 <span>{sessions.length}</span>
-          </p>
-          <nav className="sessions" aria-label="最近任务">
-            {sessions
-              .filter((item) =>
-                item.title.toLowerCase().includes(query.toLowerCase()),
-              )
-              .slice(0, 12)
-              .map((item) => (
-                <button
-                  className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
-                  key={item.id}
-                  onClick={() => openTask(item.id)}
-                >
-                  <MessageSquare size={14} />
-                  <span>
-                    <b>{item.title}</b>
-                    <small>
-                      {item.running
-                        ? "执行中"
-                        : item.reviewCount
-                          ? `${item.reviewCount} 份待复核`
-                          : item.patientId
-                            ? "患者工作区"
-                            : "独立任务"}
-                    </small>
-                  </span>
-                </button>
-              ))}
-            {!sessions.length && (
-              <p className="sidebar-empty">
-                任务与成果会保存在这里，随时继续。
-              </p>
-            )}
-          </nav>
           <button
             className="workspace-account"
             onClick={() => setModal("settings")}
@@ -1059,22 +1041,37 @@ function App() {
           </button>
         </aside>
         <div className="product-content">
-          <nav className="scenario-tabs" aria-label="场景快捷切换">
+          <nav className="scenario-tabs" aria-label="功能导航">
             {[
-              ["home", "医疗工作台", view === "home" || view === "workspaces"],
-              ["patients", "临床", ["patients", "clinical-ref", "followups", "cases"].includes(view)],
-              ["literature", "知识", ["literature", "knowledge"].includes(view)],
-              ["research", "科研", ["research", "drg"].includes(view)],
-            ].map(([target, label, active]) => (
+              ["home", "工作台", LayoutDashboard],
+              ["patients", "患者管理", Users],
+              ["followups", "随访", CalendarClock],
+              ["cases", "病例库", FileText],
+              ["clinical-ref", "临床速查", Stethoscope],
+              ["knowledge", "知识库", BookOpen],
+              ["literature", "文献", BookOpen],
+              ["research", "科研", Activity],
+              ["drg", "DRG", ClipboardList],
+              ["tasks", "任务记录", FolderOpen],
+              ["review", "待复核", CheckCheck],
+            ].map(([id, label, Icon]) => (
               <button
-                key={target}
-                className={active ? "active" : ""}
-                aria-pressed={active}
+                key={id}
+                className={
+                  view === id || (id === "home" && view === "workspaces")
+                    ? "active"
+                    : ""
+                }
+                aria-current={view === id ? "page" : undefined}
                 onClick={() =>
-                  target === "patients" ? openPatient() : navigate(target)
+                  id === "patients" ? openPatient() : navigate(id)
                 }
               >
-                {label}
+                <Icon size={15} />
+                <span>{label}</span>
+                {id === "review" && pendingReviews > 0 && (
+                  <em>{pendingReviews}</em>
+                )}
               </button>
             ))}
           </nav>
@@ -1197,34 +1194,37 @@ function App() {
                 </div>
                 {session && (
                   <div className="task-context-bar">
-                    <div className="task-steps" aria-label="任务阶段">
-                      <span
-                        className={!session.files.length ? "current" : "done"}
-                      >
-                        1 准备材料
-                      </span>
-                      <ChevronRight size={12} />
-                      <span
-                        className={
-                          busy ||
-                          (session.files.length && !session.artifacts.length)
-                            ? "current"
-                            : session.artifacts.length
-                              ? "done"
-                              : ""
-                        }
-                      >
-                        2 整理生成
-                      </span>
-                      <ChevronRight size={12} />
-                      <span
-                        className={
-                          session.artifacts.length && !busy ? "current" : ""
-                        }
-                      >
-                        3 复核成果
-                      </span>
-                    </div>
+                    {(session.files.length > 0 ||
+                      session.artifacts.length > 0) && (
+                      <div className="task-steps" aria-label="任务阶段">
+                        <span
+                          className={!session.files.length ? "current" : "done"}
+                        >
+                          1 准备材料
+                        </span>
+                        <ChevronRight size={12} />
+                        <span
+                          className={
+                            busy ||
+                            (session.files.length && !session.artifacts.length)
+                              ? "current"
+                              : session.artifacts.length
+                                ? "done"
+                                : ""
+                          }
+                        >
+                          2 整理生成
+                        </span>
+                        <ChevronRight size={12} />
+                        <span
+                          className={
+                            session.artifacts.length && !busy ? "current" : ""
+                          }
+                        >
+                          3 复核成果
+                        </span>
+                      </div>
+                    )}
                     {session.patientId && (
                       <button
                         className="text-button"
@@ -1258,18 +1258,22 @@ function App() {
                     {!session?.messages.length && (
                       <div className="welcome task-preparation">
                         <div className="welcome-symbol">
-                          <FolderOpen size={24} />
+                          {session?.files.length ? (
+                            <FolderOpen size={24} />
+                          ) : (
+                            <Stethoscope size={24} />
+                          )}
                         </div>
-                        <p className="eyebrow">准备这次工作的材料</p>
+                        <p className="eyebrow">直接提问，或描述任务</p>
                         <h2>
                           {session?.files.length
-                            ? "材料已就绪，核对后开始。"
-                            : "先添加材料，再开始整理。"}
+                            ? "材料已就绪，可以直接开始。"
+                            : "有什么可以帮你？"}
                         </h2>
                         <p>
                           {session?.patientId
                             ? "这位患者的原始材料、任务与成果都保留在当前病例工作区。"
-                            : "独立任务有自己的材料范围与执行记录。"}
+                            : "咨询、指标解读这类问题会直接回答；整理病历、写文书时助手会自动选择合适的技能模板，需要时再添加材料。"}
                         </p>
                         <button
                           className="secondary prepare-materials"
@@ -1303,7 +1307,7 @@ function App() {
                         )}
                         <div className="welcome-note">
                           <ShieldCheck size={14} />
-                          默认本地整理。外部模型需逐次确认材料发送范围。
+                          未配置模型时自动本地整理；智能模式下，输入与材料外发前需勾选同意。
                         </div>
                       </div>
                     )}
@@ -1350,7 +1354,7 @@ function App() {
                           <div className="message-content">
                             {activeRun?.partial ||
                               persistedRunning?.partial ||
-                              "准备材料和医疗工作规则…"}
+                              "正在思考并调用工具…"}
                           </div>
                         </div>
                       </article>
@@ -1400,18 +1404,109 @@ function App() {
                   </div>
                 )}
                 <div className="composer-wrap">
+                  {mention && (
+                    <div className="mention-menu" role="listbox" aria-label="选择技能">
+                      <p className="mention-title">
+                        @ 固定技能（最多 3 个）；不选择直接发送则由模型自动路由
+                      </p>
+                      {mentionMatches.length ? (
+                        mentionMatches.map((skill, index) => (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={index === mentionIndex}
+                            className={index === mentionIndex ? "active" : ""}
+                            key={skill.id}
+                            onMouseEnter={() => setMentionIndex(index)}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              pickSkill(skill);
+                            }}
+                          >
+                            <AtSign size={12} />
+                            <span>
+                              <b>{skill.name}</b>
+                              <small>{skill.description}</small>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="mention-empty">没有匹配的技能</p>
+                      )}
+                    </div>
+                  )}
+                  {Boolean(pickedSkills.length) && (
+                    <div className="skill-chips">
+                      {pickedSkills.map((id) => {
+                        const skill = skillOptions.find((s) => s.id === id);
+                        return (
+                          <span className="skill-chip" key={id}>
+                            <AtSign size={11} />
+                            {skill?.name || id}
+                            <button
+                              type="button"
+                              aria-label={`移除技能 ${skill?.name || id}`}
+                              onClick={() =>
+                                setPickedSkills((prev) =>
+                                  prev.filter((x) => x !== id),
+                                )
+                              }
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      <small>本轮固定技能，发送后清除</small>
+                    </div>
+                  )}
                   <form className="composer" onSubmit={send}>
                     <textarea
                       ref={inputRef}
                       aria-label="医疗工作需求"
                       rows={3}
-                      placeholder="描述任务，或粘贴需要整理的材料…"
+                      placeholder="输入问题或任务，如「血糖有点高，27 岁男生，怎么办」；输入 @ 可固定技能…"
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
-                        setConsent(false);
+                        const matched = e.target.value.match(/@([^\s@]{0,20})$/);
+                        if (matched) {
+                          setMention({ query: matched[1] });
+                          setMentionIndex(0);
+                        } else setMention(null);
                       }}
                       onKeyDown={(e) => {
+                        if (mention && mentionMatches.length) {
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setMentionIndex(
+                              (i) => (i + 1) % mentionMatches.length,
+                            );
+                            return;
+                          }
+                          if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setMentionIndex(
+                              (i) =>
+                                (i - 1 + mentionMatches.length) %
+                                mentionMatches.length,
+                            );
+                            return;
+                          }
+                          if (e.key === "Escape") {
+                            setMention(null);
+                            return;
+                          }
+                          if (
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            !e.nativeEvent.isComposing
+                          ) {
+                            e.preventDefault();
+                            pickSkill(mentionMatches[mentionIndex]);
+                            return;
+                          }
+                        }
                         if (
                           e.key === "Enter" &&
                           !e.shiftKey &&
@@ -1433,6 +1528,21 @@ function App() {
                         <Paperclip size={16} />
                         {uploading ? "导入中…" : "添加材料"}
                       </button>
+                      <button
+                        type="button"
+                        className="attach-button"
+                        title="输入 @ 或点此固定技能（如出院小结、用药复核）；不固定则自动路由"
+                        onClick={() => {
+                          setDraft((d) => d + (d && !d.endsWith(" ") ? " @" : "@"));
+                          setMention({ query: "" });
+                          setMentionIndex(0);
+                          inputRef.current?.focus();
+                        }}
+                        disabled={busy || loading || !config}
+                      >
+                        <AtSign size={15} />
+                        技能
+                      </button>
                       <input
                         ref={fileRef}
                         type="file"
@@ -1450,12 +1560,13 @@ function App() {
                         }}
                         disabled={busy || loading}
                       >
-                        <option value="local">本地规则整理</option>
+                        <option value="local">本地整理（不联网）</option>
                         <option
                           value="model"
                           disabled={!config?.modelConfigured}
                         >
-                          模型辅助{!config?.modelConfigured ? " · 未配置" : ""}
+                          智能模式（模型 + 工具）
+                          {!config?.modelConfigured ? " · 未配置" : ""}
                         </option>
                       </select>
                       <button
@@ -1501,8 +1612,7 @@ function App() {
                           checked={consent}
                           onChange={(e) => setConsent(e.target.checked)}
                         />
-                        我已核对本轮输入和 {selectedFileIds.length}{" "}
-                        份选中材料及此前模型会话上下文，材料将以原文外发，允许发送至所配置的模型服务。
+                        允许本会话的输入和选中材料以原文发送至所配置的模型服务（勾选一次，本会话内持续有效，可随时取消）。
                       </label>
                     )}
                     <label className="consent">
@@ -1522,7 +1632,7 @@ function App() {
                     <span>
                       {mode === "local"
                         ? "本轮在本机整理，不调用外部模型"
-                        : "模型输出为待核查草稿"}
+                        : "智能模式：咨询直接回答；文书类产出为待复核草稿"}
                     </span>
                     <span>Enter 发送 · Shift + Enter 换行</span>
                   </div>
@@ -1690,8 +1800,8 @@ function App() {
                               <h3>原文是每次整理的起点</h3>
                               <p>
                                 支持
-                                TXT、Markdown、CSV、JSON（200KB），以及可选文字的
-                                PDF（5MB / 25 页）。
+                                TXT、Markdown、CSV、JSON（≤2MB），以及可选文字的
+                                PDF（≤20MB / 300 页）。材料自动建立本地检索索引。
                               </p>
                               <button
                                 className="secondary"
@@ -1849,7 +1959,7 @@ function App() {
                             </div>
                             <p>
                               {INTENTS[run.policy.intent]} ·{" "}
-                              {run.mode === "local" ? "本地规则" : "模型辅助"}
+                              {run.mode === "local" ? "本地整理" : "智能模式"}
                             </p>
                             {(run.children || []).map((child) => (
                               <div className="child-run" key={child.id}>
