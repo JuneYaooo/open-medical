@@ -62,7 +62,19 @@ export const SCALES = [
           : (isFemale && score === 2) || (!isFemale && score === 1)
             ? "中风险，可考虑抗凝"
             : "低风险，一般不需抗凝";
-      return { score, level, interpretation: level, detail };
+      const annualRates = {
+        0: "0.2%", 1: "0.3%", 2: "0.9%", 3: "2.3%", 4: "3.9%",
+        5: "6.2%", 6: "9.7%", 7: "14.0%", 8: "21.7%", 9: "22.5%",
+      };
+      const rateNote = annualRates[score]
+        ? `年卒中率约 ${annualRates[score]}（Friberg 2012 瑞典房颤队列，未调整）`
+        : "";
+      return {
+        score,
+        level,
+        interpretation: `${level}。${rateNote}`.trim(),
+        detail,
+      };
     },
   },
   {

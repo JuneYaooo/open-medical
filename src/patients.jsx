@@ -84,6 +84,7 @@ export function PatientsView({
   const [messages, setMessages] = useState([]);
   const [followups, setFollowups] = useState([]);
   const [risks, setRisks] = useState([]);
+  const [proposals, setProposals] = useState([]);
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
@@ -123,11 +124,12 @@ export function PatientsView({
     setTab(nextTab);
     setConsent(false);
     setPaste("");
-    const [one, msgs, jobs, risks] = await Promise.all([
+    const [one, msgs, jobs, risks, proposals] = await Promise.all([
       api(`/api/patients/${id}`),
       api(`/api/patients/${id}/messages`),
       api(`/api/patients/${id}/followups`),
       api(`/api/risk-alerts?patientId=${id}`),
+      api(`/api/pending-actions?patientId=${id}`),
     ]);
     const work = await api(`/api/sessions/${one.sessionId}`);
     if (version !== patientGeneration.current) return;
@@ -135,6 +137,7 @@ export function PatientsView({
     setMessages(msgs.messages);
     setFollowups(jobs.jobs);
     setRisks(risks.alerts);
+    setProposals(proposals.actions);
     setSession(work);
   };
   const refreshPatient = async () => {
@@ -588,6 +591,49 @@ export function PatientsView({
           </div>
           {tab === "overview" && (
             <div className="detail-panel">
+              {proposals.length > 0 && (
+                <div className="patient-risk-list">
+                  <p className="muted" style={{ fontSize: 12 }}>
+                    Agent 提议的档案变更（确认后才写入）：
+                  </p>
+                  {proposals.map((proposal) => (
+                    <div className="hub-risk" key={proposal.id}>
+                      <div className="hub-risk-main">
+                        <b>{proposal.summary}</b>
+                        <small>
+                          {proposal.type === "patient-update"
+                            ? "档案变更"
+                            : proposal.type === "followup-create"
+                              ? "新建随访"
+                              : "收入病例库"}
+                          {" · "}
+                          {JSON.stringify(proposal.payload).slice(0, 120)}
+                        </small>
+                      </div>
+                      <div className="hub-risk-actions">
+                        <button
+                          className="text-button"
+                          onClick={async () => {
+                            await api(`/api/pending-actions/${proposal.id}/confirm`, "POST", {});
+                            await openPatient(detail.id, tab);
+                          }}
+                        >
+                          确认写入
+                        </button>
+                        <button
+                          className="text-button"
+                          onClick={async () => {
+                            await api(`/api/pending-actions/${proposal.id}/reject`, "POST", {});
+                            await openPatient(detail.id, tab);
+                          }}
+                        >
+                          忽略
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {risks.length > 0 && (
                 <div className="patient-risk-list">
                   {risks.map((alert) => (

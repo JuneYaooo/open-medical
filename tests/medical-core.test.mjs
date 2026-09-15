@@ -189,7 +189,19 @@ test("skill registry discovers medical instructions and rejects path or extra ar
   const skills = new SkillRegistry(["skills"]);
   assert.deepEqual(
     skills.list().map((s) => s.id),
-    ["evidence-planning", "medical-record", "medication-review"],
+    [
+      "adr-assessment",
+      "case-report",
+      "discharge-summary",
+      "evidence-planning",
+      "guideline-application",
+      "handoff-record",
+      "lab-interpretation",
+      "medical-record",
+      "medication-review",
+      "patient-education",
+      "similar-case-search",
+    ],
   );
   const result = runTool(
     "read_skill",
