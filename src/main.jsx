@@ -88,6 +88,22 @@ const WORKFLOWS = [
     prompt: "请根据材料建立循证检索任务，整理 PICO、检索式与证据核查步骤。",
   },
 ];
+// 顶栏三条用量指示器（上下文占用/累计 token/检索命中）的数据源：
+// 字符数与会话持久化 token 从会话对象汇总，检索命中由 SSE 事件实时累计。
+const RETRIEVAL_TOOL = /search|retrieve|literature|similar_case|knowledge/i;
+const metersFromSession = (s) => {
+  const chars = (s?.messages || []).reduce(
+    (n, m) => n + (m.content || "").length,
+    0,
+  );
+  let tokens = 0;
+  let rounds = 0;
+  for (const run of s?.runs || []) {
+    tokens += run.usage?.total_tokens || 0;
+    rounds += run.usage?.rounds || 0;
+  }
+  return { chars, tokens, rounds };
+};
 const eventLabel = (event) =>
   ({
     "policy.evaluated": `识别任务：${INTENTS[event.payload?.intent] || "资料整理"}`,
@@ -528,6 +544,13 @@ function App() {
     [artifactId, setArtifactId] = useState(""),
     [audit, setAudit] = useState([]),
     [query, setQuery] = useState("");
+  const [meters, setMeters] = useState({
+    chars: 0,
+    tokens: 0,
+    rounds: 0,
+    retrievals: 0,
+    compacted: false,
+  });
   const [fileSelection, setFileSelection] = useState({}),
     [materialQuery, setMaterialQuery] = useState(""),
     [materialMatches, setMaterialMatches] = useState(null);
@@ -609,6 +632,7 @@ function App() {
       const data = await api(`/api/sessions/${id}`);
       if (version === generation.current) {
         setSession(data);
+        setMeters((m) => ({ ...m, ...metersFromSession(data) }));
         setArtifactId("");
         setCitation(null);
         return data;
@@ -625,6 +649,7 @@ function App() {
     setMaterialQuery("");
     setMaterialMatches(null);
     setSession(null);
+    setMeters({ chars: 0, tokens: 0, rounds: 0, retrievals: 0, compacted: false });
     activeRef.current = id;
     setActiveId(id);
     setDraft("");
@@ -723,6 +748,7 @@ function App() {
       activeRef.current = data.id;
       setActiveId(data.id);
       setSession(data);
+      setMeters({ chars: 0, tokens: 0, rounds: 0, retrievals: 0, compacted: false });
       setLoading(false);
       setDraft("");
       setConsent(false);
@@ -742,7 +768,10 @@ function App() {
     if (!activeRef.current) return;
     const id = activeRef.current;
     const data = await api(`/api/sessions/${id}`);
-    if (activeRef.current === id) setSession(data);
+    if (activeRef.current === id) {
+      setSession(data);
+      setMeters((m) => ({ ...m, ...metersFromSession(data) }));
+    }
     await refreshList();
     return data;
   };
@@ -785,6 +814,21 @@ function App() {
         },
         (event) => {
           started = true;
+          if (
+            event.type === "tool.complete" &&
+            RETRIEVAL_TOOL.test(event.payload?.tool || "")
+          )
+            setMeters((m) => ({ ...m, retrievals: m.retrievals + 1 }));
+          if (event.type === "context.compacting")
+            setMeters((m) => ({ ...m, compacted: true }));
+          if (event.type === "message.complete" && event.payload?.usage) {
+            const usage = event.payload.usage;
+            setMeters((m) => ({
+              ...m,
+              tokens: m.tokens + (usage.total_tokens || 0),
+              rounds: m.rounds + (usage.rounds || 0),
+            }));
+          }
           setRuns((prev) => {
             const value = prev[id] || { busy: true, partial: "", events: [] };
             return {
@@ -831,7 +875,10 @@ function App() {
       setRuns((prev) => ({ ...prev, [id]: { ...prev[id], busy: false } }));
       try {
         const data = await api(`/api/sessions/${id}`);
-        if (activeRef.current === id) setSession(data);
+        if (activeRef.current === id) {
+          setSession(data);
+          setMeters((m) => ({ ...m, ...metersFromSession(data) }));
+        }
         await refreshList();
       } catch (err) {
         if (activeRef.current === id) setError(err.message);
@@ -994,6 +1041,41 @@ function App() {
           <span className="brand-caption">医疗工作台</span>
         </div>
         <div className="top-actions">
+          {session && (
+            <div className="top-meters" role="status" aria-label="会话用量指标">
+              <span
+                className={`meter ${
+                  meters.chars / (config?.contextBudget || 80000) >= 0.6
+                    ? "warn"
+                    : ""
+                }`}
+                title={`当前会话约 ${meters.chars} 字符 / 上下文预算 ${
+                  config?.contextBudget || 80000
+                } 字符${meters.compacted ? "；接近预算时历史已自动压缩，原文可按归档读回" : ""}`}
+              >
+                上下文{" "}
+                {Math.min(
+                  100,
+                  Math.round((meters.chars / (config?.contextBudget || 80000)) * 100),
+                )}
+                %
+              </span>
+              <span
+                className="meter"
+                title={`本会话累计消耗 ${meters.tokens} tokens · ${meters.rounds} 轮模型调用`}
+              >
+                {meters.tokens >= 1000
+                  ? `${(meters.tokens / 1000).toFixed(1)}k tok`
+                  : `${meters.tokens} tok`}
+              </span>
+              <span
+                className="meter"
+                title="本次打开会话以来的知识库/文献/病例检索次数"
+              >
+                检索 {meters.retrievals}
+              </span>
+            </div>
+          )}
           <PatientSwitcher
             patients={patientsList}
             currentId={currentPatientId}

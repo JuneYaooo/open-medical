@@ -145,6 +145,26 @@ small {
   align-items: center;
   gap: 6px;
 }
+.top-meters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.meter {
+  font-size: 10.5px;
+  color: #678376;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  cursor: default;
+}
+.meter.warn {
+  color: #b45309;
+  border-color: #ecc78a;
+  background: #fdf6ea;
+}
 .connection i {
   width: 6px;
   height: 6px;

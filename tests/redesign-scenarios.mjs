@@ -343,7 +343,7 @@ export const SCENARIOS = [
   },
   {
     name: '工具箱滑出面板：打开 → 进入临床速查 → 整页打开',
-    fn: async ({ page, seed: _seed, origin: _origin }) => {
+    fn: async ({ _page, seed: _seed, origin: _origin }) => {
 
     },
   },
