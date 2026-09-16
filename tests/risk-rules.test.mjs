@@ -55,13 +55,18 @@ test("risk engine: resolving clears alerts; re-evaluation reopens still-triggeri
     await f.json(`/api/risk-alerts/${alert.id}/ack`, "POST");
   const acked = (await f.json("/api/risk-alerts?status=acknowledged")).data.alerts;
   assert.equal(acked.length, first.length);
-  // Acknowledged alerts do not appear in the active list.
-  const active = (await f.json("/api/risk-alerts")).data.alerts;
+  // Acknowledged alerts do not appear in the active list
+  // （交互规范 v2.1：默认列表返回全部状态，闭环可见；active 需显式过滤）。
+  const all = (await f.json("/api/risk-alerts")).data.alerts;
+  assert.equal(all.length, first.length);
+  assert.ok(all.every((a) => a.status === "acknowledged"));
+  const active = (await f.json("/api/risk-alerts?status=active")).data.alerts;
   assert.equal(active.length, 0);
   // Still-triggering rules reopen on re-evaluation.
   await f.json("/api/risk-alerts/evaluate", "POST");
   const reopened = (await f.json("/api/risk-alerts")).data.alerts;
   assert.equal(reopened.length, first.length);
+  assert.ok(reopened.every((a) => a.status === "active"));
   // Fix the data: resolved alerts stay resolved after evaluation.
   const current = (await f.json(`/api/patients/${patient.id}`)).data;
   await f.json(`/api/patients/${patient.id}`, "PATCH", {
@@ -76,7 +81,9 @@ test("risk engine: resolving clears alerts; re-evaluation reopens still-triggeri
   });
   await f.json("/api/risk-alerts/evaluate", "POST");
   const final = (await f.json("/api/risk-alerts")).data;
-  assert.equal(final.alerts.length, 0);
+  // 默认列表含全部状态（闭环留痕）；仍在触发的应为 0，历史条目标记为已解决。
+  assert.equal(final.alerts.filter((a) => a.status === "active").length, 0);
+  assert.ok(final.alerts.every((a) => a.status === "resolved"));
   assert.equal(final.counts.active, 0);
 });
 

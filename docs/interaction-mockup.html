@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Open Medical 工作台 · 交互重设计稿 v1.1（2026-09-15）</title>
+<title>Open Medical 工作台 · 交互与 UI 设计规范 v2.1（2026-09-15）</title>
 <style>
   :root{
     --accent:#28735b; --accent-deep:#1d5947; --accent-soft:#e7f2ee; --accent-line:#bcd8cd;
@@ -253,6 +253,134 @@
   .tl li i{width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; align-self:center;}
   .p-actions{display:flex; gap:8px; padding:9px 12px; border-top:1px solid var(--border); background:#fbfcfb;}
 
+  /* ============ 扩展场景：项目/切换/风险/知识库/科研/记忆 ============ */
+  .modal-card{background:#fff;border:1.5px solid var(--accent-line);border-radius:14px;padding:16px 18px;width:560px;align-self:flex-start;box-shadow:0 16px 40px rgba(31,42,38,.14);}
+  .modal-card .m-head{font-size:15px;font-weight:700;}
+  .modal-card .m-head .m-sub{font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;}
+  .modal-card label{display:block;font-size:11px;color:var(--muted);margin:12px 0 6px;letter-spacing:.5px;}
+  .m-input{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;background:#fbfcfb;color:var(--ink);}
+  .m-input.area{min-height:44px;line-height:1.6;}
+  .m-foot{display:flex;align-items:center;gap:10px;margin-top:14px;}
+  .m-foot .note{font-size:10.5px;color:#9aa7a1;line-height:1.5;margin-right:auto;}
+  .pt-switch{position:absolute;top:84px;left:236px;width:300px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 40px rgba(31,42,38,.18);z-index:40;overflow:hidden;}
+  .ps-search{padding:9px 12px;border-bottom:1px solid var(--border);font-size:11.5px;color:#9aa7a1;}
+  .ps-group{font-size:10.5px;color:var(--muted);letter-spacing:1px;padding:8px 12px 3px;}
+  .ps-item{display:flex;gap:8px;align-items:center;padding:7px 12px;font-size:12.5px;}
+  .ps-item .sub{margin-left:auto;font-size:10.5px;color:var(--muted);}
+  .ps-item.on{background:var(--accent-soft);color:var(--accent-deep);font-weight:600;}
+  .ps-foot{border-top:1px solid var(--border);padding:8px 12px;font-size:10.5px;color:var(--muted);line-height:1.6;background:#fbfcfb;}
+  .switch-note{background:#fff;border:1px dashed var(--accent-line);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.9;max-width:92%;width:600px;align-self:flex-start;}
+  .switch-note b{color:var(--accent-deep);}
+  .risk-card{border:1px solid var(--border);border-left:4px solid var(--amber);background:#fff;border-radius:10px;padding:10px 12px;max-width:92%;width:600px;align-self:flex-start;font-size:12.5px;line-height:1.65;}
+  .risk-card.red{border-left-color:var(--red);}
+  .risk-card .r-head{display:flex;align-items:center;gap:8px;font-weight:600;}
+  .risk-card .r-body{color:#41504a;margin-top:3px;}
+  .risk-card .r-acts{display:flex;gap:8px;margin-top:8px;}
+  .risk-strip{font-size:11.5px;color:var(--muted);background:#fff;border:1px solid var(--border);border-radius:99px;padding:5px 14px;align-self:center;}
+  .stepper{display:flex;gap:2px;align-items:center;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;max-width:92%;width:640px;align-self:flex-start;font-size:11px;color:var(--muted);flex-wrap:wrap;}
+  .stepper .s{display:flex;align-items:center;gap:5px;white-space:nowrap;}
+  .stepper .s.on{color:var(--accent-deep);font-weight:600;}
+  .stepper .s .n{width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex:none;}
+  .stepper .s:not(.on) .n{background:#c2ccc7;}
+  .stepper .sep{margin:0 6px;color:#c2ccc7;}
+  .kb-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 12px;max-width:92%;width:640px;align-self:flex-start;font-size:12px;flex-wrap:wrap;}
+  .kb-row .kb-t{font-weight:600;}
+  .kb-row .kb-m{color:var(--muted);font-size:11px;}
+  .kb-row .right{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .pico-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:#fff;border:1px solid var(--accent-line);border-radius:12px;padding:12px;max-width:92%;width:640px;align-self:flex-start;}
+  .pico-grid .p-cell{background:#f6faf8;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11.5px;line-height:1.55;}
+  .pico-grid .p-cell b{display:block;color:var(--accent-deep);font-size:11px;margin-bottom:2px;}
+  .lit-row{display:flex;gap:10px;align-items:center;background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 12px;max-width:92%;width:640px;align-self:flex-start;font-size:12px;}
+  .lit-row .st{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .chart-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;max-width:92%;width:560px;align-self:flex-start;}
+  .chart-row{display:flex;align-items:flex-end;gap:18px;height:104px;padding:0 6px;}
+  .chart-row .bar-g{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;}
+  .chart-row .bar-g .bars{display:flex;gap:4px;align-items:flex-end;height:80px;}
+  .chart-row .bar-g .bar{width:20px;background:var(--accent);border-radius:4px 4px 0 0;opacity:.5;}
+  .chart-row .bar-g .bar.dark{opacity:1;}
+  .chart-row .bar-g .cap{font-size:10.5px;color:var(--muted);}
+  .toast{display:flex;gap:8px;align-items:center;background:#eef6f2;border:1px solid var(--accent-line);border-radius:99px;padding:5px 14px;font-size:11.5px;color:var(--accent-deep);align-self:flex-start;}
+  .toast button{border:none;background:none;color:var(--accent-deep);font-size:11px;text-decoration:underline;cursor:pointer;}
+  .mem-item{background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 11px;}
+  .mem-item .m-top{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600;}
+  .mem-item .m-src{font-size:10.5px;color:#9aa7a1;margin-top:3px;display:flex;align-items:center;gap:6px;}
+  .mem-item .m-acts{margin-left:auto;display:flex;gap:5px;}
+  .ctxnote{font-size:11px;color:var(--muted);background:#f6f8f7;border:1px solid var(--border);border-radius:8px;padding:6px 10px;margin-top:8px;line-height:1.7;}
+
+  /* ============ 患者列表卡与详情页（屏16/17） ============ */
+  .pt-wrap{display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;}
+  .pcard2{width:316px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 13px;position:relative;}
+  .pcard2.cur{border:1.5px solid var(--accent);box-shadow:0 0 0 3px rgba(40,115,91,.12);}
+  .pc-top{display:flex;align-items:center;gap:9px;}
+  .pc-top b{font-size:13.5px;display:block;}
+  .pc-top .pc-demo{font-size:11px;color:var(--muted);display:block;margin-top:1px;}
+  .pc-top .badge{margin-left:auto;}
+  .pc-mid{font-size:11.5px;color:#41504a;margin:8px 0 0;line-height:1.6;}
+  .pc-mid em{font-style:normal;color:var(--red);font-size:11px;margin-left:6px;}
+  .pc-foot{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:10.5px;color:var(--muted);}
+  .pc-foot span{background:#f4f7f5;border-radius:5px;padding:2px 7px;}
+  .pc-acts{display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--border);}
+  .pt-sec{background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 14px;width:100%;}
+  .pt-sec .s-t{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;margin-bottom:8px;}
+  .pt-sec .s-t .s-m{font-weight:400;font-size:11px;color:var(--muted);margin-left:auto;}
+  .pt-row{display:flex;gap:10px;align-items:center;font-size:12px;padding:6px 2px;border-top:1px solid #f0f4f2;}
+  .pt-row:first-of-type{border-top:none;}
+  .pt-row .r-date{color:var(--muted);font-size:11px;width:52px;flex:none;}
+  .pt-row .r-act{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .tlv{list-style:none;display:flex;flex-direction:column;gap:0;}
+  .tlv li{display:flex;gap:10px;font-size:12px;line-height:1.6;padding:5px 0;}
+  .tlv li .t-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:6px;}
+  .tlv li .t-date{color:var(--muted);font-size:11px;width:48px;flex:none;margin-top:1px;}
+  .tlv li .t-src{margin-left:auto;flex:none;}
+
+  /* ============ 章节与目录 ============ */
+  .toc{margin:14px 0 4px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .toc>b{font-size:12.5px;color:var(--ink);margin-right:4px;}
+  .toc a{display:inline-block;border:1px solid var(--accent-line);background:var(--accent-soft);color:var(--accent-deep);border-radius:99px;padding:4px 12px;font-size:12px;text-decoration:none;}
+  .toc a i{font-style:normal;opacity:.65;font-size:10.5px;margin-left:5px;}
+  .chapter{margin:54px 0 8px;padding:13px 18px;background:var(--ink);color:#fff;border-radius:12px;font-size:16px;font-weight:700;letter-spacing:.5px;}
+  .chapter .cno{opacity:.6;margin-right:12px;font-size:13px;}
+  .chapter .csub{margin-left:14px;font-weight:400;font-size:12px;opacity:.75;}
+
+  /* ============ 场景剧本：迷你线框状态条 ============ */
+  .sc-t{font-size:15px;margin:30px 0 4px;display:flex;align-items:center;gap:10px;}
+  .sc-t .sid{background:var(--ink);color:#fff;border-radius:6px;padding:2px 9px;font-size:12px;flex:none;}
+  .sc-i{font-size:12px;color:var(--muted);line-height:1.7;margin:0 0 10px;max-width:960px;}
+  .sc-i b{color:var(--accent-deep);}
+  .board{display:flex;align-items:stretch;gap:7px;flex-wrap:wrap;}
+  .state{width:248px;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;flex:none;}
+  .st-bar{height:15px;background:#eef1ef;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:3px;padding:0 6px;}
+  .st-bar i{width:5px;height:5px;border-radius:50%;background:#c9d2cd;}
+  .st-body{display:grid;grid-template-columns:40px 1fr;gap:5px;padding:6px;min-height:118px;}
+  .st-body.three{grid-template-columns:38px 1fr 50px;}
+  .wcol{background:#f4f7f5;border:1px solid #e6ebe8;border-radius:4px;padding:4px 3px;display:flex;flex-direction:column;gap:5px;align-items:center;}
+  .wdot{width:8px;height:8px;border-radius:50%;background:#c9d2cd;}
+  .wdot.on{background:var(--amber);} .wdot.run{background:var(--blue);} .wdot.ok{background:#5aa88c;}
+  .wmain{display:flex;flex-direction:column;gap:4px;}
+  .wblk{border:1px solid #e6ebe8;border-radius:4px;padding:4px 6px;position:relative;background:#fbfcfb;}
+  .wblk .wl{height:4px;border-radius:2px;background:#e2e8e4;margin-top:3px;}
+  .wblk .wl:first-child{margin-top:0;width:62%;}
+  .wblk.msg-u{background:var(--accent);border-color:var(--accent);margin-left:26%;}
+  .wblk.msg-u .wl{background:rgba(255,255,255,.55);}
+  .wblk.doc-h{background:#f6faf8;text-align:center;}
+  .wblk.doc-h .wl{display:inline-block;width:46%;}
+  .wblk.hl{border:1.5px solid var(--accent);background:var(--accent-soft);}
+  .wblk.hl .wl{background:var(--accent-line);}
+  .wtag{position:absolute;top:-8px;right:-5px;background:#e0523f;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;z-index:2;}
+  .wside{background:#f4f7f5;border:1px solid #e6ebe8;border-radius:4px;padding:3px;display:flex;flex-direction:column;gap:3px;}
+  .wside .wl{height:4px;border-radius:2px;background:#dfe6e2;}
+  .st-cap{padding:7px 9px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);line-height:1.65;}
+  .st-cap b{color:var(--accent-deep);}
+  .sc-arrow{align-self:center;color:var(--accent);font-size:18px;font-weight:800;flex:none;padding:0 1px;}
+  .rule-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px;}
+  .rule{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.75;color:#41504a;}
+  .rule b{color:var(--accent-deep);}
+  .rule .rno{display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:10.5px;align-items:center;justify-content:center;margin-right:7px;flex:none;}
+  .ptable{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .ptable th{background:#eef4f1;color:var(--accent-deep);text-align:left;padding:7px 10px;font-size:11px;}
+  .ptable td{border-top:1px solid var(--border);padding:7px 10px;color:#41504a;vertical-align:top;line-height:1.65;}
+  .ptable td b{color:var(--ink);}
+
   /* ============ IA 图 ============ */
   .ia{display:grid; grid-template-columns:1fr 90px 1.35fr; gap:0; align-items:stretch; background:#fff;
     border:1px solid var(--border); border-radius:14px; padding:22px; }
@@ -274,15 +402,18 @@
 <div class="page">
 
   <div class="doc-head">
-    <h1>Open Medical 工作台 · 交互重设计稿 v1.1</h1>
+    <h1>Open Medical 工作台 · 交互与 UI 设计规范 v2.1</h1>
     <div class="sub">
       2026-09-15 ｜ 对标参考：<b>ZCode</b>（任务驱动 + Goal 证据校验 + @/#//$ 符号体系）、<b>Codex</b>（审批分档 + diff 验收 + 线程迁移）、<b>WorkBuddy</b>（三栏工作台 + 右栏产物验收 + 透明执行步骤流）<br>
       本页为静态高保真示意，数据均为合成示例，不含真实患者资料。
     </div>
     <span class="ref">配套文档：docs/INTERACTION_REDESIGN.md</span><span class="ref">设计原则：对话连一切 · 患者信息第一 · 证据层嵌入 · 交付可验收 · 分档授权 · 上下文可视</span>
+  <div class="toc"><b>阅读结构</b><a href="#ch1">一 全局框架与主干<i>屏0 1 3 4</i></a><a href="#ch2">二 患者管理专题<i>屏2 7 8 16 17</i></a><a href="#ch3">三 项目体系专题<i>屏6</i></a><a href="#ch4">四 知识与工具<i>屏5 9</i></a><a href="#ch5">五 科研专题<i>屏10 11</i></a><a href="#ch6">六 医生记忆<i>屏12</i></a><a href="#ch7">七 场景剧本<i>屏13 S1-S6</i></a><a href="#ch8">八 规范与状态<i>屏14 15</i></a></div>
   </div>
 
   <!-- ================= IA 图 ================= -->
+  <div class="chapter" id="ch1"><span class="cno">第一章</span>全局框架与主干路径<span class="csub">屏 0 信息架构 · 屏 1 主工作台 · 屏 3 验收视图 · 屏 4 Goal 长任务</span></div>
+
   <h2 class="screen-title"><span class="no">0</span>信息架构：11 个平级页签 → 1 个工作台 + 3 个支撑面板</h2>
   <div class="ia">
     <div class="old">
@@ -294,20 +425,21 @@
     <div class="arrow">→</div>
     <div class="new">
       <div class="frame">
-        <b>左栏 · 任务与对象</b><p>任务时间线（患者任务 + 独立任务混合）· 患者列表 · 工具箱收纳（速查/DRG/科研/文献，点开即滑出工具面板）</p>
+        <b>左栏 · 项目 / 任务 / 患者</b><p>项目（科研课题 / 专病库 / 事务，可新建）→ 任务时间线（患者任务+独立任务）· 患者列表 · 工具箱收纳（速查/DRG/科研/文献，滑出面板）</p>
       </div>
       <div class="row2">
         <div class="frame"><b>中栏 · 对话执行区</b><p>咨询直接答；执行过程 = 可折叠步骤流；文书在对话内出产物卡</p></div>
-        <div class="frame"><b>右栏 · 上下文与产物</b><p>材料 / 知识（检索+引用进对话）/ 产物（草稿队列）</p></div>
+        <div class="frame"><b>右栏 · 场景面板</b><p>材料 / 知识 / 产物，随场景切换形态：患者速览卡 · 搜集资料 · 记忆面板</p></div>
         <div class="frame"><b>验收视图 · 叠加层</b><p>预览 / 与上一版 diff / 出处对照 + 字段清单 + 轻量复核条</p></div>
       </div>
       <div class="frame" style="border-style:dashed">
-        <b>全局层 · 顶栏</b><p>患者上下文胶囊 · 模式档位（咨询/文书/计划/自动）· 上下文与预算指示 · 本地数据徽章</p>
+        <b>全局层 · 顶栏 + 记忆</b><p>患者胶囊（一键切换）· 模式档位（咨询/文书/计划/自动）· 上下文与预算指示 · 本地数据徽章 ｜ 医生记忆：全局 / 项目 / 患者三层，越用越好用</p>
       </div>
     </div>
   </div>
 
   <!-- ================= 屏幕 1 ================= -->
+
   <h2 class="screen-title"><span class="no">1</span>主工作台：咨询直接答 + 透明执行 + 引用可溯</h2>
   <div class="screen-intent">对应日常最高频路径「问一句、答一句、给出处」。借鉴 ZCode 的任务列表与符号输入、WorkBuddy 的三栏与阶段说明、Codex 的步骤透明。医生不切页，问答、证据、产物在同一屏完成。</div>
   <div class="screen-wrap">
@@ -435,6 +567,159 @@
   </div>
 
   <!-- ================= 屏幕 2：患者速览 ================= -->
+
+  <h2 class="screen-title"><span class="no">3</span>验收视图：预览 / diff / 出处对照 + 轻量复核</h2>
+  <div class="screen-intent">把现在的<b>长表单复核</b>升级为 WorkBuddy 式"产物验收"。医生三种看法切换：<b>预览</b>（读成品）、<b>与上一版差异</b>（AI 改了什么）、<b>出处对照</b>（每句来自哪里）；下方字段清单自动核对完整性；复核收敛为一条动作条——退回即自动生成修订指令回到对话。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:55px; left:856px;">1</span>
+    <span class="pin" style="top:210px; left:520px;">2</span>
+    <span class="pin" style="top:200px; left:1006px;">3</span>
+    <span class="pin" style="top:310px; left:1006px;">4</span>
+    <span class="pin" style="top:470px; left:700px;">5</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">验收 · 出院小结 v3 — 张三</div></div>
+      <div class="app" style="grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:480px;">
+        <div class="center" style="background:#f7f9f8;">
+          <div class="accept-bar">
+            <span class="back" style="color:var(--muted);font-size:12px">‹ 返回对话</span>
+            <h3>出院小结 · v3</h3><span class="badge draft">待复核</span>
+            <div class="seg"><span>预览</span><span class="on">与上一版差异 (5)</span><span>出处对照</span></div>
+          </div>
+          <div class="accept">
+            <div class="accept-main">
+              <div class="diff-body">
+                <div class="doc-title">出 院 小 结（草稿 v3 · 与 v2 差异）</div>
+                <div class="row-same"><span class="dl">12</span>入院情况：患者因"突发胸痛 3 小时"入院，心电图示 STEMI，急诊 PCI …</div>
+                <div class="row-same"><span class="dl">13</span>住院经过：术后予双联抗血小板、调脂、控制心室率治疗，病情平稳。</div>
+                <div class="row-del"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；阿托伐他汀 20mg qn；美托洛尔 25mg bid。</div>
+                <div class="row-add"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；<b>替格瑞洛 90mg bid</b>；阿托伐他汀<b style="color:var(--accent-deep)"> 40mg </b>qn；美托洛尔 25mg bid。<span class="src-tag">源 · 指南 L120–135</span></div>
+                <div class="row-add"><span class="dl">15</span>出院诊断：急性 ST 段抬高型心肌梗死（Killip I 级）；PCI 术后。<span class="src-tag">源 · 临床资料</span></div>
+                <div class="row-same"><span class="dl">16</span>复查建议：术后 1/3/6/12 个月门诊复查心电图、血脂、肝肾功能。</div>
+                <div class="row-same"><span class="dl">17</span>康复建议：循序渐进有氧运动，4 周内避免剧烈活动。<span class="src-tag">源 · 临床资料</span></div>
+                <div class="row-del"><span class="dl">18</span>随访：按要求门诊随访。</div>
+                <div class="row-add"><span class="dl">18</span>随访：术后 1 个月复查心血管专科门诊，评估出血风险与用药耐受。<span class="src-tag">源 · 指南 L140</span></div>
+              </div>
+              <div class="review-bar">
+                <input placeholder="复核人代号（选填）">
+                <span class="note">确认后标记为"已复核"，可发起随访安排；退回将自动生成修订指令。</span>
+                <div class="acts"><button class="btn danger">退回修订</button><button class="btn primary">✓ 确认通过</button></div>
+              </div>
+            </div>
+            <div class="accept-side">
+              <div class="lnav-group" style="padding:0">字段校验清单</div>
+              <div class="check-item ok"><span class="ic">✓</span>出院诊断（2 项，与临床资料一致）</div>
+              <div class="check-item ok"><span class="ic">✓</span>出院用药（4 种，已过安全核查）</div>
+              <div class="check-item ok"><span class="ic">✓</span>住院经过（时间线 3 个节点有出处）</div>
+              <div class="check-item miss"><span class="ic">⚠</span>随访时间缺失 1 项 <button class="mini-btn fix">让 AI 补充</button></div>
+              <div class="lnav-group" style="padding:0; margin-top:6px">复核记录</div>
+              <div class="rcard" style="padding:8px 10px">
+                <div class="r-m">v2 → 退回 · "剂量需按指南更新"（14:20）</div>
+                <div class="r-m">v1 → 退回 · "缺出院诊断"（14:05）</div>
+              </div>
+              <div style="font-size:11px;color:#9aa7a1;line-height:1.6;margin-top:auto">复核仅代表院内整理流程状态，不构成电子签名或法律意义的医疗文书签发。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>三视图切换：预览 / 差异 / 出处（diff 参考 Codex 审查视图）</span>
+      <span><b>2</b>逐句"源"角标：来自指南/临床资料，点击展开行号原文</span>
+      <span><b>3</b>字段校验清单：缺项可一键"让 AI 补充"（Goal 式证据清单）</span>
+      <span><b>4</b>复核历史：每次退回原因留痕，形成修订链</span>
+      <span><b>5</b>轻量复核条：替代现有长表单；退回=自动生成修订指令回对话</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 3 ================= -->
+
+  <h2 class="screen-title"><span class="no">4</span>文书模式 + Goal 长任务：证据式校验、自动续跑到完成</h2>
+  <div class="screen-intent">借鉴 ZCode Goal / Codex goal mode。长文书不再靠医生反复点"继续"：目标卡列出<b>章节清单与完成证据</b>，每轮自动校验（只认已写入内容、已通过的核查），未达标自动续跑；全部达成后自动进入待复核队列。输入框切换为<b>文书模式</b>（允许写，但一切产物都是 draft）。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:150px; left:1006px;">1</span>
+    <span class="pin" style="top:300px; left:540px;">2</span>
+    <span class="pin" style="top:734px; left:790px;">3</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 出院小结 · 张三（自动整理中）</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <div class="ctx-meter">
+            <span class="meter"><span class="bar"><i style="width:64%"></i></span>上下文 64%</span>
+            <span class="meter"><span class="bar"><i style="width:9%"></i></span>预算 9%</span>
+            <span class="meter">本轮第 2 次校验</span>
+            <span class="icon-btn">⚙</span>
+          </div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日</div>
+            <div class="task-item active"><span class="st run"></span><div><div class="t">出院小结（自动整理中）</div><div class="m">张三 · 章节 4/5</div></div></div>
+            <div class="task-item"><span class="st review"></span><div><div class="t">随访计划生成</div><div class="m">李四 · v1 待复核</div></div></div>
+          </div>
+          <div class="lnav-foot">
+            <span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span>
+          </div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 任务</span><h3>出院小结</h3><span class="badge run">自动整理中</span></div>
+            <div class="stage"><span class="stg on">① 准备材料 ✓</span><span class="stg on">② 整理生成（第 2 轮）</span><span class="stg off">③ 复核成果</span></div>
+          </div>
+          <div class="messages">
+            <div class="msg user"><span class="who">我</span><div class="bubble">按科室模板把出院小结完整整理出来，随访部分参照指南。<span class="at">@临床资料</span><span class="at">@2024 STEMI 指南</span></div></div>
+            <div class="goal">
+              <div class="g-head">🎯 目标：出院小结五节完整 · <span class="badge run">第 2 轮校验中</span></div>
+              <div class="g-meta">完成标准：每节写入草稿且通过对应核查 · 只认已保存的草稿内容与核查通过记录</div>
+              <ul>
+                <li><span class="g-ok">✓</span>入院情况<span class="ev">已写入 · 出处 3 条</span></li>
+                <li><span class="g-ok">✓</span>住院经过<span class="ev">已写入 · 时间线 3 节点</span></li>
+                <li><span class="g-ok">✓</span>出院诊断<span class="ev">已写入 · 与临床资料一致</span></li>
+                <li><span class="g-run">●</span>出院医嘱<span class="ev">用药核查第 2 轮…</span></li>
+                <li><span class="g-todo">○</span>随访安排<span class="ev">待上一节通过后开始</span></li>
+              </ul>
+              <div class="g-foot"><span class="mini-btn">暂停</span><span class="mini-btn plain">手动接管</span><span style="margin-left:auto">第 1 轮发现"剂量与指南不一致"已自动修订</span></div>
+            </div>
+            <div class="msg ai"><span class="who">医</span><div class="bubble">第 1 轮校验发现阿托伐他汀剂量与指南推荐不一致，已按 <span class="cite">📄 2024 STEMI 指南 · L120–135</span> 修订为 40mg qn。完成剩余 1 节后进入复核。</div></div>
+          </div>
+          <div class="composer">
+            <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
+            <div class="input-line"><span class="txt" style="color:#9aa7a1">自动整理中，可随时插话调整…</span><span class="send" style="background:#c2ccc7">■</span></div>
+            <div class="composer-foot">
+              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">文书模式 · 产物均为草稿</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab">材料 <span class="n">4</span></span><span class="rtab">知识 <span class="n">2</span></span><span class="rtab on">产物 <span class="n">1</span></span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">📄 出院小结 <span class="badge run">生成中 · v3</span></div>
+              <div class="r-m">4/5 节完成 · 2 轮校验 · 预计 1 分钟</div>
+              <div class="hit-line">出院医嘱：替格瑞洛 90mg bid…<br><span style="color:#9aa7a1">随访安排生成后自动进入"待复核"队列</span></div>
+              <div class="r-a"><span class="mini-btn plain">查看当前草稿</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">完成后将出现在：今日 · 待复核</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>顶栏指示器同步展示校验轮次，长任务不失控</span>
+      <span><b>2</b>目标卡 = 章节 × 证据（只认已写入内容与核查通过记录，借鉴 ZCode Goal）</span>
+      <span><b>3</b>文书模式：可写但产物一律 draft；自动续跑可暂停/手动接管</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 4 ================= -->
+
+  <div class="chapter" id="ch2"><span class="cno">第二章</span>患者管理专题<span class="csub">屏 2 速览卡 · 屏 7 患者切换 · 屏 8 风险与资料 · 屏 16 患者列表 · 屏 17 详情页全景</span></div>
+
   <h2 class="screen-title"><span class="no">2</span>患者速览卡：@患者 即达，信息一眼可读</h2>
   <div class="screen-intent">落实<b>「对话连一切功能、患者信息查看第一优先」</b>：对话里 @患者 即唤出速览卡——诊断 / 过敏 / 用药 / 检验趋势 / 关键事件一眼可读；随访、趋势解读、完整档案都从卡上直接发起。患者管理页退为兜底入口，咨询不产文书、不强制流水线。</div>
   <div class="screen-wrap">
@@ -574,154 +859,435 @@
   </div>
 
   <!-- ================= 屏幕 3 ================= -->
-  <h2 class="screen-title"><span class="no">3</span>验收视图：预览 / diff / 出处对照 + 轻量复核</h2>
-  <div class="screen-intent">把现在的<b>长表单复核</b>升级为 WorkBuddy 式"产物验收"。医生三种看法切换：<b>预览</b>（读成品）、<b>与上一版差异</b>（AI 改了什么）、<b>出处对照</b>（每句来自哪里）；下方字段清单自动核对完整性；复核收敛为一条动作条——退回即自动生成修订指令回到对话。</div>
-  <div class="screen-wrap">
-    <span class="pin" style="top:55px; left:856px;">1</span>
-    <span class="pin" style="top:210px; left:520px;">2</span>
-    <span class="pin" style="top:200px; left:1006px;">3</span>
-    <span class="pin" style="top:310px; left:1006px;">4</span>
-    <span class="pin" style="top:470px; left:700px;">5</span>
-    <div class="window">
-      <div class="win-bar"><i></i><i></i><i></i><div class="addr">验收 · 出院小结 v3 — 张三</div></div>
-      <div class="app" style="grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:480px;">
-        <div class="center" style="background:#f7f9f8;">
-          <div class="accept-bar">
-            <span class="back" style="color:var(--muted);font-size:12px">‹ 返回对话</span>
-            <h3>出院小结 · v3</h3><span class="badge draft">待复核</span>
-            <div class="seg"><span>预览</span><span class="on">与上一版差异 (5)</span><span>出处对照</span></div>
-          </div>
-          <div class="accept">
-            <div class="accept-main">
-              <div class="diff-body">
-                <div class="doc-title">出 院 小 结（草稿 v3 · 与 v2 差异）</div>
-                <div class="row-same"><span class="dl">12</span>入院情况：患者因"突发胸痛 3 小时"入院，心电图示 STEMI，急诊 PCI …</div>
-                <div class="row-same"><span class="dl">13</span>住院经过：术后予双联抗血小板、调脂、控制心室率治疗，病情平稳。</div>
-                <div class="row-del"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；阿托伐他汀 20mg qn；美托洛尔 25mg bid。</div>
-                <div class="row-add"><span class="dl">14</span>出院用药：阿司匹林 100mg qd；<b>替格瑞洛 90mg bid</b>；阿托伐他汀<b style="color:var(--accent-deep)"> 40mg </b>qn；美托洛尔 25mg bid。<span class="src-tag">源 · 指南 L120–135</span></div>
-                <div class="row-add"><span class="dl">15</span>出院诊断：急性 ST 段抬高型心肌梗死（Killip I 级）；PCI 术后。<span class="src-tag">源 · 临床资料</span></div>
-                <div class="row-same"><span class="dl">16</span>复查建议：术后 1/3/6/12 个月门诊复查心电图、血脂、肝肾功能。</div>
-                <div class="row-same"><span class="dl">17</span>康复建议：循序渐进有氧运动，4 周内避免剧烈活动。<span class="src-tag">源 · 临床资料</span></div>
-                <div class="row-del"><span class="dl">18</span>随访：按要求门诊随访。</div>
-                <div class="row-add"><span class="dl">18</span>随访：术后 1 个月复查心血管专科门诊，评估出血风险与用药耐受。<span class="src-tag">源 · 指南 L140</span></div>
-              </div>
-              <div class="review-bar">
-                <input placeholder="复核人代号（选填）">
-                <span class="note">确认后标记为"已复核"，可发起随访安排；退回将自动生成修订指令。</span>
-                <div class="acts"><button class="btn danger">退回修订</button><button class="btn primary">✓ 确认通过</button></div>
-              </div>
-            </div>
-            <div class="accept-side">
-              <div class="lnav-group" style="padding:0">字段校验清单</div>
-              <div class="check-item ok"><span class="ic">✓</span>出院诊断（2 项，与临床资料一致）</div>
-              <div class="check-item ok"><span class="ic">✓</span>出院用药（4 种，已过安全核查）</div>
-              <div class="check-item ok"><span class="ic">✓</span>住院经过（时间线 3 个节点有出处）</div>
-              <div class="check-item miss"><span class="ic">⚠</span>随访时间缺失 1 项 <button class="mini-btn fix">让 AI 补充</button></div>
-              <div class="lnav-group" style="padding:0; margin-top:6px">复核记录</div>
-              <div class="rcard" style="padding:8px 10px">
-                <div class="r-m">v2 → 退回 · "剂量需按指南更新"（14:20）</div>
-                <div class="r-m">v1 → 退回 · "缺出院诊断"（14:05）</div>
-              </div>
-              <div style="font-size:11px;color:#9aa7a1;line-height:1.6;margin-top:auto">复核仅代表院内整理流程状态，不构成电子签名或法律意义的医疗文书签发。</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="legend">
-      <span><b>1</b>三视图切换：预览 / 差异 / 出处（diff 参考 Codex 审查视图）</span>
-      <span><b>2</b>逐句"源"角标：来自指南/临床资料，点击展开行号原文</span>
-      <span><b>3</b>字段校验清单：缺项可一键"让 AI 补充"（Goal 式证据清单）</span>
-      <span><b>4</b>复核历史：每次退回原因留痕，形成修订链</span>
-      <span><b>5</b>轻量复核条：替代现有长表单；退回=自动生成修订指令回对话</span>
-    </div>
-  </div>
 
-  <!-- ================= 屏幕 3 ================= -->
-  <h2 class="screen-title"><span class="no">4</span>文书模式 + Goal 长任务：证据式校验、自动续跑到完成</h2>
-  <div class="screen-intent">借鉴 ZCode Goal / Codex goal mode。长文书不再靠医生反复点"继续"：目标卡列出<b>章节清单与完成证据</b>，每轮自动校验（只认已写入内容、已通过的核查），未达标自动续跑；全部达成后自动进入待复核队列。输入框切换为<b>文书模式</b>（允许写，但一切产物都是 draft）。</div>
+  <h2 class="screen-title"><span class="no">7</span>患者切换：三个入口、一套规则，切换后上下文整体跟随</h2>
+  <div class="screen-intent">回答"患者视图怎么切换"：<b>三个入口</b>（顶栏胶囊下拉 / 左栏患者列表 / 会话内胶囊迁移）切换的都是同一个"当前工作对象"；切换后<b>跟随</b>与新会话默认、右栏速览卡、患者记忆注入、外发授权（按患者重置）；<b>不跟随</b>已打开的会话——会话绑定患者保持不变，需要迁移时二次确认。</div>
   <div class="screen-wrap">
-    <span class="pin" style="top:150px; left:1006px;">1</span>
-    <span class="pin" style="top:300px; left:540px;">2</span>
-    <span class="pin" style="top:734px; left:790px;">3</span>
+    <span class="pin" style="top:44px; left:300px;">1</span>
+    <span class="pin" style="top:300px; left:200px;">2</span>
+    <span class="pin" style="top:200px; left:640px;">3</span>
+    <span class="pin" style="top:150px; left:1010px;">4</span>
     <div class="window">
-      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 出院小结 · 张三（自动整理中）</div></div>
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench</div></div>
       <div class="app">
         <div class="topbar">
           <div class="brand"><span class="logo">✚</span>医疗工作台</div>
-          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
-          <div class="ctx-meter">
-            <span class="meter"><span class="bar"><i style="width:64%"></i></span>上下文 64%</span>
-            <span class="meter"><span class="bar"><i style="width:9%"></i></span>预算 9%</span>
-            <span class="meter">本轮第 2 次校验</span>
-            <span class="icon-btn">⚙</span>
-          </div>
+          <span class="pill" style="border-color:var(--accent);box-shadow:0 0 0 2px rgba(40,115,91,.15)"><span class="dot"></span>患者：张三 · 男 · 67岁 ▾</span>
+          <span class="pill local">◈ 本地</span>
+          <div class="ctx-meter"><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="pt-switch">
+          <div class="ps-search">🔍 搜索患者（姓名 / 拼音 / 首字母 / 拼音缩写）</div>
+          <div class="ps-group">最近</div>
+          <div class="ps-item on">✓ 张 三<span class="sub">ACS 术后 · 进行中</span></div>
+          <div class="ps-item">李 四<span class="sub">糖尿病 · 随访逾期</span></div>
+          <div class="ps-item">王 五<span class="sub">高血压 · 上周</span></div>
+          <div class="ps-group">分组 · 重点关注</div>
+          <div class="ps-item">赵 六<span class="sub">肾功能不全</span></div>
+          <div class="ps-foot">三个入口同一行为：顶栏胶囊 / 左栏患者列表 / 会话内胶囊迁移<br>＋ 新建档案</div>
         </div>
         <div class="lnav">
           <button class="btn-new">＋ 新任务</button>
           <div>
             <div class="lnav-group">今日</div>
-            <div class="task-item active"><span class="st run"></span><div><div class="t">出院小结（自动整理中）</div><div class="m">张三 · 章节 4/5</div></div></div>
-            <div class="task-item"><span class="st review"></span><div><div class="t">随访计划生成</div><div class="m">李四 · v1 待复核</div></div></div>
+            <div class="task-item"><span class="st review"></span><div><div class="t">出院小结草稿</div><div class="m">张三 · 待复核</div></div></div>
           </div>
-          <div class="lnav-foot">
-            <span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item" style="background:#eef4f1;border:1px solid var(--accent-line);border-radius:8px"><span class="avatar">张</span><b>张三</b><span class="sub">当前 ✓</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub">点击即切换</span></div>
+            <div class="pt-item"><span class="avatar">王</span>王五<span class="sub">高血压</span></div>
           </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head"><div class="row1"><span class="back">‹ 任务</span><h3>出院小结草稿</h3><span class="pill" style="padding:2px 10px"><span class="dot"></span>张三</span><span style="font-size:11px;color:var(--muted)">点击胶囊可在会话内迁移患者（二次确认）</span></div></div>
+          <div class="messages">
+            <div class="switch-note">
+              <b>切换患者后，立即跟随：</b><br>
+              ① 顶栏胶囊与左栏高亮 ② 新任务的默认患者 ③ 右栏患者速览卡 ④ 注入的患者记忆（病史要点/随访偏好）⑤ 外发授权按患者重置（换患者必须重新授权）<br>
+              <b>不跟随：</b><br>
+              已打开的会话仍绑定原患者（本例：出院小结始终属张三，不会串到李四）；在会话内点胶囊可显式"迁移本会话至患者 B"——二次确认，材料范围一并切换，历史消息保留并标注归属变化。
+            </div>
+            <div class="risk-strip">对话内 @患者 = 引用（可同时引用多位），不等于切换；只有上述三个入口会切换工作对象</div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">切换检查单 <span class="n">4</span></span></div>
+          <div class="rbody">
+            <div class="check-item ok"><span class="ic">✓</span>速览卡已切至张三（过敏：青霉素）</div>
+            <div class="check-item ok"><span class="ic">✓</span>患者记忆注入 5 条（随访偏好等）</div>
+            <div class="check-item miss"><span class="ic">⚠</span>外发授权：张三 会话级有效，切患者后重置</div>
+            <div class="check-item ok"><span class="ic">✓</span>材料默认范围 = 张三工作区文件</div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb"><div class="r-t" style="color:var(--muted)">设计底线：任何 PHI 展示都必须能一眼看出"当前是谁"</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>入口一：顶栏胶囊下拉（最近/分组/搜索/新建）</span>
+      <span><b>2</b>入口二：左栏患者列表，点击即切换</span>
+      <span><b>3</b>入口三：会话内胶囊迁移（二次确认，材料随之切换）</span>
+      <span><b>4</b>切换检查单：跟随项与重置项一目了然，PHI 永远可见"当前是谁"</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 8：患者管理 · 风险提示与资料搜集 ================= -->
+
+  <h2 class="screen-title"><span class="no">8</span>患者管理：风险提示可一键变任务，资料搜集三去向</h2>
+  <div class="screen-intent">患者详情页顶部新增<b>风险提示面板</b>：本地规则 + AI 每日扫描（用药冲突 / 随访逾期 / 检验趋势），每个风险都带[查看依据]并可直接生成草稿任务（对话连一切）；对话发起的<b>资料搜集</b>结果落右栏，三个去向：存入患者附件 / 存入知识库 / 引用进对话。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:210px; left:340px;">1</span>
+    <span class="pin" style="top:290px; left:340px;">2</span>
+    <span class="pin" style="top:540px; left:340px;">3</span>
+    <span class="pin" style="top:250px; left:1010px;">4</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">患者档案 · 张三 — 风险与资料</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <span class="pill local">◈ 本地</span>
+          <div class="ctx-meter"><span class="meter">风险 3 项</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item" style="background:#eef4f1;border:1px solid var(--accent-line);border-radius:8px"><span class="avatar">张</span><b>张三</b><span class="sub" style="color:var(--red)">⚠ 3</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub" style="color:var(--amber)">⚠ 1</span></div>
+            <div class="pt-item"><span class="avatar">王</span>王五<span class="sub">—</span></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
         </div>
         <div class="center">
           <div class="conv-head">
-            <div class="row1"><span class="back">‹ 任务</span><h3>出院小结</h3><span class="badge run">自动整理中</span></div>
-            <div class="stage"><span class="stg on">① 准备材料 ✓</span><span class="stg on">② 整理生成（第 2 轮）</span><span class="stg off">③ 复核成果</span></div>
+            <div class="row1"><span class="back">‹ 患者列表</span><h3>张三</h3><span class="badge no">过敏：青霉素</span><span class="pill" style="padding:2px 10px"><span class="dot"></span>ACS 术后</span></div>
+            <div class="stage"><span class="stg on">概览</span><span class="stg off">临床资料</span><span class="stg off">消息</span><span class="stg off">随访</span></div>
           </div>
           <div class="messages">
-            <div class="msg user"><span class="who">我</span><div class="bubble">按科室模板把出院小结完整整理出来，随访部分参照指南。<span class="at">@临床资料</span><span class="at">@2024 STEMI 指南</span></div></div>
-            <div class="goal">
-              <div class="g-head">🎯 目标：出院小结五节完整 · <span class="badge run">第 2 轮校验中</span></div>
-              <div class="g-meta">完成标准：每节写入草稿且通过对应核查 · 只认已保存的草稿内容与核查通过记录</div>
-              <ul>
-                <li><span class="g-ok">✓</span>入院情况<span class="ev">已写入 · 出处 3 条</span></li>
-                <li><span class="g-ok">✓</span>住院经过<span class="ev">已写入 · 时间线 3 节点</span></li>
-                <li><span class="g-ok">✓</span>出院诊断<span class="ev">已写入 · 与临床资料一致</span></li>
-                <li><span class="g-run">●</span>出院医嘱<span class="ev">用药核查第 2 轮…</span></li>
-                <li><span class="g-todo">○</span>随访安排<span class="ev">待上一节通过后开始</span></li>
-              </ul>
-              <div class="g-foot"><span class="mini-btn">暂停</span><span class="mini-btn plain">手动接管</span><span style="margin-left:auto">第 1 轮发现"剂量与指南不一致"已自动修订</span></div>
+            <div class="risk-strip">每日 06:00 本地扫描 · 3 项待处理 · 依据均可展开</div>
+            <div class="risk-card red">
+              <div class="r-head">用药风险 · 高 <span class="badge no">新增</span></div>
+              <div class="r-body">2025-09-10 新开<b>奥美拉唑</b>，与替格瑞洛合用降低抗血小板疗效（CYP2C19）。建议换用泮托拉唑或雷贝拉唑。</div>
+              <div class="r-acts"><button class="mini-btn">查看依据（2 篇）</button><button class="mini-btn">生成用药建议草稿</button><button class="mini-btn plain">忽略本次</button></div>
             </div>
-            <div class="msg ai"><span class="who">医</span><div class="bubble">第 1 轮校验发现阿托伐他汀剂量与指南推荐不一致，已按 <span class="cite">📄 2024 STEMI 指南 · L120–135</span> 修订为 40mg qn。完成剩余 1 节后进入复核。</div></div>
-          </div>
-          <div class="composer">
-            <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
-            <div class="input-line"><span class="txt" style="color:#9aa7a1">自动整理中，可随时插话调整…</span><span class="send" style="background:#c2ccc7">■</span></div>
-            <div class="composer-foot">
-              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">文书模式 · 产物均为草稿</span></div>
+            <div class="risk-card">
+              <div class="r-head">随访逾期</div>
+              <div class="r-body">术后 1 个月随访（计划 09-12）已过 3 天未完成。</div>
+              <div class="r-acts"><button class="mini-btn">生成随访提醒</button><button class="mini-btn plain">改期</button></div>
+            </div>
+            <div class="risk-card">
+              <div class="r-head">检验趋势</div>
+              <div class="r-body">LDL-C 连续 2 次上升（1.8 → 2.1 mmol/L），他汀依从性待确认。</div>
+              <div class="r-acts"><button class="mini-btn">查看趋势图</button><button class="mini-btn plain">标记已读</button></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">上次对话已发起"PCI 术后康复资料搜集" → 6 条结果见右栏</div>
             </div>
           </div>
         </div>
         <div class="rpanel">
-          <div class="rtabs"><span class="rtab">材料 <span class="n">4</span></span><span class="rtab">知识 <span class="n">2</span></span><span class="rtab on">产物 <span class="n">1</span></span></div>
+          <div class="rtabs"><span class="rtab on">搜集资料 <span class="n">6</span></span></div>
           <div class="rbody">
             <div class="rcard">
-              <div class="r-t">📄 出院小结 <span class="badge run">生成中 · v3</span></div>
-              <div class="r-m">4/5 节完成 · 2 轮校验 · 预计 1 分钟</div>
-              <div class="hit-line">出院医嘱：替格瑞洛 90mg bid…<br><span style="color:#9aa7a1">随访安排生成后自动进入"待复核"队列</span></div>
-              <div class="r-a"><span class="mini-btn plain">查看当前草稿</span></div>
+              <div class="r-t">《PCI 术后心脏康复中国专家共识》<span class="badge ok">指南</span></div>
+              <div class="r-m">知识库 · 已有全文 · 可信度高</div>
+              <div class="r-a"><span class="mini-btn">引用进对话</span><span class="mini-btn plain">存入患者附件</span></div>
             </div>
-            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
-              <div class="r-t" style="color:var(--muted)">完成后将出现在：今日 · 待复核</div>
+            <div class="rcard">
+              <div class="r-t">经皮冠状动脉介入术后运动康复：网状 Meta<span class="badge run">期刊</span></div>
+              <div class="r-m">PubMed 2025 · 摘要 · 可信度高</div>
+              <div class="r-a"><span class="mini-btn">存入知识库</span><span class="mini-btn plain">原文链接</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">术后康复患者教育手册（中文科普）<span class="badge draft">科普</span></div>
+              <div class="r-m">权威机构站 · 可信度中 · 适合发给患者</div>
+              <div class="r-a"><span class="mini-btn">生成患者教育稿（草稿）</span><span class="mini-btn plain">存入患者附件</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb"><div class="r-t" style="color:var(--muted)">搜集结果三去向：患者附件 / 知识库 / 对话引用——全部留来源与可信度</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>患者列表直接带风险角标，红色优先处理</span>
+      <span><b>2</b>风险卡：依据可展开，可一键生成草稿任务（对话连一切）</span>
+      <span><b>3</b>扫描在本地每日进行，忽略/改期均留痕</span>
+      <span><b>4</b>资料搜集结果按类型与可信度分级，三去向收口</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 9：知识库构建与使用 ================= -->
+
+    <!-- ================= 屏幕 16：患者列表页 ================= -->
+  <h2 class="screen-title"><span class="no">16</span>患者列表页：找人、看状态、一键切换</h2>
+  <div class="screen-intent">列表页只做三件事：<b>找人</b>（搜索/筛选/排序）、<b>看状态</b>（风险/随访/成果一卡看清）、<b>进入</b>（点卡片=切换为当前患者+右栏速览卡；[打开详情] 才进详情页）。查看信息零跳转，编辑才进页。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:118px; left:700px;">1</span>
+    <span class="pin" style="top:168px; left:250px;">2</span>
+    <span class="pin" style="top:280px; left:120px;">3</span>
+    <span class="pin" style="top:296px; left:660px;">4</span>
+    <span class="pin" style="top:162px; left:480px;">5</span>
+    <span class="pin" style="top:505px; left:250px;">6</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">患者列表 — 24 人</div></div>
+      <div class="app" style="grid-template-columns:236px minmax(0,1fr);grid-template-rows:48px minmax(0,1fr);">
+        <div class="topbar" style="grid-column:1/3">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill local">◈ 本地</span>
+          <div class="ctx-meter"><span class="pill">排序：最近接触 ▾</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">患者 <span class="bdg" style="background:var(--accent-soft);color:var(--accent-deep)">＋ 建档</span></div>
+            <div class="pt-item" style="background:#eef4f1;border:1px solid var(--accent-line);border-radius:8px"><span class="avatar">张</span><b>张三</b><span class="sub">当前 ✓</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub" style="color:var(--amber)">⚠1</span></div>
+            <div class="pt-item"><span class="avatar">王</span>王五<span class="sub">—</span></div>
+          </div>
+          <div>
+            <div class="lnav-group">项目</div>
+            <div class="task-item"><span class="st run"></span><div><div class="t">2型糖尿病管理路径研究</div><div class="m">科研 · 3 任务</div></div></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1">
+              <h3>患者</h3>
+              <div class="input-line" style="flex:none;width:300px;padding:6px 11px"><span class="txt" style="color:#9aa7a1">🔍 姓名 / 拼音 / 首字母</span></div>
+              <button class="btn primary" style="margin-left:auto">＋ 建档</button>
+            </div>
+            <div class="stage">
+              <span class="stg on">全部 24</span><span class="stg">重点关注 5</span><span class="stg">⚠ 有风险 4</span><span class="stg">随访逾期 2</span><span class="stg">本月新增 3</span>
+            </div>
+          </div>
+          <div class="messages" style="flex-direction:row;flex-wrap:wrap;gap:10px;align-content:flex-start;overflow:auto">
+            <div class="pcard2 cur">
+              <div class="pc-top"><span class="p-ava">张</span><div><b>张三</b><span class="pc-demo">男 · 67 岁</span></div><span class="badge no">⚠ 3</span></div>
+              <div class="pc-mid">ACS 术后 · 高血压 · 2 型糖尿病 <em>过敏：青霉素</em></div>
+              <div class="pc-foot"><span>下次随访 09-30</span><span>出院小结 v4 已复核</span><span>2 天前接触</span></div>
+              <div class="pc-acts"><button class="mini-btn">切换为此患者</button><button class="mini-btn plain">打开详情</button></div>
+            </div>
+            <div class="pcard2">
+              <div class="pc-top"><span class="p-ava">李</span><div><b>李四</b><span class="pc-demo">女 · 58 岁</span></div><span class="badge draft">⚠ 1</span></div>
+              <div class="pc-mid">2 型糖尿病 <em style="color:var(--amber)">随访逾期 3 天</em></div>
+              <div class="pc-foot"><span>随访 09-12 逾期</span><span>随访计划 v1 待复核</span><span>上周接触</span></div>
+              <div class="pc-acts"><button class="mini-btn">切换为此患者</button><button class="mini-btn plain">打开详情</button></div>
+            </div>
+            <div class="pcard2">
+              <div class="pc-top"><span class="p-ava">王</span><div><b>王五</b><span class="pc-demo">男 · 45 岁</span></div></div>
+              <div class="pc-mid">高血压</div>
+              <div class="pc-foot"><span>无待办</span><span>上周接触</span></div>
+              <div class="pc-acts"><button class="mini-btn">切换为此患者</button><button class="mini-btn plain">打开详情</button></div>
+            </div>
+            <div class="pcard2">
+              <div class="pc-top"><span class="p-ava">赵</span><div><b>赵六</b><span class="pc-demo">男 · 71 岁</span></div><span class="badge draft">⚠ 1</span></div>
+              <div class="pc-mid">慢性肾功能不全 3 期</div>
+              <div class="pc-foot"><span>重点关注</span><span>检验 09-10 肌酐↑</span></div>
+              <div class="pc-acts"><button class="mini-btn">切换为此患者</button><button class="mini-btn plain">打开详情</button></div>
+            </div>
+            <div class="pcard2" style="border-style:dashed;background:#fbfcfb">
+              <div class="pc-top"><span class="p-ava" style="background:#eef1ef;color:#9aa7a1">＋</span><div><b style="color:var(--muted)">建档</b><span class="pc-demo">电话、性别可不填</span></div></div>
+              <div class="pc-mid" style="color:var(--muted)">建档完成自动创建病例工作区</div>
             </div>
           </div>
         </div>
       </div>
     </div>
     <div class="legend">
-      <span><b>1</b>顶栏指示器同步展示校验轮次，长任务不失控</span>
-      <span><b>2</b>目标卡 = 章节 × 证据（只认已写入内容与核查通过记录，借鉴 ZCode Goal）</span>
-      <span><b>3</b>文书模式：可写但产物一律 draft；自动续跑可暂停/手动接管</span>
+      <span><b>1</b>搜索：姓名/拼音/首字母，键盘 ↑↓ 直接切换选中</span>
+      <span><b>2</b>筛选 chips 即过滤器，数字实时联动</span>
+      <span><b>3</b>卡片字段固定：诊断串 + 过敏红字 + 风险数 + 下次随访 + 最近成果</span>
+      <span><b>4</b>点卡片 = 切换为当前患者（右栏速览卡跟随）；[打开详情] 才进详情页</span>
+      <span><b>5</b>当前患者卡片带描边标识，任何 PHI 可见"当前是谁"</span>
+      <span><b>6</b>建档入口常驻；空状态同款卡片</span>
     </div>
   </div>
 
-  <!-- ================= 屏幕 4 ================= -->
+  <!-- ================= 屏幕 17：患者详情页 · 概览全景 ================= -->
+  <h2 class="screen-title"><span class="no">17</span>患者详情页：概览 = 风险 → 时间线 → 成果，编辑只在临床资料</h2>
+  <div class="screen-intent">详情页是<b>兜底</b>入口（日常看速览卡）。概览 tab 自上而下四区：<b>风险面板</b>（红>琥珀排序、依据可展开、可生成草稿任务）→ <b>关键事件时间线</b>（每个节点带来源）→ <b>成果列表</b>（点击直达验收）→ <b>AI 提议</b>（唯一写入通道，必须人确认）。临床资料/消息/随访为独立 tab。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:62px; left:560px;">1</span>
+    <span class="pin" style="top:230px; left:560px;">2</span>
+    <span class="pin" style="top:420px; left:430px;">3</span>
+    <span class="pin" style="top:600px; left:560px;">4</span>
+    <span class="pin" style="top:795px; left:560px;">5</span>
+    <span class="pin" style="top:130px; left:1010px;">6</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">患者详情 · 张三 — 概览</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <span class="pill local">◈ 本地</span>
+          <div class="ctx-meter"><span class="meter">风险 3</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item" style="background:#eef4f1;border:1px solid var(--accent-line);border-radius:8px"><span class="avatar">张</span><b>张三</b><span class="sub" style="color:var(--red)">⚠3</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub">糖尿病</span></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1">
+              <span class="back">‹ 患者列表</span><h3>张三</h3>
+              <span class="pill" style="padding:2px 10px">男 · 67 岁 · ACS 术后 · 高血压</span>
+              <span class="badge no">过敏：青霉素</span>
+              <button class="btn" style="margin-left:auto">打开病例工作区</button>
+            </div>
+            <div class="stage"><span class="stg on">概览</span><span class="stg">临床资料</span><span class="stg">消息</span><span class="stg">随访</span></div>
+          </div>
+          <div class="messages" style="gap:10px">
+            <div class="risk-strip">每日 06:00 本地扫描 · 3 项待处理 · <b style="color:var(--accent-deep)">查看扫描历史</b></div>
+            <div class="risk-card red" style="width:100%">
+              <div class="r-head">用药风险 · 高 <span class="badge no">新增</span></div>
+              <div class="r-body">奥美拉唑 × 替格瑞洛（CYP2C19）降低抗血小板疗效，建议换泮托拉唑。</div>
+              <div class="r-acts"><button class="mini-btn">查看依据（2 篇）</button><button class="mini-btn">生成用药建议草稿</button><button class="mini-btn plain">忽略本次</button></div>
+            </div>
+            <div class="risk-card" style="width:100%">
+              <div class="r-head">随访逾期</div>
+              <div class="r-body">术后 1 个月随访（计划 09-12）已过 3 天。</div>
+              <div class="r-acts"><button class="mini-btn">生成随访提醒</button><button class="mini-btn plain">改期</button></div>
+            </div>
+            <div class="pt-sec">
+              <div class="s-t">关键事件时间线 <span class="s-m">筛选：全部 ▾ ｜ 仅就诊 / 检验 / 文书</span></div>
+              <ul class="tlv">
+                <li><span class="t-dot"></span><span class="t-date">09-12</span>随访逾期提醒生成<span class="t-src"><span class="mini-btn plain">来源：随访计划</span></span></li>
+                <li><span class="t-dot"></span><span class="t-date">09-02</span>门诊随访 · 肝功能正常 · LDL-C 2.1<span class="t-src"><span class="mini-btn plain">来源：随访记录 L8–12</span></span></li>
+                <li><span class="t-dot"></span><span class="t-date">08-20</span>出院 · 带药 30 天 · 出院小结 v4<span class="t-src"><span class="mini-btn plain">查看验收</span></span></li>
+                <li><span class="t-dot"></span><span class="t-date">08-12</span>急诊 PCI（STEMI）· 药物涂层支架 ×1<span class="t-src"><span class="mini-btn plain">来源：手术记录 L3–9</span></span></li>
+              </ul>
+            </div>
+            <div class="pt-sec">
+              <div class="s-t">成果 <span class="s-m">3 份 · 全部经人工验收</span></div>
+              <div class="pt-row"><span class="r-date">09-12</span>用药建议（泮托拉唑替换）<span class="badge ok">已复核</span><span class="r-act"><span class="mini-btn plain">查看验收</span></span></div>
+              <div class="pt-row"><span class="r-date">09-01</span>出院小结 v4<span class="badge ok">已复核</span><span class="r-act"><span class="mini-btn plain">查看验收</span></span></div>
+              <div class="pt-row"><span class="r-date">08-30</span>随访计划 v1<span class="badge draft">待复核</span><span class="r-act"><span class="mini-btn">打开验收</span></span></div>
+            </div>
+            <div class="pt-sec">
+              <div class="s-t">AI 提议 <span class="badge run">1 条待确认</span><span class="s-m">写入档案的唯一通道：必须医生确认</span></div>
+              <div class="pt-row"><span class="r-date">今天</span>建议新增诊断：血脂异常<span class="r-m" style="color:var(--muted);font-size:11px">来源：09-02 随访记录 L12</span><span class="r-act"><button class="mini-btn">采纳写入</button><button class="mini-btn plain">忽略</button></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">患者上下文</span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">患者记忆 <span class="n" style="background:#eef1ef;border-radius:99px;font-size:10.5px;padding:0 6px;color:var(--muted)">5</span></div>
+              <div class="r-m">随访喜欢约周三上午 · 家属代取药</div>
+              <div class="r-a"><span class="mini-btn plain">管理记忆</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">外发授权 <span class="badge ok">会话级有效</span></div>
+              <div class="r-m">切换患者后自动重置；本地处理不受影响</div>
+              <div class="r-a"><span class="mini-btn plain">撤销授权</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">病例工作区 <span class="n" style="background:#eef1ef;border-radius:99px;font-size:10.5px;padding:0 6px;color:var(--muted)">12 文件</span></div>
+              <div class="r-m">出院记录 · 检验 ×2 · 手术记录 · 随访记录…</div>
+              <div class="r-a"><span class="mini-btn">打开工作区</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb"><div class="r-t" style="color:var(--muted)">概览只读；编辑仅限"临床资料" tab</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>头部 PHI 条：身份/诊断/过敏一眼可见，任何操作不遮挡</span>
+      <span><b>2</b>风险面板：红>琥珀排序、依据可展开、一键生成草稿任务</span>
+      <span><b>3</b>时间线：每节点带来源（行号/记录），可按类型筛选</span>
+      <span><b>4</b>成果列表：状态徽章 + 点击直达验收视图</span>
+      <span><b>5</b>AI 提议 = 唯一写入通道，采纳即人确认并留痕</span>
+      <span><b>6</b>右栏患者上下文：记忆 / 外发授权 / 工作区文件，随切换跟随</span>
+    </div>
+  </div>
+
+<div class="chapter" id="ch3"><span class="cno">第三章</span>项目体系专题<span class="csub">屏 6 新建项目与项目记忆</span></div>
+
+  <h2 class="screen-title"><span class="no">6</span>项目体系：像 ZCode/Codex 一样可新建项目，任务归组、上下文隔离</h2>
+  <div class="screen-intent">左栏从"扁平任务列表"升级为<b>项目 → 任务</b>两级：项目是长期容器（科研课题 / 专病知识库 / 日常事务），可随时新建；每个项目自动获得独立的<b>项目记忆</b>与可选知识子库，项目内任务默认继承项目上下文。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:130px; left:110px;">1</span>
+    <span class="pin" style="top:352px; left:640px;">2</span>
+    <span class="pin" style="top:470px; left:640px;">3</span>
+    <span class="pin" style="top:560px; left:500px;">4</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 新建项目</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：未选择</span>
+          <span class="pill local">◈ 数据本地处理</span>
+          <div class="ctx-meter"><span class="meter"><span class="bar"><i style="width:6%"></i></span>上下文 6%</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">项目 <span class="bdg">＋ 新建</span></div>
+            <div class="task-item active"><span class="st run"></span><div><div class="t">2型糖尿病管理路径研究</div><div class="m">科研 · 3 个进行中任务</div></div></div>
+            <div class="task-item"><span class="st idle"></span><div><div class="t">心内科专病知识库</div><div class="m">知识库 · 132 篇文档</div></div></div>
+            <div class="task-item"><span class="st idle"></span><div><div class="t">行政 · 会议与文书</div><div class="m">事务 · 2 个任务</div></div></div>
+          </div>
+          <div>
+            <div class="lnav-group">未归入项目 · 今日</div>
+            <div class="task-item"><span class="st review"></span><div><div class="t">出院小结草稿</div><div class="m">张三 · v3 待复核</div></div></div>
+            <div class="task-item"><span class="st done"></span><div><div class="t">快速咨询：血压趋势</div><div class="m">张三 · 已答</div></div></div>
+          </div>
+          <div>
+            <div class="lnav-group">患者</div>
+            <div class="pt-item"><span class="avatar">张</span>张三<span class="sub">ACS 术后</span></div>
+            <div class="pt-item"><span class="avatar">李</span>李四<span class="sub">糖尿病</span></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head"><div class="row1"><span class="back">‹ 项目</span><h3>新建项目</h3></div></div>
+          <div class="messages">
+            <div class="modal-card">
+              <div class="m-head">新建项目 <span class="m-sub">项目 = 长期容器，任务与知识归组于内</span></div>
+              <label>项目名称</label>
+              <div class="m-input">2型糖尿病管理路径研究</div>
+              <label>项目类型</label>
+              <div class="opts"><span class="opt on">科研课题</span><span class="opt">专病知识库</span><span class="opt">日常事务</span><span class="opt">自定义</span></div>
+              <label>目标描述（将作为项目记忆的种子，AI 会在课题内延续这些背景）</label>
+              <div class="m-input area">评估 SGLT2i 联合管理路径对血糖达标率的影响，产出一篇回顾性队列论文；目标期刊：中华内分泌代谢杂志。</div>
+              <label>配套知识子库</label>
+              <div class="opts"><span class="opt on">＋ 新建「课题文献」子库</span><span class="opt">挂接：临床指南</span></div>
+              <div class="m-foot"><span class="note">创建后自动完成：项目记忆空间 · 项目内新任务默认绑定 · 数据仅存本机</span><button class="btn primary">创建项目</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">说明 <span class="n">4</span></span></div>
+          <div class="rbody">
+            <div class="rcard"><div class="r-t">项目 vs 任务</div><div class="r-m">任务 = 一次对话式工作（会话）；项目 = 长期容器，归组任务、文献、数据与记忆。任务可随时归入项目。</div></div>
+            <div class="rcard"><div class="r-t">项目记忆</div><div class="r-m">目标、纳排标准、方法论等在项目内自动沉淀，跨会话生效。</div></div>
+            <div class="rcard"><div class="r-t">知识子库</div><div class="r-m">课题文献与科室资料按项目隔离，可挂接全局指南库。</div></div>
+            <div class="rcard"><div class="r-t">与患者的关系</div><div class="r-m">科研项目只使用脱敏聚合数据；患者任务始终归患者，不进项目。</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>左栏两级：项目（可新建）→ 任务；未归入项目的任务在"今日"</span>
+      <span><b>2</b>类型决定模板：科研/专病库/事务各有预置结构</span>
+      <span><b>3</b>目标描述 = 项目记忆种子，跨会话延续课题背景</span>
+      <span><b>4</b>创建即配好记忆空间与知识子库，全部本地</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 7：患者切换 ================= -->
+
+  <div class="chapter" id="ch4"><span class="cno">第四章</span>知识与工具<span class="csub">屏 5 工具面板 · 屏 9 知识库构建与使用</span></div>
+
   <h2 class="screen-title"><span class="no">5</span>工具面板：表单工具接入对话，结果可一键变草稿</h2>
   <div class="screen-intent">现状的临床速查 / DRG / 科研是与 agent 割裂的表单页。新设计把它们收纳进左栏<b>工具箱</b>，点击在右侧<b>滑出工具面板</b>（对话不中断）；工具结果卡可<b>直接生成文书草稿</b>，进入同一套验收闭环——表单起点，对话续写。</div>
   <div class="screen-wrap">
@@ -795,25 +1361,717 @@
     </div>
   </div>
 
-  <div style="margin-top:44px;padding:16px 20px;background:#fff;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--muted);line-height:1.8">
-    <b style="color:var(--ink)">阅读提示</b>：本页为交互设计示意，五个屏幕共同覆盖一条主线——<b style="color:var(--ink)">咨询（屏1）→ 患者信息（屏2）→ 长文书自动整理（屏4）→ 验收复核（屏3）→ 表单工具汇入同一闭环（屏5）</b>。
-    实施拆解、组件规格、与现有代码的迁移路径见 <b>docs/INTERACTION_REDESIGN.md</b>。所有患者、数值、指南引用均为演示用合成数据。
+  <!-- ================= 屏幕 6：项目体系与新建项目 ================= -->
+
+  <h2 class="screen-title"><span class="no">9</span>医生知识库：构建（上传→AI 打标→索引）与使用（检索→引用→防过期）</h2>
+  <div class="screen-intent">知识库既是<b>可管理的数据资产</b>（子库分组、上传流程、索引状态、体检防过期），又是<b>对话的证据层</b>（@指南、右栏检索、行号引用）。构建与使用在同一视图完成闭环。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:145px; left:760px;">1</span>
+    <span class="pin" style="top:300px; left:660px;">2</span>
+    <span class="pin" style="top:400px; left:660px;">3</span>
+    <span class="pin" style="top:520px; left:660px;">4</span>
+    <span class="pin" style="top:300px; left:1010px;">5</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">知识库 — 心内科 · 本地索引</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：未选择</span>
+          <span class="pill local">◈ 全部本地索引</span>
+          <div class="ctx-meter"><span class="meter">1,284 段已索引</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">项目</div>
+            <div class="task-item active"><span class="st idle"></span><div><div class="t">心内科专病知识库</div><div class="m">知识库项目 · 132 篇</div></div></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 项目</span><h3>心内科专病知识库</h3>
+              <button class="btn primary" style="padding:4px 12px;font-size:12px">⬆ 上传文档</button>
+              <button class="btn" style="padding:4px 12px;font-size:12px">＋ 新建子库</button>
+            </div>
+            <div class="stage">
+              <span class="stg on">临床指南 86</span><span class="stg on">药品说明书 214</span><span class="stg on">科室规范 32</span><span class="stg on">个人笔记 57</span><span class="stg">课题文献 48</span>
+            </div>
+          </div>
+          <div class="messages">
+            <div class="kb-row"><span class="kb-t">2024 中国 STEMI 诊断治疗指南</span><span class="kb-m">临床指南 · 2024 · 214 段</span><span class="right"><span class="badge ok">已索引</span><span class="mini-btn plain">对话引用 23 次</span></span></div>
+            <div class="kb-row"><span class="kb-t">替格瑞洛说明书（药房版）</span><span class="kb-m">药品说明书 · 2025-11 更新 · 48 段</span><span class="right"><span class="badge ok">已索引</span></span></div>
+            <div class="kb-row"><span class="kb-t">PCI 术后护理规范（科室）</span><span class="kb-m">科室规范 · 2026-01 · 36 段</span><span class="right"><span class="badge run">索引中 80%</span></span></div>
+            <div class="risk-card" style="border-left-color:var(--blue);width:640px">
+              <div class="r-head">知识库体检 · 2 项建议</div>
+              <div class="r-body">《2021 冠心病康复指南》已有 2024 更新版；《阿司匹林说明书》为 2019 旧版且官方已修订。</div>
+              <div class="r-acts"><button class="mini-btn">查看新旧对比</button><button class="mini-btn">上传新版并归档旧版</button></div>
+            </div>
+            <div class="stepper">
+              <span class="s on"><span class="n">1</span>选择文件（PDF/MD/网页）</span><span class="sep">›</span>
+              <span class="s on"><span class="n">2</span>AI 识别分类打标：《2024 STEMI 指南》→ 临床指南</span><span class="sep">›</span>
+              <span class="s on"><span class="n">3</span>抽取文本 214 段</span><span class="sep">›</span>
+              <span class="s"><span class="n">4</span>向量索引（本地）</span><span class="sep">›</span>
+              <span class="s"><span class="n">5</span>可被对话引用</span>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">使用方式 <span class="n">3</span></span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">① 对话直接引用</div>
+              <div class="r-m">对话里 @指南名称，或让 AI 自动检索；回答带行号引用气泡。</div>
+              <div class="hit-line">"PCI 术后双联抗血小板应维持 <mark>12 个月</mark>…" <b style="color:var(--accent-deep)">L120–135</b></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">② 右栏知识 tab 检索</div>
+              <div class="r-m">任务中随手检索，命中一键"引用进对话"，出处随答案走。</div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">③ 从对话反向入库</div>
+              <div class="r-m">搜集的文献/网页/结论说"存入知识库"→ 自动打标归入子库（屏 8）。</div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb"><div class="r-t" style="color:var(--muted)">个人笔记：对话里说"记到知识库"即成结构化笔记，带原文出处</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>子库 chips 即筛选器，与左栏知识库项目联动</span>
+      <span><b>2</b>文档行：索引状态 + 被引用次数，资产可用性可见</span>
+      <span><b>3</b>知识库体检：过期指南提醒，一键替换归档</span>
+      <span><b>4</b>上传流程 AI 打标：识别标题→归子库→抽取→本地索引</span>
+      <span><b>5</b>使用三方式：对话引用 / 右栏检索 / 反向入库——证据层嵌入对话</span>
+    </div>
   </div>
+
+  <!-- ================= 屏幕 10：科研 · 课题与文献 ================= -->
+
+  <div class="chapter" id="ch5"><span class="cno">第五章</span>科研专题<span class="csub">屏 10 查询与研究 · 屏 11 数据与论文</span></div>
+
+  <h2 class="screen-title"><span class="no">10</span>科研 · 查询与研究：课题项目 + PICO + 文献集 + 精读筛选</h2>
+  <div class="screen-intent">科研是<b>项目类型</b>（屏 6）：课题页承载 PICO、文献集与阶段进度；检索结果一键入集；"按纳入标准过一遍"这类筛选交给对话完成，排除原因留痕——查询、研究、记录在同一个课题上下文里累积。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:190px; left:640px;">1</span>
+    <span class="pin" style="top:360px; left:340px;">2</span>
+    <span class="pin" style="top:480px; left:340px;">3</span>
+    <span class="pin" style="top:265px; left:1010px;">4</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">项目 · 2型糖尿病管理路径研究 — 文献阶段</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>项目：2型糖尿病管理路径研究</span>
+          <span class="pill local">◈ 脱敏聚合</span>
+          <div class="ctx-meter"><span class="meter"><span class="bar"><i style="width:31%"></i></span>上下文 31%</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">项目 · 课题任务</div>
+            <div class="task-item active"><span class="st run"></span><div><div class="t">文献筛选（第 3 批）</div><div class="m">48 篇 · 进行中</div></div></div>
+            <div class="task-item"><span class="st idle"></span><div><div class="t">证据表更新</div><div class="m">上批 12 篇已入表</div></div></div>
+            <div class="task-item"><span class="st idle"></span><div><div class="t">队列定义</div><div class="m">待开始（屏 11）</div></div></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 项目</span><h3>2型糖尿病管理路径研究</h3><span class="badge run">文献阶段</span></div>
+            <div class="stage">
+              <span class="stg on">① 检索</span><span class="stg on">② 筛选</span><span class="stg on">③ 精读</span><span class="stg">④ 证据表</span><span class="stg">⑤ 分析</span><span class="stg">⑥ 写作</span>
+            </div>
+          </div>
+          <div class="messages">
+            <div class="pico-grid">
+              <div class="p-cell"><b>P 人群</b>2 型糖尿病门诊患者（18-80 岁）</div>
+              <div class="p-cell"><b>I 干预</b>SGLT2i 联合管理路径</div>
+              <div class="p-cell"><b>C 对照</b>常规路径</div>
+              <div class="p-cell"><b>O 结局</b>糖化达标率 · 低血糖事件</div>
+            </div>
+            <div class="msg user"><span class="who">我</span><div class="bubble">把新检索的 5 篇按纳入标准过一遍。</div></div>
+            <div class="steps">
+              <div class="head">已执行 3 步 · 21s <span class="chev">▾ 收起</span></div>
+              <ul>
+                <li><span class="ok">✓</span><span class="tool">literature_screen</span>5 篇全文 → 逐篇对照纳排标准<span class="ms">18s</span></li>
+                <li><span class="ok">✓</span><span class="tool">evidence_extract</span>2 篇纳入：提取 PICO 与结局数据<span class="ms">2.0s</span></li>
+                <li><span class="warn">⚠</span><span class="tool">evidence_extract</span>3 篇排除：人群不符 2 · 结局不可提取 1<span class="ms">1.0s</span></li>
+              </ul>
+            </div>
+            <div class="lit-row"><span class="kb-t">Effects of SGLT2 inhibitors on glycemic variability</span><span class="kb-m">Diabetes Care 2026 · RCT</span><span class="st"><span class="badge ok">已入证据表</span></span></div>
+            <div class="lit-row"><span class="kb-t">Real-world SGLT2i pathway adherence: a cohort study</span><span class="kb-m">BMJ Open 2025 · 队列</span><span class="st"><span class="badge ok">已入证据表</span></span></div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb;width:640px">
+              <div class="r-t" style="color:var(--muted)">文献集 48 篇：待筛 2 · 精读中 3 · 已入证据表 43 · 全部留筛选原因与原文行号</div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">检索结果 <span class="n">8</span></span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">SGLT2i + structured care in T2DM<span class="badge run">PubMed</span></div>
+              <div class="r-m">2026-07 · RCT · 与 PICO 匹配度 92%</div>
+              <div class="r-a"><span class="mini-btn">加入文献集</span><span class="mini-btn plain">预览摘要</span><span class="mini-btn plain">精读</span></div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">Sodium-glucose cotransporter-2 inhibitors and renal outcomes<span class="badge run">PubMed</span></div>
+              <div class="r-m">2025-11 · Meta 分析 · 匹配度 85%</div>
+              <div class="r-a"><span class="mini-btn">加入文献集</span><span class="mini-btn plain">精读</span></div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb"><div class="r-t" style="color:var(--muted)">精读 = PDF 阅读器 + 对话问答，出处即原文行号；记录自动归入课题</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>PICO 卡由对话生成、可编辑，是课题记忆的一部分</span>
+      <span><b>2</b>筛选交给对话：纳入/排除逐篇留原因，可复核</span>
+      <span><b>3</b>文献集状态闭环：待筛→精读→入证据表，全部有出处</span>
+      <span><b>4</b>检索结果按 PICO 匹配度排序，一键入集/精读</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 11：科研 · 自有数据与论文写作 ================= -->
+
+  <h2 class="screen-title"><span class="no">11</span>科研 · 记录与产出：自有数据脱敏统计 + 论文走统一验收闭环</h2>
+  <div class="screen-intent">结合自己患者数据做科研：<b>自然语言定义队列 → 本地脱敏 → 沙箱统计 → 图表产物</b>，全程只出聚合结果；写论文复用文书验收闭环——骨架按文献集与统计结果生成，逐节 Goal 校验，图表与引用自动嵌入。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:180px; left:640px;">1</span>
+    <span class="pin" style="top:400px; left:340px;">2</span>
+    <span class="pin" style="top:600px; left:340px;">3</span>
+    <span class="pin" style="top:300px; left:1010px;">4</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">项目 · 2型糖尿病管理路径研究 — 分析与写作</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>项目：2型糖尿病管理路径研究</span>
+          <span class="pill local">◈ 本地沙箱 · 仅聚合结果</span>
+          <div class="ctx-meter"><span class="meter"><span class="bar"><i class="warn" style="width:58%"></i></span>上下文 58%</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">项目 · 课题任务</div>
+            <div class="task-item active"><span class="st run"></span><div><div class="t">队列分析与论文初稿</div><div class="m">阶段 ⑤ 分析 → ⑥ 写作</div></div></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 项目</span><h3>队列分析与论文初稿</h3><span class="badge run">统计沙箱运行中</span></div>
+            <div class="stage">
+              <span class="stg on">① 检索 ✓</span><span class="stg on">② 筛选 ✓</span><span class="stg on">③ 精读 ✓</span><span class="stg on">④ 证据表 ✓</span><span class="stg on">⑤ 分析</span><span class="stg">⑥ 写作</span>
+            </div>
+          </div>
+          <div class="messages">
+            <div class="msg user"><span class="who">我</span><div class="bubble">从我的患者里筛出近一年用过 SGLT2i 的 T2DM 患者，按糖化变化分两组，出对比图，然后按证据表和图表搭论文骨架。</div></div>
+            <div class="steps">
+              <div class="head">已执行 3 步 · 12.4s <span class="chev">▾ 收起</span></div>
+              <ul>
+                <li><span class="ok">✓</span><span class="tool">cohort_filter（本地脱敏）</span>近一年 SGLT2i 处方 · T2DM → 236 / 1,842 人<span class="ms">3.2s</span></li>
+                <li><span class="ok">✓</span><span class="tool">python_sandbox</span>分组统计 + 检验（本地沙箱）<span class="ms">8.1s</span></li>
+                <li><span class="ok">✓</span><span class="tool">chart_generate</span>对比图生成<span class="ms">1.1s</span></li>
+              </ul>
+            </div>
+            <div class="chart-card">
+              <div class="a-head" style="font-size:12.5px">图 1 · 两组糖化血红蛋白变化（基线 → 12 个月）<span class="badge ok">聚合结果</span></div>
+              <div class="chart-row">
+                <div class="bar-g"><div class="bars"><div class="bar dark" style="height:64px"></div><div class="bar" style="height:38px"></div></div><span class="cap">联合路径组 n=118（-0.9%）</span></div>
+                <div class="bar-g"><div class="bars"><div class="bar dark" style="height:60px"></div><div class="bar" style="height:52px"></div></div><span class="cap">常规路径组 n=118（-0.3%）</span></div>
+              </div>
+              <div class="ctxnote">深色=基线糖化，浅色=12 个月随访；组间差异 -0.6%（95%CI -0.8~-0.4），统计在本地沙箱完成，导出仅含聚合数值，无任何个体信息。</div>
+            </div>
+            <div class="artifact">
+              <div class="a-head">📄 论文初稿骨架 <span class="badge draft">待复核 · v1</span><span class="badge ok">引用 43 篇</span></div>
+              <div class="a-meta">结构：背景 / 方法 / 结果 / 讨论 / 结论 / 限制 · 依据=证据表 + 图 1-3</div>
+              <div class="a-sum">方法节已按证据表写好；结果节等待你确认图 1 分组方式后生成。引用格式按目标期刊自动套用。</div>
+              <div class="a-actions"><button class="btn primary">打开验收视图</button><button class="btn ghost">逐节 Goal 校验</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">产物 <span class="n">3</span></span></div>
+          <div class="rbody">
+            <div class="rcard">
+              <div class="r-t">📊 图 1-3 统计图 <span class="badge ok">已确认</span></div>
+              <div class="r-m">生成于统计沙箱 · 可导出 300dpi</div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">📋 证据表（43 篇）<span class="badge ok">已锁定</span></div>
+              <div class="r-m">PICO 矩阵 · 每格带原文行号出处</div>
+            </div>
+            <div class="rcard">
+              <div class="r-t">📄 论文初稿骨架 <span class="badge draft">v1 待复核</span></div>
+              <div class="r-m">6 节 Goal 清单 · 2/6 节完成</div>
+              <div class="r-a"><span class="mini-btn plain">查看验收</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>队列用自然语言定义，筛选在本地完成并报告命中率</span>
+      <span><b>2</b>图表是产物：可确认/重生成，确认后进入论文</span>
+      <span><b>3</b>论文骨架引用文献集自动格式化，走屏 3 验收闭环 + 逐节 Goal 校验</span>
+      <span><b>4</b>产物三件套：统计图 / 证据表 / 论文稿，全部留版本与出处</span>
+    </div>
+  </div>
+
+  <!-- ================= 屏幕 12：医生记忆系统 ================= -->
+
+  <div class="chapter" id="ch6"><span class="cno">第六章</span>医生记忆<span class="csub">屏 12 三层记忆系统</span></div>
+
+  <h2 class="screen-title"><span class="no">12</span>医生记忆：全局 / 项目 / 患者三层 + 短期上下文，越用越好用</h2>
+  <div class="screen-intent">参考 ZCode 的记忆设计与 WorkBuddy 的"每晚整理"：<b>短期记忆</b>=当前会话上下文（自动压缩）；<b>长期记忆</b>分三层——全局（医生偏好/写法/反馈）、项目（课题背景/纳排标准）、患者（病史要点/随访偏好）。记忆由每晚会话整理自动提炼 + 对话里显式"记住/忘掉"，全部本地可编辑可删除；回答可展开"参考了哪些记忆"。</div>
+  <div class="screen-wrap">
+    <span class="pin" style="top:135px; left:700px;">1</span>
+    <span class="pin" style="top:130px; left:700px;">2</span>
+    <span class="pin" style="top:340px; left:640px;">3</span>
+    <span class="pin" style="top:300px; left:1010px;">4</span>
+    <span class="pin" style="top:495px; left:1010px;">5</span>
+    <div class="window">
+      <div class="win-bar"><i></i><i></i><i></i><div class="addr">Open Medical Workbench — 记忆</div></div>
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="logo">✚</span>医疗工作台</div>
+          <span class="pill"><span class="dot"></span>患者：张三 · 男 · 67岁</span>
+          <span class="pill local">◈ 记忆存本机</span>
+          <div class="ctx-meter"><span class="meter"><span class="bar"><i style="width:38%"></i></span>会话上下文 38%</span><span class="meter">长期记忆 16 条</span><span class="icon-btn">⚙</span></div>
+        </div>
+        <div class="lnav">
+          <button class="btn-new">＋ 新任务</button>
+          <div>
+            <div class="lnav-group">今日</div>
+            <div class="task-item"><span class="st run"></span><div><div class="t">出院小结草稿</div><div class="m">张三 · 生成中</div></div></div>
+          </div>
+          <div class="lnav-foot"><span class="navlink">🧠 记忆面板</span><span class="navlink">▦ 工具箱</span><span class="navlink">⌂ 首页</span></div>
+        </div>
+        <div class="center">
+          <div class="conv-head">
+            <div class="row1"><span class="back">‹ 任务</span><h3>出院小结草稿</h3><span class="pill" style="padding:2px 10px"><span class="dot"></span>张三</span><span style="font-size:11px;color:var(--muted)">🧠 本回答参考了 2 条记忆 ▾</span></div>
+          </div>
+          <div class="messages">
+            <div class="toast">🧠 已记住：出院小结按科室模板第三节格式分节 · 长期记忆 · 全局 <button>查看</button></div>
+            <div class="msg user"><span class="who">我</span><div class="bubble">以后出院小结都按科室模板第三节的格式写。</div></div>
+            <div class="msg ai"><span class="who">医</span>
+              <div class="bubble">好的，已写入<b>全局记忆</b>：今后所有出院小结默认按科室模板第三节分节。本篇正在按此格式重新生成。
+                <div class="ctxnote">🧠 本次生成参考的记忆：① 偏好 · 出院小结按科室模板第三节格式（刚记住）② 写法 · 检验值保留 1 位小数（08-12 会话提炼）——点击顶部"参考了 2 条记忆"可随时展开或屏蔽。</div>
+              </div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb;width:600px">
+              <div class="r-t" style="color:var(--muted)">记忆如何越来越好用：每晚自动整理当天会话 → 提炼事实/偏好/纠正 → 征求确认后入库 → 下次自动生效；也可对话里直接"记住/忘掉"</div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
+            <div class="input-line"><span class="txt">写完了发我验收。<span class="caret"></span></span><span class="send">➤</span></div>
+            <div class="composer-foot">
+              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="mode-chip caret">文书模式 · 产物均为草稿</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rpanel">
+          <div class="rtabs"><span class="rtab on">全局 <span class="n">8</span></span><span class="rtab">项目 <span class="n">3</span></span><span class="rtab">患者 <span class="n">5</span></span></div>
+          <div class="rbody">
+            <div class="mem-item">
+              <div class="m-top"><span class="badge ok">偏好</span>出院小结按科室模板第三节格式<span class="m-acts"><span class="mini-btn plain">编辑</span><span class="mini-btn plain">忘掉</span></span></div>
+              <div class="m-src">来源：09-15 会话 · 显式记住 · 全局生效</div>
+            </div>
+            <div class="mem-item">
+              <div class="m-top"><span class="badge ok">写法</span>检验值保留 1 位小数，附单位<span class="m-acts"><span class="mini-btn plain">编辑</span><span class="mini-btn plain">忘掉</span></span></div>
+              <div class="m-src">来源：08-12 会话 · 整理提炼 · 已生效 11 次</div>
+            </div>
+            <div class="mem-item">
+              <div class="m-top"><span class="badge no">反馈</span>描述血糖用具体数值，不用"偏高"等口语<span class="m-acts"><span class="mini-btn plain">编辑</span><span class="mini-btn plain">忘掉</span></span></div>
+              <div class="m-src">来源：08-30 你纠正后记录 · 全局生效</div>
+            </div>
+            <div class="mem-item">
+              <div class="m-top"><span class="badge run">项目</span>课题纳排标准（详见项目记忆）<span class="m-acts"><span class="mini-btn plain">查看</span></span></div>
+              <div class="m-src">归属：2型糖尿病管理路径研究 · 仅项目内生效</div>
+            </div>
+            <div class="rcard" style="border-style:dashed;background:#fbfcfb">
+              <div class="r-t" style="color:var(--muted)">患者记忆 5 条仅注入张三上下文 · 迁移患者自动跟随切换</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b>1</b>显式"记住"即时生效，toast 可点击查看详情</span>
+      <span><b>2</b>回答标注"参考了哪些记忆"，可展开、可屏蔽——记忆不黑箱</span>
+      <span><b>3</b>记忆注入有范围：全局/项目/患者各归各位</span>
+      <span><b>4</b>记忆面板：每条带类型、来源会话、生效次数，可编辑可忘掉</span>
+      <span><b>5</b>患者记忆跟随患者切换（屏 7），不串档</span>
+    </div>
+  </div>
+
+  <!-- ================= 13 场景剧本 ================= -->
+
+  <div class="chapter" id="ch7"><span class="cno">第七章</span>场景剧本<span class="csub">屏 13 · S1-S6 六条线的页面状态推演</span></div>
+
+  <h2 class="screen-title"><span class="no">13</span>场景剧本：每条线给出 触发 → 页面状态序列（红色角标 = 该步变化） → 案例数据 → 边界裁定</h2>
+  <div class="screen-intent">前面 1–12 屏是"空间的展示"，这一节是"时间的推演"：每个核心场景按用户使用逻辑连续走完，标注<b>同一页面在各步发生的变化</b>；任何一步都要能回溯到前面的屏。案例全部为合成数据。</div>
+
+  <h3 class="sc-t"><span class="sid">S1</span>门诊间隙快问快答（咨询）—— 案例：王五家属问"能吃布洛芬吗"</h3>
+  <div class="sc-i">使用逻辑：<b>首页直接问 → 咨询模式只读 → 直接答+出处 → 连续追问 → 结束不产生任何待办</b>。全程不切页、不强制流程。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">①输入</span><div class="wl"></div><div class="wl" style="width:80%"></div><div class="wl" style="width:46%"></div></div>
+          <div class="wblk"><div class="wl"></div><div class="wl" style="width:50%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 首页大输入框直接输入："王五能吃布洛芬吗？退烧"，患者下拉选王五。选场景只是填模板，不自动跑。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk msg-u"><div class="wl"></div><div class="wl" style="width:44%"></div></div>
+          <div class="wblk hl"><span class="wtag">②步骤流</span><div class="wl"></div><div class="wl" style="width:70%"></div><div class="wl" style="width:52%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>②</b> 进入会话·咨询模式（只读不写）。步骤流：read_patient_profile → medication_safety_check，8.2s。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl"></div></div>
+          <div class="wblk hl"><span class="wtag">③直接答</span><div class="wl"></div><div class="wl" style="width:74%"></div><div class="wl" style="width:60%"></div><div class="wl" style="width:36%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> 直接答："退烧优先选对乙酰氨基酚；布洛芬与抗血小板药同用增加胃出血风险"<b>+ 引用气泡</b>[说明书 L42–48]。⚠ 无产物卡——咨询不产文书。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk msg-u"><div class="wl" style="width:70%"></div></div>
+          <div class="wblk"><div class="wl"></div><div class="wl" style="width:56%"></div></div>
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>④</b> 连续追问"那对乙酰氨基酚剂量？"上下文延续。结束：无待复核、无草稿。<b>边界</b>：医生说"把结论存为就诊备注"→ 才生成 draft 附件进验收（R1）。</div>
+    </div>
+  </div>
+
+  <h3 class="sc-t"><span class="sid">S2</span>出院小结：从建任务到归档与随访（文书全流程）—— 案例：张三</h3>
+  <div class="sc-i">使用逻辑：<b>选患者+场景 → 确认材料 → Goal 自动整理 → 待复核 → 验收退回 → 修订 → 通过 → 患者时间线可见 → 发起随访</b>。这是产品的主干路径，覆盖屏 1/3/4。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">①任务卡</span><div class="wl"></div><div class="wl" style="width:52%"></div></div>
+          <div class="wblk"><div class="wl"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 新任务：患者=张三，场景=出院小结（模板预填、可改）。确认前不运行、不耗积分。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot"></span></div>
+        <div class="wmain"><div class="wblk"><div class="wl"></div></div><div class="wblk"><div class="wl" style="width:50%"></div></div></div>
+        <div class="wside hl"><span class="wtag">②材料</span><div class="wl"></div><div class="wl" style="width:60%"></div><div class="wl" style="width:40%"></div></div>
+      </div>
+      <div class="st-cap"><b>②</b> 准备材料：右栏材料 tab 勾选"08-20 出院记录 + 检验 2 份"，材料范围限定本次运行。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+          <div class="wblk hl"><span class="wtag">③Goal 4/5</span><div class="wl"></div><div class="wl" style="width:72%"></div><div class="wl" style="width:64%"></div><div class="wl" style="width:48%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> 文书模式：Goal 卡出现（五节×证据），第 1 轮校验发现剂量与指南不一致→自动修订续跑。可暂停/接管。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain"><div class="wblk hl"><span class="wtag">④产物卡</span><div class="wl"></div><div class="wl" style="width:66%"></div></div><div class="wblk"><div class="wl" style="width:44%"></div></div></div>
+        <div class="wside"><div class="wl"></div><div class="wl" style="width:56%"></div></div>
+      </div>
+      <div class="st-cap"><b>④</b> 完成进待复核：对话内产物卡（draft·v3·出处 12 条），左栏"今日"出现待复核徽章 3。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">⑤验收·diff</span><div class="wl"></div><div class="wl" style="width:80%"></div><div class="wl" style="width:70%"></div><div class="wl" style="width:56%"></div><div class="wl" style="width:30%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>⑤</b> 打开验收视图（叠加中栏）：看 diff 发现剂量改动有出处 → 但随访缺 1 项 → <b>退回</b>，自动生成修订指令回会话。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain"><div class="wblk"><div class="wl"></div></div><div class="wblk"><div class="wl" style="width:58%"></div></div></div>
+        <div class="wside hl"><span class="wtag">⑥患者时间线</span><div class="wl"></div><div class="wl" style="width:64%"></div></div>
+      </div>
+      <div class="st-cap"><b>⑥</b> 补齐后二次验收<b>通过</b>（approved·v4）：患者详情时间线出现该成果，[安排随访] 亮起；左栏待复核徽章 -1。</div>
+    </div>
+  </div>
+
+  <h3 class="sc-t"><span class="sid">S3</span>风险处理：从提醒到任务到归档—— 案例：张三 × 奥美拉唑冲突</h3>
+  <div class="sc-i">使用逻辑：<b>风险卡发现 → 一键生成任务（对话连一切）→ 会话完成建议 → 验收 → 风险闭环</b>。风险不是通知，是任务入口。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:44%"></div></div>
+          <div class="wblk hl"><span class="wtag">①风险卡</span><div class="wl"></div><div class="wl" style="width:78%"></div><div class="wl" style="width:50%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 患者列表 ⚠3 → 详情：红色风险卡"奥美拉唑×替格瑞洛"。点[查看依据]展开 2 篇出处。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain"><div class="wblk msg-u"><div class="wl"></div><div class="wl" style="width:60%"></div></div><div class="wblk hl"><span class="wtag">②上下文</span><div class="wl"></div></div></div>
+        <div class="wside"><div class="wl"></div><div class="wl" style="width:52%"></div></div>
+      </div>
+      <div class="st-cap"><b>②</b> 点[生成用药建议草稿]：跳入会话·自动切<b>文书模式</b>，风险依据+相关指南已注入上下文 chips。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:36%"></div></div>
+          <div class="wblk hl"><span class="wtag">③建议+出处</span><div class="wl"></div><div class="wl" style="width:72%"></div><div class="wl" style="width:38%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> 生成建议："换泮托拉唑 40mg qd"+引用气泡；产物卡 draft·v1。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+          <div class="wblk hl"><span class="wtag">④风险闭环</span><div class="wl"></div><div class="wl" style="width:56%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>④</b> 验收通过后回到患者详情：风险卡标记<b>已处理</b>（关联成果 v1），⚠3 → ⚠2。忽略/误报也结构化留痕（调规则用）。</div>
+    </div>
+  </div>
+
+  <h3 class="sc-t"><span class="sid">S4</span>知识库：一篇新指南从上传到被引用再到防过期—— 案例：《2024 STEMI 指南》</h3>
+  <div class="sc-i">使用逻辑：<b>上传 → AI 打标确认 → 索引 → 对话引用 → 月度体检防过期</b>。构建与使用同视图（屏 9），此处看时间线。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">①上传</span><div class="wl"></div><div class="wl" style="width:56%"></div></div>
+          <div class="wblk"><div class="wl" style="width:44%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 知识库项目·[上传文档]：拖入 PDF"stemiv2024.pdf"。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">②AI打标</span><div class="wl"></div><div class="wl" style="width:70%"></div></div>
+          <div class="wblk"><div class="wl" style="width:48%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>②</b> AI 识别：《2024 中国 STEMI 诊断治疗指南》→ 建议归入"临床指南"，年份 2024。<b>确认后</b>才抽取索引。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">③已索引</span><div class="wl"></div><div class="wl" style="width:50%"></div></div>
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> 文档行状态：索引中 80% → 已索引·214 段；"对话引用 0 次"计数开始。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk msg-u"><div class="wl" style="width:64%"></div></div>
+          <div class="wblk hl"><span class="wtag">④被引用</span><div class="wl"></div><div class="wl" style="width:70%"></div><div class="wl" style="width:34%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>④</b> 任何会话 @该指南 或 AI 自动检索 → 回答带 [L120–135] 气泡；文档行"对话引用 1 次"。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">⑤体检</span><div class="wl"></div><div class="wl" style="width:66%"></div><div class="wl" style="width:44%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>⑤</b> 月度体检：提醒某 2021 旧指南有新版 → [查看对比]→[上传新版并归档旧版]，旧文档保留可溯。</div>
+    </div>
+  </div>
+
+  <h3 class="sc-t"><span class="sid">S5</span>科研课题：从立项到投稿包—— 案例：2型糖尿病管理路径研究</h3>
+  <div class="sc-i">使用逻辑：<b>立项（目标=记忆）→ 检索入集 → 对话筛选 → 证据表 → 队列统计 → 论文 → 验收 → 投稿包</b>。对应屏 6/10/11，阶段条全程可见。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">①立项</span><div class="wl"></div><div class="wl" style="width:68%"></div></div>
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 新建课题（屏 6）：目标描述入项目记忆；自动建"课题文献"子库。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain"><div class="wblk hl"><span class="wtag">②检索入集</span><div class="wl"></div><div class="wl" style="width:60%"></div></div><div class="wblk"><div class="wl" style="width:44%"></div></div></div>
+        <div class="wside hl"><div class="wl"></div><div class="wl" style="width:58%"></div><div class="wl" style="width:40%"></div></div>
+      </div>
+      <div class="st-cap"><b>②</b> 检索结果按 PICO 匹配度排序 → 一键加入文献集（右栏）；48 篇去重。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk msg-u"><div class="wl" style="width:70%"></div></div>
+          <div class="wblk hl"><span class="wtag">③筛选留痕</span><div class="wl"></div><div class="wl" style="width:76%"></div><div class="wl" style="width:52%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> "按纳入标准过一遍"→ 纳入 2/排除 3，逐篇原因留痕；证据表 +2 行（带行号出处）。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body three"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain"><div class="wblk hl"><span class="wtag">④队列统计</span><div class="wl"></div><div class="wl" style="width:64%"></div></div><div class="wblk"><div class="wl" style="width:40%"></div></div></div>
+        <div class="wside"><div class="wl"></div><div class="wl" style="width:50%"></div></div>
+      </div>
+      <div class="st-cap"><b>④</b> 自然语言定义队列 → 本地脱敏 236 人 → 沙箱统计 → 图 1（顶栏徽章"仅聚合结果"）。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:36%"></div></div>
+          <div class="wblk hl"><span class="wtag">⑤论文→验收</span><div class="wl"></div><div class="wl" style="width:74%"></div><div class="wl" style="width:58%"></div><div class="wl" style="width:30%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>⑤</b> 骨架按证据表+图表生成，6 节 Goal 逐节校验 → 与出院小结<b>同一个</b>验收视图（屏 3）退回/通过。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">⑥投稿包</span><div class="wl"></div><div class="wl" style="width:62%"></div></div>
+          <div class="wblk"><div class="wl" style="width:42%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>⑥</b> 通过后一键打包：定稿 + 图 1-3（300dpi）+ 参考文献表（期刊格式）+ 证据表。全部带版本。</div>
+    </div>
+  </div>
+
+  <h3 class="sc-t"><span class="sid">S6</span>记忆沉淀：一次纠正，之后自动生效—— 案例：写法纠正"血糖偏高"→具体数值</h3>
+  <div class="sc-i">使用逻辑：<b>AI 表述不当 → 医生纠正 → 即时记住（反馈类·全局）→ 当晚静默整理 → 次日起自动生效</b>。对应屏 12，注入始终可见。</div>
+  <div class="board">
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">①不当表述</span><div class="wl"></div><div class="wl" style="width:58%"></div></div>
+          <div class="wblk"><div class="wl" style="width:40%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>①</b> 会话里 AI 写"血糖控制偏高"——医生觉得不专业。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot on"></span></div>
+        <div class="wmain">
+          <div class="wblk msg-u"><div class="wl" style="width:74%"></div></div>
+          <div class="wblk hl"><span class="wtag">②即时记住</span><div class="wl"></div><div class="wl" style="width:48%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>②</b> 医生纠正"用具体数值"→ toast"已记住：描述血糖用具体数值 · 反馈 · 全局"，可点开/撤销。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot ok"></span></div>
+        <div class="wmain">
+          <div class="wblk hl"><span class="wtag">③每晚整理</span><div class="wl"></div><div class="wl" style="width:60%"></div></div>
+          <div class="wblk"><div class="wl" style="width:36%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>③</b> 当晚整理任务静默运行：当天会话再提炼 2 条事实类记忆，待明早确认（批量确认不影响使用）。</div>
+    </div>
+    <span class="sc-arrow">→</span>
+    <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
+      <div class="st-body"><div class="wcol"><span class="wdot run"></span></div>
+        <div class="wmain">
+          <div class="wblk"><div class="wl" style="width:34%"></div></div>
+          <div class="wblk hl"><span class="wtag">④次日生效</span><div class="wl"></div><div class="wl" style="width:70%"></div><div class="wl" style="width:44%"></div></div>
+        </div>
+      </div>
+      <div class="st-cap"><b>④</b> 次日任何会话：表述自动用具体数值，回答头部"参考了 1 条记忆"可展开——<b>越用越顺手，且可纠偏</b>。</div>
+    </div>
+  </div>
+
+  <!-- ================= 14 统一交互规范 ================= -->
+
+  <div class="chapter" id="ch8"><span class="cno">第八章</span>规范与状态总表<span class="csub">屏 14 十条裁定 · 屏 15 页面状态总表</span></div>
+
+  <h2 class="screen-title"><span class="no">14</span>统一交互规范：十条全局裁定，保证所有场景不打架</h2>
+  <div class="screen-intent">以下规则凌驾于所有场景之上；任何新场景/新界面与规则冲突时，<b>改场景，不改规则</b>。这也是评审清单。</div>
+  <div class="rule-grid">
+    <div class="rule"><span class="rno">1</span><b>产物唯一生命周期</b>：draft → 验收视图 → approved / rejected；编辑后回 draft。<u>所有</u>"生成草稿"入口（文书、风险建议、工具结果、统计图、论文、就诊备注）都汇到同一个验收视图。</div>
+    <div class="rule"><span class="rno">2</span><b>模式档位唯一且全局</b>：咨询（只读）/ 文书（可写但一律 draft）/ 计划（先方案） / 自动（本地连续执行）。切换入口唯一（composer 右下）。写档案、外发、删除在任何档位都二次确认。</div>
+    <div class="rule"><span class="rno">3</span><b>回答三件套</b>：步骤流（可折叠）+ 结论 + 出处（若引用了来源）。无出处的段落标"待核查"。步骤流样式全场景一致。</div>
+    <div class="rule"><span class="rno">4</span><b>右栏 = 场景面板</b>：位置与 tab 骨架固定（材料/知识/产物，可附加场景 tab），内容随任务类型切换；任何场景不得新开独立窗口或弹走主对话。</div>
+    <div class="rule"><span class="rno">5</span><b>患者上下文唯一规则</b>（屏 7）：@患者=引用≠切换；切换只有三个入口；PHI 界面必须可见"当前是谁"；外发授权按患者隔离、切换即重置。</div>
+    <div class="rule"><span class="rno">6</span><b>待办唯一收口</b>：今日（左栏）+ 待复核（徽章+队列）。风险、随访逾期、复核、记忆确认全部汇入这两处，不设第三个通知中心。</div>
+    <div class="rule"><span class="rno">7</span><b>长任务只认 Goal 卡</b>：多步产物任务（出院小结、论文）在会话内显示 Goal 卡（清单×证据、轮次、暂停/接管）；单步咨询与简单问答没有 Goal 卡。</div>
+    <div class="rule"><span class="rno">8</span><b>记忆注入可见</b>：回答头部标注"参考了 N 条记忆"，可展开可屏蔽；全局/项目/患者三层各归各位，患者记忆随切换跟随（屏 7）。</div>
+    <div class="rule"><span class="rno">9</span><b>溯源形态按对象固定</b>：文档=行号区间；患者数据=记录+时间；文献=DOI/期刊年；统计=队列条件+沙箱参数。同一对象在任何页面出现，溯源样式一致。</div>
+    <div class="rule"><span class="rno">10</span><b>一切长任务可中断可回溯</b>：暂停/手动接管常在；失败与取消保留运行记录；"忽略/退回"必须结构化留原因（风险调优、修订指令共用此机制）。</div>
+  </div>
+
+  <!-- ================= 15 页面清单与状态总表 ================= -->
+
+  <h2 class="screen-title"><span class="no">15</span>页面清单与状态总表：每个页面有哪些状态、由什么触发</h2>
+  <div class="screen-intent">枚举全部页面与其状态迁移，确保"各种页面的变化"被系统覆盖，而不是散落在各场景里。</div>
+  <table class="ptable">
+    <tr><th style="width:120px">页面/视图</th><th style="width:170px">进入入口</th><th>状态（触发 → 变化）</th></tr>
+    <tr><td><b>首页</b></td><td>左栏 ⌂ / 启动</td><td>空状态（无患者）→ 常态（场景卡+待办数）→ 输入即建任务。变化源：建档、今日待办数。</td></tr>
+    <tr><td><b>会话工作台</b></td><td>新建任务 / 左栏任务 / 患者详情"打开病例工作区"</td><td>准备材料（材料 tab 高亮）→ 生成中（步骤流滚动，Goal 卡出现）→ 待复核（产物卡+徽章+1）→ 已归档（产物 approved 标记）。模式档位随场景预置：咨询/文书。</td></tr>
+    <tr><td><b>验收视图</b></td><td>产物卡[打开验收] / 待复核队列 / 风险"已处理"回链</td><td>预览 ⇄ diff ⇄ 出处对照 三态切换；通过 → 关闭并回会话（产物 approved）；退回 → 关闭并注入修订指令。移动端退化为全屏页。</td></tr>
+    <tr><td><b>患者列表</b></td><td>左栏患者 / 切换器</td><td>常态 ⇄ 搜索/分组过滤；风险角标随每日扫描更新（⚠n）；点击=切换当前患者（屏 7）。</td></tr>
+    <tr><td><b>患者详情</b></td><td>列表点击 / 速览卡[完整档案]</td><td>四 tab（概览/临床/消息/随访）；概览含风险面板 + pending-actions；approved 成果写入时间线；编辑临床资料仅手填+AI 提议确认。</td></tr>
+    <tr><td><b>知识库视图</b></td><td>左栏知识库项目</td><td>上传流程 4 态（选文件→AI打标确认→抽取→已索引）；体检卡出现/处理；子库 chips 即过滤。</td></tr>
+    <tr><td><b>项目页</b></td><td>左栏项目点击 / 新建项目</td><td>阶段 stepper（科研 6 阶段）随任务推进；项目记忆/子库入口常驻；新建对话框为唯一创建入口。</td></tr>
+    <tr><td><b>记忆面板</b></td><td>左栏 🧠 / 回答"参考记忆"展开</td><td>三层 tab；条目 hover 出 编辑/忘掉；整理待确认项顶部成批出现。</td></tr>
+    <tr><td><b>工具面板</b></td><td>工具箱点击 / 对话内 $技能</td><td>滑入态 → 表单预填态 → 结果态（[生成草稿] 汇入验收）；×即收回，对话不中断。</td></tr>
+  </table>
+
+  <div style="margin-top:44px;padding:16px 20px;background:#fff;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--muted);line-height:1.8">
+    <b style="color:var(--ink)">阅读提示</b>：本页是《交互与 UI 设计规范 v2.1》的可视化版（17 屏），按八章组织——一 全局框架与主干路径（屏0/1/3/4）· 二 患者管理专题（屏2/7/8）· 三 项目体系专题（屏6）· 四 知识与工具（屏5/9）· 五 科研专题（屏10/11）· 六 医生记忆（屏12）· 七 场景剧本 S1-S6（屏13，红色角标=该步页面变化）· 八 规范与页面状态（屏14/15）。权威文字版见 <b>docs/INTERACTION_REDESIGN.md</b>（v2.0）。屏幕编号为稳定 ID，跨章引用不受重排影响。所有患者、数值、指南引用均为演示用合成数据。
 </div>
 <script>
-  // 预览辅助：URL 带 #shot0..#shot4 时只显示对应章节，便于逐屏核对
+  // 预览辅助：URL 带 #shot0..#shot15 时只显示对应章节，便于逐屏核对
   (function(){
     const h = location.hash;
     if (!h.startsWith("#shot")) return;
     const idx = +h.slice(5);
     const titles = Array.from(document.querySelectorAll("h2.screen-title"));
+    const numbers = titles.map(t => parseInt(t.textContent.trim(), 10));
     const blocks = titles.map(t => {
       const els = [t]; let n = t.nextElementSibling;
       while (n && !n.classList.contains("screen-title")) { els.push(n); n = n.nextElementSibling; }
+      let p = t.previousElementSibling;
+      while (p && p.classList.contains("chapter")) { els.unshift(p); p = p.previousElementSibling; }
       return els;
     });
     document.querySelector(".doc-head").style.display = "";
-    blocks.forEach((els, i) => els.forEach(e => e.style.display = i === idx ? "" : "none"));
+    blocks.forEach((els, i) => els.forEach(e => e.style.display = numbers[i] === idx ? "" : "none"));
   })();
 </script>
 </body>

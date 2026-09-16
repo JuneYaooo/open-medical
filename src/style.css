@@ -4095,3 +4095,196 @@ blockquote p {
   font-size: 12px;
   color: #5d6c5f;
 }
+
+/* ================= 交互重设计 v2.1 新增组件 ================= */
+/* --- 顶栏患者切换器 --- */
+.pt-switcher{position:relative;}
+.patient-pill{cursor:pointer;font-weight:600;border-color:var(--accent);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.patient-pill.empty{border-style:dashed;border-color:var(--border);color:var(--muted);font-weight:400;}
+.patient-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;}
+.pt-switch-menu{position:absolute;top:calc(100% + 6px);right:0;width:300px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(31,42,38,.16);z-index:60;overflow:hidden;}
+.ps-search{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);color:var(--muted);}
+.ps-search input{border:none;outline:none;flex:1;font-size:12.5px;background:transparent;}
+.ps-group{font-size:10.5px;color:var(--muted);letter-spacing:1px;padding:8px 12px 3px;}
+.ps-item{display:flex;gap:8px;align-items:center;width:100%;padding:7px 12px;font-size:12.5px;background:none;border:none;cursor:pointer;text-align:left;}
+.ps-item:hover{background:#f0f4f2;}
+.ps-item.on{background:var(--accent-soft);color:var(--accent-deep);font-weight:600;}
+.ps-item .sub{margin-left:auto;font-size:10.5px;color:var(--muted);}
+.ps-empty-row{padding:8px 12px;font-size:11.5px;color:var(--muted);}
+.ps-foot{border-top:1px solid var(--border);padding:8px 12px;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;background:#fbfcfb;}
+.ps-foot button{border:none;background:none;color:var(--accent-deep);font-size:11.5px;cursor:pointer;text-decoration:underline;}
+
+/* --- 左栏分组 --- */
+.nav-label{display:flex;align-items:center;gap:6px;}
+.nav-label-action{border:none;background:none;color:var(--accent-deep);font-size:11px;cursor:pointer;padding:0 4px;}
+.nav-label-action.warn{background:var(--accent-soft);border-radius:99px;padding:1px 8px;font-weight:600;}
+.nav-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);margin-left:auto;flex:none;}
+nav.toolbox .session b{font-weight:500;}
+
+/* --- 步骤流 --- */
+.steps-flow{background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-size:12px;color:var(--muted);max-width:92%;margin-bottom:8px;}
+.steps-flow.running{border-color:var(--accent-line);}
+.steps-head{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;cursor:pointer;color:var(--ink);font-size:12.5px;padding:0;text-align:left;}
+.steps-head b{font-weight:600;}
+.steps-flow.running .steps-head b{color:var(--accent-deep);}
+.steps-count{margin-left:auto;color:#9aa7a1;font-size:11px;}
+.steps-head .chev{transition:transform .15s;color:var(--muted);}
+.steps-head .chev.open{transform:rotate(180deg);}
+.steps-list{list-style:none;margin-top:7px;display:flex;flex-direction:column;gap:5px;}
+.steps-list li{display:flex;gap:7px;align-items:center;}
+.steps-list .st-ic{width:16px;display:inline-flex;color:#5aa88c;}
+.steps-list .st-ic.failed{color:var(--danger);}
+.steps-list .st-ic.running{color:var(--accent);}
+.steps-list .st-tool{color:var(--accent-deep);font-weight:600;}
+.steps-list .st-status{margin-left:auto;color:#9aa7a1;font-size:11px;}
+.steps-list .st-empty{color:#9aa7a1;}
+.message-content.streaming{border-left:2px solid var(--accent-line);padding-left:10px;color:#41504a;}
+
+/* --- 对话内产物卡 --- */
+.artifact-inline{border:1px solid var(--accent-line);background:linear-gradient(180deg,#fbfdfc,#f3f8f6);border-radius:12px;padding:10px 13px;max-width:92%;margin-top:8px;}
+.artifact-inline .ai-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink);}
+.artifact-inline .ai-acts{display:flex;gap:8px;margin-top:8px;}
+.acc-badge{font-size:10.5px;border-radius:99px;padding:2px 8px;font-weight:600;}
+.acc-badge.draft{background:var(--accent-soft);color:var(--amber);}
+.acc-badge.approved{background:var(--accent-soft);color:var(--accent-deep);}
+.acc-badge.rejected{background:var(--red-soft, #fbeeec);color:var(--danger);}
+.mini-btn{font-size:11px;border-radius:6px;border:1px solid var(--accent-line);color:var(--accent-deep);background:var(--accent-soft);padding:3px 9px;cursor:pointer;}
+.mini-btn.plain{background:#fff;border-color:var(--border);color:var(--muted);}
+.mini-btn:hover{filter:brightness(.98);}
+
+/* --- 模式档位 --- */
+.mode-chips{display:flex;gap:4px;background:#eef1ef;border-radius:10px;padding:3px;}
+.mode-chip{border:none;background:none;border-radius:8px;font-size:12px;padding:4px 11px;color:var(--muted);cursor:pointer;}
+.mode-chip.on{background:#fff;color:var(--accent-deep);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+.mode-chip.local.on{color:var(--ink);}
+.mode-chip:disabled{opacity:.45;cursor:not-allowed;}
+
+/* --- 患者速览卡（对话内） --- */
+.patient-summary{background:#fff;border:1px solid var(--accent-line);border-radius:12px;overflow:hidden;max-width:92%;margin-bottom:10px;}
+.patient-summary.compact .ps-grid{grid-template-columns:1fr 1fr 1fr;}
+.ps-head{display:flex;align-items:center;gap:10px;padding:9px 13px;background:linear-gradient(180deg,#f6fbf9,#eef6f2);border-bottom:1px solid var(--border);}
+.ps-head .p-ava{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none;}
+.ps-head .p-id b{font-size:13px;display:block;}
+.ps-head .p-id span{font-size:11px;color:var(--muted);}
+.ps-badges{margin-left:auto;display:flex;gap:6px;align-items:center;}
+.badge.no{background:var(--red-soft, #fbeeec);color:var(--danger);}
+.pill.local{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:99px;padding:2px 9px;font-size:10.5px;color:var(--accent-deep);}
+.ps-grid{display:grid;grid-template-columns:1fr 1fr 1.1fr;}
+.ps-col{padding:9px 12px;border-right:1px solid var(--border);min-width:0;}
+.ps-col:last-child{border-right:none;}
+.ps-col h5{font-size:10.5px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;font-weight:600;}
+.med-chip{display:inline-block;background:#f0f4f2;border:1px solid var(--border);border-radius:6px;padding:2px 7px;margin:0 4px 4px 0;font-size:11px;}
+.ps-empty{font-size:11px;color:#9aa7a1;}
+.ps-col .tl{list-style:none;font-size:11.5px;color:#41504a;display:flex;flex-direction:column;gap:4px;}
+.ps-col .tl i{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;margin-right:6px;}
+.ps-col .vital{margin-bottom:5px;}
+.ps-col .vital .row1{display:flex;gap:5px;align-items:baseline;}
+.ps-col .vital b{font-size:14px;}
+.ps-col .vital .u{font-size:10px;color:var(--muted);}
+.ps-col .vital .d{font-size:10px;color:var(--muted);}
+.ps-actions{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--border);background:#fbfcfb;}
+
+/* --- 验收视图 --- */
+.acceptance{display:grid;grid-template-rows:auto 1fr;background:#f7f9f8;border:1px solid var(--border);border-radius:12px;overflow:hidden;min-height:0;height:100%;}
+.accept-bar{display:flex;align-items:center;gap:10px;background:#fff;border-bottom:1px solid var(--border);padding:10px 16px;flex-wrap:wrap;}
+.accept-bar h3{font-size:14px;}
+.seg{margin-left:auto;display:flex;background:#eef1ef;border-radius:9px;padding:3px;}
+.seg button{border:none;background:none;font-size:12px;color:var(--muted);padding:4px 12px;border-radius:7px;cursor:pointer;}
+.seg button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+.accept-body{display:grid;grid-template-columns:minmax(0,1fr) 260px;min-height:0;}
+.accept-main{display:flex;flex-direction:column;min-height:0;overflow:auto;padding:14px 20px;gap:10px;}
+.acc-doc{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.9;}
+.acc-doc .acc-head{font-weight:700;color:var(--accent-deep);}
+.row-add{background:#e9f5ee;border-radius:4px;padding:0 6px;}
+.row-del{background:var(--red-soft, #fbeeec);border-radius:4px;padding:0 6px;color:#8d443b;text-decoration:line-through;}
+.row-same{color:#41504a;}
+.src-row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--border);font-size:12.5px;justify-content:space-between;}
+.src-row:first-of-type{border-top:none;}
+.review-bar{border-top:1px solid var(--border);background:#fff;border-radius:10px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;bottom:0;}
+.review-note{font-size:11.5px;color:var(--muted);flex:1;min-width:200px;}
+.review-acts{display:flex;gap:8px;margin-left:auto;}
+.btn{border-radius:8px;font-size:12.5px;padding:6px 14px;border:1px solid var(--border);background:#fff;cursor:pointer;}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+.btn.danger{border-color:#e5c4bf;color:var(--danger);}
+.review-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;}
+.review-form input[type="text"],.review-form input:not([type]){border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;flex:1;min-width:140px;}
+.review-form .attest{display:flex;gap:5px;align-items:center;font-size:11.5px;color:var(--muted);white-space:nowrap;}
+.accept-side{border-left:1px solid var(--border);background:#fbfcfb;padding:12px;overflow:auto;display:flex;flex-direction:column;gap:8px;}
+.side-label{font-size:10.5px;color:var(--muted);letter-spacing:1px;font-weight:600;}
+.check-item{display:flex;gap:7px;font-size:12px;align-items:flex-start;line-height:1.5;padding:3px 0;}
+.check-item .ic{flex:none;}
+.check-item.ok .ic{color:#5aa88c;}
+.check-item.warn .ic{color:var(--amber);}
+.check-item.miss .ic{color:var(--amber);}
+.rcard{border:1px solid var(--border);border-radius:9px;padding:8px 10px;background:#fff;font-size:11.5px;}
+.acc-history summary{font-size:11.5px;color:var(--muted);cursor:pointer;}
+.acc-h-row{display:flex;flex-direction:column;font-size:11.5px;padding:5px 0;border-top:1px dashed var(--border);}
+.acc-h-row small{color:var(--muted);}
+.acc-disclaimer{font-size:10.5px;color:#9aa7a1;line-height:1.6;margin-top:auto;}
+
+/* --- 患者详情 · 概览新版 --- */
+.pt-sec{background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-bottom:10px;}
+.pt-sec .s-t{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;margin-bottom:8px;color:var(--ink);}
+.pt-sec .s-t .s-m{font-weight:400;font-size:11px;color:var(--muted);margin-left:auto;}
+.pt-row{display:flex;gap:10px;align-items:center;font-size:12px;padding:6px 2px;border-top:1px solid #f0f4f2;}
+.pt-row:first-of-type{border-top:none;}
+.pt-row .r-date{color:var(--muted);font-size:11px;width:70px;flex:none;}
+.pt-row .r-act{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none;}
+.tlv{list-style:none;display:flex;flex-direction:column;}
+.tlv li{display:flex;gap:10px;font-size:12px;line-height:1.6;padding:5px 0;align-items:flex-start;}
+.tlv li + li{border-top:1px dashed #eef2ef;}
+.tlv .t-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:6px;}
+.tlv .t-date{color:var(--muted);font-size:11px;width:96px;flex:none;margin-top:1px;}
+.tlv .t-text{flex:1;}
+.risk-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.risk-card{border:1px solid var(--border);border-left:4px solid var(--amber);background:#fff;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.65;}
+.risk-card.red{border-left-color:var(--danger);}
+.risk-card .r-head{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink);}
+.risk-card .r-body{color:#41504a;margin-top:3px;}
+.risk-card .r-body b{color:var(--ink);}
+.risk-card .r-evidence{display:block;margin-top:3px;color:var(--muted);}
+.risk-card .r-acts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+
+/* ================= v2.1 补全：Goal卡/记忆标注/知识tab/@患者/工具面板 ================= */
+.goal-card{border:1.5px solid var(--accent-line);background:linear-gradient(180deg,#f6fbf9,#eef6f2);border-radius:12px;padding:11px 14px;max-width:92%;margin-bottom:8px;}
+.goal-card .g-head{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);flex-wrap:wrap;}
+.goal-card .g-head b{font-weight:700;}
+.goal-card .badge.run{background:var(--blue-soft,#e8f0fa);color:var(--blue);}
+.goal-card .badge.ok{background:var(--accent-soft);color:var(--accent-deep);}
+.goal-card .g-list{list-style:none;margin-top:8px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink);}
+.goal-card .g-list li{display:flex;gap:8px;align-items:baseline;}
+.goal-card .g-ok{color:#5aa88c;font-weight:700;}
+.goal-card .g-run{color:var(--blue);font-weight:700;}
+.goal-card .g-todo{color:#b3beb8;}
+.goal-card .ev{margin-left:auto;font-size:11px;color:var(--muted);}
+.goal-card .g-foot{margin-top:9px;font-size:11px;color:var(--muted);border-top:1px dashed var(--border);padding-top:7px;}
+.memory-note{margin-top:6px;}
+.memory-note > button{border:none;background:var(--accent-soft);color:var(--accent-deep);border-radius:99px;padding:2px 10px;font-size:11px;cursor:pointer;}
+.memory-note ul{margin:6px 0 0;padding:6px 10px;background:#f6faf8;border:1px solid var(--border);border-radius:8px;font-size:11.5px;color:#41504a;display:flex;flex-direction:column;gap:3px;list-style:none;}
+.panel-knowledge{display:flex;flex-direction:column;gap:8px;}
+.kb-hit{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:#fff;}
+.kb-hit .kb-hit-t{display:flex;flex-direction:column;gap:2px;}
+.kb-hit .kb-hit-t b{font-size:12.5px;color:var(--ink);}
+.kb-hit .kb-hit-t small{color:var(--muted);font-size:10.5px;}
+.kb-hit .kb-hit-m{font-size:11.5px;color:#41504a;background:#f6f8f7;border-left:2px solid var(--accent-line);padding:4px 8px;border-radius:0 6px 6px 0;margin-top:6px;line-height:1.6;}
+.kb-hit .kb-hit-m span{color:var(--accent-deep);font-weight:600;margin-right:6px;}
+.kb-hit .mini-btn{margin-top:7px;}
+.mention-menu .patient-mention{display:flex;gap:8px;align-items:center;width:100%;background:none;border:none;padding:7px 10px;cursor:pointer;text-align:left;font-size:12.5px;}
+.mention-menu .patient-mention:hover,.mention-menu .patient-mention.active{background:#f0f4f2;}
+.mention-menu .patient-mention .stethoscope,.mention-menu .patient-mention svg{color:var(--accent-deep);flex:none;}
+.mention-menu .patient-mention small{display:block;color:var(--muted);}
+.skill-chip.patient{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-deep);}
+.ref-patient-cards{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
+.tool-slide-scrim{position:fixed;inset:0;background:rgba(31,42,38,.32);z-index:80;}
+.tool-slide{position:fixed;top:0;right:0;bottom:0;width:min(600px,72vw);background:#fff;border-left:1px solid var(--border);box-shadow:-16px 0 40px rgba(31,42,38,.18);z-index:81;display:flex;flex-direction:column;}
+.tool-slide .ts-head{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);}
+.tool-slide .ts-head b{font-size:15px;}
+.tool-slide .ts-head .text-button{margin-left:auto;}
+.tool-slide .ts-body{flex:1;overflow:auto;padding:14px 16px;}
+.tool-slide .ts-menu{display:flex;flex-direction:column;gap:8px;}
+.tool-slide .ts-menu button{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:11px 14px;cursor:pointer;text-align:left;}
+.tool-slide .ts-menu button:hover{border-color:var(--accent-line);background:#fbfdfc;}
+.tool-slide .ts-menu b{font-size:13px;display:block;}
+.tool-slide .ts-menu small{color:var(--muted);font-size:11px;}
+.tool-slide .ts-menu svg{margin-left:auto;color:var(--muted);}
+.tool-slide .ts-open{margin-bottom:10px;display:flex;justify-content:flex-end;}

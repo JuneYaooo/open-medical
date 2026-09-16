@@ -250,10 +250,15 @@ export class RiskEngine {
       .run(payload, now, existing.id);
     return "reopened";
   }
-  list({ patientId, status = "active" } = {}) {
-    checkStatus(status);
-    const where = ["risk_alerts.status=?"];
-    const args = [status];
+  // 默认返回全部状态：已确认/已处理的风险需要闭环可见（交互规范 R10）。
+  list({ patientId, status } = {}) {
+    if (status !== undefined) checkStatus(status);
+    const where = ["1=1"];
+    const args = [];
+    if (status) {
+      where.push("risk_alerts.status=?");
+      args.push(status);
+    }
     if (patientId) {
       where.push("patient_id=?");
       args.push(patientId);

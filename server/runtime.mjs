@@ -891,7 +891,10 @@ export class MedicalRuntime {
     return file;
   }
   review(sessionId, artifactId, body) {
-    const reviewer = string(body.reviewer, "复核者代号", 80);
+    // 代号选填（交互规范 v2.1）：未填时记为"本机使用者"，保留审计但降低复核门槛。
+    const reviewer = body.reviewer
+      ? string(body.reviewer, "复核者代号", 80)
+      : "本机使用者";
     const note = string(body.note, "复核说明", 3000);
     check(
       ["approved", "rejected"].includes(body.decision),
