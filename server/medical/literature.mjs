@@ -292,7 +292,16 @@ export function literatureTools(literature) {
         },
         ["query"],
       ),
-      execute: (args) => literature.search(args),
+      // 参数类错误返回给模型自适应重试，而不是作为 rejection 逃逸。
+      execute: async (args) => {
+        try {
+          return await literature.search(args);
+        } catch (error) {
+          if (error instanceof Error && error.code === "INVALID_INPUT")
+            return { error: error.message, code: error.code };
+          throw error;
+        }
+      },
     },
     {
       definition: definition(
@@ -301,7 +310,15 @@ export function literatureTools(literature) {
         { pmid: textDef, doi: textDef },
         [],
       ),
-      execute: (args) => literature.fetchArticle(args),
+      execute: async (args) => {
+        try {
+          return await literature.fetchArticle(args);
+        } catch (error) {
+          if (error instanceof Error && error.code === "INVALID_INPUT")
+            return { error: error.message, code: error.code };
+          throw error;
+        }
+      },
     },
   ];
 }

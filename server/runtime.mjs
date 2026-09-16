@@ -706,6 +706,9 @@ export class MedicalRuntime {
           // 超预算 35% 的单个工具结果整体归档，模型按需读回。
           offload: archiveFor,
           onToolResult: (output) => {
+            // Consultation retrieval supplies context for the answer; it is
+            // not a document draft requiring a separate review card.
+            if (run.policy.intent === "consultation" && output?.type === "source_search") return;
             if (output?.id) {
               output.provenance =
                 output.provenance === "local_rule"
