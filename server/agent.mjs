@@ -1495,6 +1495,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } catch (e) {
     if (e.code !== "ENOENT") throw e;
   }
+  // 本地单机工作台：单次任务的意外 rejection 记录后继续服务，
+  // 不让整个进程（及其余会话）随之退出。
+  process.on("unhandledRejection", (reason) => {
+    const message =
+      reason instanceof Error ? `${reason.message}\n${reason.stack}` : String(reason);
+    console.error(`[unhandledRejection] ${message}`);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error(`[uncaughtException] ${error?.stack || error}`);
+  });
   const server = createServer();
   const port = Number(process.env.PORT || 8787);
   server.listen(port, "127.0.0.1", () =>
