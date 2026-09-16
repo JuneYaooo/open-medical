@@ -2,9 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
-  LayoutDashboard,
-  Users,
-  CheckCheck,
   ArrowUp,
   BookOpen,
   ChevronRight,
@@ -50,6 +47,17 @@ import { DrgView } from "./drg";
 import { ClinicalRefView } from "./clinical-ref";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 import { ModelSettings } from "./model-settings";
+import {
+  AcceptanceView,
+  GoalCard,
+  MemoryNote,
+  ModeChips,
+  PatientSummaryCard,
+  PatientSwitcher,
+  StepsFlow,
+  modeNotes,
+  modeToRequest,
+} from "./ui";
 const WORKFLOWS = [
   {
     id: "observations",
@@ -489,7 +497,6 @@ function App() {
     [session, setSession] = useState(null),
     [activeId, setActiveId] = useState(""),
     [draft, setDraft] = useState(""),
-    [mode, setMode] = useState("local"),
     [consent, setConsent] = useState(false);
   const [team, setTeam] = useState(false);
   const [pickedSkills, setPickedSkills] = useState([]),
@@ -500,6 +507,19 @@ function App() {
   const [wsList, setWsList] = useState([]);
   const [patientRoute, setPatientRoute] = useState({});
   const [homeKey, setHomeKey] = useState(0);
+  const [patientsList, setPatientsList] = useState([]);
+  const [currentPatientId, setCurrentPatientId] = useState(
+    () => localStorage.getItem("om.currentPatient") || "",
+  );
+  const [patientDetail, setPatientDetail] = useState(null);
+  const [acceptId, setAcceptId] = useState("");
+  const [chip, setChip] = useState("consult");
+  const [doctorMemCount, setDoctorMemCount] = useState(0);
+  const [referencedPatients, setReferencedPatients] = useState([]);
+  const [toolPanel, setToolPanel] = useState(null);
+  const [kQuery, setKQuery] = useState("");
+  const [kHits, setKHits] = useState(null);
+  const [kBusy, setKBusy] = useState(false);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -548,21 +568,38 @@ function App() {
     setMention(null);
     inputRef.current?.focus();
   };
+  const patientMentions =
+    mention && !session?.patientId
+      ? patientsList
+          .filter((p) => p.name.toLowerCase().includes(mention.query.toLowerCase()))
+          .slice(0, 4)
+      : [];
+  const pickPatientMention = (p) => {
+    setDraft((d) => d.replace(/@[^\s@]{0,20}$/, ""));
+    setMention(null);
+    setReferencedPatients((prev) =>
+      prev.some((x) => x.id === p.id) ? prev : [...prev, p],
+    );
+    inputRef.current?.focus();
+  };
   const selectedArtifact =
     session?.artifacts.find((a) => a.id === artifactId) ||
     session?.artifacts.at(-1);
+  const acceptArtifact = session?.artifacts.find((a) => a.id === acceptId);
   const selectedFileIds = (
     fileSelection[activeId] ||
     session?.files.map((f) => f.id) ||
     []
   ).filter((id) => session?.files.some((f) => f.id === id));
   const refreshList = async () => {
-    const [value, ws] = await Promise.all([
+    const [value, ws, pt] = await Promise.all([
       api("/api/sessions"),
       api("/api/workspaces").catch(() => ({ workspaces: [] })),
+      api("/api/patients").catch(() => ({ patients: [] })),
     ]);
     setSessions(value.sessions);
     setWsList(ws.workspaces || []);
+    setPatientsList(pt.patients || []);
     return value.sessions;
   };
   const load = async (id) => {
@@ -592,9 +629,11 @@ function App() {
     setActiveId(id);
     setDraft("");
     setConsent(false);
-    setMode(config?.modelConfigured ? "model" : "local");
+    setChip(config?.modelConfigured ? "consult" : "local");
     setTeam(false);
     setSidebar(false);
+    setReferencedPatients([]);
+    setAcceptId("");
     return load(id);
   };
   const init = async () => {
@@ -603,12 +642,15 @@ function App() {
     try {
       const value = await bootstrap(true);
       setConfig(value);
-      // 已配置模型时默认走智能模式；本地规则只是无模型时的兜底。
+      // 已配置模型时默认走智能档位；本地规则只是无模型时的兜底。
       if (!modeAutoTuned.current) {
         modeAutoTuned.current = true;
-        setMode(value.modelConfigured ? "model" : "local");
+        setChip(value.modelConfigured ? "consult" : "local");
       }
       const list = await refreshList();
+      api("/api/doctor/profile")
+        .then((p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0))
+        .catch(() => {});
       if (
         activeRef.current &&
         list.some((item) => item.id === activeRef.current)
@@ -626,6 +668,27 @@ function App() {
   useEffect(() => {
     init();
   }, []);
+  // 当前患者上下文：打开患者会话时跟随；详情供速览卡使用
+  useEffect(() => {
+    const pid = session?.patientId || currentPatientId;
+    if (!pid) {
+      setPatientDetail(null);
+      return;
+    }
+    let stale = false;
+    api(`/api/patients/${pid}`)
+      .then((d) => {
+        if (!stale) setPatientDetail(d);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [session?.patientId, currentPatientId]);
+  const switchCurrentPatient = (id) => {
+    setCurrentPatientId(id);
+    localStorage.setItem("om.currentPatient", id || "");
+  };
   useEffect(() => {
     if (endRef.current) {
       const pane = endRef.current.parentElement;
@@ -634,7 +697,7 @@ function App() {
     }
   }, [session?.messages.length, activeRun?.partial]);
   useEffect(() => {
-    if (!activeId || activeRun?.busy) return;
+    if (!activeId) return;
     const timer = setInterval(() => {
       if (document.hidden) return;
       api(`/api/sessions/${activeId}`)
@@ -665,6 +728,7 @@ function App() {
       setConsent(false);
       setSidebar(false);
       setArtifactId("");
+      setAcceptId("");
       setCitation(null);
       setMaterialQuery("");
       setMaterialMatches(null);
@@ -680,12 +744,13 @@ function App() {
     const data = await api(`/api/sessions/${id}`);
     if (activeRef.current === id) setSession(data);
     await refreshList();
+    return data;
   };
-  async function send(e, override = {}) {
+  async function send(e, override = {}, refreshedSession) {
     e?.preventDefault();
     const text = override.message || draft.trim();
     if (!text || loading) return;
-    let current = session;
+    let current = refreshedSession || session;
     if (!current) current = await create();
     if (!current || sendingRef.current.has(current.id)) return;
     const id = current.id;
@@ -700,12 +765,13 @@ function App() {
       [id]: { busy: true, partial: "", events: [] },
     }));
     let started = false;
+    const req = modeToRequest(chip, { message: text });
     try {
       await streamTurn(
         id,
         {
-          message: text,
-          mode,
+          message: req.message,
+          mode: req.mode,
           externalConsent: consent,
           skills: pickedSkills,
           delegations: team ? ["timeline", "observations", "medication"] : [],
@@ -869,6 +935,13 @@ function App() {
           "",
       );
       setInspector(options.tab === "results");
+      if (options.artifactId) setAcceptId(options.artifactId);
+      if (options.draft) {
+        setDraft(options.draft);
+        setChip(config?.modelConfigured ? "document" : "local");
+        setConsent(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
     }
   };
   const prepareTask = async ({ prompt, patient, title }) => {
@@ -877,12 +950,13 @@ function App() {
       : await create(title);
     if (!data) throw new Error("任务准备失败，请刷新连接后重试。");
     setDraft(prompt);
-    setMode(config?.modelConfigured ? "model" : "local");
+    setChip(config?.modelConfigured ? "document" : "local");
     setTeam(false);
     setConsent(false);
     setTab("materials");
     setInspector(false);
     setView("workbench");
+    if (patient) switchCurrentPatient(patient.id);
     setNotice(
       patient
         ? `已进入 ${patient.name} 的病例工作区，请核对本次材料。`
@@ -920,6 +994,12 @@ function App() {
           <span className="brand-caption">医疗工作台</span>
         </div>
         <div className="top-actions">
+          <PatientSwitcher
+            patients={patientsList}
+            currentId={currentPatientId}
+            onSwitch={(p) => switchCurrentPatient(p.id)}
+            onManage={() => navigate("patients")}
+          />
           <span className={`connection ${config ? "" : "offline"}`}>
             <i />
             {config ? "本机工作空间" : "连接未就绪"}
@@ -958,21 +1038,60 @@ function App() {
           <label className="search">
             <Search size={14} />
             <input
-              aria-label="搜索历史记录"
-              placeholder="搜索历史记录"
+              aria-label="搜索任务"
+              placeholder="搜索任务"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
           <p className="nav-label">
-            最近任务 <span>{sessions.length}</span>
+            项目
+            <button
+              className="nav-label-action"
+              onClick={() => openWorkspaces({ create: true })}
+            >
+              ＋ 新建
+            </button>
           </p>
-          <nav className="sessions" aria-label="最近任务">
+          <nav className="sessions" aria-label="项目">
+            {wsList.slice(0, 6).map((item) => (
+              <button
+                className={`session ${view === "workspaces" && workspaceTarget?.id === item.id ? "active" : ""}`}
+                key={item.id}
+                onClick={() => openWorkspaces({ id: item.id })}
+              >
+                <FolderOpen size={14} />
+                <span>
+                  <b>{item.title}</b>
+                  <small>{item.running ? "执行中" : "项目工作区"}</small>
+                </span>
+              </button>
+            ))}
+            {!wsList.length && (
+              <p className="sidebar-empty">
+                还没有项目。点「＋ 新建」把相关任务归到一起。
+              </p>
+            )}
+          </nav>
+          <p className="nav-label">
+            今日任务 <span>{sessions.length}</span>
+            {pendingReviews > 0 && (
+              <button
+                className="nav-label-action warn"
+                onClick={() => navigate("review")}
+              >
+                待复核 {pendingReviews}
+              </button>
+            )}
+          </p>
+          <nav className="sessions" aria-label="今日任务">
             {sessions
-              .filter((item) =>
-                item.title.toLowerCase().includes(query.toLowerCase()),
+              .filter(
+                (item) =>
+                  !query ||
+                  item.title.toLowerCase().includes(query.toLowerCase()),
               )
-              .slice(0, 20)
+              .slice(0, 12)
               .map((item) => (
                 <button
                   className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
@@ -1001,80 +1120,70 @@ function App() {
             )}
           </nav>
           <p className="nav-label">
-            项目任务 <span>{wsList.length}</span>
+            患者
+            <button
+              className="nav-label-action"
+              onClick={() => openPatient()}
+            >
+              管理
+            </button>
           </p>
-          <nav className="sessions" aria-label="项目任务">
-            {wsList
-              .filter((item) =>
-                item.title.toLowerCase().includes(query.toLowerCase()),
-              )
-              .slice(0, 6)
-              .map((item) => (
-                <button
-                  className={`session ${view === "workspaces" && workspaceTarget?.id === item.id ? "active" : ""}`}
-                  key={item.id}
-                  onClick={() => openWorkspaces({ id: item.id })}
-                >
-                  <FolderOpen size={14} />
-                  <span>
-                    <b>{item.title}</b>
-                    <small>{item.running ? "执行中" : "项目工作区"}</small>
-                  </span>
-                </button>
-              ))}
-            {!wsList.length && (
-              <p className="sidebar-empty">
-                在医疗工作台选择「项目任务」即可创建。
-              </p>
+          <nav className="sessions" aria-label="患者">
+            {patientsList.slice(0, 8).map((p) => (
+              <button
+                key={p.id}
+                className={`session ${currentPatientId === p.id ? "active" : ""}`}
+                onClick={() => {
+                  switchCurrentPatient(p.id);
+                  openPatient({ id: p.id });
+                }}
+              >
+                <Stethoscope size={14} />
+                <span>
+                  <b>{p.name}</b>
+                  <small>
+                    {p.counts?.dueFollowups
+                      ? `${p.counts.dueFollowups} 项随访到期`
+                      : p.counts?.unprocessedMessages
+                        ? `${p.counts.unprocessedMessages} 条新消息`
+                        : "点击查看"}
+                  </small>
+                </span>
+                {(p.counts?.dueFollowups > 0 ||
+                  p.counts?.unprocessedMessages > 0) && (
+                  <em className="nav-dot" />
+                )}
+              </button>
+            ))}
+            {!patientsList.length && (
+              <p className="sidebar-empty">还没有患者档案。</p>
             )}
           </nav>
+          <p className="nav-label">
+            工具箱
+            <button
+              className="nav-label-action"
+              onClick={() => setToolPanel("__menu")}
+            >
+              打开
+            </button>
+          </p>
+          <p className="sidebar-empty">
+            随访 · 病例库 · 速查 · 文献 · 科研 · DRG · 知识库
+          </p>
           <button
             className="workspace-account"
-            onClick={() => setModal("settings")}
+            onClick={() => setModal("doctor")}
           >
             <span className="avatar">医</span>
             <span>
-              <b>个人工作空间</b>
-              <small>Open Medical · 本机版</small>
+              <b>医生记忆</b>
+              <small>档案 · 偏好 · 每晚整理</small>
             </span>
             <Settings2 size={15} />
           </button>
         </aside>
         <div className="product-content">
-          <nav className="scenario-tabs" aria-label="功能导航">
-            {[
-              ["home", "工作台", LayoutDashboard],
-              ["patients", "患者管理", Users],
-              ["followups", "随访", CalendarClock],
-              ["cases", "病例库", FileText],
-              ["clinical-ref", "临床速查", Stethoscope],
-              ["knowledge", "知识库", BookOpen],
-              ["literature", "文献", BookOpen],
-              ["research", "科研", Activity],
-              ["drg", "DRG", ClipboardList],
-              ["tasks", "任务记录", FolderOpen],
-              ["review", "待复核", CheckCheck],
-            ].map(([id, label, Icon]) => (
-              <button
-                key={id}
-                className={
-                  view === id || (id === "home" && view === "workspaces")
-                    ? "active"
-                    : ""
-                }
-                aria-current={view === id ? "page" : undefined}
-                onClick={() =>
-                  id === "patients" ? openPatient() : navigate(id)
-                }
-              >
-                <Icon size={15} />
-                <span>{label}</span>
-                {id === "review" && pendingReviews > 0 && (
-                  <em>{pendingReviews}</em>
-                )}
-              </button>
-            ))}
-          </nav>
           {view === "workspaces" ? (
             <WorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
@@ -1090,6 +1199,8 @@ function App() {
               initialTab={patientRoute.tab}
               initialCreate={patientRoute.create}
               onOpenWorkspace={openTask}
+              onSwitchCurrent={switchCurrentPatient}
+              onChanged={refreshList}
             />
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
@@ -1253,8 +1364,49 @@ function App() {
                     <Loader2 className="spin" />
                     正在载入工作会话…
                   </div>
+                ) : acceptArtifact ? (
+                  <AcceptanceView
+                    artifact={acceptArtifact}
+                    previous={acceptArtifact.history?.at(-1)}
+                    onSource={openSource}
+                    onClose={() => {
+                      setAcceptId("");
+                      updateSession();
+                    }}
+                    onReview={async (body) => {
+                      await api(
+                        `/api/sessions/${activeId}/artifacts/${acceptArtifact.id}/review`,
+                        { method: "POST", body: JSON.stringify(body) },
+                      );
+                      const reviewedSession = await updateSession();
+                      if (body.decision === "rejected") {
+                        const title = acceptArtifact.title;
+                        const note = body.note;
+                        setAcceptId("");
+                        setNotice(`已退回「${title}」，正在按复核意见生成修订…`);
+                        try {
+                          await send(null, {
+                            message: `请根据复核意见修订「${title}」：${note}。请保留原文来源与行号，修订后更新版本。`,
+                            mode: "local",
+                          }, reviewedSession);
+                        } catch {
+                          setNotice("修订任务已写入会话，可手动发送继续。");
+                        }
+                      }
+                    }}
+                  />
                 ) : (
                   <div className="message-list">
+                    {session?.patientId && patientDetail && (
+                      <PatientSummaryCard
+                        detail={patientDetail}
+                        session={session}
+                        compact
+                        onOpenDetail={() =>
+                          openPatient({ id: session.patientId })
+                        }
+                      />
+                    )}
                     {!session?.messages.length && (
                       <div className="welcome task-preparation">
                         <div className="welcome-symbol">
@@ -1327,6 +1479,9 @@ function App() {
                             </span>
                           </div>
                           <div className="message-content">{m.content}</div>
+                          {m.role !== "user" && (
+                            <MemoryNote count={doctorMemCount} />
+                          )}
                           {m.risk === "high" && (
                             <p className="boundary">
                               此内容需要专业人员核查，不能用于自动诊疗决策。
@@ -1335,30 +1490,63 @@ function App() {
                         </div>
                       </article>
                     ))}
+                    {(busy || session?.artifacts.length > 0) &&
+                      (chip === "document" || /时间线|检验|用药|病历|文书/.test(session?.messages.findLast((m) => m.role === "user")?.content || "")) && (
+                        <GoalCard
+                          message={session?.messages.findLast((m) => m.role === "user")?.content || ""}
+                          running={busy}
+                          artifacts={session?.artifacts || []}
+                          round={session?.runs.length || 1}
+                          onStop={stop}
+                        />
+                      )}
                     {busy && (
                       <article className="message">
                         <div className="message-avatar">
                           <Loader2 className="spin" size={17} />
                         </div>
                         <div className="message-body">
-                          <div className="message-meta">
-                            <b>正在执行</b>
-                            <span>
-                              {eventLabel(
-                                activeRun?.events?.at(-1) || {
-                                  type: "message.start",
-                                },
-                              )}
-                            </span>
-                          </div>
-                          <div className="message-content">
-                            {activeRun?.partial ||
-                              persistedRunning?.partial ||
-                              "正在思考并调用工具…"}
-                          </div>
+                          <StepsFlow
+                            events={activeRun?.events || []}
+                            running={busy}
+                            fallbackText="正在思考并调用工具…"
+                          />
+                          {(activeRun?.partial || persistedRunning?.partial) && (
+                            <div className="message-content streaming">
+                              {activeRun?.partial || persistedRunning?.partial}
+                            </div>
+                          )}
                         </div>
                       </article>
                     )}
+                    {!busy &&
+                      (session?.artifacts.length || 0) > 0 &&
+                      session.artifacts
+                        .slice(-3)
+                        .reverse()
+                        .map((a) => (
+                          <div className="artifact-inline" key={a.id}>
+                            <div className="ai-head">
+                              <FileText size={14} />
+                              <b>{a.title}</b>
+                              <span className={`acc-badge ${a.status}`}>
+                                {STATUS[a.status]}
+                              </span>
+                              <span className="muted">v{a.version}</span>
+                            </div>
+                            <div className="ai-acts">
+                              <button
+                                className="mini-btn"
+                                onClick={() => {
+                                  setArtifactId(a.id);
+                                  setAcceptId(a.id);
+                                }}
+                              >
+                                打开验收视图
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                     {session?.runs
                       .filter((r) =>
                         ["failed", "cancelled", "interrupted"].includes(
@@ -1378,7 +1566,7 @@ function App() {
                               );
                               if (original) {
                                 setDraft(original.content);
-                                setMode(r.mode);
+                                setChip(r.mode === "local" ? "local" : "document");
                                 setConsent(false);
                                 setFileSelection((prev) => ({
                                   ...prev,
@@ -1403,9 +1591,34 @@ function App() {
                     <div ref={endRef} />
                   </div>
                 )}
+                {!acceptArtifact && (
                 <div className="composer-wrap">
                   {mention && (
-                    <div className="mention-menu" role="listbox" aria-label="选择技能">
+                    <div className="mention-menu" role="listbox" aria-label="提及">
+                      {patientMentions.length > 0 && (
+                        <>
+                          <p className="mention-title">@ 引用患者（引用 ≠ 切换当前患者）</p>
+                          {patientMentions.map((p) => (
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              key={p.id}
+                              className="patient-mention"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                pickPatientMention(p);
+                              }}
+                            >
+                              <Stethoscope size={12} />
+                              <span>
+                                <b>{p.name}</b>
+                                <small>{(p.tags || []).join("、") || "患者档案"}</small>
+                              </span>
+                            </button>
+                          ))}
+                        </>
+                      )}
                       <p className="mention-title">
                         @ 固定技能（最多 3 个）；不选择直接发送则由模型自动路由
                       </p>
@@ -1434,6 +1647,39 @@ function App() {
                         <p className="mention-empty">没有匹配的技能</p>
                       )}
                     </div>
+                  )}
+                  {referencedPatients.length > 0 && (
+                    <>
+                      <div className="skill-chips">
+                        {referencedPatients.map((p) => (
+                          <span className="skill-chip patient" key={p.id}>
+                            <Stethoscope size={11} /> @患者：{p.name}
+                            <button
+                              type="button"
+                              aria-label={`移除引用患者 ${p.name}`}
+                              onClick={() =>
+                                setReferencedPatients((prev) =>
+                                  prev.filter((x) => x.id !== p.id),
+                                )
+                              }
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                        <small>引用的患者上下文；@引用不切换当前患者</small>
+                      </div>
+                      <div className="ref-patient-cards">
+                        {referencedPatients.map((p) => (
+                          <PatientSummaryCard
+                            key={p.id}
+                            patient={p}
+                            compact
+                            onOpenDetail={() => openPatient({ id: p.id })}
+                          />
+                        ))}
+                      </div>
+                    </>
                   )}
                   {Boolean(pickedSkills.length) && (
                     <div className="skill-chips">
@@ -1551,34 +1797,15 @@ function App() {
                         accept=".txt,.md,.csv,.json,.pdf"
                         onChange={upload}
                       />
-                      <select
-                        aria-label="运行方式"
-                        value={mode}
-                        onChange={(e) => {
-                          setMode(e.target.value);
+                      <ModeChips
+                        value={chip}
+                        onChange={(c) => {
+                          setChip(c);
                           setConsent(false);
                         }}
                         disabled={busy || loading}
-                      >
-                        <option value="local">本地整理（不联网）</option>
-                        <option
-                          value="model"
-                          disabled={!config?.modelConfigured}
-                        >
-                          智能模式（模型 + 工具）
-                          {!config?.modelConfigured ? " · 未配置" : ""}
-                        </option>
-                      </select>
-                      <button
-                        className="secondary"
-                        title="切换模型（沿用通用 Agent 的模型设置）"
-                        disabled={busy}
-                        onClick={() => setModal("model")}
-                      >
-                        {config?.modelConfigured
-                          ? `${config.provider || "model"} · ${config.model}`
-                          : "配置模型"}
-                      </button>
+                        modelConfigured={Boolean(config?.modelConfigured)}
+                      />
                       <span className="composer-spacer" />
                       {busy ? (
                         <button
@@ -1598,14 +1825,14 @@ function App() {
                             loading ||
                             !config ||
                             uploading ||
-                            (mode === "model" && !consent)
+                            (chip !== "local" && !consent)
                           }
                         >
                           <ArrowUp size={19} />
                         </button>
                       )}
                     </div>
-                    {mode === "model" && (
+                    {chip !== "local" && (
                       <label className="consent">
                         <input
                           type="checkbox"
@@ -1630,13 +1857,23 @@ function App() {
                   </form>
                   <div className="composer-note">
                     <span>
-                      {mode === "local"
-                        ? "本轮在本机整理，不调用外部模型"
-                        : "智能模式：咨询直接回答；文书类产出为待复核草稿"}
+                      {modeNotes[chip]}
+                      {!config?.modelConfigured && (
+                        <>
+                          {" · "}
+                          <button
+                            className="text-button"
+                            onClick={() => setModal("model")}
+                          >
+                            配置模型后可用咨询/文书/计划档位
+                          </button>
+                        </>
+                      )}
                     </span>
                     <span>Enter 发送 · Shift + Enter 换行</span>
                   </div>
                 </div>
+                )}
               </main>
               <aside className={`inspector ${inspector ? "open" : ""}`}>
                 <div className="inspector-head">
@@ -1652,6 +1889,7 @@ function App() {
                 <div className="panel-tabs" role="tablist">
                   {[
                     ["materials", "材料"],
+                    ["knowledge", "知识"],
                     ["results", "产物"],
                     ["events", "执行记录"],
                   ].map(([key, label]) => (
@@ -1905,6 +2143,70 @@ function App() {
                       )}
                     </>
                   )}
+                  {tab === "knowledge" && (
+                    <div className="panel-knowledge">
+                      <form
+                        className="material-search"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!kQuery.trim()) return;
+                          setKBusy(true);
+                          try {
+                            const value = await api(
+                              `/api/knowledge/search?q=${encodeURIComponent(kQuery)}&limit=8`,
+                            );
+                            setKHits(value.hits);
+                          } catch (err) {
+                            setError(err.message);
+                          } finally {
+                            setKBusy(false);
+                          }
+                        }}
+                      >
+                        <input
+                          aria-label="检索知识库"
+                          placeholder="在知识库中检索，引用会带出处进入对话"
+                          value={kQuery}
+                          onChange={(e) => setKQuery(e.target.value)}
+                        />
+                        <button className="icon-button" aria-label="检索知识库" disabled={!kQuery.trim() || kBusy}>
+                          <Search size={15} />
+                        </button>
+                      </form>
+                      {(kHits || []).map((hit, i) => (
+                        <div className="kb-hit" key={`${hit.docId}-${hit.ord}-${i}`}>
+                          <div className="kb-hit-t">
+                            <b>{hit.docTitle}</b>
+                            <small>
+                              {hit.kind || "知识"} · L{hit.startLine}–{hit.endLine}
+                            </small>
+                          </div>
+                          {(hit.matches || []).slice(0, 2).map((m) => (
+                            <p className="kb-hit-m" key={m.lineNo}>
+                              <span>L{m.lineNo}</span>
+                              {m.text}
+                            </p>
+                          ))}
+                          <button
+                            className="mini-btn"
+                            onClick={() => {
+                              const cite = `\n【参考：${hit.docTitle} L${hit.startLine}–${hit.endLine}】${(hit.matches || [])[0]?.text || ""}`;
+                              setDraft((d) => (d ? d + cite : cite.trim()));
+                              inputRef.current?.focus();
+                            }}
+                          >
+                            引用进对话
+                          </button>
+                        </div>
+                      ))}
+                      {kHits && !kHits.length && (
+                        <p className="muted">没有匹配的知识条目。可在「工具箱 → 知识库」上传指南。</p>
+                      )}
+                      {!kHits && (
+                        <p className="muted">输入关键词检索本地知识库；命中可一键引用进对话，出处随答案保留。</p>
+                      )}
+                    </div>
+                  )}
                   {tab === "results" && (
                     <>
                       {session?.artifacts.length > 1 && (
@@ -2006,6 +2308,90 @@ function App() {
           )}
         </div>
       </div>
+      {toolPanel && (
+        <>
+          <div
+            className="tool-slide-scrim"
+            onClick={() => setToolPanel(null)}
+            aria-hidden
+          />
+          <aside className="tool-slide" aria-label="工具箱面板">
+            <div className="ts-head">
+              <b>工具箱</b>
+              {toolPanel !== "__menu" && (
+                <button
+                  className="text-button"
+                  onClick={() => setToolPanel("__menu")}
+                >
+                  ‹ 工具列表
+                </button>
+              )}
+              <IconButton title="关闭工具面板" onClick={() => setToolPanel(null)}>
+                <X size={16} />
+              </IconButton>
+            </div>
+            <div className="ts-body">
+              {toolPanel === "__menu" ? (
+                <div className="ts-menu">
+                  {[
+                    ["followups", "随访计划", "到期提醒与计划"],
+                    ["cases", "病例库", "相似病例检索"],
+                    ["clinical-ref", "临床速查", "量表 · 检验 · 编码 · ADR"],
+                    ["knowledge", "知识库", "指南导入与检索"],
+                    ["literature", "文献检索", "PubMed 检索与导入"],
+                    ["research", "科研统计", "统计工具"],
+                    ["drg", "DRG 测算", "入组与测算"],
+                  ].map(([id, label, desc]) => (
+                    <button key={id} onClick={() => setToolPanel(id)}>
+                      <span>
+                        <b>{label}</b>
+                        <small>{desc}</small>
+                      </span>
+                      <ChevronRight size={14} />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="ts-open">
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        const v = toolPanel;
+                        setToolPanel(null);
+                        navigate(v);
+                      }}
+                    >
+                      整页打开 {toolPanel}
+                    </button>
+                  </div>
+                  {toolPanel === "followups" && (
+                    <FollowupsView
+                      onOpenPatient={(id) => {
+                        setToolPanel(null);
+                        openPatient({ id });
+                      }}
+                    />
+                  )}
+                  {toolPanel === "cases" && <CasesView />}
+                  {toolPanel === "clinical-ref" && <ClinicalRefView />}
+                  {toolPanel === "knowledge" && <KnowledgeView />}
+                  {toolPanel === "literature" && (
+                    <LiteratureView
+                      onOpenTask={(id) => {
+                        setToolPanel(null);
+                        openTask(id);
+                      }}
+                    />
+                  )}
+                  {toolPanel === "research" && <ResearchView />}
+                  {toolPanel === "drg" && <DrgView />}
+                </>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
       {notice && (
         <div className="notice" role="status">
           {notice}
@@ -2092,7 +2478,12 @@ function App() {
       {modal === "doctor" && (
         <Modal
           title="医生档案与记忆"
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null);
+            api("/api/doctor/profile")
+              .then((p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0))
+              .catch(() => {});
+          }}
           wide
         >
           <DoctorProfilePanel config={config} />

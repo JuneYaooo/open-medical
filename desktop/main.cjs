@@ -30,7 +30,13 @@ app.setName(productName);
 const testDirectory = process.env.MEDICAL_DESKTOP_TEST_DIR;
 const smokeTest =
   process.argv.includes("--smoke-test") && Boolean(testDirectory);
-if (smokeTest) app.setPath("userData", resolve(testDirectory));
+// 自动化端到端模式：与 smoke 一样使用隔离数据目录与数据库，
+// 但保持交互窗口不自动退出，供 Playwright 驱动跑场景。
+const e2eMode =
+  !smokeTest && process.argv.includes("--e2e") && Boolean(testDirectory);
+// 数据目录隔离：设置 MEDICAL_DESKTOP_TEST_DIR 即生效（自动化测试用），
+// --smoke-test 额外启用内建冒烟流程。
+if (testDirectory) app.setPath("userData", resolve(testDirectory));
 const root = resolve(__dirname, "..");
 const icon = (name) => join(root, "build", "icons", name);
 let runtime,
@@ -187,9 +193,10 @@ async function start() {
   // keeps its platform.sqlite beside it, untouched.
   const sharedDirectory = join(homedir(), ".open-medical-workbench");
   mkdirSync(sharedDirectory, { recursive: true, mode: 0o700 });
-  const sharedDatabase = smokeTest
-    ? join(dataDirectory, "medical.sqlite")
-    : join(sharedDirectory, "medical.sqlite");
+  const sharedDatabase =
+    smokeTest || e2eMode
+      ? join(dataDirectory, "medical.sqlite")
+      : join(sharedDirectory, "medical.sqlite");
   const legacyDatabase = join(dataDirectory, "medical.sqlite");
   if (!existsSync(sharedDatabase) && existsSync(legacyDatabase)) {
     require("node:fs").copyFileSync(legacyDatabase, sharedDatabase);
@@ -208,7 +215,7 @@ async function start() {
     parseEnv(readFileSync(configuration, "utf8")),
   ))
     if (allowed.test(key) && value !== "") process.env[key] = value;
-  if (!smokeTest) {
+  if (!smokeTest && !e2eMode) {
     const browserCandidates =
       process.platform === "darwin"
         ? [
@@ -287,7 +294,7 @@ async function start() {
   const stopDaemonAndQuit = async () => {
     await app.quit();
   };
-  if (!smokeTest && existsSync(icon(process.platform === "darwin" ? "icon_16.png" : "icon_32.png"))) {
+  if (!smokeTest && !e2eMode && existsSync(icon(process.platform === "darwin" ? "icon_16.png" : "icon_32.png"))) {
     try {
       tray = new Tray(nativeImage.createFromPath(icon(process.platform === "darwin" ? "icon_16.png" : "icon_32.png")));
       tray.setToolTip(productName);

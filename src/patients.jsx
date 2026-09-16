@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, streamTurn } from "./agent-runtime";
 import { Badge, IconButton, Modal } from "./components";
+import { RiskList, Timeline } from "./ui";
 import { ClinicalPanel } from "./patient-clinical";
 
 const ORGANIZE_PROMPT =
@@ -71,6 +72,8 @@ export function parsePastedMessages(raw) {
 export function PatientsView({
   config,
   onOpenWorkspace,
+  onSwitchCurrent,
+  onChanged,
   initialPatientId,
   initialTab = "overview",
   initialCreate = false,
@@ -116,6 +119,7 @@ export function PatientsView({
     setPatients(list.patients);
     setReminders(todo.reminders);
     setInbox(box.messages);
+    onChanged?.();
     return list.patients;
   };
   const openPatient = async (id, nextTab = "overview") => {
@@ -124,6 +128,7 @@ export function PatientsView({
     setTab(nextTab);
     setConsent(false);
     setPaste("");
+    onSwitchCurrent?.(id);
     const [one, msgs, jobs, risks, proposals] = await Promise.all([
       api(`/api/patients/${id}`),
       api(`/api/patients/${id}/messages`),
@@ -330,9 +335,10 @@ export function PatientsView({
         <button
           className="patient-card"
           key={p.id}
-          onClick={() =>
-            openPatient(p.id).catch((err) => setError(err.message))
-          }
+          onClick={() => {
+            onSwitchCurrent?.(p.id);
+            openPatient(p.id).catch((err) => setError(err.message));
+          }}
         >
           <span className="patient-avatar">
             <Stethoscope size={17} />
@@ -346,13 +352,13 @@ export function PatientsView({
             </small>
           </span>
           <span className="patient-counts">
+            {p.counts.dueFollowups > 0 && (
+              <em className="pill warn">{p.counts.dueFollowups} 项随访到期</em>
+            )}
             {p.counts.unprocessedMessages > 0 && (
               <em className="pill warn">
                 {p.counts.unprocessedMessages} 条新消息
               </em>
-            )}
-            {p.counts.dueFollowups > 0 && (
-              <em className="pill warn">{p.counts.dueFollowups} 项随访到期</em>
             )}
             {p.counts.pendingReminders > 0 && (
               <em className="pill">{p.counts.pendingReminders} 条提醒</em>
@@ -525,6 +531,19 @@ export function PatientsView({
                   .filter(Boolean)
                   .join(" · ") || "未补充基础信息"}
               </small>
+              {(detail.allergies || []).length > 0 && (
+                <em className="pill warn">
+                  过敏：
+                  {detail.allergies
+                    .map((a) =>
+                      typeof a === "string"
+                        ? a
+                        : [a.substance, a.reaction].filter(Boolean).join("（") +
+                          (a.reaction ? "）" : ""),
+                    )
+                    .join("、")}
+                </em>
+              )}
             </span>
             <div className="toolbar-actions">
               <button
@@ -591,10 +610,37 @@ export function PatientsView({
           </div>
           {tab === "overview" && (
             <div className="detail-panel">
+              <RiskList
+                alerts={[...risks].sort(
+                  (a, b) =>
+                    (a.status === "active" ? 0 : 1) -
+                      (b.status === "active" ? 0 : 1) ||
+                    { critical: 0, warning: 1, info: 2 }[a.severity] -
+                    { critical: 0, warning: 1, info: 2 }[b.severity],
+                )}
+                busy={busy}
+                onDraft={(r) =>
+                  onOpenWorkspace(session.id, {
+                    draft: `请针对风险「${r.title}」生成处理建议草稿：${r.message} 只使用本病例材料内信息并保留来源，结论待医生复核。`,
+                  })
+                }
+                onAck={async (r) => {
+                  await api(`/api/risk-alerts/${r.id}/ack`, "POST", {});
+                  await refreshPatient();
+                }}
+                onResolve={async (r, reopen = false) => {
+                  await api(
+                    `/api/risk-alerts/${r.id}/${reopen ? "reopen" : "resolve"}`,
+                    "POST",
+                    {},
+                  );
+                  await refreshPatient();
+                }}
+              />
               {proposals.length > 0 && (
                 <div className="patient-risk-list">
                   <p className="muted" style={{ fontSize: 12 }}>
-                    Agent 提议的档案变更（确认后才写入）：
+                    AI 提议的档案变更（写入档案的唯一通道，确认后才生效）：
                   </p>
                   {proposals.map((proposal) => (
                     <div className="hub-risk" key={proposal.id}>
@@ -618,7 +664,7 @@ export function PatientsView({
                             await openPatient(detail.id, tab);
                           }}
                         >
-                          确认写入
+                          采纳写入
                         </button>
                         <button
                           className="text-button"
@@ -634,27 +680,45 @@ export function PatientsView({
                   ))}
                 </div>
               )}
-              {risks.length > 0 && (
-                <div className="patient-risk-list">
-                  {risks.map((alert) => (
-                    <div className={`hub-risk risk-${alert.severity}`} key={alert.id}>
-                      <div className="hub-risk-main">
-                        <b>{alert.title}</b>
-                        <small>{alert.message}</small>
-                      </div>
-                      <button
-                        className="text-button"
-                        onClick={async () => {
-                          await api(`/api/risk-alerts/${alert.id}/ack`, "POST", {});
-                          await openPatient(detail.id, tab);
-                        }}
-                      >
-                        确认
-                      </button>
-                    </div>
-                  ))}
+              <div className="pt-sec">
+                <div className="s-t">
+                  关键事件时间线
+                  <span className="s-m">材料 · 产物 · 随访</span>
                 </div>
-              )}
+                <Timeline
+                  items={[
+                    ...session.artifacts.map((a) => ({
+                      sort: a.createdAt,
+                      date: fmtDate(a.createdAt),
+                      text: `${a.title}（v${a.version} · ${
+                        a.status === "draft"
+                          ? "待复核"
+                          : a.status === "approved"
+                            ? "已复核"
+                            : "需修订"
+                      }）`,
+                      action: (
+                        <button
+                          className="mini-btn plain"
+                          onClick={() =>
+                            onOpenWorkspace(session.id, {
+                              tab: "results",
+                              artifactId: a.id,
+                            })
+                          }
+                        >
+                          查看
+                        </button>
+                      ),
+                    })),
+                    ...followups.map((j) => ({
+                      sort: j.nextDue,
+                      date: fmtDate(j.nextDue),
+                      text: `随访：${j.name}（每 ${j.intervalDays} 天${j.status !== "active" ? ` · ${j.status === "paused" ? "已暂停" : j.status}` : ""}）`,
+                    })),
+                  ].sort((a, b) => new Date(b.sort) - new Date(a.sort))}
+                />
+              </div>
               <div className="count-cards">
                 <div>
                   <b>{session.files.length}</b>
@@ -662,7 +726,7 @@ export function PatientsView({
                 </div>
                 <div>
                   <b>{session.artifacts.length}</b>
-                  <span>份产物草稿</span>
+                  <span>份产物</span>
                 </div>
                 <div>
                   <b>
@@ -673,31 +737,6 @@ export function PatientsView({
                   </b>
                   <span>待人工复核</span>
                 </div>
-              </div>
-              <div className="artifact-list">
-                {session.artifacts.map((a) => (
-                  <button
-                    className="artifact-row"
-                    key={a.id}
-                    onClick={() =>
-                      onOpenWorkspace(session.id, {
-                        tab: "results",
-                        artifactId: a.id,
-                      })
-                    }
-                  >
-                    <span>
-                      <b>{a.title}</b>
-                      <small>版本 {a.version}</small>
-                    </span>
-                    <Badge status={a.status} />
-                  </button>
-                ))}
-                {!session.artifacts.length && (
-                  <p className="muted">
-                    还没有产物。导入材料后点「自动整理病例」开始。
-                  </p>
-                )}
               </div>
               <p className="boundary">
                 评估与摘要只是待复核草稿：没有药物知识库、剂量或相互作用判断，不构成诊疗决定。
