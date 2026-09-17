@@ -64,6 +64,7 @@ export class DeepSeekProvider {
       onDelta = () => {},
       onStatus = () => {},
       model = this.model,
+      thinking = this.thinking,
     } = {},
   ) {
     check(
@@ -83,7 +84,7 @@ export class DeepSeekProvider {
       ...(tools?.length ? { tools } : {}),
       stream: true,
       stream_options: { include_usage: true },
-      ...(this.includeThinking ? { thinking: { type: this.thinking } } : {}),
+      ...(this.includeThinking ? { thinking: { type: thinking } } : {}),
       max_tokens: this.maxTokens,
     };
     const response = await requestProvider(this.fetch, `${this.baseUrl}/chat/completions`, {
@@ -497,6 +498,7 @@ export class AnthropicProvider {
       onDelta = () => {},
       onStatus = () => {},
       model = this.model,
+      thinking = this.thinking,
     } = {},
   ) {
     check(
@@ -510,11 +512,16 @@ export class AnthropicProvider {
       AbortSignal.timeout(this.timeoutMs),
     ]);
     const converted = anthropicMessages(messages);
+    // 深入思考：启用扩展思考并扩容输出预算（思考内容不计入回答）。
+    const thinkBudget = 4096;
     const payload = {
       model,
       system: converted.system,
       messages: converted.messages,
-      max_tokens: this.maxTokens,
+      max_tokens: this.maxTokens + (thinking === "enabled" ? thinkBudget : 0),
+      ...(thinking === "enabled"
+        ? { thinking: { type: "enabled", budget_tokens: thinkBudget } }
+        : {}),
       stream: true,
       ...(tools?.length
         ? {
