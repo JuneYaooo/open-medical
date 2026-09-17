@@ -433,7 +433,7 @@
         <div class="frame"><b>验收视图 · 叠加层</b><p>预览 / 与上一版 diff / 出处对照 + 字段清单 + 轻量复核条</p></div>
       </div>
       <div class="frame" style="border-style:dashed">
-        <b>全局层 · 顶栏 + 记忆</b><p>患者胶囊（一键切换）· 模式档位（咨询/文书/计划/自动）· 上下文与预算指示 · 本地数据徽章 ｜ 医生记忆：全局 / 项目 / 患者三层，越用越好用</p>
+        <b>全局层 · 顶栏 + 记忆</b><p>患者胶囊（一键切换）· 模型徽标（点击换模型）· 外发授权分档 · 上下文与预算指示 · 本地数据徽章 ｜ 医生记忆：全局 / 项目 / 患者三层，越用越好用</p>
       </div>
     </div>
   </div>
@@ -526,7 +526,7 @@
             </div>
             <div class="composer-foot">
               <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span>↵ 发送 · Shift+↵ 换行</span><span class="mode-chip caret">咨询模式 · 只读不写</span></div>
+              <div class="right"><span>↵ 发送 · Shift+↵ 换行</span><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
             </div>
           </div>
         </div>
@@ -562,7 +562,7 @@
       <span><b>5</b>执行步骤流：工具名+结果+耗时，可展开（替代纯文本日志）</span>
       <span><b>6</b>结论带引用气泡，点击跳行号原文高亮（复用现有 reader）</span>
       <span><b>7</b>产物卡内嵌对话：draft 徽章 + 验收入口</span>
-      <span><b>8</b>符号输入体系：@患者/资料/指南、/命令、$技能；右下角模式档位</span>
+      <span><b>8</b>符号输入体系：@患者/资料/指南、/命令、$技能；右下角外发授权分档（本会话有效/逐轮确认）</span>
     </div>
   </div>
 
@@ -633,8 +633,8 @@
 
   <!-- ================= 屏幕 3 ================= -->
 
-  <h2 class="screen-title"><span class="no">4</span>文书模式 + Goal 长任务：证据式校验、自动续跑到完成</h2>
-  <div class="screen-intent">借鉴 ZCode Goal / Codex goal mode。长文书不再靠医生反复点"继续"：目标卡列出<b>章节清单与完成证据</b>，每轮自动校验（只认已写入内容、已通过的核查），未达标自动续跑；全部达成后自动进入待复核队列。输入框切换为<b>文书模式</b>（允许写，但一切产物都是 draft）。</div>
+  <h2 class="screen-title"><span class="no">4</span>Goal 长任务：证据式校验、自动续跑到完成</h2>
+  <div class="screen-intent">借鉴 ZCode Goal / Codex goal mode。长文书不再靠医生反复点"继续"：目标卡列出<b>章节清单与完成证据</b>，每轮自动校验（只认已写入内容、已通过的核查），未达标自动续跑；全部达成后自动进入待复核队列。Agent 获得连续执行权（写档案仍走提案确认，一切产物都是 draft）。</div>
   <div class="screen-wrap">
     <span class="pin" style="top:150px; left:1006px;">1</span>
     <span class="pin" style="top:300px; left:540px;">2</span>
@@ -689,7 +689,7 @@
             <div class="input-line"><span class="txt" style="color:#9aa7a1">自动整理中，可随时插话调整…</span><span class="send" style="background:#c2ccc7">■</span></div>
             <div class="composer-foot">
               <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">文书模式 · 产物均为草稿</span></div>
+              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">Agent 自动整理 · 产物均为草稿</span></div>
             </div>
           </div>
         </div>
@@ -712,7 +712,7 @@
     <div class="legend">
       <span><b>1</b>顶栏指示器同步展示校验轮次，长任务不失控</span>
       <span><b>2</b>目标卡 = 章节 × 证据（只认已写入内容与核查通过记录，借鉴 ZCode Goal）</span>
-      <span><b>3</b>文书模式：可写但产物一律 draft；自动续跑可暂停/手动接管</span>
+      <span><b>3</b>Agent 自动整理：产物一律 draft；自动续跑可暂停/手动接管</span>
     </div>
   </div>
 
@@ -823,7 +823,7 @@
             <div class="input-line"><span class="txt">把这次的血压趋势写进随访小结。<span class="caret"></span></span><span class="send">➤</span></div>
             <div class="composer-foot">
               <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span>↵ 发送</span><span class="mode-chip caret">咨询模式 · 只读不写</span></div>
+              <div class="right"><span>↵ 发送</span><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
             </div>
           </div>
         </div>
@@ -843,7 +843,7 @@
               <div class="r-a"><span class="mini-btn plain">查看</span></div>
             </div>
             <div class="rcard" style="border-style:dashed;background:#fbfcfb">
-              <div class="r-t" style="color:var(--muted)">咨询模式仅引用选中材料与患者档案</div>
+              <div class="r-t" style="color:var(--muted)">问答仅引用选中材料与患者档案</div>
             </div>
           </div>
         </div>
@@ -1330,7 +1330,7 @@
           <div class="composer">
             <div class="input-line"><span class="txt" style="color:#9aa7a1">继续追问，或让 AI 生成评估记录…</span><span class="send">➤</span></div>
             <div class="composer-foot"><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret">咨询模式</span></div></div>
+              <div class="right"><span class="mode-chip caret">外发授权 · 本会话有效</span></div></div>
           </div>
         </div>
         <div class="tool-panel" style="border-left:1px solid var(--border)">
@@ -1669,7 +1669,7 @@
             <div class="input-line"><span class="txt">写完了发我验收。<span class="caret"></span></span><span class="send">➤</span></div>
             <div class="composer-foot">
               <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret">文书模式 · 产物均为草稿</span></div>
+              <div class="right"><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
             </div>
           </div>
         </div>
@@ -1716,7 +1716,7 @@
   <div class="screen-intent">前面 1–12 屏是"空间的展示"，这一节是"时间的推演"：每个核心场景按用户使用逻辑连续走完，标注<b>同一页面在各步发生的变化</b>；任何一步都要能回溯到前面的屏。案例全部为合成数据。</div>
 
   <h3 class="sc-t"><span class="sid">S1</span>门诊间隙快问快答（咨询）—— 案例：王五家属问"能吃布洛芬吗"</h3>
-  <div class="sc-i">使用逻辑：<b>首页直接问 → 咨询模式只读 → 直接答+出处 → 连续追问 → 结束不产生任何待办</b>。全程不切页、不强制流程。</div>
+  <div class="sc-i">使用逻辑：<b>首页直接问 → 问答只读 → 直接答+出处 → 连续追问 → 结束不产生任何待办</b>。全程不切页、不强制流程。</div>
   <div class="board">
     <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
       <div class="st-body"><div class="wcol"><span class="wdot"></span></div>
@@ -1735,7 +1735,7 @@
           <div class="wblk hl"><span class="wtag">②步骤流</span><div class="wl"></div><div class="wl" style="width:70%"></div><div class="wl" style="width:52%"></div></div>
         </div>
       </div>
-      <div class="st-cap"><b>②</b> 进入会话·咨询模式（只读不写）。步骤流：read_patient_profile → medication_safety_check，8.2s。</div>
+      <div class="st-cap"><b>②</b> 进入会话·问答（只读不写）。步骤流：read_patient_profile → medication_safety_check，8.2s。</div>
     </div>
     <span class="sc-arrow">→</span>
     <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
@@ -1788,7 +1788,7 @@
           <div class="wblk hl"><span class="wtag">③Goal 4/5</span><div class="wl"></div><div class="wl" style="width:72%"></div><div class="wl" style="width:64%"></div><div class="wl" style="width:48%"></div></div>
         </div>
       </div>
-      <div class="st-cap"><b>③</b> 文书模式：Goal 卡出现（五节×证据），第 1 轮校验发现剂量与指南不一致→自动修订续跑。可暂停/接管。</div>
+      <div class="st-cap"><b>③</b> 整理任务：Goal 卡出现（五节×证据），第 1 轮校验发现剂量与指南不一致→自动修订续跑。可暂停/接管。</div>
     </div>
     <span class="sc-arrow">→</span>
     <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
@@ -1835,7 +1835,7 @@
         <div class="wmain"><div class="wblk msg-u"><div class="wl"></div><div class="wl" style="width:60%"></div></div><div class="wblk hl"><span class="wtag">②上下文</span><div class="wl"></div></div></div>
         <div class="wside"><div class="wl"></div><div class="wl" style="width:52%"></div></div>
       </div>
-      <div class="st-cap"><b>②</b> 点[生成用药建议草稿]：跳入会话·自动切<b>文书模式</b>，风险依据+相关指南已注入上下文 chips。</div>
+      <div class="st-cap"><b>②</b> 点[生成用药建议草稿]：跳入会话·自动转入<b>整理执行</b>，风险依据+相关指南已注入上下文 chips。</div>
     </div>
     <span class="sc-arrow">→</span>
     <div class="state"><div class="st-bar"><i></i><i></i><i></i></div>
@@ -2024,7 +2024,7 @@
   <div class="screen-intent">以下规则凌驾于所有场景之上；任何新场景/新界面与规则冲突时，<b>改场景，不改规则</b>。这也是评审清单。</div>
   <div class="rule-grid">
     <div class="rule"><span class="rno">1</span><b>产物唯一生命周期</b>：draft → 验收视图 → approved / rejected；编辑后回 draft。<u>所有</u>"生成草稿"入口（文书、风险建议、工具结果、统计图、论文、就诊备注）都汇到同一个验收视图。</div>
-    <div class="rule"><span class="rno">2</span><b>模式档位唯一且全局</b>：咨询（只读）/ 文书（可写但一律 draft）/ 计划（先方案） / 自动（本地连续执行）。切换入口唯一（composer 右下）。写档案、外发、删除在任何档位都二次确认。</div>
+    <div class="rule"><span class="rno">2</span><b>意图由 agent 自动判定，无用户档位</b>：服务端 policy 引擎识别问答/整理并写入系统提示词，模型自行决定直接回答或调用文书工具；未配置模型时自动降级本地规则。写档案、外发、删除始终二次确认。</div>
     <div class="rule"><span class="rno">3</span><b>回答三件套</b>：步骤流（可折叠）+ 结论 + 出处（若引用了来源）。无出处的段落标"待核查"。步骤流样式全场景一致。</div>
     <div class="rule"><span class="rno">4</span><b>右栏 = 场景面板</b>：位置与 tab 骨架固定（材料/知识/产物，可附加场景 tab），内容随任务类型切换；任何场景不得新开独立窗口或弹走主对话。</div>
     <div class="rule"><span class="rno">5</span><b>患者上下文唯一规则</b>（屏 7）：@患者=引用≠切换；切换只有三个入口；PHI 界面必须可见"当前是谁"；外发授权按患者隔离、切换即重置。</div>
@@ -2042,7 +2042,7 @@
   <table class="ptable">
     <tr><th style="width:120px">页面/视图</th><th style="width:170px">进入入口</th><th>状态（触发 → 变化）</th></tr>
     <tr><td><b>首页</b></td><td>左栏 ⌂ / 启动</td><td>空状态（无患者）→ 常态（场景卡+待办数）→ 输入即建任务。变化源：建档、今日待办数。</td></tr>
-    <tr><td><b>会话工作台</b></td><td>新建任务 / 左栏任务 / 患者详情"打开病例工作区"</td><td>准备材料（材料 tab 高亮）→ 生成中（步骤流滚动，Goal 卡出现）→ 待复核（产物卡+徽章+1）→ 已归档（产物 approved 标记）。模式档位随场景预置：咨询/文书。</td></tr>
+    <tr><td><b>会话工作台</b></td><td>新建任务 / 左栏任务 / 患者详情"打开病例工作区"</td><td>准备材料（材料 tab 高亮）→ 生成中（步骤流滚动，Goal 卡出现）→ 待复核（产物卡+徽章+1）→ 已归档（产物 approved 标记）。意图由 policy 自动判定，无手动档位。</td></tr>
     <tr><td><b>验收视图</b></td><td>产物卡[打开验收] / 待复核队列 / 风险"已处理"回链</td><td>预览 ⇄ diff ⇄ 出处对照 三态切换；通过 → 关闭并回会话（产物 approved）；退回 → 关闭并注入修订指令。移动端退化为全屏页。</td></tr>
     <tr><td><b>患者列表</b></td><td>左栏患者 / 切换器</td><td>常态 ⇄ 搜索/分组过滤；风险角标随每日扫描更新（⚠n）；点击=切换当前患者（屏 7）。</td></tr>
     <tr><td><b>患者详情</b></td><td>列表点击 / 速览卡[完整档案]</td><td>四 tab（概览/临床/消息/随访）；概览含风险面板 + pending-actions；approved 成果写入时间线；编辑临床资料仅手填+AI 提议确认。</td></tr>
