@@ -71,7 +71,7 @@ test("真实模型 · 咨询直接答：不产文书、回答引用材料", { sk
     ].join("\n"),
   });
   await openPatientWorkspace(page, "模型咨询患者");
-  // 默认档位应为咨询（模型已配置）；勾选外发同意
+  // 无档位可选：意图由服务端 policy 判定，模型应自行选择直接回答
   await sendAndWaitDone(
     page,
     "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。",
@@ -96,8 +96,6 @@ test("真实模型 · 文书整理：工具调用 + 产物 + 验收通过", { sk
     ].join("\n"),
   });
   await openPatientWorkspace(page, "模型文书患者");
-  // 切到文书档位
-  await page.locator('.mode-chips .mode-chip:has-text("文书")').click();
   await sendAndWaitDone(
     page,
     "请整理本患者的病例材料：生成病历时间线、检验数值摘录，保留来源与行号。",

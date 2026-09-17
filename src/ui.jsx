@@ -432,57 +432,13 @@ export function PatientSwitcher({ patients, currentId, onSwitch, onManage }) {
   );
 }
 
-/* ---------- 模式档位 ---------- */
-const MODES = [
-  { id: "consult", label: "咨询", hint: "\n\n（请直接回答这个问题，不需要生成文书草稿。）", note: "只读问答" },
-  { id: "document", label: "文书", hint: "", note: "整理类产出为待复核草稿" },
-  { id: "plan", label: "计划", hint: "\n\n（请先给出整理方案与步骤，不要直接生成文书草稿，等我确认后再执行。）", note: "先方案后执行" },
-];
-export function ModeChips({ value, onChange, disabled, modelConfigured }) {
-  return (
-    <div className="mode-chips" role="radiogroup" aria-label="任务档位">
-      {MODES.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          role="radio"
-          aria-checked={value === m.id}
-          className={`mode-chip ${value === m.id ? "on" : ""}`}
-          disabled={disabled || (!modelConfigured && m.id !== "plan")}
-          title={modelConfigured ? m.note : `${m.note} · 需要配置模型`}
-          onClick={() => onChange(m.id)}
-        >
-          {m.label}
-        </button>
-      ))}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={value === "local"}
-        className={`mode-chip local ${value === "local" ? "on" : ""}`}
-        disabled={disabled}
-        title="在本机用规则整理，不调用外部模型"
-        onClick={() => onChange("local")}
-      >
-        本地整理
-      </button>
-    </div>
-  );
+/* ---------- 模式判定（agent 自动，用户不选档位） ---------- */
+// 有模型就走模型循环；意图（直接回答 vs 整理成草稿）由服务端 policy
+// 引擎判定并写入系统提示词，模型自行决定是否调用文书类工具。
+export function modeToRequest(modelEnabled, base) {
+  if (!modelEnabled) return { ...base, mode: "local" };
+  return { ...base, mode: "model" };
 }
-export function modeToRequest(chip, base) {
-  if (chip === "local") return { ...base, mode: "local" };
-  return {
-    ...base,
-    mode: "model",
-    message: (base.message || "") + (MODES.find((m) => m.id === chip)?.hint || ""),
-  };
-}
-export const modeNotes = {
-  consult: "咨询模式：直接回答，不产文书",
-  document: "文书模式：整理类产出为待复核草稿",
-  plan: "计划模式：先出方案，确认后再执行",
-  local: "本地整理：不调用外部模型",
-};
 
 /* ---------- 风险卡列表 ---------- */
 export function RiskList({ alerts, onAck, onResolve, onDraft, busy }) {
