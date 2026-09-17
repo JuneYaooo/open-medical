@@ -160,6 +160,7 @@ export class GuidelineLibrary {
   // tokenizer (substring matching over a small local corpus).
   async search({ query, org, year, kind, collection, limit = 8 } = {}) {
     const text = string(query, "检索词", 200);
+    const cjk = /[\u4e00-\u9fff]/;
     const terms = text
       .split(/\s+/)
       .map((term) => term.trim().toLowerCase())
@@ -170,6 +171,15 @@ export class GuidelineLibrary {
       "INVALID_INPUT",
       "返回数量须为 1–30",
     );
+    // 无分词器的中文长查询（自然语言整句）做重叠 bigram 退化匹配，
+    // 任一 bigram 命中即视为该词命中，避免整句子串匹配必然落空。
+    const termDefs = terms.map((term) => {
+      const subs = [];
+      if (term.length >= 4 && cjk.test(term)) {
+        for (let i = 0; i + 2 <= term.length; i++) subs.push(term.slice(i, i + 2));
+      }
+      return { term, subs };
+    });
     const docs = this.store.db
       .prepare("SELECT data FROM guideline_docs")
       .all()
@@ -210,17 +220,28 @@ export class GuidelineLibrary {
         const lower = chunk.text.toLowerCase();
         let score = 0;
         let missing = false;
-        for (const term of terms) {
-          const index = lower.indexOf(term);
+        for (const { term, subs } of termDefs) {
+          let needle = term;
+          let index = lower.indexOf(needle);
+          if (index < 0 && subs.length) {
+            for (const sub of subs) {
+              const at = lower.indexOf(sub);
+              if (at >= 0) {
+                needle = sub;
+                index = at;
+                break;
+              }
+            }
+          }
           if (index < 0) {
             missing = true;
             break;
           }
           let occurrences = 0;
-          let at = lower.indexOf(term);
+          let at = lower.indexOf(needle);
           while (at >= 0) {
             occurrences++;
-            at = lower.indexOf(term, at + term.length);
+            at = lower.indexOf(needle, at + needle.length);
           }
           score += occurrences;
         }
@@ -358,7 +379,7 @@ export function knowledgeTools(library) {
     {
       definition: definition(
         "knowledge_search",
-        "在本地医学知识库中检索（指南/书籍/资料等全部类别），返回带文档名与行号出处的原文块。回答医学问题前优先检索。",
+        "在本地医学知识库中检索（指南/书籍/资料等全部类别），返回带文档名与行号出处的原文块。回答医学问题前优先检索。collection/kind/org 为精确匹配筛选，不确定时请省略，先用自然语言检索词即可。",
         {
           query: textDef,
           kind: textDef,
@@ -369,7 +390,31 @@ export function knowledgeTools(library) {
         },
         ["query"],
       ),
-      execute: (args) => library.search(args),
+      execute: async (args) => {
+        const result = await library.search(args);
+        // 模型常凭猜测传 collection/kind/org 精确过滤（实际是精确匹配），
+        // 猜错就全军覆没：无命中时自动去过滤重试一次并明示。
+        if ((result.count || 0) > 0 || !(args.collection || args.kind || args.org))
+          return result;
+        const widened = await library.search({
+          ...args,
+          collection: undefined,
+          kind: undefined,
+          org: undefined,
+        });
+        if (!widened.count) return result;
+        const dropped = [
+          args.collection && `库:${args.collection}`,
+          args.kind && `类别:${args.kind}`,
+          args.org && `机构:${args.org}`,
+        ]
+          .filter(Boolean)
+          .join("、");
+        return {
+          ...widened,
+          note: `筛选条件（${dropped}）下无命中，已自动返回全库检索结果；可先用 knowledge_list 查看有哪些知识库与类别，或省略筛选词重试。`,
+        };
+      },
     },
     {
       definition: definition(

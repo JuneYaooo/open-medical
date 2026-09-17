@@ -343,8 +343,15 @@ export const SCENARIOS = [
   },
   {
     name: '工具箱滑出面板：打开 → 进入临床速查 → 整页打开',
-    fn: async ({ _page, seed: _seed, origin: _origin }) => {
-
+    fn: async ({ page }) => {
+      await page.locator('.nav-label button:has-text("打开")').click();
+      await page.waitForSelector(".tool-slide");
+      await page.locator('.ts-menu button:has-text("临床速查")').click();
+      await page.waitForSelector('.tool-slide button:has-text("量表计算")');
+      await page.locator('.tool-slide button:has-text("整页打开")').click();
+      // 整页打开后面板关闭，切换到临床速查整页视图
+      await page.waitForSelector('.tool-slide', { state: "detached" });
+      await page.waitForSelector('h3:has-text("量表与计算器")', { timeout: 8000 });
     },
   },
 

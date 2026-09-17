@@ -193,7 +193,9 @@ export function runTool(
     check(skills, "SKILL_NOT_CONFIGURED", "技能注册表未配置", 503);
     const skill = skills.get(args.skillId);
     return {
-      id: skill.id,
+      // 字段名用 skillId 而非 id：runtime 会把带 id 的工具输出当作产物
+      // 草稿收入产物列表，技能正文不是产物。
+      skillId: skill.id,
       name: skill.name,
       description: skill.description,
       instructions: skill.body,
