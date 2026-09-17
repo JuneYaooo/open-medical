@@ -799,7 +799,10 @@ function App() {
         {
           message: req.message,
           mode: req.mode,
-          externalConsent: consent,
+          externalConsent: accessMode === "auto" ? true : consent,
+          ...(thinking === "enabled" && modelEnabled
+            ? { thinking: "enabled" }
+            : {}),
           skills: pickedSkills,
           delegations: team ? ["timeline", "observations", "medication"] : [],
           ...override,

@@ -97,12 +97,10 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");
   // 默认档位应为咨询（模型已配置）
-  assert.match(
-    await page.locator(".mode-chips .mode-chip.on").innerText(),
-    /咨询/,
-  );
-  // 勾选外发同意并发送
-  const consent = page.locator(".composer .consent input").first();
+  // 无模式档位：会话头/输入区不应出现档位选择器
+  assert.equal(await page.locator(".mode-chips").count(), 0);
+  // 逐次确认档下勾选外发；默认会话自动无需勾选
+  const consent = page.locator(".tb-check input");
   if (await consent.isVisible().catch(() => false)) await consent.check();
   await page.locator(".composer textarea").fill(
     "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。",
