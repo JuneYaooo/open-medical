@@ -179,6 +179,12 @@ export class MedicalRuntime {
         409,
       );
     if (body.model !== undefined) string(body.model, "模型名称", 100);
+    if (body.thinking !== undefined)
+      check(
+        ["enabled", "disabled"].includes(body.thinking),
+        "INVALID_INPUT",
+        "思考档无效",
+      );
     const requestId = identifier(body.requestId || randomUUID());
     check(
       !session.runs.some((r) => r.requestId === requestId),
@@ -689,6 +695,7 @@ export class MedicalRuntime {
           permissions,
           signal: controller.signal,
           model: handle.body.model || this.provider.model,
+          thinking: handle.body.thinking,
           emit,
           onUsage: addUsage,
           // 会话超过预算时自动压缩：保留最近对话，更早历史摘要化，原文

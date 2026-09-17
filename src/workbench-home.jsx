@@ -424,6 +424,7 @@ export function WorkbenchHome({
             <div className="hub-composer-controls">
               <div className="hub-task-type" role="tablist" aria-label="任务类型">
                 <button
+                  type="button"
                   aria-pressed={taskType === "medical"}
                   className={taskType === "medical" ? "active" : ""}
                   title="患者与临床场景：可用医疗工具（整理病历/随访/知识库/文献等），产出走草稿复核"
@@ -432,6 +433,7 @@ export function WorkbenchHome({
                   临床任务
                 </button>
                 <button
+                  type="button"
                   aria-pressed={taskType === "project"}
                   className={taskType === "project" ? "active" : ""}
                   title="通用 Agent 工作区：本地文件夹、终端、Git 等，适合写代码、整理文档等非患者任务"

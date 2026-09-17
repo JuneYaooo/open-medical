@@ -513,7 +513,8 @@ function App() {
     [activeId, setActiveId] = useState(""),
     [draft, setDraft] = useState(""),
     [consent, setConsent] = useState(false);
-  const [consentScope, setConsentScope] = useState("session");
+  const [accessMode, setAccessMode] = useState("auto");
+  const [thinking, setThinking] = useState("disabled");
   const [team, setTeam] = useState(false);
   const [pickedSkills, setPickedSkills] = useState([]),
     [mention, setMention] = useState(null),
@@ -664,6 +665,7 @@ function App() {
     try {
       const value = await bootstrap(true);
       setConfig(value);
+      setThinking(value.thinking === "enabled" ? "enabled" : "disabled");
       const list = await refreshList();
       api("/api/doctor/profile")
         .then((p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0))
@@ -786,7 +788,9 @@ function App() {
       [id]: { busy: true, partial: "", events: [] },
     }));
     let started = false;
-    const req = modeToRequest(Boolean(config?.modelConfigured), {
+    const modelEnabled =
+      Boolean(config?.modelConfigured) && accessMode !== "local";
+    const req = modeToRequest(modelEnabled, {
       message: text,
     });
     try {
@@ -853,8 +857,8 @@ function App() {
               });
           if (event.type === "message.complete" && activeRef.current === id) {
             setTab("results");
-            // 逐轮确认档位：每轮结束后收回外发授权，下一轮需重新勾选。
-            if (consentScope === "each") setConsent(false);
+            // 逐次确认档：每轮结束后收回外发授权，下一轮需重新勾选。
+            if (accessMode === "each") setConsent(false);
           }
         },
       );
@@ -1009,6 +1013,9 @@ function App() {
     (sum, item) => sum + item.reviewCount,
     0,
   );
+  const modelEnabled =
+    Boolean(config?.modelConfigured) && accessMode !== "local";
+  const effectiveConsentRequired = modelEnabled && accessMode === "each";
   const fileContent = citation
     ? session?.files.find((f) => f.id === citation.sourceId)?.text ||
       session?.messages.find((m) => m.id === citation.sourceId)?.content
@@ -1866,11 +1873,12 @@ function App() {
                       <button
                         type="button"
                         className="attach-button"
+                        title="添加材料：TXT / Markdown / CSV / JSON / PDF"
                         onClick={() => fileRef.current?.click()}
                         disabled={busy || uploading || !config}
                       >
                         <Paperclip size={16} />
-                        {uploading ? "导入中…" : "添加材料"}
+                        {uploading ? "导入中…" : "附件"}
                       </button>
                       <button
                         type="button"
@@ -1895,7 +1903,61 @@ function App() {
                         accept=".txt,.md,.csv,.json,.pdf"
                         onChange={upload}
                       />
+                      <span className="tb-divider" />
+                      <label
+                        className="tb-item"
+                        title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选；仅本地=不调用外部模型，只用本机规则"
+                      >
+                        权限
+                        <select
+                          value={accessMode}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setAccessMode(v);
+                            setConsent(v === "auto");
+                          }}
+                          disabled={busy || loading}
+                        >
+                          <option value="each">逐次确认</option>
+                          <option value="auto">会话自动</option>
+                          <option value="local">仅本地</option>
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="tb-item"
+                        title={`当前模型：${config?.model || "未配置"}；点击打开运行设置更换模型`}
+                        onClick={() => setModal("settings")}
+                      >
+                        模型 <b>{config?.model || "未配置"}</b>
+                      </button>
+                      {config?.modelConfigured && (
+                        <label
+                          className="tb-item"
+                          title="深入：请求模型启用思考/推理通道（取决于供应商支持；标准=关闭）"
+                        >
+                          思考
+                          <select
+                            value={thinking}
+                            onChange={(e) => setThinking(e.target.value)}
+                            disabled={busy || loading}
+                          >
+                            <option value="disabled">标准</option>
+                            <option value="enabled">深入</option>
+                          </select>
+                        </label>
+                      )}
                       <span className="composer-spacer" />
+                      {accessMode === "each" && config?.modelConfigured && !busy && (
+                        <label className="tb-check">
+                          <input
+                            type="checkbox"
+                            checked={consent}
+                            onChange={(e) => setConsent(e.target.checked)}
+                          />
+                          本轮允许外发
+                        </label>
+                      )}
                       {busy ? (
                         <button
                           type="button"
@@ -1914,32 +1976,13 @@ function App() {
                             loading ||
                             !config ||
                             uploading ||
-                            (config?.modelConfigured && !consent)
+                            effectiveConsentRequired && !consent
                           }
                         >
                           <ArrowUp size={19} />
                         </button>
                       )}
                     </div>
-                    {config?.modelConfigured && (
-                      <label className="consent">
-                        <input
-                          type="checkbox"
-                          checked={consent}
-                          onChange={(e) => setConsent(e.target.checked)}
-                        />
-                        允许本会话的输入和选中材料以原文发送至所配置的模型服务
-                        <select
-                          className="consent-scope"
-                          value={consentScope}
-                          onChange={(e) => setConsentScope(e.target.value)}
-                          aria-label="外发授权范围"
-                        >
-                          <option value="session">本会话有效</option>
-                          <option value="each">逐轮确认（每轮发送后重置）</option>
-                        </select>
-                      </label>
-                    )}
                     <label className="consent">
                       <input
                         type="checkbox"

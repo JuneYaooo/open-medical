@@ -4445,3 +4445,50 @@ nav.toolbox .session b{font-weight:500;}
   font-size: 13px;
   color: #678376;
 }
+
+/* 输入框工具条：附件 / 技能 / 权限 / 模型 / 思考 */
+.tb-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+}
+.tb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #678376;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tb-item b {
+  font-weight: 600;
+  color: #485b4e;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-item select {
+  font-size: 11px;
+  color: #485b4e;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 3px;
+  max-width: 120px;
+}
+.tb-item:hover {
+  color: var(--accent-deep, #28735b);
+}
+.tb-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #678376;
+  white-space: nowrap;
+}

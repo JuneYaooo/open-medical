@@ -20,6 +20,7 @@ export class AgentRuntime {
     permissions,
     signal = new AbortController().signal,
     model = this.provider.model,
+    thinking,
     emit = () => {},
     context = {},
     onUsage = () => {},
@@ -83,6 +84,7 @@ export class AgentRuntime {
         registry.definitions(permissions),
         {
           model,
+          thinking,
           signal,
           onDelta: delta,
           onStatus: (status) => emit("status.update", status),

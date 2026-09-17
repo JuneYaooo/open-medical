@@ -591,6 +591,7 @@ export function createServer(options = {}) {
           modelConfigured: providerConfigured(provider),
           contextBudget: runtime.maxContextChars,
           maxRounds: runtime.maxRounds,
+          thinking: provider.thinking,
           directoryPicker: typeof options.chooseDirectory === "function",
           provider: provider.provider || "deepseek",
           engine: "medical-runtime",
