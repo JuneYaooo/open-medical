@@ -52,11 +52,9 @@ import {
   AcceptanceView,
   GoalCard,
   MemoryNote,
-  ModeChips,
   PatientSummaryCard,
   PatientSwitcher,
   StepsFlow,
-  modeNotes,
   modeToRequest,
 } from "./ui";
 const WORKFLOWS = [
@@ -531,7 +529,6 @@ function App() {
   );
   const [patientDetail, setPatientDetail] = useState(null);
   const [acceptId, setAcceptId] = useState("");
-  const [chip, setChip] = useState("consult");
   const [doctorMemCount, setDoctorMemCount] = useState(0);
   const [referencedPatients, setReferencedPatients] = useState([]);
   const [toolPanel, setToolPanel] = useState(null);
@@ -566,8 +563,7 @@ function App() {
     endRef = useRef(),
     activeRef = useRef(""),
     generation = useRef(0),
-    sendingRef = useRef(new Set()),
-    modeAutoTuned = useRef(false);
+    sendingRef = useRef(new Set());
   const activeRun = runs[activeId];
   const persistedRunning = session?.runs.findLast(
     (r) => r.status === "running",
@@ -656,7 +652,6 @@ function App() {
     setActiveId(id);
     setDraft("");
     setConsent(false);
-    setChip(config?.modelConfigured ? "consult" : "local");
     setTeam(false);
     setSidebar(false);
     setReferencedPatients([]);
@@ -669,11 +664,6 @@ function App() {
     try {
       const value = await bootstrap(true);
       setConfig(value);
-      // 已配置模型时默认走智能档位；本地规则只是无模型时的兜底。
-      if (!modeAutoTuned.current) {
-        modeAutoTuned.current = true;
-        setChip(value.modelConfigured ? "consult" : "local");
-      }
       const list = await refreshList();
       api("/api/doctor/profile")
         .then((p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0))
@@ -796,7 +786,9 @@ function App() {
       [id]: { busy: true, partial: "", events: [] },
     }));
     let started = false;
-    const req = modeToRequest(chip, { message: text });
+    const req = modeToRequest(Boolean(config?.modelConfigured), {
+      message: text,
+    });
     try {
       await streamTurn(
         id,
@@ -990,7 +982,6 @@ function App() {
       if (options.artifactId) setAcceptId(options.artifactId);
       if (options.draft) {
         setDraft(options.draft);
-        setChip(config?.modelConfigured ? "document" : "local");
         setConsent(false);
         setTimeout(() => inputRef.current?.focus(), 100);
       }
@@ -1002,7 +993,6 @@ function App() {
       : await create(title);
     if (!data) throw new Error("任务准备失败，请刷新连接后重试。");
     setDraft(prompt);
-    setChip(config?.modelConfigured ? "document" : "local");
     setTeam(false);
     setConsent(false);
     setTab("materials");
@@ -1591,7 +1581,11 @@ function App() {
                       </article>
                     ))}
                     {(busy || session?.artifacts.length > 0) &&
-                      (chip === "document" || /时间线|检验|用药|病历|文书/.test(session?.messages.findLast((m) => m.role === "user")?.content || "")) && (
+                      (/时间线|检验|用药|病历|文书|整理|总结/.test(
+                        session?.messages.findLast((m) => m.role === "user")?.content || "",
+                      ) ||
+                        busy ||
+                        session?.artifacts.length > 0) && (
                         <GoalCard
                           message={session?.messages.findLast((m) => m.role === "user")?.content || ""}
                           running={busy}
@@ -1671,7 +1665,6 @@ function App() {
                               );
                               if (original) {
                                 setDraft(original.content);
-                                setChip(r.mode === "local" ? "local" : "document");
                                 setConsent(false);
                                 setFileSelection((prev) => ({
                                   ...prev,
@@ -1902,15 +1895,6 @@ function App() {
                         accept=".txt,.md,.csv,.json,.pdf"
                         onChange={upload}
                       />
-                      <ModeChips
-                        value={chip}
-                        onChange={(c) => {
-                          setChip(c);
-                          setConsent(false);
-                        }}
-                        disabled={busy || loading}
-                        modelConfigured={Boolean(config?.modelConfigured)}
-                      />
                       <span className="composer-spacer" />
                       {busy ? (
                         <button
@@ -1930,14 +1914,14 @@ function App() {
                             loading ||
                             !config ||
                             uploading ||
-                            (chip !== "local" && !consent)
+                            (config?.modelConfigured && !consent)
                           }
                         >
                           <ArrowUp size={19} />
                         </button>
                       )}
                     </div>
-                    {chip !== "local" && (
+                    {config?.modelConfigured && (
                       <label className="consent">
                         <input
                           type="checkbox"
@@ -1971,7 +1955,7 @@ function App() {
                   </form>
                   <div className="composer-note">
                     <span>
-                      {modeNotes[chip]}
+                      AI 自动判断直接回答还是整理成草稿；整理产出均为待复核草稿
                       {!config?.modelConfigured && (
                         <>
                           {" · "}
@@ -1979,7 +1963,7 @@ function App() {
                             className="text-button"
                             onClick={() => setModal("model")}
                           >
-                            配置模型后可用咨询/文书/计划档位
+                            未配置模型，当前仅本地规则整理；点击配置解锁完整能力
                           </button>
                         </>
                       )}
