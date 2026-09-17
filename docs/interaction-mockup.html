@@ -62,6 +62,8 @@
     background:var(--paper); border-radius:99px; padding:4px 12px; font-size:12px; color:var(--ink);}
   .pill .dot{width:7px; height:7px; border-radius:50%; background:var(--accent);}
   .pill.local{background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-deep);}
+  .tb-chip{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); background:#fff; border-radius:8px; padding:3px 9px; font-size:10.5px; color:#485b4e;}
+  .tb-chip b{font-weight:600;}
   .mode-chip{display:inline-flex; align-items:center; gap:6px; border-radius:99px; padding:4px 12px;
     font-size:12px; border:1px solid var(--accent-line); background:var(--accent-soft); color:var(--accent-deep); font-weight:600;}
   .mode-chip.caret::after{content:"▾"; font-size:10px; opacity:.7;}
@@ -428,7 +430,7 @@
         <b>左栏 · 项目 / 任务 / 患者</b><p>项目（科研课题 / 专病库 / 事务，可新建）→ 任务时间线（患者任务+独立任务）· 患者列表 · 工具箱收纳（速查/DRG/科研/文献，滑出面板）</p>
       </div>
       <div class="row2">
-        <div class="frame"><b>中栏 · 对话执行区</b><p>咨询直接答；执行过程 = 可折叠步骤流；文书在对话内出产物卡</p></div>
+        <div class="frame"><b>中栏 · 对话执行区</b><p>咨询直接答；执行过程 = 可折叠步骤流；composer 工具条：附件 / 权限 / 模型 / 思考；文书在对话内出产物卡</p></div>
         <div class="frame"><b>右栏 · 场景面板</b><p>材料 / 知识 / 产物，随场景切换形态：患者速览卡 · 搜集资料 · 记忆面板</p></div>
         <div class="frame"><b>验收视图 · 叠加层</b><p>预览 / 与上一版 diff / 出处对照 + 字段清单 + 轻量复核条</p></div>
       </div>
@@ -525,8 +527,8 @@
               <span class="txt">把随访安排补上，按指南建议的复查节点。<span class="caret"></span></span><span class="send">➤</span>
             </div>
             <div class="composer-foot">
-              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span>↵ 发送 · Shift+↵ 换行</span><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
+              <span><span class="sym">📎</span>附件</span><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="tb-chip">权限 · <b>会话自动</b> ▾</span><span class="tb-chip">模型 · <b>deepseek-flash</b> ▾</span><span class="tb-chip">思考 · <b>标准</b> ▾</span><span>↵ 发送 · Shift+↵ 换行</span></div>
             </div>
           </div>
         </div>
@@ -562,7 +564,7 @@
       <span><b>5</b>执行步骤流：工具名+结果+耗时，可展开（替代纯文本日志）</span>
       <span><b>6</b>结论带引用气泡，点击跳行号原文高亮（复用现有 reader）</span>
       <span><b>7</b>产物卡内嵌对话：draft 徽章 + 验收入口</span>
-      <span><b>8</b>符号输入体系：@患者/资料/指南、/命令、$技能；右下角外发授权分档（本会话有效/逐轮确认）</span>
+      <span><b>8</b>composer 工具条：附件、@技能、权限分档（逐次确认/会话自动/仅本地）、模型切换、思考档</span>
     </div>
   </div>
 
@@ -688,8 +690,8 @@
             <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
             <div class="input-line"><span class="txt" style="color:#9aa7a1">自动整理中，可随时插话调整…</span><span class="send" style="background:#c2ccc7">■</span></div>
             <div class="composer-foot">
-              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">Agent 自动整理 · 产物均为草稿</span></div>
+              <span><span class="sym">📎</span>附件</span><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="tb-chip">权限 · <b>会话自动</b> ▾</span><span class="tb-chip">思考 · <b>深入</b> ▾</span><span class="mode-chip caret" style="background:var(--blue-soft);border-color:#bcd3ea;color:var(--blue)">Agent 自动整理 · 产物均为草稿</span></div>
             </div>
           </div>
         </div>
@@ -822,8 +824,8 @@
             <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span><span class="chip gray">＋ 添加材料</span></div>
             <div class="input-line"><span class="txt">把这次的血压趋势写进随访小结。<span class="caret"></span></span><span class="send">➤</span></div>
             <div class="composer-foot">
-              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span>↵ 发送</span><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
+              <span><span class="sym">📎</span>附件</span><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="tb-chip">权限 · <b>会话自动</b> ▾</span><span class="tb-chip">模型 · <b>deepseek-flash</b> ▾</span><span class="tb-chip">思考 · <b>标准</b> ▾</span><span>↵ 发送</span></div>
             </div>
           </div>
         </div>
@@ -1329,8 +1331,8 @@
           </div>
           <div class="composer">
             <div class="input-line"><span class="txt" style="color:#9aa7a1">继续追问，或让 AI 生成评估记录…</span><span class="send">➤</span></div>
-            <div class="composer-foot"><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret">外发授权 · 本会话有效</span></div></div>
+            <div class="composer-foot"><span><span class="sym">📎</span>附件</span><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="tb-chip">权限 · <b>会话自动</b> ▾</span><span class="tb-chip">模型 · <b>deepseek-flash</b> ▾</span><span class="tb-chip">思考 · <b>标准</b> ▾</span></div></div>
           </div>
         </div>
         <div class="tool-panel" style="border-left:1px solid var(--border)">
@@ -1668,8 +1670,8 @@
             <div class="ctx-chips"><span class="chip">患者：张三 <span class="x">×</span></span></div>
             <div class="input-line"><span class="txt">写完了发我验收。<span class="caret"></span></span><span class="send">➤</span></div>
             <div class="composer-foot">
-              <span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
-              <div class="right"><span class="mode-chip caret">外发授权 · 本会话有效</span></div>
+              <span><span class="sym">📎</span>附件</span><span><span class="sym">@</span>患者/资料/指南</span><span><span class="sym">/</span>命令</span><span><span class="sym">$</span>技能</span>
+              <div class="right"><span class="tb-chip">权限 · <b>会话自动</b> ▾</span><span class="tb-chip">思考 · <b>标准</b> ▾</span></div>
             </div>
           </div>
         </div>
