@@ -159,10 +159,12 @@ export function DoctorProfilePanel() {
       )}
       {notice && <p className="form-notice">{notice}</p>}
 
-      <section className="doctor-section">
-        <h3>结构化偏好</h3>
+      <details className="doctor-section">
+        <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+          结构化偏好表单（高级）
+        </summary>
         <p className="muted">
-          保存后会作为「医生偏好档案」注入医疗任务的系统指令（≤800 字）。
+          平时无需手动编辑：直接在对话里表达偏好，AI 会提议记忆、你确认后生效。此处表单用于微调「医生偏好档案」注入的系统指令（≤800 字）。
         </p>
         {TEXT_FIELDS.map(([key, label, placeholder]) => (
           <label className="doctor-field" key={key}>
@@ -216,7 +218,7 @@ export function DoctorProfilePanel() {
             <RotateCcw size={14} /> 重读
           </button>
         </div>
-      </section>
+      </details>
 
       <section className="doctor-section">
         <h3>当前注入摘要预览</h3>
@@ -226,7 +228,11 @@ export function DoctorProfilePanel() {
       </section>
 
       <section className="doctor-section">
-        <h3>记忆管理</h3>
+        <h3>记忆</h3>
+        <p className="muted">
+          在对话里直接说你的偏好即可：AI 会用 doctor_memory_propose
+          存为「待确认」，你在这里确认后自动注入后续每次任务；不合适的忽略或删除。
+        </p>
         <div className="doctor-add">
           <input
             value={newMemory}
