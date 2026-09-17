@@ -369,7 +369,10 @@ export function createServer(options = {}) {
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     domain: createMedicalWorkspaceDomain({
-      plugins: [...knowledgeToolPlugins, ...pendingActionTools(pending)],
+      plugins: [
+        ...knowledgeToolPlugins,
+        ...pendingActionTools(pending, doctor),
+      ],
     }),
     onNotification: options.onNotification,
     sandbox: runtime.sandbox,
@@ -392,7 +395,7 @@ export function createServer(options = {}) {
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
-  runtime.registerPlugins(pendingActionTools(pending));
+  runtime.registerPlugins(pendingActionTools(pending, doctor));
   const swapProvider = (next) => {
     provider = next;
     runtime.provider = provider;

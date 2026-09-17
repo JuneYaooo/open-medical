@@ -121,3 +121,66 @@ test("case-save proposal: with patient snapshot and standalone", async (t) => {
   assert.equal(ok.status, 200);
   assert.equal((await f.json("/api/cases")).data.count, 2);
 });
+
+test("patient-create proposal: chat registration propose -> confirm creates patient", async (t) => {
+  const f = await fixture(t);
+  const boot = (await f.json("/api/bootstrap")).data;
+  assert.ok(boot.tools.includes("patient_create_propose"));
+  assert.ok(boot.tools.includes("doctor_memory_propose"));
+
+  const service = f.server.runtime.toolPlugins.get("patient_create_propose");
+  const created = service.execute({
+    name: "王秀英",
+    gender: "female",
+    birthYear: 1952,
+    groups: ["2型糖尿病"],
+    tags: ["二甲双胍"],
+    diagnoses: [{ code: "E11.9", name: "2型糖尿病", date: "2024-03-01" }],
+    allergies: ["青霉素"],
+    summary: "从上传的门诊病历识别出新患者，建议建档",
+  });
+  assert.equal(created.status, "pending");
+
+  // Missing name is rejected at propose time.
+  assert.throws(
+    () => service.execute({ summary: "没有姓名" }),
+    (err) => err.code === "INVALID_INPUT",
+  );
+
+  const listed = (await f.json("/api/pending-actions?status=pending")).data;
+  assert.equal(
+    listed.actions.filter((a) => a.type === "patient-create").length,
+    1,
+  );
+
+  const confirmed = await f.json(`/api/pending-actions/${created.id}/confirm`, "POST");
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.data.action.status, "applied");
+  assert.equal(confirmed.data.applied.name, "王秀英");
+
+  const after = (await f.json("/api/patients")).data;
+  const made = after.patients.find((p) => p.name === "王秀英");
+  assert.ok(made, "建档提案确认后患者应已创建");
+  assert.equal(made.allergies[0], "青霉素");
+  assert.equal(made.diagnoses[0].code, "E11.9");
+  assert.ok(made.sessionId, "建档应同时创建病例工作区");
+});
+
+test("doctor_memory_propose: model-proposed memory starts pending and injects after confirm", async (t) => {
+  const f = await fixture(t);
+  const service = f.server.runtime.toolPlugins.get("doctor_memory_propose");
+  const proposed = service.execute({
+    content: "随访小结按科室模板第三节格式写",
+    topic: "文书格式",
+  });
+  assert.equal(proposed.status, "pending");
+
+  const profile = (await f.json("/api/doctor/profile")).data;
+  assert.ok(!profile.digest.includes("随访小结按科室模板第三节格式"));
+
+  const confirmed = await f.json(`/api/doctor/memories/${proposed.memoryId}/confirm`, "POST");
+  assert.equal(confirmed.status, 200);
+
+  const after = (await f.json("/api/doctor/profile")).data;
+  assert.ok(after.digest.includes("随访小结按科室模板第三节格式"));
+});

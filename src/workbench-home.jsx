@@ -426,16 +426,18 @@ export function WorkbenchHome({
                 <button
                   aria-pressed={taskType === "medical"}
                   className={taskType === "medical" ? "active" : ""}
+                  title="患者与临床场景：可用医疗工具（整理病历/随访/知识库/文献等），产出走草稿复核"
                   onClick={() => setTaskType("medical")}
                 >
-                  医疗任务
+                  临床任务
                 </button>
                 <button
                   aria-pressed={taskType === "project"}
                   className={taskType === "project" ? "active" : ""}
+                  title="通用 Agent 工作区：本地文件夹、终端、Git 等，适合写代码、整理文档等非患者任务"
                   onClick={() => setTaskType("project")}
                 >
-                  项目任务
+                  通用任务
                 </button>
               </div>
               {taskType === "medical" && (
@@ -491,9 +493,11 @@ export function WorkbenchHome({
             </div>
           </form>
           <p className="hub-composer-hint">
-            {selectedPatient
-              ? `沿用「${selectedPatient.name}」的病例材料，进入后可核对本次范围。`
-              : "先准备任务，再添加材料；生成结果后由你复核。"}
+            {taskType === "project"
+              ? "通用任务 = 完整的 Agent 工作区（文件/终端/Git），与患者数据相互隔离。"
+              : selectedPatient
+                ? `沿用「${selectedPatient.name}」的病例材料，进入后可核对本次范围。`
+                : "临床任务围绕患者与诊疗材料，AI 产出均为待你复核的草稿；进入任务后可继续添加材料。"}
           </p>
           <section className="hub-scenarios" aria-label="医疗工作场景">
             <div className="hub-section-head">

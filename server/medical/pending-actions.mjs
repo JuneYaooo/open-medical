@@ -7,7 +7,7 @@ import { validateClinicalInput } from "../patients.mjs";
 // structured payload; only the doctor's confirm applies it through the
 // same deterministic services the UI uses (proposal pattern from the
 // mediwise/MDT references — LLM proposes, deterministic code applies).
-const TYPES = ["patient-update", "followup-create", "case-save"];
+const TYPES = ["patient-create", "patient-update", "followup-create", "case-save"];
 
 export class PendingActions {
   // services are accessor functions (e.g. () => patients) so the registry
@@ -63,6 +63,13 @@ export class PendingActions {
         "患者档案提案至少包含一项变更（诊断/用药/过敏/检验/就诊）",
       );
       normalized = fields;
+    }
+    if (type === "patient-create") {
+      check(
+        typeof payload.name === "string" && payload.name.trim(),
+        "INVALID_INPUT",
+        "建档提案需要患者姓名",
+      );
     }
     if (type === "followup-create") {
       check(
@@ -141,7 +148,27 @@ export class PendingActions {
       409,
     );
     let applied;
-    if (action.type === "patient-update") {
+    if (action.type === "patient-create") {
+      const { name, gender, birthYear, phone, groups, tags, note } =
+        action.payload;
+      const patient = this.patients.create({
+        name,
+        gender,
+        birthYear,
+        phone,
+        groups,
+        tags,
+        note,
+      });
+      // 建档提案里的临床字段随档案一起写入（走患者更新校验）。
+      const clinical = validateClinicalInput(action.payload);
+      if (Object.keys(clinical).length)
+        this.patients.update(patient.id, {
+          expectedRevision: patient.revision,
+          ...clinical,
+        });
+      applied = this.patients.row(patient.id);
+    } else if (action.type === "patient-update") {
       const current = this.patients.row(action.patientId);
       applied = this.patients.update(action.patientId, {
         expectedRevision: current.revision,
@@ -195,7 +222,7 @@ export class PendingActions {
 
 // Agent-facing proposal tools. None of them mutate records — every tool
 // only files a pending action for the doctor to confirm.
-export function pendingActionTools(pending) {
+export function pendingActionTools(pending, doctor = null) {
   const definition = (name, description, properties, required = []) => ({
     type: "function",
     function: {
@@ -210,7 +237,83 @@ export function pendingActionTools(pending) {
     },
   });
   const textDef = { type: "string" };
+  const memoryTool = doctor
+    ? [
+        {
+          definition: definition(
+            "doctor_memory_propose",
+            "当医生在对话中明确表达偏好或习惯（随访方式、文书格式、常用检查组合、表达习惯等）时，把它存为一条待确认记忆。只创建待确认条目，医生在记忆面板确认后才会注入后续任务；不要推测或替医生总结没有说过的偏好。",
+            { content: textDef, topic: textDef },
+            ["content"],
+          ),
+          execute: (args) => {
+            const memory = doctor.addMemory({
+              kind: "explicit",
+              status: "pending",
+              content: args.content,
+              topic: args.topic || "",
+              source: { via: "chat" },
+            });
+            return {
+              memoryId: memory.id,
+              status: memory.status,
+              note: "已存为待确认记忆；医生在「医生记忆」面板确认后自动注入后续任务。",
+            };
+          },
+        },
+      ]
+    : [];
   return [
+    ...memoryTool,
+    {
+      definition: definition(
+        "patient_create_propose",
+        "从上传材料中识别出新患者时，提议创建患者档案（姓名等基本信息 + 可选的临床字段）。只创建待确认提案，医生确认后才真正建档；材料中找不到姓名时先向医生询问。",
+        {
+          name: textDef,
+          gender: { type: "string", enum: ["male", "female"] },
+          birthYear: { type: "integer" },
+          phone: textDef,
+          groups: { type: "array", items: textDef },
+          tags: { type: "array", items: textDef },
+          note: textDef,
+          diagnoses: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { code: textDef, name: textDef, date: textDef },
+              required: ["name"],
+              additionalProperties: false,
+            },
+          },
+          medications: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: textDef,
+                dose: textDef,
+                frequency: textDef,
+                note: textDef,
+              },
+              required: ["name"],
+              additionalProperties: false,
+            },
+          },
+          allergies: { type: "array", items: textDef },
+          summary: textDef,
+        },
+        ["name", "summary"],
+      ),
+      execute: (args) => {
+        const { summary, ...payload } = args;
+        return pending.propose({
+          type: "patient-create",
+          payload,
+          summary,
+        });
+      },
+    },
     {
       definition: definition(
         "patient_record_propose",

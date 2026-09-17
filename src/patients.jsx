@@ -88,6 +88,7 @@ export function PatientsView({
   const [followups, setFollowups] = useState([]);
   const [risks, setRisks] = useState([]);
   const [proposals, setProposals] = useState([]);
+  const [createProposals, setCreateProposals] = useState([]);
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
@@ -111,14 +112,18 @@ export function PatientsView({
         (p.tags || []).some((t) => t.includes(query)),
     );
   const refresh = async () => {
-    const [list, todo, box] = await Promise.all([
+    const [list, todo, box, pending] = await Promise.all([
       api("/api/patients"),
       api("/api/reminders"),
       api("/api/inbox"),
+      api("/api/pending-actions?status=pending").catch(() => ({ actions: [] })),
     ]);
     setPatients(list.patients);
     setReminders(todo.reminders);
     setInbox(box.messages);
+    setCreateProposals(
+      (pending.actions || []).filter((a) => a.type === "patient-create"),
+    );
     onChanged?.();
     return list.patients;
   };
@@ -426,6 +431,52 @@ export function PatientsView({
         </p>
       )}
       {notice && <p className="notice">{notice}</p>}
+      {!detail && createProposals.length > 0 && (
+        <div className="patient-risk-list" style={{ marginBottom: 14 }}>
+          <p className="muted" style={{ fontSize: 12 }}>
+            AI 建档提案（从对话材料中识别的新患者，确认后才真正建档）：
+          </p>
+          {createProposals.map((proposal) => (
+            <div className="hub-risk" key={proposal.id}>
+              <div className="hub-risk-main">
+                <b>{proposal.summary}</b>
+                <small>
+                  {JSON.stringify(proposal.payload).slice(0, 160)}
+                </small>
+              </div>
+              <div className="hub-risk-actions">
+                <button
+                  className="text-button"
+                  onClick={async () => {
+                    await api(
+                      `/api/pending-actions/${proposal.id}/confirm`,
+                      "POST",
+                      {},
+                    );
+                    setNotice("建档提案已确认，患者已创建。");
+                    await refresh();
+                  }}
+                >
+                  确认建档
+                </button>
+                <button
+                  className="text-button"
+                  onClick={async () => {
+                    await api(
+                      `/api/pending-actions/${proposal.id}/reject`,
+                      "POST",
+                      {},
+                    );
+                    await refresh();
+                  }}
+                >
+                  忽略
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {busy && (
         <p className="notice running">
           <Loader2 className="spin" size={14} /> {progress || "执行中"}

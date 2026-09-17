@@ -37,6 +37,7 @@ import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
 import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
+import { RichMessage } from "./workbench/message";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
 import { KnowledgeView } from "./knowledge";
@@ -514,6 +515,7 @@ function App() {
     [activeId, setActiveId] = useState(""),
     [draft, setDraft] = useState(""),
     [consent, setConsent] = useState(false);
+  const [consentScope, setConsentScope] = useState("session");
   const [team, setTeam] = useState(false);
   const [pickedSkills, setPickedSkills] = useState([]),
     [mention, setMention] = useState(null),
@@ -857,8 +859,11 @@ function App() {
               .catch((err) => {
                 if (activeRef.current === id) setError(err.message);
               });
-          if (event.type === "message.complete" && activeRef.current === id)
+          if (event.type === "message.complete" && activeRef.current === id) {
             setTab("results");
+            // 逐轮确认档位：每轮结束后收回外发授权，下一轮需重新勾选。
+            if (consentScope === "each") setConsent(false);
+          }
         },
       );
     } catch (err) {
@@ -1086,6 +1091,13 @@ function App() {
             <i />
             {config ? "本机工作空间" : "连接未就绪"}
           </span>
+          <button
+            className="meter model-badge"
+            title={`当前模型：${config?.model || "未配置"}（${config?.provider || "-"}）；点击打开运行设置可更换模型`}
+            onClick={() => setModal("settings")}
+          >
+            {config?.model || "未配置模型"}
+          </button>
           <IconButton title="运行设置" onClick={() => setModal("settings")}>
             <Settings2 size={18} />
           </IconButton>
@@ -1560,7 +1572,13 @@ function App() {
                               {m.role === "user" ? "本轮输入" : "工作草稿"}
                             </span>
                           </div>
-                          <div className="message-content">{m.content}</div>
+                          <div className="message-content">
+                            {m.role === "user" ? (
+                              m.content
+                            ) : (
+                              <RichMessage text={m.content} />
+                            )}
+                          </div>
                           {m.role !== "user" && (
                             <MemoryNote count={doctorMemCount} />
                           )}
@@ -1595,7 +1613,12 @@ function App() {
                           />
                           {(activeRun?.partial || persistedRunning?.partial) && (
                             <div className="message-content streaming">
-                              {activeRun?.partial || persistedRunning?.partial}
+                              <RichMessage
+                                text={
+                                  activeRun?.partial ||
+                                  persistedRunning?.partial
+                                }
+                              />
                             </div>
                           )}
                         </div>
@@ -1921,7 +1944,16 @@ function App() {
                           checked={consent}
                           onChange={(e) => setConsent(e.target.checked)}
                         />
-                        允许本会话的输入和选中材料以原文发送至所配置的模型服务（勾选一次，本会话内持续有效，可随时取消）。
+                        允许本会话的输入和选中材料以原文发送至所配置的模型服务
+                        <select
+                          className="consent-scope"
+                          value={consentScope}
+                          onChange={(e) => setConsentScope(e.target.value)}
+                          aria-label="外发授权范围"
+                        >
+                          <option value="session">本会话有效</option>
+                          <option value="each">逐轮确认（每轮发送后重置）</option>
+                        </select>
                       </label>
                     )}
                     <label className="consent">

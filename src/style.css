@@ -497,6 +497,107 @@ small {
   overflow-wrap: anywhere;
   color: #485b4e;
 }
+/* 会话内 Markdown 渲染（RichMessage）：亮色作用域样式 */
+.message-content .wb-markdown > :first-child {
+  margin-top: 0;
+}
+.message-content .wb-markdown > :last-child {
+  margin-bottom: 0;
+}
+.message-content .wb-markdown h1,
+.message-content .wb-markdown h2,
+.message-content .wb-markdown h3,
+.message-content .wb-markdown h4 {
+  margin: 1.1em 0 0.4em;
+  line-height: 1.5;
+  color: #33463b;
+}
+.message-content .wb-markdown h1 {
+  font-size: 15px;
+}
+.message-content .wb-markdown h2 {
+  font-size: 14px;
+}
+.message-content .wb-markdown h3,
+.message-content .wb-markdown h4 {
+  font-size: 13px;
+}
+.message-content .wb-markdown p {
+  margin: 0.45em 0;
+}
+.message-content .wb-markdown ul,
+.message-content .wb-markdown ol {
+  margin: 0.45em 0;
+  padding-left: 20px;
+}
+.message-content .wb-markdown li {
+  margin: 0.2em 0;
+}
+.message-content .wb-markdown blockquote {
+  margin: 0.6em 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--accent-line, #c8d8ce);
+  color: #5f7166;
+}
+.message-content .wb-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 12px;
+}
+.message-content .wb-markdown th,
+.message-content .wb-markdown td {
+  border: 1px solid var(--border, #e3e8e6);
+  padding: 5px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+.message-content .wb-markdown th {
+  background: #f4f6f5;
+  color: #33463b;
+}
+.message-content .wb-markdown :not(pre) > code {
+  background: #f0f3f1;
+  border: 1px solid var(--border, #e3e8e6);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  color: #3c5548;
+}
+.message-content .wb-markdown pre {
+  background: #f7f9f8;
+  border: 1px solid var(--border, #e3e8e6);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.message-content .wb-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.message-content .wb-markdown a {
+  color: var(--accent, #28735b);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.message-content .wb-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border, #e3e8e6);
+  margin: 1em 0;
+}
+.message-content .wb-markdown details.wb-thinking {
+  margin: 0 0 0.6em;
+  font-size: 12px;
+  color: #6b7d72;
+}
+.message-content .wb-markdown details.wb-thinking summary {
+  cursor: pointer;
+  user-select: none;
+}
 .user-message {
   padding: 18px 19px;
   border-radius: 11px;
@@ -2434,6 +2535,12 @@ blockquote p {
   border-top: 1px solid #f0f3ed;
   padding-top: 12px;
 }
+.hub-task-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #8a9a8e;
+  line-height: 1.6;
+}
 .hub-patient-picker {
   display: flex;
   align-items: center;
@@ -4308,3 +4415,33 @@ nav.toolbox .session b{font-weight:500;}
 .tool-slide .ts-menu small{color:var(--muted);font-size:11px;}
 .tool-slide .ts-menu svg{margin-left:auto;color:var(--muted);}
 .tool-slide .ts-open{margin-bottom:10px;display:flex;justify-content:flex-end;}
+
+/* 外发授权范围选择与顶栏模型徽标 */
+.consent .consent-scope {
+  margin-left: 6px;
+  font-size: 11px;
+  color: #678376;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 4px;
+  max-width: 200px;
+}
+.model-badge {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* 医生记忆面板：记忆管理为主视图，结构化表单折叠并置底 */
+.doctor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.doctor-panel > details.doctor-section {
+  order: 10;
+}
+.doctor-panel > details.doctor-section summary {
+  font-size: 13px;
+  color: #678376;
+}
