@@ -28,8 +28,7 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
     [runAt, setRunAt] = useState(initialTime),
     [interval, setIntervalValue] = useState("0"),
     [mode, setMode] = useState("local"),
-    [consent, setConsent] = useState(false),
-    [team, setTeam] = useState(false);
+    [consent, setConsent] = useState(false);
   const [code, setCode] = useState(
     'result = {"资料数": len(sources), "原文行数": sum(len(s["text"].splitlines()) for s in sources)}',
   );
@@ -111,9 +110,7 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
                     mode,
                     externalConsent: consent,
                     fileIds,
-                    delegations: team
-                      ? ["timeline", "observations", "medication"]
-                      : [],
+                    delegations: [],
                   }),
                 });
                 setConsent(false);
@@ -186,17 +183,6 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
                   模型辅助{!config?.modelConfigured ? "（未配置）" : ""}
                 </option>
               </select>
-            </label>
-            <label className="task-check">
-              <input
-                type="checkbox"
-                checked={team}
-                onChange={(e) => {
-                  setTeam(e.target.checked);
-                  setConsent(false);
-                }}
-              />
-              由时间线、检验、用药资料三个子代理分别整理
             </label>
             <p className="muted">
               固定使用当前选中的 {fileIds.length}{" "}

@@ -3,7 +3,7 @@ import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Copy, Check, FileText } from "lucide-react";
-import "highlight.js/styles/github-dark.css";
+import "highlight.js/styles/github.css";
 
 // Decision-flow blocks from the clinical-decision-flow skill render as SVG.
 // mermaid is lazy-loaded only when a flowchart actually appears.

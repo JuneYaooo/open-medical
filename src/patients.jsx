@@ -219,7 +219,7 @@ export function PatientsView({
       setBusy(false);
     }
   };
-  const runTask = async (prompt, { mode, delegations = [] }) => {
+  const runTask = async (prompt, { mode }) => {
     if (busy || !session) return;
     setBusy(true);
     setError("");
@@ -231,7 +231,6 @@ export function PatientsView({
         {
           message: prompt,
           mode,
-          delegations,
           externalConsent: mode === "model" ? consent : undefined,
           fileIds: session.files.map((f) => f.id),
         },
@@ -599,12 +598,7 @@ export function PatientsView({
             <div className="toolbar-actions">
               <button
                 className="secondary"
-                onClick={() =>
-                  runTask(ORGANIZE_PROMPT, {
-                    mode: "local",
-                    delegations: ["timeline", "observations", "medication"],
-                  })
-                }
+                onClick={() => runTask(ORGANIZE_PROMPT, { mode: "local" })}
                 disabled={busy || !session.files.length}
               >
                 <Play size={14} /> 自动整理病例

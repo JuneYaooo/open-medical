@@ -4,7 +4,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      input: { medical: "index.html", platform: "platform.html" },
+      input: { medical: "index.html" },
     },
   },
   server: {
