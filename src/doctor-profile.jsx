@@ -293,11 +293,13 @@ export function DoctorProfilePanel() {
                 <p>{m.content}</p>
                 <small>
                   {m.kind === "explicit"
-                    ? "手动添加"
+                    ? m.source?.via === "chat"
+                      ? "对话提议"
+                      : "手动添加"
                     : m.kind === "consolidated"
                       ? m.source?.mode === "model"
-                        ? "模型归纳"
-                        : `重复信号 ×${m.count}`
+                          ? "模型归纳"
+                          : `重复信号 ×${m.count}`
                       : `观察信号 ×${m.count}`}
                   {m.topic ? ` · ${m.topic}` : ""}
                   {m.source?.type ? ` · 来自${sourceLabel(m.source.type)}` : ""}

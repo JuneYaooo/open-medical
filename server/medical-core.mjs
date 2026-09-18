@@ -137,7 +137,7 @@ function artifact(type, title, body) {
     ...body,
   };
 }
-export function runTool(
+export async function runTool(
   name,
   args = {},
   {
@@ -182,7 +182,10 @@ export function runTool(
         "INVALID_TOOL_ARGS",
         `${key} 需要最多 40 条条目`,
       );
-      value.forEach((v) => string(v, key, 2000));
+      // 仅约束字符串数组；对象数组（如建档提案的 diagnoses/medications）
+      // 由各工具 execute 内的结构化校验负责。
+      if (schema.properties[key].items?.type === "string")
+        value.forEach((v) => string(v, key, 2000));
     }
   }
   if (name === "list_skills") {
@@ -203,7 +206,9 @@ export function runTool(
     };
   }
   if (plugins.has(name)) {
-    const result = plugins
+    // 插件可为 async（文献检索、语义检索等外呼）；不 await 会把 Promise
+    // spread 成空对象，模型将收不到任何结果。
+    const result = await plugins
       .get(name)
       .execute(args, {
         sources: sources.map((s) => ({

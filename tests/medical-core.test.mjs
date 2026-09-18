@@ -22,7 +22,7 @@ test("health questions route to consultation with low risk, not workflow drafts"
     "record_structuring",
   );
 });
-test("consultation local work asks the lab knowledge plugin instead of build_workflow", () => {
+test("consultation local work asks the lab knowledge plugin instead of build_workflow", async () => {
   const message = {
     id: "m",
     name: "本轮输入",
@@ -47,7 +47,7 @@ test("consultation local work asks the lab knowledge plugin instead of build_wor
       },
     },
   };
-  const result = runTool(work.tool, work.args, {
+  const result = await runTool(work.tool, work.args, {
     sources: [message],
     definitions: [definition],
     plugins: new Map([
@@ -69,7 +69,7 @@ test("consultation work with a real lab knowledge entry returns interpretation l
   assert.ok(hit.entries[0].high.length > 0);
   assert.match(hit.note, /医生/);
 });
-test("timeline extracts real source lines, sorts dates and flags impossible dates", () => {
+test("timeline extracts real source lines, sorts dates and flags impossible dates", async () => {
   const sources = [
     {
       id: "s1",
@@ -78,21 +78,21 @@ test("timeline extracts real source lines, sorts dates and flags impossible date
       text: "2026-02-03 复诊\n2025年1月2日 首诊\n2026-02-30 日期待核对\n无日期事件",
     },
   ];
-  const result = runTool("extract_clinical_timeline", {}, { sources });
+  const result = await runTool("extract_clinical_timeline", {}, { sources });
   assert.equal(result.events.length, 3);
   assert.equal(result.events[0].date, "2025-01-02");
   assert.equal(result.events[0].source.line, 2);
   assert.equal(result.events[2].dateValid, false);
   assert.equal(result.status, "draft");
 });
-test("tool registry rejects unknown tools, invented event input and unscoped source access", () => {
-  assert.throws(() => runTool("shell", { command: "ls" }), /未授权/);
-  assert.throws(
+test("tool registry rejects unknown tools, invented event input and unscoped source access", async () => {
+  await assert.rejects(() => runTool("shell", { command: "ls" }), /未授权/);
+  await assert.rejects(
     () =>
       runTool("extract_clinical_timeline", { events: [{ event: "invented" }] }),
     /未声明/,
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       runTool("read_source", {
         sourceId: "another-session",
@@ -101,13 +101,13 @@ test("tool registry rejects unknown tools, invented event input and unscoped sou
       }),
     /当前会话/,
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       runTool("build_workflow", { title: "test", steps: [{ text: "bad" }] }),
     /文本/,
   );
 });
-test("server registered medical plugins are schema checked and provenance marked", () => {
+test("server registered medical plugins are schema checked and provenance marked", async () => {
   const definition = {
     type: "function",
     function: {
@@ -121,7 +121,7 @@ test("server registered medical plugins are schema checked and provenance marked
       },
     },
   };
-  const result = runTool(
+  const result = await runTool(
     "medical_demo",
     { value: "患者资料" },
     {
@@ -133,13 +133,113 @@ test("server registered medical plugins are schema checked and provenance marked
   );
   assert.equal(result.value, "患者资料");
   assert.equal(result.provenance, "plugin_draft");
-  assert.throws(() => runTool("medical_demo", { value: 3 }, {
+  await assert.rejects(() => runTool("medical_demo", { value: 3 }, {
     definitions: [definition],
     plugins: new Map([["medical_demo", { definition, execute: () => ({}) }]]),
   }), /value/);
 });
-test("evidence plan is clearly unsearched and medication review does not infer safety", () => {
-  const plan = runTool("build_evidence_question", {
+test("async plugin results are awaited, not swallowed into provenance stubs", async () => {
+  const definition = {
+    type: "function",
+    function: {
+      name: "medical_async_demo",
+      description: "异步插件（文献/语义检索类）",
+      parameters: {
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const result = await runTool(
+    "medical_async_demo",
+    { value: "检索词" },
+    {
+      definitions: [definition],
+      plugins: new Map([
+        [
+          "medical_async_demo",
+          {
+            definition,
+            execute: async (args) => {
+              await new Promise((resolve) => setTimeout(resolve, 5));
+              return { value: args.value, articles: [{ pmid: "1" }] };
+            },
+          },
+        ],
+      ]),
+    },
+  );
+  assert.equal(result.value, "检索词");
+  assert.deepEqual(result.articles, [{ pmid: "1" }]);
+  assert.equal(result.provenance, "plugin_draft");
+});
+test("object-array args (proposal diagnoses/medications) pass shallow validation", async () => {
+  const definition = {
+    type: "function",
+    function: {
+      name: "medical_proposal_demo",
+      description: "结构化提案插件",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          diagnoses: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { code: { type: "string" }, name: { type: "string" } },
+              required: ["name"],
+              additionalProperties: false,
+            },
+          },
+          tags: { type: "array", items: { type: "string" } },
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+  };
+  let received = null;
+  const result = await runTool(
+    "medical_proposal_demo",
+    {
+      name: "吴秀英",
+      diagnoses: [{ code: "I20.9", name: "心绞痛" }],
+      tags: ["高血压"],
+    },
+    {
+      definitions: [definition],
+      plugins: new Map([
+        [
+          "medical_proposal_demo",
+          {
+            definition,
+            execute: (args) => {
+              received = args;
+              return { ok: true };
+            },
+          },
+        ],
+      ]),
+    },
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(received.diagnoses, [{ code: "I20.9", name: "心绞痛" }]);
+  // 字符串数组仍受长度约束
+  await assert.rejects(
+    () =>
+      runTool(
+        "medical_proposal_demo",
+        { name: "x", tags: [123] },
+        { definitions: [definition], plugins: new Map() },
+      ),
+    /tags/,
+  );
+});
+test("evidence plan is clearly unsearched and medication review does not infer safety", async () => {
+  const plan = await runTool("build_evidence_question", {
     population: "adult",
     intervention: "care",
     comparison: "usual",
@@ -147,7 +247,7 @@ test("evidence plan is clearly unsearched and medication review does not infer s
   });
   assert.equal(plan.retrieved, false);
   assert.match(plan.searchUrl, /pubmed/);
-  const review = runTool(
+  const review = await runTool(
     "review_medication_safety",
     {},
     {
@@ -159,8 +259,8 @@ test("evidence plan is clearly unsearched and medication review does not infer s
   assert.ok(artifactLines(review).length);
 });
 
-test("unknown clinical fields are missing information, not confirmation of safe medication", () => {
-  const result = runTool(
+test("unknown clinical fields are missing information, not confirmation of safe medication", async () => {
+  const result = await runTool(
     "review_medication_safety",
     {},
     {
@@ -177,8 +277,8 @@ test("unknown clinical fields are missing information, not confirmation of safe 
   for (const field of ["过敏史", "肾功能信息", "肝功能信息"])
     assert.ok(result.missing.includes(field));
 });
-test("lab extraction retains numbers, units and original sources without conversions", () => {
-  const result = runTool(
+test("lab extraction retains numbers, units and original sources without conversions", async () => {
+  const result = await runTool(
     "extract_observations",
     {},
     {
@@ -204,7 +304,7 @@ test("timeline request stays timeline when original records mention drugs", () =
   );
 });
 
-test("PICO extracts explicitly labelled user fields and model-supplied arguments pass through as provided", () => {
+test("PICO extracts explicitly labelled user fields and model-supplied arguments pass through as provided", async () => {
   const source = {
     id: "s",
     name: "question",
@@ -218,7 +318,7 @@ test("PICO extracts explicitly labelled user fields and model-supplied arguments
     comparison: "常规方案",
     outcome: "结局 B",
   });
-  const result = runTool("build_workflow", {
+  const result = await runTool("build_workflow", {
     title: "电话 13812345678",
     steps: ["联系 13912345678"],
   });
@@ -226,7 +326,7 @@ test("PICO extracts explicitly labelled user fields and model-supplied arguments
   assert.equal(result.status, "draft");
 });
 
-test("PDF page citations, ambiguous dates and signed laboratory values remain explicit", () => {
+test("PDF page citations, ambiguous dates and signed laboratory values remain explicit", async () => {
   const sources = [
     {
       id: "p",
@@ -236,10 +336,10 @@ test("PDF page citations, ambiguous dates and signed laboratory values remain ex
       text: "[PDF 第 1 页]\n2026-01-01 至 2026-01-02 门诊\nHb -2.3 g/L\nCRP 1,200 mg/dL",
     },
   ];
-  const timeline = runTool("extract_clinical_timeline", {}, { sources });
+  const timeline = await runTool("extract_clinical_timeline", {}, { sources });
   assert.equal(timeline.events[0].ambiguousDates, true);
   assert.equal(timeline.events[0].source.page, 1);
-  const obs = runTool("extract_observations", {}, { sources });
+  const obs = await runTool("extract_observations", {}, { sources });
   assert.equal(obs.observations[0].value, "-2.3");
   assert.equal(obs.observations[1].value, "1,200");
 });
@@ -265,13 +365,13 @@ test("skill registry discovers medical instructions and rejects path or extra ar
       "similar-case-search",
     ],
   );
-  const result = runTool(
+  const result = await runTool(
     "read_skill",
     { skillId: "medical-record" },
     { skills },
   );
   assert.match(result.instructions, /extract_clinical_timeline/);
-  assert.throws(
+  await assert.rejects(
     () =>
       runTool(
         "read_skill",

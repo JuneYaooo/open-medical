@@ -30,7 +30,7 @@ import {
   AtSign,
 } from "lucide-react";
 import { api, bootstrap, streamTurn, downloadSession } from "./agent-runtime";
-import { artifactLines, INTENTS } from "../shared/medical.mjs";
+import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import "./style.css";
 import { importMaterial } from "./import-material";
 import { TaskCenter } from "./task-center";
@@ -182,10 +182,12 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           <PencilLine size={14} />
         </IconButton>
       </div>
-      <h3>{artifact.title}</h3>
+      <h3>{artifactTitle(artifact) || "未命名产物"}</h3>
       <p className="muted">
         {artifact.provenance === "local_rule" ? "本地规则整理" : "待核查草稿"} ·{" "}
-        {new Date(artifact.createdAt).toLocaleString("zh-CN")}
+        {artifact.createdAt
+          ? new Date(artifact.createdAt).toLocaleString("zh-CN")
+          : "时间未记录"}
       </p>
       {artifact.events?.length > 0 && (
         <ol className="timeline">
@@ -776,7 +778,7 @@ function App() {
     await refreshList();
     return data;
   };
-  async function send(e, override = {}, refreshedSession) {
+  async function send(e, override = {}, refreshedSession, retryOnConflict = false) {
     e?.preventDefault();
     const text = override.message || draft.trim();
     if (!text || loading) return;
@@ -873,6 +875,20 @@ function App() {
         },
       );
     } catch (err) {
+      // 首次发送被 revision 冲突拒绝（并发上传/重命名晚到时）：重取快照
+      // 自动重发一次，用户无需手动「刷新核对后再发送」。
+      if (
+        !started &&
+        !retryOnConflict &&
+        /会话资料已更新/.test(err.message || "")
+      ) {
+        const fresh = await api(`/api/sessions/${id}`).catch(() => null);
+        if (fresh) {
+          setDraft((current) => current || text);
+          sendingRef.current.delete(id);
+          return await send(null, override, fresh, true);
+        }
+      }
       if (activeRef.current === id) {
         setError(err.message);
         if (!started) setDraft((current) => current || text);
@@ -1022,20 +1038,20 @@ function App() {
     const pending = homePending.current;
     homePending.current = null;
     setHomeFileCount(0);
-    // 待发会话可能已附加材料，重新拉取最新快照，确保 fileIds 带上
     let data;
-    if (pending)
+    if (pending) {
+      if (title)
+        await api(`/api/sessions/${pending.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title }),
+        }).catch(() => {});
+      // PATCH 标题与上传材料都会递增 revision；必须在它们全部完成后再取
+      // 快照，否则发送会带旧 revision 被服务端 409 拒绝（任务静默不执行）。
       data = await api(`/api/sessions/${pending.id}`).catch(() => pending);
-    else if (patient) data = await select(patient.sessionId);
+      await refreshList().catch(() => {});
+    } else if (patient) data = await select(patient.sessionId);
     else data = await create(title);
     if (!data) throw new Error("任务准备失败，请刷新连接后重试。");
-    if (pending && title) {
-      await api(`/api/sessions/${data.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ title }),
-      }).catch(() => {});
-      await refreshList().catch(() => {});
-    }
     setConsent(false);
     setTab("materials");
     setInspector(false);
@@ -1642,7 +1658,14 @@ function App() {
                           <div className="message-meta">
                             <b>{m.role === "user" ? "你" : "医疗工作助理"}</b>
                             <span>
-                              {m.role === "user" ? "本轮输入" : "工作草稿"}
+                              {m.role === "user"
+                                ? "本轮输入"
+                                : m.intent === "consultation" ||
+                                    (m.intent === undefined &&
+                                      !session?.runs?.find((r) => r.id === m.runId)
+                                        ?.artifacts?.length)
+                                  ? "咨询回复"
+                                  : "工作草稿"}
                             </span>
                           </div>
                           <div className="message-content">
@@ -2422,7 +2445,7 @@ function App() {
                         >
                           {session.artifacts.map((a) => (
                             <option key={a.id} value={a.id}>
-                              {a.title} · {STATUS[a.status]}
+                              {artifactTitle(a) || "未命名产物"} · {STATUS[a.status]}
                             </option>
                           ))}
                         </select>

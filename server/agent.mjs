@@ -801,7 +801,7 @@ export function createServer(options = {}) {
           return send(
             res,
             200,
-            runTool(
+            await runTool(
               "search_materials",
               { query: string(url.searchParams.get("q"), "检索词", 200) },
               { sources: session.files },

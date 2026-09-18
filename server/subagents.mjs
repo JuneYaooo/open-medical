@@ -120,7 +120,7 @@ export class MedicalSubagents {
       emit("subagent.started");
       if (mode === "local") {
         await setImmediate(undefined, { signal });
-        const result = runTool(
+        const result = await runTool(
           agent.tool,
           {},
           { sources, skills: this.skills },
@@ -184,7 +184,7 @@ export class MedicalSubagents {
               "子代理不能使用此工具或递归委派",
               403,
             );
-            const output = runTool(
+            const output = await runTool(
               call.function.name,
               JSON.parse(call.function.arguments),
               { sources, skills: this.skills },

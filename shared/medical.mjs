@@ -52,6 +52,29 @@ export function medicalPolicy(input = "") {
     ],
   };
 }
+const PROPOSAL_TYPE_LABELS = {
+  "patient-create": "患者建档提案",
+  "patient-update": "档案变更提案",
+  "followup-create": "随访计划提案",
+  "case-save": "病例入库提案",
+};
+// 产物标题回退链：工具产物用 title；提案类产物只有 summary/payload；
+// 旧数据中的技能正文快照只有 name。全空则返回空串，由调用方隐藏。
+export function artifactTitle(artifact) {
+  if (!artifact) return "";
+  const t = (artifact.title || "").trim();
+  if (t) return t;
+  const name =
+    artifact.payload && typeof artifact.payload.name === "string"
+      ? artifact.payload.name.trim()
+      : "";
+  const label = PROPOSAL_TYPE_LABELS[artifact.type] || "";
+  if (label && name) return `${label} · ${name}`;
+  if (label) return label;
+  if ((artifact.summary || "").trim()) return artifact.summary.trim();
+  if ((artifact.name || "").trim()) return artifact.name.trim();
+  return "";
+}
 export function artifactLines(artifact) {
   if (!artifact) return [];
   if (artifact.observations)

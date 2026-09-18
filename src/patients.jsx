@@ -47,6 +47,24 @@ const fmtDate = (value) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+// 提案卡明细：渲染结构化字段而非原始 JSON
+const proposalDetail = (type, payload = {}) => {
+  const parts = [];
+  if (payload.name) parts.push(type === "followup-create" ? `计划 ${payload.name}` : `姓名 ${payload.name}`);
+  if (payload.gender === "male") parts.push("男");
+  if (payload.gender === "female") parts.push("女");
+  if (payload.birthYear) parts.push(`${payload.birthYear} 年生`);
+  if (payload.phone) parts.push(payload.phone);
+  if (payload.diagnoses?.length)
+    parts.push(`诊断 ${payload.diagnoses.map((d) => d.name).filter(Boolean).join("、")}`);
+  if (payload.diagnosis) parts.push(`诊断 ${payload.diagnosis}`);
+  if (payload.medications?.length)
+    parts.push(`用药 ${payload.medications.map((m) => m.name).filter(Boolean).join("、")}`);
+  if (payload.allergies?.length) parts.push(`过敏 ${payload.allergies.join("、")}`);
+  if (payload.labs?.length) parts.push(`检验 ${payload.labs.length} 项待录入`);
+  if (payload.visits?.length) parts.push(`就诊 ${payload.visits.length} 次待录入`);
+  return parts.join(" · ");
+};
 export function parsePastedMessages(raw) {
   return raw
     .split(/\n+/)
@@ -440,7 +458,8 @@ export function PatientsView({
               <div className="hub-risk-main">
                 <b>{proposal.summary}</b>
                 <small>
-                  {JSON.stringify(proposal.payload).slice(0, 160)}
+                  {proposalDetail(proposal.type, proposal.payload) ||
+                    (proposal.payload?.note || "").slice(0, 160)}
                 </small>
               </div>
               <div className="hub-risk-actions">
@@ -701,9 +720,12 @@ export function PatientsView({
                             ? "档案变更"
                             : proposal.type === "followup-create"
                               ? "新建随访"
-                              : "收入病例库"}
-                          {" · "}
-                          {JSON.stringify(proposal.payload).slice(0, 120)}
+                              : proposal.type === "patient-create"
+                                ? "新建患者"
+                                : "收入病例库"}
+                          {proposalDetail(proposal.type, proposal.payload)
+                            ? ` · ${proposalDetail(proposal.type, proposal.payload)}`
+                            : ""}
                         </small>
                       </div>
                       <div className="hub-risk-actions">
@@ -737,34 +759,41 @@ export function PatientsView({
                 </div>
                 <Timeline
                   items={[
-                    ...session.artifacts.map((a) => ({
-                      sort: a.createdAt,
-                      date: fmtDate(a.createdAt),
-                      text: `${a.title}（v${a.version} · ${
-                        a.status === "draft"
-                          ? "待复核"
-                          : a.status === "approved"
-                            ? "已复核"
-                            : "需修订"
-                      }）`,
-                      action: (
-                        <button
-                          className="mini-btn plain"
-                          onClick={() =>
-                            onOpenWorkspace(session.id, {
-                              tab: "results",
-                              artifactId: a.id,
-                            })
-                          }
-                        >
-                          查看
-                        </button>
-                      ),
-                    })),
+                    // 无标题且无时间的条目是历史空壳（旧版技能正文快照），时间线上没有可读信息
+                    ...session.artifacts
+                      .filter((a) => (a.title || a.summary || a.payload) && a.createdAt)
+                      .map((a) => ({
+                        sort: a.createdAt,
+                        date: fmtDate(a.createdAt),
+                        text: `${a.title || a.summary || a.type}（v${a.version || 1} · ${
+                          a.status === "draft"
+                            ? "待复核"
+                            : a.status === "approved"
+                              ? "已复核"
+                              : "需修订"
+                        }）`,
+                        action: (
+                          <button
+                            className="mini-btn plain"
+                            onClick={() =>
+                              onOpenWorkspace(session.id, {
+                                tab: "results",
+                                artifactId: a.id,
+                              })
+                            }
+                          >
+                            查看
+                          </button>
+                        ),
+                      })),
                     ...followups.map((j) => ({
                       sort: j.nextDue,
                       date: fmtDate(j.nextDue),
-                      text: `随访：${j.name}（每 ${j.intervalDays} 天${j.status !== "active" ? ` · ${j.status === "paused" ? "已暂停" : j.status}` : ""}）`,
+                      text: `随访：${j.name}（${
+                        j.intervalDays
+                          ? `每 ${j.intervalDays} 天`
+                          : "按需安排"
+                      }${j.status !== "active" ? ` · ${j.status === "paused" ? "已暂停" : j.status}` : ""}）`,
                     })),
                   ].sort((a, b) => new Date(b.sort) - new Date(a.sort))}
                 />
