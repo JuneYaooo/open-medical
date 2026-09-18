@@ -10,7 +10,7 @@ RUN node -e "require('fs').writeFileSync('/tmp/bootstrap-ca.pem', require('tls')
 ARG PYPI_INDEX_URL=https://pypi.org/simple
 RUN python3 -m venv /opt/agent-python \
     && /opt/agent-python/bin/pip install --index-url "${PYPI_INDEX_URL}" --no-cache-dir --timeout=30 --retries=2 \
-      openpyxl python-docx python-pptx reportlab pypdf pillow pandas \
+      openpyxl python-docx python-pptx reportlab pypdf pillow pandas matplotlib \
     && /opt/agent-python/bin/pip freeze > /opt/agent-python/requirements.lock
 ENV PATH="/opt/agent-python/bin:${PATH}"
 COPY document.py /opt/agent-tools/document.py

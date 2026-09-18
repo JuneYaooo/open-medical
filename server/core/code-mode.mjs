@@ -107,6 +107,8 @@ export async function executeCode(service, id, registry, code, context) {
         mounts: [{ source: directory, target: "/program", readonly: true }],
         command: ["node", "/program/bridge.mjs"],
         timeoutMs: 120000,
+        // 桥通过 stdin 接收工具回复，必须保持管道打开。
+        interactive: true,
       },
       {
         signal,

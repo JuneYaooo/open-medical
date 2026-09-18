@@ -1038,7 +1038,9 @@ export class WorkspaceService {
           try {
             const result = await new AgentRuntime({
               provider: this.provider,
-              maxRounds: 3,
+              // 读取+汇总类子任务在 3 轮内经常无法完成（列目录、读文件、
+              // 复核各占一轮）；6 轮仍受父任务超时约束。
+              maxRounds: 6,
               maxContextChars: 60000,
             }).run({
               messages: [
@@ -1065,7 +1067,12 @@ export class WorkspaceService {
             child.text = result.text;
           } catch (error) {
             child.status = context.signal.aborted ? "cancelled" : "failed";
-            child.error = error.code ? error.message : "子任务执行失败";
+            child.error =
+              (error.code === "TOOL_BUDGET"
+                ? `${error.message}；不能 resume（该子任务已终结）。请在父任务中直接完成这部分工作，或拆成更小的任务重新委派。`
+                : error.code
+                  ? error.message
+                  : "子任务执行失败");
           }
           child.endedAt = Date.now();
           addUsage(child.usage);

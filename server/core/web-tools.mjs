@@ -280,7 +280,14 @@ export function registerWebTools(extensions, id, registry, _runId = "manual") {
         c.signal,
         fetch,
         config.braveSearch ? extensions.searchKey(id) : null,
-      );
+      ).then((result) => {
+        // 摘要常不足以核实具体事实；未授权任何来源时提前说明边界，
+        // 避免模型反复换词重搜后才向用户解释。
+        if (!(config.origins || []).length)
+          result.hint =
+            "当前工作区未授权任何网页来源：web_fetch 无法读取正文，只能使用这些搜索摘要。如需核实具体数据，请让用户在扩展设置中添加目标来源后重试，或如实告知信息局限。";
+        return result;
+      });
     },
     "tools.execute",
   );

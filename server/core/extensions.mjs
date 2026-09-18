@@ -788,7 +788,7 @@ export class WorkspaceExtensions {
         });
     tool(
       "terminal_run",
-      "在隔离容器中执行并等待最多30秒。snapshot=true快照项目文本；approvalIds覆盖待审批修改；artifactIds把已生成成果按原文件名作为输入。返回running后用terminal_wait，exitCode非零表示失败。",
+      "在隔离容器中执行并等待最多30秒。每次调用都是全新容器：/work 由输入快照重建，跨调用不保留任何状态；请把完整工作流写进一条命令执行，验证类命令只做只读检查，不要重复产生副作用的命令。snapshot=true快照项目文本；approvalIds覆盖待审批修改；artifactIds把已生成成果按原文件名作为输入。快照不含 .git 等受保护路径，不要在终端运行 git——仓库信息用 git_status/git_diff/git_log。返回running后用terminal_wait，exitCode非零表示失败。",
       "process.spawn",
       {
         command: { type: "string", minLength: 1, maxLength: 12000 },
