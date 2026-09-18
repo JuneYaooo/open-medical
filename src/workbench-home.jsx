@@ -668,7 +668,7 @@ export function WorkbenchHome({
                   <span className="tb-divider" />
                   <label
                     className="tb-item"
-                    title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选；仅本地=不调用外部模型，只用本机规则"
+                    title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选"
                   >
                     权限
                     <select
@@ -678,7 +678,6 @@ export function WorkbenchHome({
                     >
                       <option value="each">逐次确认</option>
                       <option value="auto">会话自动</option>
-                      <option value="local">仅本地</option>
                     </select>
                   </label>
                   <button

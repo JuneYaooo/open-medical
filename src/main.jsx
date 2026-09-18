@@ -1555,7 +1555,6 @@ function App() {
                         try {
                           await send(null, {
                             message: `请根据复核意见修订「${title}」：${note}。请保留原文来源与行号，修订后更新版本。`,
-                            mode: "local",
                           }, reviewedSession);
                         } catch {
                           setNotice("修订任务已写入会话，可手动发送继续。");
@@ -1983,7 +1982,7 @@ function App() {
                       <span className="tb-divider" />
                       <label
                         className="tb-item"
-                        title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选；仅本地=不调用外部模型，只用本机规则"
+                        title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选"
                       >
                         权限
                         <select
@@ -1997,7 +1996,6 @@ function App() {
                         >
                           <option value="each">逐次确认</option>
                           <option value="auto">会话自动</option>
-                          <option value="local">仅本地</option>
                         </select>
                       </label>
                       <button
@@ -2071,7 +2069,7 @@ function App() {
                             className="text-button"
                             onClick={() => setModal("model")}
                           >
-                            未配置模型，当前仅本地规则整理；点击配置解锁完整能力
+                            未配置模型，点击配置后使用 AI Agent
                           </button>
                         </>
                       )}
@@ -2467,7 +2465,7 @@ function App() {
                             </div>
                             <p>
                               {INTENTS[run.policy.intent]} ·{" "}
-                              {run.mode === "local" ? "本地整理" : "智能模式"}
+                              {run.mode === "local" ? "本地整理" : "Agent 执行"}
                             </p>
                             {(run.children || []).map((child) => (
                               <div className="child-run" key={child.id}>
@@ -2615,7 +2613,7 @@ function App() {
             <p className="boundary">
               {config?.modelConfigured
                 ? `当前模型：${config.provider || "model"} · ${config.model}`
-                : "尚未配置模型，当前仅本地规则整理。"}
+                : "尚未配置模型，点击「切换模型」配置后使用 AI Agent。"}
             </p>
             <div className="modal-actions">
               <button className="primary" onClick={() => setModal("model")}>

@@ -27,7 +27,6 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
     ),
     [runAt, setRunAt] = useState(initialTime),
     [interval, setIntervalValue] = useState("0"),
-    [mode, setMode] = useState("local"),
     [consent, setConsent] = useState(false);
   const [code, setCode] = useState(
     'result = {"资料数": len(sources), "原文行数": sum(len(s["text"].splitlines()) for s in sources)}',
@@ -107,7 +106,7 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
                     message,
                     runAt: new Date(runAt).toISOString(),
                     intervalMinutes: Number(interval),
-                    mode,
+                    mode: "model",
                     externalConsent: consent,
                     fileIds,
                     delegations: [],
@@ -169,38 +168,25 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
                 </select>
               </label>
             </div>
-            <label>
-              运行方式
-              <select
-                value={mode}
-                onChange={(e) => {
-                  setMode(e.target.value);
-                  setConsent(false);
-                }}
-              >
-                <option value="local">本地规则整理</option>
-                <option value="model" disabled={!config?.modelConfigured}>
-                  模型辅助{!config?.modelConfigured ? "（未配置）" : ""}
-                </option>
-              </select>
-            </label>
+            {!config?.modelConfigured && (
+              <p className="task-error">尚未配置模型：计划任务由 AI Agent 执行，请先在「切换模型」中配置。</p>
+            )}
             <p className="muted">
               固定使用当前选中的 {fileIds.length}{" "}
               份材料；新增材料不会自动加入。修改材料或模型服务后需重新创建模型计划。
             </p>
-            {mode === "model" && (
-              <label className="task-check">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                />
-                我已核对任务及选中材料，授权该计划按上述频率重复发送给当前模型服务，直至暂停或删除。
-              </label>
-            )}
+            <label className="task-check">
+              <input
+                type="checkbox"
+                checked={consent}
+                disabled={!config?.modelConfigured}
+                onChange={(e) => setConsent(e.target.checked)}
+              />
+              我已核对任务及选中材料，授权该计划按上述频率重复发送给当前模型服务，直至暂停或删除。
+            </label>
             <button
               className="primary"
-              disabled={busy || (mode === "model" && !consent)}
+              disabled={busy || !config?.modelConfigured || !consent}
             >
               保存计划
             </button>
