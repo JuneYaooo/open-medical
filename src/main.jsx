@@ -515,12 +515,12 @@ function App() {
     [consent, setConsent] = useState(false);
   const [accessMode, setAccessMode] = useState("auto");
   const [thinking, setThinking] = useState("disabled");
-  const [team, setTeam] = useState(false);
   const [pickedSkills, setPickedSkills] = useState([]),
     [mention, setMention] = useState(null),
     [mentionIndex, setMentionIndex] = useState(0);
   const [view, setView] = useState("home");
   const [workspaceTarget, setWorkspaceTarget] = useState(null);
+  const [activeWsId, setActiveWsId] = useState("");
   const [wsList, setWsList] = useState([]);
   const [patientRoute, setPatientRoute] = useState({});
   const [homeKey, setHomeKey] = useState(0);
@@ -558,13 +558,15 @@ function App() {
     [sidebar, setSidebar] = useState(false),
     [inspector, setInspector] = useState(false),
     [uploading, setUploading] = useState(false),
+    [homeFileCount, setHomeFileCount] = useState(0),
     [citation, setCitation] = useState(null);
   const inputRef = useRef(),
     fileRef = useRef(),
     endRef = useRef(),
     activeRef = useRef(""),
     generation = useRef(0),
-    sendingRef = useRef(new Set());
+    sendingRef = useRef(new Set()),
+    homePending = useRef(null);
   const activeRun = runs[activeId];
   const persistedRunning = session?.runs.findLast(
     (r) => r.status === "running",
@@ -642,8 +644,14 @@ function App() {
       if (version === generation.current) setLoading(false);
     }
   };
+  // 首页附件挂在「待发任务」会话上：离开首页或正式发送后作废
+  const resetHomePending = () => {
+    homePending.current = null;
+    setHomeFileCount(0);
+  };
   const select = async (id) => {
     setError("");
+    resetHomePending();
     setNotice("");
     setMaterialQuery("");
     setMaterialMatches(null);
@@ -653,7 +661,6 @@ function App() {
     setActiveId(id);
     setDraft("");
     setConsent(false);
-    setTeam(false);
     setSidebar(false);
     setReferencedPatients([]);
     setAcceptId("");
@@ -804,7 +811,7 @@ function App() {
             ? { thinking: "enabled" }
             : {}),
           skills: pickedSkills,
-          delegations: team ? ["timeline", "observations", "medication"] : [],
+          delegations: [],
           ...override,
           sessionRevision: current.revision,
           fileIds: (
@@ -910,7 +917,7 @@ function App() {
     setUploading(true);
     setError("");
     try {
-      let current = session;
+      let current = homePending.current || session;
       if (!current) current = await create();
       if (!current) return;
       for (const file of files) {
@@ -924,11 +931,25 @@ function App() {
       await updateSession();
       setTab("materials");
       setNotice("材料已保存。PDF 仅保存抽取文字，表格顺序和空白页需对照原件。");
+      if (homePending.current?.id === current.id) {
+        const fresh = await api(`/api/sessions/${current.id}`);
+        setHomeFileCount(fresh.files.length);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setUploading(false);
     }
+  };
+  // 首页点附件：先确保有待发会话（患者任务挂患者会话），再弹文件选择
+  const homeAttach = async (patientSessionId) => {
+    if (!homePending.current) {
+      homePending.current = patientSessionId
+        ? await select(patientSessionId)
+        : await create();
+      if (!homePending.current) return;
+    }
+    fileRef.current?.click();
   };
   const openSource = (source) => {
     setCitation(source);
@@ -961,12 +982,15 @@ function App() {
   };
   const navigate = (next) => {
     setView(next);
+    resetHomePending();
     setSidebar(false);
     setNotice("");
     refreshList().catch((err) => setError(err.message));
   };
   const openWorkspaces = (target = {}) => {
+    resetHomePending();
     setWorkspaceTarget(target);
+    setActiveWsId(target.id || "");
     setView("workspaces");
   };
   const openPatient = (route = {}) => {
@@ -994,23 +1018,35 @@ function App() {
       }
     }
   };
-  const prepareTask = async ({ prompt, patient, title }) => {
-    const data = patient
-      ? await select(patient.sessionId)
-      : await create(title);
+  const prepareTask = async ({ prompt, patient, title, skills = [] }) => {
+    const pending = homePending.current;
+    homePending.current = null;
+    setHomeFileCount(0);
+    // 待发会话可能已附加材料，重新拉取最新快照，确保 fileIds 带上
+    let data;
+    if (pending)
+      data = await api(`/api/sessions/${pending.id}`).catch(() => pending);
+    else if (patient) data = await select(patient.sessionId);
+    else data = await create(title);
     if (!data) throw new Error("任务准备失败，请刷新连接后重试。");
-    setDraft(prompt);
-    setTeam(false);
+    if (pending && title) {
+      await api(`/api/sessions/${data.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }).catch(() => {});
+      await refreshList().catch(() => {});
+    }
     setConsent(false);
     setTab("materials");
     setInspector(false);
     setView("workbench");
-    if (patient) switchCurrentPatient(patient.id);
-    setNotice(
-      patient
-        ? `已进入 ${patient.name} 的病例工作区，请核对本次材料。`
-        : "任务已就绪：咨询类问题可直接发送；整理类任务可先添加材料。",
-    );
+    if (patient) {
+      switchCurrentPatient(patient.id);
+      setNotice(
+        `任务已在 ${patient.name} 的病例工作区发起，材料范围可在右侧核对。`,
+      );
+    }
+    send(null, { message: prompt, skills }, data);
   };
   const pendingReviews = sessions.reduce(
     (sum, item) => sum + item.reviewCount,
@@ -1093,8 +1129,8 @@ function App() {
           </span>
           <button
             className="meter model-badge"
-            title={`当前模型：${config?.model || "未配置"}（${config?.provider || "-"}）；点击打开运行设置可更换模型`}
-            onClick={() => setModal("settings")}
+            title={`当前模型：${config?.model || "未配置"}（${config?.provider || "-"}）；点击切换或配置模型`}
+            onClick={() => setModal("model")}
           >
             {config?.model || "未配置模型"}
           </button>
@@ -1123,11 +1159,11 @@ function App() {
             className="new-session"
             onClick={() => {
               setHomeKey((value) => value + 1);
-              navigate(view === "workspaces" ? "workspaces" : "home");
+              navigate("home");
             }}
           >
             <Plus size={17} />
-            {view === "workspaces" ? "新建工作区" : "新建任务"}
+            新建任务
           </button>
           <label className="search">
             <Search size={14} />
@@ -1148,20 +1184,36 @@ function App() {
             </button>
           </p>
           <nav className="sessions" aria-label="项目">
-            {wsList.slice(0, 6).map((item) => (
-              <button
-                className={`session ${view === "workspaces" && workspaceTarget?.id === item.id ? "active" : ""}`}
-                key={item.id}
-                onClick={() => openWorkspaces({ id: item.id })}
-              >
-                <FolderOpen size={14} />
-                <span>
-                  <b>{item.title}</b>
-                  <small>{item.running ? "执行中" : "项目工作区"}</small>
-                </span>
-              </button>
-            ))}
-            {!wsList.length && (
+            {wsList
+              .filter((item) => !item.archived)
+              .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+              .slice(0, 8)
+              .map((item) => (
+                <button
+                  className={`session ${
+                    view === "workspaces" &&
+                    (activeWsId || workspaceTarget?.id) === item.id
+                      ? "active"
+                      : ""
+                  }`}
+                  key={item.id}
+                  onClick={() => openWorkspaces({ id: item.id })}
+                >
+                  <FolderOpen size={14} />
+                  <span>
+                    <b>{item.title}</b>
+                    <small>
+                      {item.running
+                        ? "执行中"
+                        : item.pending
+                          ? `${item.pending} 项待审批`
+                          : "项目工作区"}
+                    </small>
+                  </span>
+                  {item.pinned && <em className="nav-dot" />}
+                </button>
+              ))}
+            {!wsList.filter((item) => !item.archived).length && (
               <p className="sidebar-empty">
                 还没有项目。点「＋ 新建」把相关任务归到一起。
               </p>
@@ -1284,6 +1336,13 @@ function App() {
               config={config}
               initialWorkspaceId={workspaceTarget?.id || ""}
               initialCreate={Boolean(workspaceTarget?.create)}
+              initialPrompt={workspaceTarget?.prompt || ""}
+              onOpenSettings={() => setModal("settings")}
+              onMenu={() => setSidebar(!sidebar)}
+              onChanged={(id) => {
+                if (id) setActiveWsId(id);
+                refreshList().catch(() => {});
+              }}
             />
           ) : view === "patients" ? (
             <PatientsView
@@ -1323,6 +1382,21 @@ function App() {
               onRefresh={refreshList}
               onReconnect={init}
               onOpenProjects={openWorkspaces}
+              accessMode={accessMode}
+              onAccessModeChange={(value) => {
+                setAccessMode(value);
+                setConsent(value === "auto");
+              }}
+              thinking={thinking}
+              onThinkingChange={setThinking}
+              consent={consent}
+              onConsentChange={setConsent}
+              onModelSettings={() => setModal("model")}
+              onAttach={homeAttach}
+              uploading={uploading}
+              attachedCount={homeFileCount}
+              fileInputRef={fileRef}
+              onFilesPicked={upload}
             />
           ) : (
             <div className="shell">
@@ -1929,8 +2003,8 @@ function App() {
                       <button
                         type="button"
                         className="tb-item"
-                        title={`当前模型：${config?.model || "未配置"}；点击打开运行设置更换模型`}
-                        onClick={() => setModal("settings")}
+                        title={`当前模型：${config?.model || "未配置"}；点击切换或配置模型`}
+                        onClick={() => setModal("model")}
                       >
                         模型 <b>{config?.model || "未配置"}</b>
                       </button>
@@ -1986,18 +2060,6 @@ function App() {
                         </button>
                       )}
                     </div>
-                    <label className="consent">
-                      <input
-                        type="checkbox"
-                        checked={team}
-                        disabled={busy}
-                        onChange={(e) => {
-                          setTeam(e.target.checked);
-                          setConsent(false);
-                        }}
-                      />
-                      三个子代理联合整理：时间线 · 检验摘录 · 用药资料
-                    </label>
                   </form>
                   <div className="composer-note">
                     <span>
@@ -2550,62 +2612,28 @@ function App() {
             <p>
               医疗策略、会话、资料与复核在本地运行时管理。模型只承担辅助推理。
             </p>
-            <dl>
-              <dt>运行内核</dt>
-              <dd>AgentRuntime + 医疗领域适配器</dd>
-              <dt>模型配置</dt>
-              <dd>
-                {config?.modelConfigured
-                  ? `${config.provider || "model"} · ${config.model}`
-                  : "尚未配置"}
-              </dd>
-              <dt>数据存储</dt>
-              <dd>本机 SQLite（单用户）</dd>
-              <dt>医疗技能</dt>
-              <dd>
-                {config?.skills?.length || 0} 个本地可发现技能（只读说明）
-              </dd>
-              <dt>代码沙箱</dt>
-              <dd>
-                {config?.sandbox?.available
-                  ? `${config.sandbox.backend} · 禁止联网、文件写入和子进程`
-                  : config?.sandbox?.reason}
-              </dd>
-              <dt>子代理</dt>
-              <dd>独立上下文 · 并行 2 个 · 每任务最多 3 个 · 父任务取消联动</dd>
-              <dt>调度</dt>
-              <dd>SQLite 持久计划 · 单次或固定间隔 · 服务运行时执行</dd>
-            </dl>
             <p className="boundary">
-              要开启模型辅助，请在项目 .env 选择 AI_PROVIDER，并配置对应的
-              DeepSeek、OpenAI 或 Anthropic
-              密钥后重启服务。密钥不会保存在浏览器。
+              {config?.modelConfigured
+                ? `当前模型：${config.provider || "model"} · ${config.model}`
+                : "尚未配置模型，当前仅本地规则整理。"}
             </p>
-            <button
-              className="secondary"
-              onClick={async () => {
-                await init();
-                setModal(null);
-              }}
-            >
-              刷新连接状态
-            </button>
-            <button
-              className="secondary"
-              onClick={() => setModal("doctor")}
-            >
-              医生档案与记忆
-            </button>
-            <button
-              className="secondary"
-              onClick={() => setModal("model")}
-            >
-              切换模型
-            </button>
-            <p className="muted">
-              文献检索、指南库、病例库、科研分析与 DRG
-              测算按模块逐步上线；本版本未接入医院信息系统、电子签名或药物数据库。
-            </p>
+            <div className="modal-actions">
+              <button className="primary" onClick={() => setModal("model")}>
+                切换模型
+              </button>
+              <button className="secondary" onClick={() => setModal("doctor")}>
+                医生档案与记忆
+              </button>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  await init();
+                  setModal(null);
+                }}
+              >
+                刷新连接状态
+              </button>
+            </div>
           </div>
         </Modal>
       )}

@@ -195,10 +195,12 @@ export function createWorkspaceServer(options = {}) {
         options.dist ||
           resolve(dirname(fileURLToPath(import.meta.url)), "../dist"),
       );
+      // 融合后只有一个前端入口：平台模式也服务同一张医疗工作台页面，
+      // 患者等医疗接口在平台内核上不存在时前端自行降级为空列表。
       const target = await realpath(
         resolve(
           dist,
-          path === "/" ? "platform.html" : "." + decodeURIComponent(path),
+          path === "/" ? "index.html" : "." + decodeURIComponent(path),
         ),
       );
       check(target.startsWith(dist + sep), "PATH_DENIED", "路径越界", 403);

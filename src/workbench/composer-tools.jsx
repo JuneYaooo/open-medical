@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, AtSign, Plus, X, FileText } from "lucide-react";
+import { Paperclip, AtSign, X, FileText } from "lucide-react";
 import { api } from "../agent-runtime";
 import { importMaterial } from "../import-material";
+// 与医疗任务 composer 同一套工具栏风格：材料/引用/技能常驻底部，
+// 附件以卡片展示，可拖拽或粘贴文件。
 export function ComposerTools({
   attachments,
   setAttachments,
@@ -13,8 +15,7 @@ export function ComposerTools({
   onSkill,
 }) {
   const file = useRef(null),
-    [loading, setLoading] = useState(false),
-    [open, setOpen] = useState(false);
+    [loading, setLoading] = useState(false);
   const alive = useRef(true),
     importing = useRef(false);
   const [skills, setSkills] = useState(null);
@@ -89,7 +90,10 @@ export function ComposerTools({
   useEffect(() => {
     const paste = (e) => {
       const files = [...(e.clipboardData?.files || [])];
-      if (files.length && document.activeElement?.closest(".desk-composer")) {
+      if (
+        files.length &&
+        document.activeElement?.closest(".desk-composer, .composer")
+      ) {
         e.preventDefault();
         attach(files);
       }
@@ -119,49 +123,35 @@ export function ComposerTools({
       />
       <button
         type="button"
-        className="wb-tools-toggle"
-        title="添加材料 / 引用文件 / 选择技能（也可直接拖拽或粘贴文件）"
-        aria-expanded={open}
+        className="attach-button"
+        title="添加材料：文本/代码/PDF/图片（也可直接拖拽或粘贴文件）"
         disabled={disabled || loading}
-        onClick={() => setOpen(!open)}
+        onClick={() => file.current.click()}
       >
-        <Plus size={15} />
+        <Paperclip size={16} />
+        {loading ? "读取中…" : "材料"}
       </button>
-      {open && (
-        <>
-          <button
-            type="button"
-            title="添加材料（也可直接拖拽或粘贴文件）"
-            disabled={disabled || loading}
-            onClick={() => file.current.click()}
-          >
-            <Paperclip size={15} />
-            {loading ? "读取中…" : "材料"}
-          </button>
-          <button
-            type="button"
-            title="引用工作区文件"
-            disabled={disabled}
-            onClick={() => {
-              onMention();
-              setOpen(false);
-            }}
-          >
-            <AtSign size={15} />
-            引用
-          </button>
-          <button
-            type="button"
-            title="选择项目技能"
-            disabled={
-              disabled || current.runs.some((r) => r.status === "running")
-            }
-            onClick={loadSkills}
-          >
-            技能
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        className="attach-button"
+        title="引用工作区文件（在文件面板中选择）"
+        disabled={disabled}
+        onClick={onMention}
+      >
+        <AtSign size={15} />
+        引用
+      </button>
+      <button
+        type="button"
+        className="attach-button"
+        title="选择项目技能"
+        disabled={
+          disabled || current.runs.some((r) => r.status === "running")
+        }
+        onClick={loadSkills}
+      >
+        技能
+      </button>
       {skills && (
         <select
           aria-label="选择项目技能"

@@ -230,7 +230,14 @@ export const SCENARIOS = [
     name: '项目：左栏「＋ 新建」打开项目创建入口',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
   await page.locator('.nav-label button', { hasText: "＋ 新建" }).click();
-  await page.waitForSelector(".workspace-layout", { timeout: 10000 });
+  // 融合后：同一医疗外壳内弹出「连接项目工作区」modal，不再有独立工作区布局
+  await page.waitForSelector(".modal-backdrop", { timeout: 10000 });
+  assert.match(
+    await page.locator(".modal-backdrop").innerText(),
+    /连接项目工作区/,
+  );
+  await page.locator('.modal-backdrop button[title="关闭"]').click();
+  await page.waitForSelector(".workspace-shell", { timeout: 10000 });
     },
   },
   {
@@ -247,11 +254,12 @@ export const SCENARIOS = [
   void p;
   await page.goto(origin);
   await page.waitForSelector(".app-navigation");
-  // 首页直接发起独立任务
+  // 首页一次发送独立任务（本地档位快速完成）
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("患者 PCI 术后用药方案怎么定？");
-  await page.locator('button:has-text("准备任务")').click();
+  await page.locator(".hub-composer-controls .send-button").click();
   await page.waitForSelector(".composer");
+  await page.locator(".send-button.stop").waitFor({ state: "hidden", timeout: 30000 }).catch(() => {});
   // 打开知识 tab 并检索
   await page.locator('.panel-tabs button:has-text("知识")').click();
   await page.locator('.panel-knowledge input').fill("双联抗血小板");
@@ -272,8 +280,9 @@ export const SCENARIOS = [
   await page.waitForSelector(".app-navigation");
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("整理一下");
-  await page.locator('button:has-text("准备任务")').click();
+  await page.locator(".hub-composer-controls .send-button").click();
   await page.waitForSelector(".composer");
+  await page.locator(".send-button.stop").waitFor({ state: "hidden", timeout: 30000 }).catch(() => {});
   // 当前会话未绑定患者：@ 应出现“引用患者”分组
   await page.locator(".composer textarea").fill("");
   await page.locator(".composer textarea").pressSequentially("@引");

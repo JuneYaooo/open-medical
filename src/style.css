@@ -685,6 +685,10 @@ small {
   display: grid;
   place-items: center;
 }
+.send-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .send-button.stop {
   background: #8d7560;
 }
@@ -2493,6 +2497,7 @@ blockquote p {
   padding: 15px 18px 12px;
   box-shadow: 0 5px 24px #405b3b07;
   transition: border-color 0.15s;
+  position: relative;
 }
 .hub-composer:focus-within {
   border-color: #86ac91;
@@ -2532,8 +2537,33 @@ blockquote p {
   display: flex;
   align-items: center;
   gap: 9px;
+  flex-wrap: wrap;
   border-top: 1px solid #f0f3ed;
   padding-top: 12px;
+}
+.hub-composer .skill-chips {
+  padding: 8px 0 2px;
+}
+.hub-composer .mention-menu {
+  left: 18px;
+  right: 18px;
+}
+.hub-composer .tb-divider {
+  align-self: center;
+  height: 20px;
+}
+.hub-attach-count {
+  font-size: 11px;
+  color: #5f8a6e;
+  background: #e7f0e5;
+  border: 1px solid #cfe0cc;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.hub-task-type button:disabled,
+.hub-patient-picker select:disabled {
+  opacity: 0.55;
 }
 .hub-task-hint {
   margin: 6px 0 0;
@@ -4491,4 +4521,119 @@ nav.toolbox .session b{font-weight:500;}
   font-size: 11px;
   color: #678376;
   white-space: nowrap;
+}
+
+/* --- 融合后的项目工作区：与医疗任务同一外壳，面板更宽以容纳文件/审批 --- */
+.product-content > .shell.workspace-shell {
+  grid-template-columns: minmax(0, 1fr) 460px;
+}
+.workspace-hub-empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+  overflow: auto;
+}
+.workspace-hub-empty .panel-empty {
+  max-width: 430px;
+}
+.workspace-shell .composer .wb-composer-tools {
+  padding-bottom: 0;
+  gap: 4px;
+}
+.workspace-shell .composer .wb-composer-tools select {
+  font-size: 11px;
+  color: #485b4e;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 4px;
+  max-width: 160px;
+}
+.tb-warn-icon {
+  color: #b3661c;
+  flex-shrink: 0;
+}
+.tb-scope-chip {
+  font-size: 10px;
+  color: #7b8578;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.workspace-shell .conversation .workspace-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 18px;
+  justify-content: space-between;
+}
+.workspace-shell .message-list .wb-artifacts {
+  padding: 0 18px;
+  max-width: 665px;
+  margin: 0 auto;
+  width: 100%;
+}
+.workspace-shell .message-list .wb-review-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfe3d4;
+  background: #eef6ee;
+  color: #28735b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  width: 100%;
+}
+.wb-resume-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #678376;
+  margin: 0 4px 6px;
+}
+@media (min-width: 1600px) {
+  .product-content > .shell.workspace-shell {
+    grid-template-columns: minmax(0, 1fr) 540px;
+  }
+}
+@media (max-width: 1180px) {
+  .product-content > .shell.workspace-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ws-suggest-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  max-width: 580px;
+  margin: 18px auto 0;
+}
+.ws-suggest-grid button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  color: #3d4a41;
+  cursor: pointer;
+}
+.ws-suggest-grid button span {
+  flex: 1;
+  min-width: 0;
+}
+.ws-suggest-grid button:hover {
+  border-color: #b9d4bd;
+  background: #f4f9f3;
 }
