@@ -598,8 +598,13 @@ export function PatientsView({
             <div className="toolbar-actions">
               <button
                 className="secondary"
-                onClick={() => runTask(ORGANIZE_PROMPT, { mode: "local" })}
-                disabled={busy || !session.files.length}
+                onClick={() => runTask(ORGANIZE_PROMPT, { mode: "model" })}
+                disabled={
+                  busy ||
+                  !config?.modelConfigured ||
+                  !session.files.length ||
+                  !consent
+                }
               >
                 <Play size={14} /> 自动整理病例
               </button>
