@@ -5,6 +5,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  existsSync,
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -298,6 +299,66 @@ test(
       }),
       (e) => e.code === "CODE_FAILED",
     );
+  },
+);
+test(
+  "Binary files moved in the container keep the host original and surface the copy as an artifact",
+  { skip: !process.env.TEST_DOCKER_IMAGE },
+  async (t) => {
+    const f = fixture(t);
+    f.service.update(f.id, {
+      revision: f.service.get(f.id).revision,
+      profile: "standard",
+      allowWrite: true,
+    });
+    await f.configure({ terminal: true, image: process.env.TEST_DOCKER_IMAGE });
+    const bytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
+    ]);
+    writeFileSync(join(f.root, "photo.jpg"), bytes);
+    writeFileSync(join(f.root, "note.txt"), "text line\n");
+    let result = await f.tool("terminal_run", {
+      command:
+        "mkdir -p images && mv photo.jpg images/photo.jpg && mv note.txt docs-note.txt",
+      snapshot: true,
+      timeoutMs: 60000,
+    });
+    while (["running", "finalizing"].includes(result?.status))
+      result = await f.tool("terminal_wait", {
+        id: result.id,
+        timeoutMs: 30000,
+      });
+    assert.equal(result.exitCode, 0, JSON.stringify(result));
+    // 移动的二进制成为成果，宿主原文件不出删除提案。
+    const approvals = f.service.get(f.id).approvals;
+    assert.ok(
+      approvals.every((a) => a.path !== "photo.jpg"),
+      "moved binary must not produce a deletion proposal",
+    );
+    assert.ok(
+      (result.result?.skipped || []).some((s) => s.includes("photo.jpg")),
+      "result must explain the preserved binary",
+    );
+    const artifact = f.service.store
+      .get(f.id)
+      .artifacts.find((a) => a.name === "images/photo.jpg");
+    assert.ok(artifact, "moved binary must be stored as an artifact");
+    assert.deepEqual(f.service.artifacts.read(f.id, artifact.id).data, bytes);
+    // 文本移动仍是「新路径写入 + 旧路径删除」提案，批准后宿主完成移动。
+    for (const path of ["docs-note.txt", "note.txt"]) {
+      const approval = approvals.find((a) => a.path === path);
+      assert.ok(approval, `missing proposal for ${path}`);
+      f.service.decide(f.id, approval.id, {
+        revision: f.service.get(f.id).revision,
+        decision: "approve",
+      });
+    }
+    assert.equal(
+      readFileSync(join(f.root, "docs-note.txt"), "utf8"),
+      "text line\n",
+    );
+    assert.equal(existsSync(join(f.root, "note.txt")), false);
+    assert.equal(existsSync(join(f.root, "photo.jpg")), true);
   },
 );
 test("vision tool requires active consent, sends detected image format and accounts usage", async (t) => {

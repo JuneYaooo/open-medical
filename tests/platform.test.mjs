@@ -249,6 +249,43 @@ test("failed execution resumes a complete checkpoint without replaying its tools
   );
 });
 
+test("git_log returns per-commit file entries and git_diff accepts a rev", async (t) => {
+  const f = setup(t);
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: f.root, encoding: "utf8" });
+  git("init", "-q");
+  git("config", "user.name", "Synthetic");
+  git("config", "user.email", "synthetic@example.invalid");
+  writeFileSync(join(f.root, "a.txt"), "one");
+  writeFileSync(join(f.root, "b.txt"), "one");
+  git("add", "a.txt", "b.txt");
+  git("commit", "-qm", "feat: baseline");
+  writeFileSync(join(f.root, "a.txt"), "two");
+  git("add", "a.txt");
+  git("commit", "-qm", "fix: update a");
+  const log = await f.tool("git_log", { limit: 5 });
+  assert.equal(log.entries.length, 2);
+  assert.equal(log.entries[0].subject, "fix: update a");
+  assert.deepEqual(log.entries[0].files, ["a.txt"]);
+  assert.deepEqual(
+    [...log.entries[1].files].sort(),
+    ["a.txt", "b.txt"],
+  );
+  assert.match(log.log, /fix: update a/);
+  const diff = await f.tool("git_diff", { path: "a.txt", rev: "HEAD~1" });
+  assert.equal(diff.rev, "HEAD~1");
+  assert.match(diff.diff, /-one/);
+  assert.match(diff.diff, /\+two/);
+  await assert.rejects(
+    f.tool("git_diff", { path: "a.txt", staged: true, rev: "HEAD" }),
+    (e) => e.code === "GIT_REV",
+  );
+  await assert.rejects(
+    f.tool("git_diff", { path: "a.txt", rev: "--output=/tmp/evil" }),
+    (e) => e.code === "GIT_REV",
+  );
+});
+
 function repository(root) {
   const git = (...args) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8" });

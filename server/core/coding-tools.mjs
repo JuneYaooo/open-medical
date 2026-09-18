@@ -153,15 +153,15 @@ export function registerCodingTools(
   );
   add(
     "git_diff",
-    "查看单个授权文件的 Git diff；不执行外部 diff 或 textconv。",
+    "查看单个授权文件的 Git diff：默认对比工作区与 HEAD，staged=true 对比暂存区，rev（HEAD、HEAD~N 或提交哈希）对比指定提交与工作区。不执行外部 diff 或 textconv。",
     "filesystem.read",
-    { path: str, staged: { type: "boolean" } },
-    (a, c) => git.diff(a.path, a.staged, c.signal),
+    { path: str, staged: { type: "boolean" }, rev: { type: "string", maxLength: 64 } },
+    (a, c) => git.diff(a.path, a.staged === true, c.signal, a.rev ?? null),
     ["path"],
   );
   add(
     "git_log",
-    "读取最近提交摘要，最多 30 条。",
+    "读取最近提交摘要（默认含每条提交变更的文件清单 entries[].files），最多 30 条。",
     "filesystem.read",
     { limit: { type: "integer", minimum: 1, maximum: 30 } },
     (a, c) => git.log(a.limit, c.signal),

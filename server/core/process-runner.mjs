@@ -154,9 +154,10 @@ export class ProcessRunner {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
-    // Non-interactive commands must receive EOF; Docker's `-i` is reserved
-    // for terminal sessions and otherwise leaves the client waiting on stdin.
-    if (!config.interactive) child.stdin.end();
+    // Interactive sessions (terminal input via terminal_write, code SDK tool
+    // replies on stdin) keep the pipe open; only explicit non-interactive
+    // callers get EOF on launch, or reply frames can never be delivered.
+    if (config.interactive === false) child.stdin.end();
     const id = randomUUID();
     const s = {
       id,

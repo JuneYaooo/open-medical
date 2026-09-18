@@ -259,6 +259,9 @@ export class TerminalTools {
           timeoutMs,
           resources: "code",
           network,
+          // 交互会话与一次性命令共用此入口；保持 stdin 打开以支持
+          // terminal_write，命令自身退出即结束。
+          interactive: true,
         },
         {
           signal: context.signal,
@@ -360,6 +363,12 @@ export class TerminalTools {
               const outputPaths = new Set(
                 [...output.files, ...output.binaries].map((f) => f.path),
               );
+              // 二进制输出只会成为可下载成果，不会写回宿主文件；若它的内容
+              // 与某个已消失的输入文件一致（容器内被移动/改名），保留宿主
+              // 原文件，避免「批准移动」实际变成删除原件。
+              const binaryHashes = new Map(
+                output.binaries.map((b) => [hashText(b.data), b.path]),
+              );
               for (const [path] of stagedHashes) {
                 if (
                   outputPaths.has(path) ||
@@ -368,6 +377,13 @@ export class TerminalTools {
                   continue;
                 // New files that disappear do not delete anything on the host.
                 if (!before.has(path)) continue;
+                const movedTo = binaryHashes.get(before.get(path));
+                if (movedTo && movedTo !== path) {
+                  output.skipped.push(
+                    `${path}：二进制文件被移动为成果 ${movedTo}，宿主原文件保留；如需在宿主上移动请手动处理`,
+                  );
+                  continue;
+                }
                 try {
                   this.service.assertWriteScope(id, path, context.runId);
                   const proposal = files.deletion(path, before.get(path));

@@ -385,9 +385,16 @@ export class GitWorkspace {
     ).trim();
     return { head, branch: branch || null, entries, filtered: true };
   }
-  async diff(path, staged = false, signal) {
+  async diff(path, staged = false, signal, rev = null) {
     await this.checkRoot(signal);
     await this.fileScope(path, signal);
+    check(
+      rev === null ||
+        (/^(HEAD([~^]\d*)?|[0-9a-fA-F]{7,64})$/.test(rev) && !staged),
+      "GIT_REV",
+      "rev 仅支持 HEAD、HEAD~N 或提交哈希；rev 与 staged 不能同时使用",
+      422,
+    );
     const diff = await this.command(
       [
         "diff",
@@ -396,12 +403,13 @@ export class GitWorkspace {
         "--no-renames",
         "--ignore-submodules=all",
         ...(staged ? ["--cached"] : []),
+        ...(rev ? [rev] : []),
         "--",
         path,
       ],
       { signal },
     );
-    return { path, staged, diff };
+    return { path, staged, ...(rev ? { rev } : {}), diff };
   }
   async log(limit = 10, signal) {
     await this.checkRoot(signal);
@@ -410,11 +418,37 @@ export class GitWorkspace {
       "GIT_LIMIT",
       "最多读取 30 条提交",
     );
+    const raw = await this.command(
+      [
+        "log",
+        `-${limit}`,
+        "--format=%h%x00%s%x01",
+        "--name-only",
+        "--no-decorate",
+        "--no-renames",
+        "--ignore-submodules=all",
+      ],
+      { signal },
+    );
+    // 每条提交的格式行是单独一行「<hash>\0<subject>\x01」，随后的非空行是文件列表。
+    const entries = [];
+    for (const line of raw.split("\n")) {
+      if (!line) continue;
+      const record = line.includes("\x01") ? line.split("\x01")[0] : null;
+      if (record !== null && record.includes("\0")) {
+        const [hash, subject] = record.split("\0");
+        entries.push({ hash, subject: subject.trim(), files: [] });
+        continue;
+      }
+      const path = line.trim();
+      if (entries.length && path && this.visible(path))
+        entries.at(-1).files.push(path);
+    }
     return {
-      log: await this.command(
-        ["log", `-${limit}`, "--format=%h %s", "--no-decorate"],
-        { signal },
-      ),
+      log:
+        entries.map((e) => `${e.hash} ${e.subject}`).join("\n") +
+        (entries.length ? "\n" : ""),
+      entries,
     };
   }
   async worktree(target, branch, expectedHead, signal) {
