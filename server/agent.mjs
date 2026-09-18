@@ -357,7 +357,7 @@ export function createServer(options = {}) {
   };
   const runtime = new MedicalRuntime(store, provider, {
     maxContextChars: envNumber("MEDICAL_CONTEXT_BUDGET", 80000),
-    maxRounds: envNumber("MEDICAL_MAX_ROUNDS", 12),
+    maxRounds: envNumber("MEDICAL_MAX_ROUNDS", Infinity),
     maxToolCalls: envNumber("MEDICAL_MAX_TOOL_CALLS", 8),
     ...options.runtimeOptions,
     skills,

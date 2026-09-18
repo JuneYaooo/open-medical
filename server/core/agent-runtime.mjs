@@ -5,7 +5,7 @@ import { check } from "../errors.mjs";
 export class AgentRuntime {
   constructor({
     provider,
-    maxRounds = 8,
+    maxRounds = Infinity,
     maxContextChars = 100000,
     maxToolCalls = 8,
   }) {
@@ -272,6 +272,9 @@ export class AgentRuntime {
       // Individual results are durable; incomplete batches are sealed on recovery.
       await onCheckpoint(structuredClone(messages));
     }
-    check(false, "TOOL_BUDGET", "已达到工具轮数预算，本次执行不完整", 422);
+    // 轮数默认不设上限：上下文靠逐轮压缩与大结果归档兜底，用户可随时
+    // 停止。仅当显式配置了有限轮数（MEDICAL_MAX_ROUNDS）时才在此截断。
+    if (Number.isFinite(this.maxRounds))
+      check(false, "TOOL_BUDGET", "已达到工具轮数预算，本次执行不完整", 422);
   }
 }

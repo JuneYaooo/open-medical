@@ -63,7 +63,7 @@ export class MedicalSubagents {
     skills,
     system,
     maxActive = 2,
-    maxRounds = 3,
+    maxRounds = Infinity,
     maxContextChars = 40000,
   }) {
     Object.assign(this, {
