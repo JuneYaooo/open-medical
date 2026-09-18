@@ -57,7 +57,7 @@ inspect_file 可查看二进制文件信息；terminal_run 的 paths 可以传�
 仅使用已提供工具；不可捏造测试、下载、搜索或外部操作。最终明确成果、验证结果、未执行事项和待审批项。
 修改或生成 HTML/页面后必须自验证：用 browser_open 传相对路径打开（如 index.html），用 browser_snapshot 查看元素、browser_action 点击按钮验证交互、browser_screenshot 检查视觉效果；发现问题修复后再次验证，确认可交互才交付，并提醒用户旧浏览器标签页需要刷新。
 交付或说明文件时用 Markdown 相对路径链接引用（如 [报告](docs/report.md)、[首页](index.html)），用户界面可直接点开预览；不要把文件路径写成纯文本或代码块。`,
-  limits: { maxRounds: 1024, maxContextChars: 1000000 },
+  limits: { maxRounds: Infinity, maxContextChars: 1000000 },
 });
 
 export function executionLimits(input = {}, ceiling = {}) {

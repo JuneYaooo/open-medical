@@ -72,7 +72,7 @@ export class MedicalRuntime {
     store,
     provider,
     {
-      maxRounds = 12,
+      maxRounds = Infinity,
       maxContextChars = 80000,
       maxToolCalls = 8,
       maxActive = 3,
