@@ -522,12 +522,14 @@ export function GoalCard({ message = "", running, artifacts = [], onStop, round 
       rows = [{ label: "按需求整理材料", done: false, evidence: "" }];
     for (const row of rows) {
       const hit = artifacts.find((a) => {
-        const t = a.title || "";
+        const t = (a.title || "").trim();
+        // 空标题产物（未产出内容的空壳）不应匹配任何目标行
+        if (!t) return false;
         return t.includes(row.label.slice(0, 2)) || row.label.includes(t.slice(0, 2));
       });
       if (hit) {
         row.done = true;
-        row.evidence = `已写入 v${hit.version} · 出处 ${(hit.events || []).length} 条 · 待复核`;
+        row.evidence = `已写入 v${hit.version || 1} · 出处 ${(hit.events || []).length} 条 · 待复核`;
       }
     }
     if (!running && artifacts.length) {

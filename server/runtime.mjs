@@ -527,7 +527,7 @@ export class MedicalRuntime {
           (d) => d.function.name === work.tool,
         );
         const result = known
-          ? runTool(work.tool, work.args, {
+          ? await runTool(work.tool, work.args, {
               sources,
               skills: this.skills,
               definitions: this.toolDefinitions,
@@ -660,7 +660,7 @@ export class MedicalRuntime {
                   args?.limit === undefined ? 8000 : args.limit,
                 );
               } else
-                output = runTool(name, args, {
+                output = await runTool(name, args, {
                   sources,
                   skills: this.skills,
                   definitions: this.toolDefinitions,
@@ -716,7 +716,8 @@ export class MedicalRuntime {
             // Consultation retrieval supplies context for the answer; it is
             // not a document draft requiring a separate review card.
             if (run.policy.intent === "consultation" && output?.type === "source_search") return;
-            if (output?.id) {
+            // readOnly 输出（技能正文、目录等）不是可复核产物，不进产物列表
+            if (output?.id && !output.readOnly) {
               output.provenance =
                 output.provenance === "local_rule"
                   ? "local_rule"
@@ -739,6 +740,8 @@ export class MedicalRuntime {
         content: text,
         createdAt: iso(),
         risk: run.policy.risk,
+        // 咨询直答不产出草稿，前端据 intent 区分署名，避免一律标「工作草稿」
+        intent: run.policy.intent,
         status: "completed",
       };
       this.store.mutate(sessionId, (s) => {
