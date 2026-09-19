@@ -1989,9 +1989,12 @@ export class WorkspaceService {
           // 领域叠层的结构化草稿产物（带 id 且非 readOnly）按运行收集，
           // 供会话投影与复核端点使用；文件类产物走 workspace.artifacts。
           if (handle.collectArtifacts && output && typeof output === "object") {
-            const { id: artifactId, readOnly } = output;
+            const { id: artifactId, readOnly, status } = output;
+            // 与 tool.complete 的 artifact 约定一致：只收 draft 草稿，
+            // 终端会话（status completed/failed 等）不算结构化产物。
             if (
               typeof artifactId === "string" &&
+              status === "draft" &&
               readOnly !== true &&
               !(typeof handle.skipArtifact === "function" && handle.skipArtifact(output))
             ) {
