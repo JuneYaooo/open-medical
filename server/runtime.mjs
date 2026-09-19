@@ -24,7 +24,7 @@ const {
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const iso = () => new Date().toISOString();
 // 咨询问答在本地规则模式下的降级回答：内置指标速查 + 模式引导，而不是工作流草稿。
-const consultationNotice = (result) => {
+export const consultationNotice = (result) => {
   const entries = (result?.entries || []).slice(0, 4);
   return [
     "这是一条咨询提问。当前为本地规则模式（不调用模型），只能给出内置检验指标速查，无法针对具体情况解答：",

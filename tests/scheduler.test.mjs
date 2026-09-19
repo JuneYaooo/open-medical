@@ -8,6 +8,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+const legacySession = async (f, tag) =>
+  (
+    await f.json("/api/sessions", "POST", {
+      id: `legacy-${tag}-${Math.random().toString(36).slice(2, 8)}`,
+    })
+  ).data;
+
 test("explicit resume after failure schedules a fresh occurrence without replaying old request", async (t) => {
   let now = Date.now(),
     fail = true;
@@ -24,7 +31,7 @@ test("explicit resume after failure schedules a fresh occurrence without replayi
     provider,
     schedulerOptions: { now: () => now, autoStart: false },
   });
-  const s = await f.session(),
+  const s = await legacySession(f, "c"),
     scheduler = f.server.scheduler;
   const job = scheduler.create(s.id, {
     name: "合成恢复",
@@ -50,7 +57,7 @@ test("explicit resume after failure schedules a fresh occurrence without replayi
 
 test("scheduler starts on server listen and executes without browser connection", async (t) => {
   const f = await fixture(t, { schedulerOptions: { pollMs: 10 } });
-  const s = await f.session();
+  const s = await legacySession(f, "s");
   const job = f.server.scheduler.create(s.id, {
     name: "自动执行验证",
     message: "合成时间线",
@@ -72,7 +79,7 @@ test("persistent scheduler runs once, coalesces missed intervals and rejects dup
   const f = await fixture(t, {
     schedulerOptions: { now: () => now, autoStart: false },
   });
-  const s = await f.session();
+  const s = await legacySession(f, "s");
   const scheduler = f.server.scheduler;
   const job = scheduler.create(s.id, {
     name: "合成计划",
@@ -114,7 +121,7 @@ test("scheduled model tasks require consent and pause when provider or materials
     provider,
     schedulerOptions: { now: () => now, autoStart: false },
   });
-  const s = await f.session();
+  const s = await legacySession(f, "s");
   const scheduler = f.server.scheduler;
   const input = {
     name: "合成计划",
@@ -152,8 +159,8 @@ test("scheduler REST scope, revision and one-shot completion are enforced", asyn
   const f = await fixture(t, {
     schedulerOptions: { now: () => now, autoStart: false },
   });
-  const s = await f.session(),
-    other = await f.session();
+  const s = await legacySession(f, "d"),
+    other = await legacySession(f, "e");
   const created = await f.json(`/api/sessions/${s.id}/schedules`, "POST", {
     name: "合成计划",
     message: "整理资料",

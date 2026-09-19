@@ -67,12 +67,14 @@ export class WorkspaceStore {
         });
     }
   }
-  create({ title = "新工作区", root, permissions }) {
+  create({ title = "新工作区", root, permissions, kind, patientId }) {
     const workspace = {
       id: randomUUID(),
       title,
       root,
       permissions,
+      ...(kind ? { kind } : {}),
+      ...(patientId ? { patientId } : {}),
       revision: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -280,6 +282,12 @@ export class WorkspaceStore {
       )
       .all(id, runId, after)
       .map(({ data, ...row }) => ({ ...row, data: JSON.parse(data) }));
+  }
+  remove(id) {
+    this.get(id);
+    this.db.prepare("DELETE FROM agent_workspaces WHERE id=?").run(id);
+    this.db.prepare("DELETE FROM agent_events WHERE workspace_id=?").run(id);
+    this.db.prepare("DELETE FROM agent_trace WHERE workspace_id=?").run(id);
   }
   fork(id, { runId, revision } = {}) {
     const source = this.get(id);

@@ -4,9 +4,16 @@ import { AppError, check, identifier, string } from "./errors.mjs";
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
 export class PatientRegistry {
-  constructor(store, runtime) {
+  constructor(store, runtime, { createSession, removeSession } = {}) {
     this.store = store;
     this.runtime = runtime;
+    // 统一内核：新患者病例会话由 SessionBridge 创建（kind:"session" 工作区）。
+    this.createSession =
+      createSession ||
+      (({ title, patientId }) => ({
+        id: store.create({ title, patientId }).id,
+      }));
+    this.removeSession = removeSession;
   }
   all() {
     return this.store.db
@@ -101,7 +108,7 @@ export class PatientRegistry {
       "已有同名在管患者，请改用其他标识",
       409,
     );
-    const session = this.store.create({
+    const session = this.createSession({
       title: `${patient.name} · 病例`,
       patientId: patient.id,
     });
@@ -223,6 +230,10 @@ export class PatientRegistry {
       .prepare("DELETE FROM patient_messages WHERE patient_id=?")
       .run(id);
     this.store.db.prepare("DELETE FROM patients WHERE id=?").run(id);
+    if (this.removeSession) {
+      this.removeSession(sessionId);
+      return;
+    }
     try {
       this.store.get(sessionId);
       this.store.delete(sessionId);

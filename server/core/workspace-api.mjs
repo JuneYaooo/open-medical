@@ -198,7 +198,11 @@ export async function workspaceApi({
   }
   if (!id) {
     if (req.method === "GET") {
-      send(res, 200, { workspaces: service.list() });
+      send(res, 200, {
+        workspaces: service
+          .list()
+          .filter((w) => w.kind !== "session"),
+      });
       return true;
     }
     if (req.method === "POST") {

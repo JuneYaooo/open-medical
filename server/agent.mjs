@@ -3,7 +3,7 @@ import http from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, dirname, extname, join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { WebSocketServer } from "ws";
@@ -44,6 +44,7 @@ import { searchIcd9 } from "./medical/icd9.mjs";
 import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
 import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
+import { SessionBridge } from "./session-bridge.mjs";
 import { EmbeddingService } from "./medical/embeddings.mjs";
 import { LanceVectorStore } from "./medical/vector-store.mjs";
 import {
@@ -373,6 +374,15 @@ export function createServer(options = {}) {
         ...knowledgeToolPlugins,
         ...pendingActionTools(pending, doctor),
       ],
+      // 会话叠层：医疗核心工具经 runTool 分发这些插件（材料 sources、
+      // readOnly 约定与旧医疗会话一致）。
+      sessionPlugins: [
+        ...knowledgeToolPlugins,
+        ...researchToolPlugins(research),
+        ...pendingActionTools(pending, doctor),
+      ],
+      skills,
+      doctor,
     }),
     onNotification: options.onNotification,
     sandbox: runtime.sandbox,
@@ -382,16 +392,61 @@ export function createServer(options = {}) {
       ...options.extensions,
     },
   });
+  // 首页会话统一到工作区内核：新建会话 = kind:"session" 的工作区；
+  // 既有 sessions 表会话继续走 MedicalRuntime。桥对两条路径透明。
+  const sessionsRoot =
+    databasePath === ":memory:"
+      ? mkdtempSync(join(tmpdir(), "omw-sessions-"))
+      : join(dirname(databasePath), "session-workspaces");
+  mkdirSync(sessionsRoot, { recursive: true, mode: 0o700 });
+  const sessionBridge = new SessionBridge(store, runtime, workspaces, {
+    sessionsRoot,
+    skills,
+    doctor,
+    plugins: [
+      ...knowledgeToolPlugins,
+      ...researchToolPlugins(research),
+      ...pendingActionTools(pending, doctor),
+    ],
+    contextBudget:
+      options.runtimeOptions?.maxContextChars ??
+      envNumber("MEDICAL_CONTEXT_BUDGET", 80000),
+    maxRounds:
+      options.runtimeOptions?.maxRounds ??
+      envNumber("MEDICAL_MAX_ROUNDS", 512),
+    onMaterialIngest: (file) => {
+      materials.ingest(file).catch(() => {});
+    },
+  });
+  const agentRuntime = sessionBridge.dispatcher;
   const secret = options.token || randomBytes(32).toString("hex");
-  const scheduler = new MedicalScheduler(
-    store,
-    runtime,
-    options.schedulerOptions,
-  );
-  const patients = new PatientRegistry(store, runtime);
+  const scheduler = new MedicalScheduler(store, agentRuntime, {
+    ...options.schedulerOptions,
+    resolveSession: (sessionId) => {
+      if (sessionBridge.isSessionWorkspace(sessionId)) {
+        const w = sessionBridge.workspace(sessionId);
+        return {
+          revision: w.revision,
+          files: (w.materials || []).map((f) => ({ id: f.id, hash: f.hash })),
+        };
+      }
+      return store.get(sessionId);
+    },
+  });
+  const patients = new PatientRegistry(store, agentRuntime, {
+    createSession: ({ title, patientId }) => {
+      const projected = sessionBridge.createSession({ title, patientId });
+      return { id: projected.id };
+    },
+    removeSession: (sessionId) => {
+      if (sessionBridge.isSessionWorkspace(sessionId))
+        sessionBridge.removeSession(sessionId);
+      else store.delete(sessionId);
+    },
+  });
   const followups = new FollowUpManager(
     store,
-    runtime,
+    agentRuntime,
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
@@ -446,7 +501,7 @@ export function createServer(options = {}) {
       "请先确认患者消息可以原文发送给所配置的模型服务",
       412,
     );
-    const handle = runtime.prepare(patient.sessionId, {
+    const handle = agentRuntime.prepare(patient.sessionId, {
       message: composeDigest(trimmed, patient.name),
       mode: "model",
       externalConsent: true,
@@ -454,7 +509,7 @@ export function createServer(options = {}) {
       requestId: `digest_${pid}_${Date.now()}`,
       isolatedContext: true,
     });
-    const run = await track(runtime.execute(handle));
+    const run = await track(agentRuntime.execute(handle));
     if (run.status === "completed") patients.markProcessed(pid, run.runId);
     return run;
   };
@@ -532,7 +587,7 @@ export function createServer(options = {}) {
             ? provider.provider || "configured"
             : "local",
           model: provider.model,
-          engine: "medical-runtime",
+          engine: "unified-runtime",
           genericWorkspaces: workspaces.domain?.id === "generic",
           modes: [
             {
@@ -594,7 +649,7 @@ export function createServer(options = {}) {
           thinking: provider.thinking,
           directoryPicker: typeof options.chooseDirectory === "function",
           provider: provider.provider || "deepseek",
-          engine: "medical-runtime",
+          engine: "unified-runtime",
           modes: [
             {
               id: "standard",
@@ -671,34 +726,154 @@ export function createServer(options = {}) {
       )
         return;
       if (path === "/api/sessions" && req.method === "GET")
-        return send(res, 200, {
-          sessions: store.list().map((s) => ({
-            id: s.id,
-            title: s.title,
-            patientId: s.patientId || null,
-            updatedAt: s.updatedAt,
-            revision: s.revision,
-            messageCount: s.messages.length,
-            reviewCount: s.artifacts.filter((a) => a.status === "draft").length,
-            running: runtime.active.has(s.id),
-          })),
-        });
+        return send(res, 200, { sessions: sessionBridge.list() });
       if (path === "/api/sessions" && req.method === "POST") {
         const b = await body(req);
-        return send(
-          res,
-          201,
-          publicSession(
-            store.create({
-              id: b.id ? identifier(b.id) : undefined,
-              title: b.title ? string(b.title, "标题", 100) : undefined,
-            }),
-          ),
-        );
+        // 显式 id 仅用于既有测试/迁移场景（旧引擎）；首页新建会话统一
+        // 落在内核 kind:"session" 工作区上。
+        if (b.id)
+          return send(
+            res,
+            201,
+            publicSession(
+              store.create({
+                id: identifier(b.id),
+                title: b.title ? string(b.title, "标题", 100) : undefined,
+              }),
+            ),
+          );
+        return send(res, 201, sessionBridge.createSession(b));
       }
       const parts = path.split("/").filter(Boolean);
       if (parts[0] === "api" && parts[1] === "sessions" && parts[2]) {
         const id = identifier(parts[2]);
+        if (sessionBridge.isSessionWorkspace(id)) {
+          if (parts[3] === "schedules") {
+            if (parts.length === 4 && req.method === "GET")
+              return send(res, 200, { jobs: scheduler.list(id) });
+            if (parts.length === 4 && req.method === "POST")
+              return send(res, 201, scheduler.create(id, await body(req)));
+            if (parts.length === 5) {
+              const job = scheduler.get(parts[4]);
+              check(job.sessionId === id, "NOT_FOUND", "计划不属于当前会话", 404);
+              if (req.method === "PATCH")
+                return send(res, 200, scheduler.update(job.id, await body(req)));
+              if (req.method === "DELETE") {
+                scheduler.delete(job.id, (await body(req)).revision);
+                return send(res, 200, { ok: true });
+              }
+            }
+          }
+          if (parts.length === 3) {
+            if (req.method === "GET") return send(res, 200, sessionBridge.get(id));
+            if (req.method === "PATCH") {
+              const b = await body(req);
+              sessionBridge.renameSession(id, b.title);
+              return send(res, 200, sessionBridge.get(id));
+            }
+            if (req.method === "DELETE") {
+              const projected = sessionBridge.get(id);
+              check(
+                !projected.patientId,
+                "PATIENT_SESSION",
+                "此会话是患者病例工作区，请在患者管理中删除患者档案",
+                409,
+              );
+              for (const file of projected.files)
+                materials.remove(file.id).catch(() => {});
+              sessionBridge.removeSession(id);
+              return send(res, 200, { ok: true });
+            }
+          }
+          if (
+            parts.length === 4 &&
+            ["copy-materials", "fork"].includes(parts[3]) &&
+            req.method === "POST"
+          ) {
+            const forkBody = await body(req);
+            if (parts[3] === "fork") forkBody.fork = true;
+            return send(res, 201, sessionBridge.copyMaterials(id, forkBody));
+          }
+          if (parts[3] === "files") {
+            if (parts.length === 4 && req.method === "POST") {
+              const file = sessionBridge.addMaterial(id, await body(req));
+              return send(res, 201, file);
+            }
+            if (parts.length === 5 && req.method === "DELETE") {
+              const projected = sessionBridge.get(id);
+              check(
+                !projected.runs.some(
+                  (r) => r.status === "running" || r.fileIds?.includes(parts[4]),
+                ),
+                "SOURCE_IN_USE",
+                "此材料已被执行记录引用。可取消勾选以排除后续任务；如需清除全部资料，请删除会话。",
+                409,
+              );
+              check(
+                projected.files.some((f) => f.id === parts[4]),
+                "NOT_FOUND",
+                "材料不存在",
+                404,
+              );
+              materials.remove(parts[4]).catch(() => {});
+              sessionBridge.removeMaterial(id, parts[4]);
+              store.audit(id, "file.deleted", { fileId: parts[4] });
+              return send(res, 200, { ok: true });
+            }
+          }
+          if (parts[3] === "search" && req.method === "GET")
+            return send(
+              res,
+              200,
+              await sessionBridge.searchMaterials(
+                id,
+                string(url.searchParams.get("q"), "检索词", 200),
+              ),
+            );
+          if (parts[3] === "audit" && req.method === "GET")
+            return send(res, 200, { events: store.auditLog(id) });
+          if (parts[3] === "events" && req.method === "GET")
+            return send(res, 200, {
+              events: sessionBridge.workspaceEvents(id, {
+                after: Number(url.searchParams.get("after") || 0),
+                limit: Number(url.searchParams.get("limit") || 1000),
+              }),
+            });
+          if (parts[3] === "export" && req.method === "GET") {
+            const projected = sessionBridge.get(id);
+            if (url.searchParams.get("format") === "json")
+              return send(res, 200, projected);
+            res.writeHead(200, {
+              "Content-Type": "text/markdown; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            res.end(exportMarkdown(projected));
+            return;
+          }
+          if (parts[3] === "artifacts" && parts[4]) {
+            if (parts[5] === "review" && req.method === "POST")
+              return send(
+                res,
+                200,
+                sessionBridge.reviewArtifact(
+                  id,
+                  identifier(parts[4]),
+                  await body(req),
+                ),
+              );
+            if (parts.length === 5 && req.method === "PATCH")
+              return send(
+                res,
+                200,
+                sessionBridge.editArtifact(
+                  id,
+                  identifier(parts[4]),
+                  await body(req),
+                ),
+              );
+          }
+          return send(res, 404, { error: "会话资源不存在", code: "NOT_FOUND" });
+        }
         const session = store.get(id);
         if (parts[3] === "schedules") {
           if (parts.length === 4 && req.method === "GET")
@@ -1023,8 +1198,21 @@ export function createServer(options = {}) {
       }
       if (parts[0] === "api" && parts[1] === "research" && req.method === "POST") {
         const b = await body(req);
-        const sources = b.sessionId
-          ? store.get(identifier(b.sessionId)).files
+        const researchSessionId = b.sessionId
+          ? identifier(b.sessionId)
+          : null;
+        const sources = researchSessionId
+          ? sessionBridge.isSessionWorkspace(researchSessionId)
+            ? (sessionBridge.materialsOf(researchSessionId) || []).map(
+                ({ id: fid, name, text, hash, extraction }) => ({
+                  id: fid,
+                  name,
+                  text,
+                  hash,
+                  extraction,
+                }),
+              )
+            : store.get(researchSessionId).files
           : [];
         if (parts[2] === "profile")
           return send(res, 200, research.profile({ ...b, sources }));
@@ -1186,10 +1374,14 @@ export function createServer(options = {}) {
           const name = article.pmid
             ? `PMID-${article.pmid}.md`
             : `DOI-${String(article.doi).replace(/[^A-Za-z0-9.-]/g, "_").slice(0, 80)}.md`;
-          const file = runtime.addFile(identifier(b.sessionId), {
+          const sessionId = identifier(b.sessionId);
+          const materialInput = {
             name,
             text: literature.materialText(article),
-          });
+          };
+          const file = sessionBridge.isSessionWorkspace(sessionId)
+            ? sessionBridge.addMaterial(sessionId, materialInput)
+            : runtime.addFile(sessionId, materialInput);
           return send(res, 201, { file, article });
         }
       }
@@ -1284,9 +1476,9 @@ export function createServer(options = {}) {
       const match = path.match(/^\/api\/chat\/([A-Za-z0-9_-]+)(\/cancel)?$/);
       if (match && req.method === "POST") {
         const id = identifier(match[1]);
-        store.get(id);
-        if (match[2]) return send(res, 200, { cancelled: runtime.cancel(id) });
-        const handle = runtime.prepare(id, await body(req));
+        if (!sessionBridge.isSessionWorkspace(id)) store.get(id);
+        if (match[2]) return send(res, 200, { cancelled: sessionBridge.cancel(id) });
+        const prepared = sessionBridge.prepareSend(id, await body(req));
         res.writeHead(200, {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
@@ -1297,7 +1489,7 @@ export function createServer(options = {}) {
         const close = () => {
           if (!res.writableEnded) {
             disconnected = true;
-            runtime.cancel(id);
+            sessionBridge.cancel(id);
           }
         };
         res.on("close", close);
@@ -1306,12 +1498,13 @@ export function createServer(options = {}) {
         }, 15000);
         try {
           await track(
-            runtime.execute(handle, (event) => {
+            sessionBridge.executeSend(prepared, (event) => {
               if (!disconnected) {
                 res.write(
                   `id: ${event.seq}\nevent: message\ndata: ${JSON.stringify(event)}\n\n`,
                 );
-                if (res.writableLength > 2 * 1024 * 1024) runtime.cancel(id);
+                if (res.writableLength > 2 * 1024 * 1024)
+                  sessionBridge.cancel(id);
               }
             }),
           );
@@ -1325,8 +1518,11 @@ export function createServer(options = {}) {
       // Legacy callers must use the same policy, consent and session boundaries.
       if (path === "/api/agent/run" && req.method === "POST") {
         const b = await body(req);
-        const handle = runtime.prepare(identifier(b.sessionId), b);
-        const result = await track(runtime.execute(handle));
+        const sessionId = identifier(b.sessionId);
+        const prepared = sessionBridge.prepareSend(sessionId, b);
+        const result = await track(
+          sessionBridge.executeSend(prepared),
+        );
         return send(res, result.status === "completed" ? 200 : 422, result);
       }
       if (path.startsWith("/api/"))
@@ -1382,11 +1578,11 @@ export function createServer(options = {}) {
         method: "event",
         params: {
           type: "gateway.ready",
-          payload: { engine: "medical-runtime", version: "0.4.0" },
+          payload: { engine: "unified-runtime", version: "0.4.0" },
         },
       });
       ws.on("close", () => {
-        for (const id of owned) runtime.cancel(id);
+        for (const id of owned) sessionBridge.cancel(id);
       });
       ws.on("message", (raw) => {
         track(
@@ -1405,25 +1601,33 @@ export function createServer(options = {}) {
                 write({ jsonrpc: "2.0", id: rpc.id, result });
               if (rpc.method === "session.create")
                 return reply({
-                  session_id: store.create({
-                    title: p.title ? string(p.title, "标题", 100) : undefined,
-                  }).id,
+                  session_id: p.id
+                    ? store.create({
+                        id: identifier(p.id),
+                        title: p.title
+                          ? string(p.title, "标题", 100)
+                          : undefined,
+                      }).id
+                    : sessionBridge.createSession(p).id,
                 });
               if (rpc.method === "session.get")
-                return reply(
-                  publicSession(store.get(identifier(p.session_id))),
-                );
+                return reply(sessionBridge.get(identifier(p.session_id)));
               if (rpc.method === "prompt.cancel")
                 return reply({
-                  cancelled: runtime.cancel(identifier(p.session_id)),
+                  cancelled: sessionBridge.cancel(
+                    identifier(p.session_id),
+                  ),
                 });
               if (rpc.method === "prompt.submit") {
                 const id = identifier(p.session_id);
-                const handle = runtime.prepare(id, { ...p, message: p.text });
+                const prepared = sessionBridge.prepareSend(id, {
+                  ...p,
+                  message: p.text,
+                });
                 owned.add(id);
-                reply({ status: "streaming", run_id: handle.run.id });
+                reply({ status: "streaming", run_id: prepared.handle?.run?.id });
                 try {
-                  await runtime.execute(handle, (event) =>
+                  await sessionBridge.executeSend(prepared, (event) =>
                     write({ jsonrpc: "2.0", method: "event", params: event }),
                   );
                 } finally {
@@ -1450,6 +1654,7 @@ export function createServer(options = {}) {
   });
   server.store = store;
   server.runtime = runtime;
+  server.sessionBridge = sessionBridge;
   server.workspaces = workspaces;
   server.materials = materials;
   server.token = secret;
@@ -1477,6 +1682,8 @@ export function createServer(options = {}) {
     followups.stop();
     for (const id of workspaces.active.keys()) workspaces.interrupt(id);
     for (const id of runtime.active.keys()) runtime.cancel(id);
+    for (const id of workspaces.active.keys())
+      if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
     for (const ws of sockets.clients) ws.terminate();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
