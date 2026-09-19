@@ -296,6 +296,16 @@ export function WorkspacesView({
   const [prompt, setPrompt] = useState(""),
     [partial, setPartial] = useState(""),
     [events, setEvents] = useState([]);
+  // 首页带来的首个任务：工作区就绪后自动运行一次，避免用户落地后还要再点
+  // 一次发送。只在首个稳定状态触发；条件不满足（忙碌/运行中/无模型）时保
+  // 留预填，交回手动发送。
+  const autoRun = useRef(initialPrompt ? "pending" : "off");
+  useEffect(() => {
+    if (autoRun.current !== "pending" || !current?.id) return;
+    autoRun.current = "off";
+    if (running || busy || !prompt.trim() || !config?.modelConfigured) return;
+    run();
+  }, [current?.id, prompt, busy, running]);
   // Auto-refresh open previews when the agent applies file changes: the
   // viewer re-reads the file and rebuilds its blob, so the panel never shows
   // a stale version of an open tab.
