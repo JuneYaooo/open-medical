@@ -32,7 +32,7 @@ test("minimal mode rejects unsolicited model tool calls before execution", async
     },
   };
   const f = await fixture(t, { provider });
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.chat(s.id, "整理合成记录", {
     mode: "minimal",
     externalConsent: true,
@@ -60,7 +60,7 @@ test("minimal mode rejects explicit delegations before creating a run", async (t
       },
     },
   });
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.json(`/api/chat/${s.id}`, "POST", {
     message: "整理合成记录",
     mode: "minimal",
@@ -119,7 +119,7 @@ test("model-driven delegation returns child results and accumulates their usage"
     },
   };
   const f = await fixture(t, { provider });
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.chat(s.id, "整理合成资料", {
     mode: "model",
     externalConsent: true,
@@ -144,7 +144,7 @@ test("earlier model rounds containing deselected files are excluded from later c
     },
   };
   const f = await fixture(t, { provider });
-  const s = await f.session();
+  const s = await f.legacy();
   const file = f.server.runtime.addFile(s.id, {
     name: "private.txt",
     text: "EXCLUDED_FILE_MARKER",
@@ -165,7 +165,7 @@ test("earlier model rounds containing deselected files are excluded from later c
 
 test("medical child workers persist distinct lifecycles and source-linked drafts", async (t) => {
   const f = await fixture(t);
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.chat(s.id, "合成测试 2026-01-02 首诊 Hb 98 g/L", {
     delegations: ["timeline", "observations", "medication"],
   });
@@ -199,7 +199,7 @@ test("model child context is isolated and cannot recursively delegate", async (t
     },
   };
   const f = await fixture(t, { provider });
-  const s = await f.session();
+  const s = await f.legacy();
   f.server.runtime.addFile(s.id, {
     name: "excluded.txt",
     text: "UNSELECTED_SENTINEL",
@@ -231,7 +231,7 @@ test("parent cancellation reaches running and queued children", async (t) => {
     },
   };
   const f = await fixture(t, { provider });
-  const s = await f.session();
+  const s = await f.legacy();
   const handle = f.server.runtime.prepare(s.id, {
     message: "整理合成资料",
     mode: "model",
@@ -293,7 +293,7 @@ test("registered plugins execute through actual model tool loop", async (t) => {
       { definition, execute: () => ({ value: "plugin-executed" }) },
     ],
   });
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.chat(s.id, "合成资料", {
     mode: "model",
     externalConsent: true,
@@ -304,7 +304,7 @@ test("manual sandbox uses authenticated runtime, preserves result and trajectory
   const f = await fixture(t);
   if (!f.server.runtime.sandbox.status().available)
     return t.skip("OS sandbox unavailable");
-  const s = await f.session();
+  const s = await f.legacy();
   const result = await f.chat(s.id, "合成统计", {
     sandboxCode: "result=len(sources)",
     mode: "local",

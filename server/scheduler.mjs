@@ -9,9 +9,18 @@ export class MedicalScheduler {
   constructor(
     store,
     runtime,
-    { now = () => Date.now(), pollMs = 1000, autoStart = true } = {},
+    {
+      now = () => Date.now(),
+      pollMs = 1000,
+      autoStart = true,
+      resolveSession,
+    } = {},
   ) {
     Object.assign(this, { store, runtime, now, pollMs, autoStart });
+    // 会话统一内核后，计划可能挂在 kind:"session" 的工作区上；
+    // resolveSession 返回 {revision, files}，缺省读旧 sessions 表。
+    this.resolveSession =
+      resolveSession || ((sessionId) => this.store.get(sessionId));
     this.inFlight = new Set();
     this.stopped = false;
     store.db.exec(
@@ -45,7 +54,7 @@ export class MedicalScheduler {
     return JSON.parse(row.data);
   }
   list(sessionId) {
-    this.store.get(sessionId);
+    this.resolveSession(sessionId);
     return this.store.db
       .prepare(
         "SELECT data FROM scheduled_jobs WHERE session_id=? ORDER BY next_run_at",
@@ -64,7 +73,7 @@ export class MedicalScheduler {
     return job;
   }
   create(sessionId, input) {
-    const session = this.store.get(sessionId);
+    const session = this.resolveSession(sessionId);
     check(
       input && typeof input === "object" && !Array.isArray(input),
       "INVALID_INPUT",
@@ -218,7 +227,7 @@ export class MedicalScheduler {
     this.store.audit(job.sessionId, "schedule.deleted", { jobId: id });
   }
   validateSnapshot(job) {
-    const session = this.store.get(job.sessionId);
+    const session = this.resolveSession(job.sessionId);
     check(
       job.sourceHashes.every((snapshot) =>
         session.files.some(

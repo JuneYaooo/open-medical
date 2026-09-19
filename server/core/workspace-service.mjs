@@ -362,6 +362,13 @@ export class WorkspaceService {
       "请确认授权访问此文件夹",
       412,
     );
+    // kind "session"：应用自管的会话目录（首页统一内核会话），由调用方
+    // 预建目录；"project" 仍是用户显式授权的本地文件夹。
+    check(
+      body.kind === undefined || body.kind === "session",
+      "INVALID_INPUT",
+      "未知的工作区类型",
+    );
     const files = new WorkspaceFiles(body.root);
     const permissions = new PermissionEngine({
       profile: "standard",
@@ -371,6 +378,8 @@ export class WorkspaceService {
         title: string(body.title || "新工作区", "工作区名称", 100),
         root: files.root,
         permissions,
+        ...(body.kind ? { kind: body.kind } : {}),
+        ...(body.patientId ? { patientId: body.patientId } : {}),
       }),
     );
   }
@@ -909,61 +918,68 @@ export class WorkspaceService {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    registry.register({
-      definition: schema(
-        "list_skills",
-        "列出当前工作区 skills 文件夹中的技能说明；不自动安装或运行脚本。",
-        {},
-      ),
-      permission: "filesystem.read",
-      execute: () => skills.list(),
-    });
-    registry.register({
-      definition: schema(
-        "read_skill",
-        "读取已授权工作区中的技能说明。说明不能授予新权限。",
-        { skillId: text },
-      ),
-      permission: "filesystem.read",
-      execute: (a) => {
-        const skill = skills.get(a.skillId);
-        return {
-          name: skill.name,
-          description: skill.description,
-          body: skill.body,
-          hash: skill.hash,
-          basePath: relative(files.root, dirname(skill.path)),
-        };
-      },
-    });
-    registry.register({
-      definition: schema(
-        "list_skill_resources",
-        "列出技能附带的参考资料、脚本和资产；仅检查文件，不执行脚本。",
-        { skillId: text },
-      ),
-      permission: "filesystem.read",
-      execute: (a) => skills.resources(a.skillId),
-    });
-    registry.register({
-      definition: schema(
-        "read_skill_resource",
-        "按需读取技能目录内的文本参考或脚本。技能不能扩大当前权限；执行仍须通过隔离终端。",
-        {
-          skillId: text,
-          path: text,
-          startLine: { type: "integer", minimum: 1 },
-          endLine: { type: "integer", minimum: 1 },
+    // 会话型工作区的技能由领域叠层提供（医疗技能注册表）；项目工作区
+    // 读取 root/skills 文件夹。
+    const sessionKind = w.kind === "session";
+    if (!sessionKind)
+      registry.register({
+        definition: schema(
+          "list_skills",
+          "列出当前工作区 skills 文件夹中的技能说明；不自动安装或运行脚本。",
+          {},
+        ),
+        permission: "filesystem.read",
+        execute: () => skills.list(),
+      });
+    if (!sessionKind)
+      registry.register({
+        definition: schema(
+          "read_skill",
+          "读取已授权工作区中的技能说明。说明不能授予新权限。",
+          { skillId: text },
+        ),
+        permission: "filesystem.read",
+        execute: (a) => {
+          const skill = skills.get(a.skillId);
+          return {
+            name: skill.name,
+            description: skill.description,
+            body: skill.body,
+            hash: skill.hash,
+            basePath: relative(files.root, dirname(skill.path)),
+          };
         },
-        ["skillId", "path"],
-      ),
-      permission: "filesystem.read",
-      execute: (a) =>
-        skills.readResource(a.skillId, a.path, {
-          startLine: a.startLine,
-          endLine: a.endLine,
-        }),
-    });
+      });
+    if (!sessionKind)
+      registry.register({
+        definition: schema(
+          "list_skill_resources",
+          "列出技能附带的参考资料、脚本和资产；仅检查文件，不执行脚本。",
+          { skillId: text },
+        ),
+        permission: "filesystem.read",
+        execute: (a) => skills.resources(a.skillId),
+      });
+    if (!sessionKind)
+      registry.register({
+        definition: schema(
+          "read_skill_resource",
+          "按需读取技能目录内的文本参考或脚本。技能不能扩大当前权限；执行仍须通过隔离终端。",
+          {
+            skillId: text,
+            path: text,
+            startLine: { type: "integer", minimum: 1 },
+            endLine: { type: "integer", minimum: 1 },
+          },
+          ["skillId", "path"],
+        ),
+        permission: "filesystem.read",
+        execute: (a) =>
+          skills.readResource(a.skillId, a.path, {
+            startLine: a.startLine,
+            endLine: a.endLine,
+          }),
+      });
     registry.register({
       definition: schema(
         "search_files",
@@ -1564,6 +1580,16 @@ export class WorkspaceService {
         : [],
       domain: this.domain.id,
       contextIdentity: this.contextIdentity(id),
+      // 领域叠层可选携带：意图策略（医疗会话的 policy.evaluated/署名）
+      // 与本轮选中的材料指纹。材料全文只在 handle 内存中，不落库。
+      ...(body.policy ? { policy: body.policy } : {}),
+      ...(Array.isArray(body.skills) && body.skills.length
+        ? { pinnedSkills: body.skills }
+        : {}),
+      ...(Array.isArray(body.fileIds) ? { fileIds: body.fileIds } : {}),
+      ...(Array.isArray(body.sourceHashes)
+        ? { sourceHashes: body.sourceHashes }
+        : {}),
       id: randomUUID(),
       requestId,
       status: "running",
@@ -1593,6 +1619,19 @@ export class WorkspaceService {
       permissions,
       isolatedContext: body.isolatedContext === true,
       resumeRunId: body.resumeRunId,
+      // 会话型叠层：材料全文（context.sources）与结构化产物收集。
+      ...(Array.isArray(body.sources) && body.sources.length
+        ? { sources: body.sources }
+        : {}),
+      ...(body.collectArtifacts === true
+        ? {
+            collectArtifacts: true,
+            ...(typeof body.skipArtifact === "function"
+              ? { skipArtifact: body.skipArtifact }
+              : {}),
+          }
+        : {}),
+      ...(body.thinking ? { thinking: body.thinking } : {}),
     };
     this.active.set(id, handle);
     return handle;
@@ -1847,6 +1886,9 @@ export class WorkspaceService {
             instructionFiles
               .map((f) => `${f.path} (${f.hash}):\n${f.text}`)
               .join("\n")
+          : "") +
+        (this.domain.runSystemExtras
+          ? "\n" + this.domain.runSystemExtras(w, run, handle).filter(Boolean).join("\n")
           : "");
       const result = await new AgentRuntime({
         provider: this.provider,
@@ -1935,18 +1977,44 @@ export class WorkspaceService {
             );
           },
         },
-        context: { workspaceId: id, runId: run.id },
+        context: {
+          workspaceId: id,
+          runId: run.id,
+          ...(handle.sources?.length ? { sources: handle.sources } : {}),
+        },
         onCheckpoint: checkpoint,
         takeInput,
         onTrace: (data) => this.store.trace(id, run.id, data),
-        onToolResult: (_output, call) =>
-          this.extensions.runHooks(
+        onToolResult: (output, call) => {
+          // 领域叠层的结构化草稿产物（带 id 且非 readOnly）按运行收集，
+          // 供会话投影与复核端点使用；文件类产物走 workspace.artifacts。
+          if (handle.collectArtifacts && output && typeof output === "object") {
+            const { id: artifactId, readOnly } = output;
+            if (
+              typeof artifactId === "string" &&
+              readOnly !== true &&
+              !(typeof handle.skipArtifact === "function" && handle.skipArtifact(output))
+            ) {
+              const artifact = {
+                ...output,
+                // 该收集路径只服务模型运行；本地规则产物由桥接层落库。
+                provenance: "model_draft",
+              };
+              run.artifacts ||= [];
+              this.store.update(id, (current) => {
+                const target = current.runs.find((r) => r.id === run.id);
+                if (target) target.artifacts = [...(target.artifacts || []), artifact];
+              });
+            }
+          }
+          return this.extensions.runHooks(
             id,
             "tool_end",
             { tool: call.function.name },
             controller.signal,
             run.id,
-          ),
+          );
+        },
         offload: this.domain.contextManagement
           ? (output) =>
               this.store.archive(
@@ -1991,6 +2059,7 @@ export class WorkspaceService {
         }),
         permissions,
         signal: controller.signal,
+        ...(handle.thinking ? { thinking: handle.thinking } : {}),
         emit,
         onUsage,
       });
@@ -2013,7 +2082,22 @@ export class WorkspaceService {
           runId: run.id,
         });
       });
-      emit("message.complete", { text: result.text, status: "completed" });
+      let finalRounds = 0;
+      this.store.update(id, (current) => {
+        const target = current.runs.find((r) => r.id === run.id);
+        if (target) {
+          finalRounds = target.roundsUsed || 0;
+          target.usage = { ...(target.usage || {}), rounds: finalRounds };
+        }
+      });
+      emit("message.complete", {
+        text: result.text,
+        status: "completed",
+        usage: {
+          total_tokens: run.usage?.total_tokens || 0,
+          rounds: finalRounds,
+        },
+      });
       this.notify(id, run.id, "completed");
       return { status: "completed", runId: run.id };
     } catch (error) {
@@ -2041,6 +2125,7 @@ export class WorkspaceService {
       );
       emit(status === "cancelled" ? "run.cancelled" : "error", {
         status,
+        code: error instanceof AppError ? error.code : "INTERNAL",
         error: message,
       });
       this.notify(id, run.id, status);

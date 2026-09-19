@@ -880,7 +880,7 @@ function App() {
       if (
         !started &&
         !retryOnConflict &&
-        /会话资料已更新/.test(err.message || "")
+        /会话资料已更新|工作区已变化/.test(err.message || "")
       ) {
         const fresh = await api(`/api/sessions/${id}`).catch(() => null);
         if (fresh) {

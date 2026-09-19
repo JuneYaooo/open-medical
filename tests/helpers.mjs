@@ -22,6 +22,14 @@ export async function fixture(t, options = {}) {
     const r = await json("/api/sessions", "POST", title ? { title } : {});
     return r.data;
   };
+  // 显式创建旧引擎（MedicalRuntime）会话：用于测试旧引擎内部行为。
+  const legacy = async (title) => {
+    const r = await json("/api/sessions", "POST", {
+      id: `legacy-${Math.random().toString(36).slice(2, 10)}`,
+      ...(title ? { title } : {}),
+    });
+    return r.data;
+  };
   const chat = async (id, message, extra = {}) => {
     const r = await request(`/api/chat/${id}`, "POST", { message, ...extra });
     const text = await r.text();
@@ -34,5 +42,5 @@ export async function fixture(t, options = {}) {
         .map((l) => JSON.parse(l.slice(6))),
     };
   };
-  return { server, origin, request, json, session, chat };
+  return { server, origin, request, json, session, legacy, chat };
 }

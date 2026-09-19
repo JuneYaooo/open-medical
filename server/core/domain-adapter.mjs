@@ -10,6 +10,7 @@ export function defineDomain({
   beforeComplete,
   registerTools,
   systemFor,
+  runSystemExtras,
   contextManagement = false,
   allowAutoFileWrites = false,
 }) {
@@ -23,7 +24,13 @@ export function defineDomain({
     "DOMAIN_CONFIG",
     "领域指令不能为空",
   );
-  for (const hook of [beforeTool, beforeComplete, registerTools, systemFor])
+  for (const hook of [
+    beforeTool,
+    beforeComplete,
+    registerTools,
+    systemFor,
+    runSystemExtras,
+  ])
     check(
       hook === undefined || typeof hook === "function",
       "DOMAIN_CONFIG",
@@ -37,6 +44,7 @@ export function defineDomain({
     beforeComplete,
     registerTools,
     systemFor,
+    runSystemExtras,
     contextManagement,
     allowAutoFileWrites,
   });
