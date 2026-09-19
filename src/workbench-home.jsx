@@ -737,7 +737,7 @@ export function WorkbenchHome({
                   {starting ? (
                     <Loader2 size={16} className="spin" />
                   ) : taskType === "project" ? (
-                    "打开项目工作区"
+                    "发送并打开工作区"
                   ) : (
                     "进入随访"
                   )}
