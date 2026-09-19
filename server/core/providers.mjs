@@ -30,9 +30,9 @@ export class DeepSeekProvider {
       "DEEPSEEK_THINKING 需为 enabled 或 disabled",
     );
     check(
-      Number.isInteger(maxTokens) && maxTokens >= 256 && maxTokens <= 32768,
+      Number.isInteger(maxTokens) && maxTokens >= 256 && maxTokens <= 131072,
       "PROVIDER_CONFIG",
-      "模型输出预算须为 256–32768 token",
+      "模型输出预算须为 256–131072 token",
     );
     this.timeoutMs = timeoutMs;
     this.thinking = thinking;
@@ -499,9 +499,9 @@ export class AnthropicProvider {
       "模型超时须为 50–600000 毫秒",
     );
     check(
-      Number.isInteger(maxTokens) && maxTokens >= 256 && maxTokens <= 32768,
+      Number.isInteger(maxTokens) && maxTokens >= 256 && maxTokens <= 131072,
       "PROVIDER_CONFIG",
-      "模型输出预算须为 256–32768 token",
+      "模型输出预算须为 256–131072 token",
     );
   }
   async complete(
