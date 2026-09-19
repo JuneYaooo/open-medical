@@ -69,8 +69,12 @@ test("advanced capabilities default denied and require explicit consent, revisio
       f.tool(name, {}),
       (e) => e.code === "PERMISSION_DENIED",
     );
-  // Local-file browsing for self-verification is allowed by default, but
-  // remote web pages still require explicit origin/network authorization.
+  // 0.9.4 起：项目工作区默认放开联网读取（browser.read / network），无
+  // 需逐项授权；显式关闭扩展浏览开关后仍回到 PERMISSION_DENIED。
+  const grantsNow = f.service.get(f.id).permissions.grants;
+  assert.equal(grantsNow["browser.read"], true);
+  assert.equal(grantsNow.network, true);
+  await f.configure({ browser: false });
   await assert.rejects(
     f.tool("browser_open", { url: "https://example.com/" }),
     (e) => e.code === "PERMISSION_DENIED",
