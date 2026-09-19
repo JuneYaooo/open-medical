@@ -49,7 +49,6 @@ test("incomplete and malformed streams are failures, never successful empty repl
   for (const [name, response] of [
     ["truncated", frame({ content: "partial" })],
     ["malformed", "data: broken\n\n"],
-    ["length", frame({ content: "partial" }, "length") + "data: [DONE]\n\n"],
   ]) {
     await t.test(name, async (t) => {
       const p = await mockProvider(t, (_, res) => {
@@ -582,4 +581,94 @@ test("Anthropic native Messages SSE supports text and fragmented tool_use", asyn
   );
   assert.equal(second.message.content, "完成。");
   assert.equal(round, 2);
+});
+
+test("output-length truncation delivers partial content with stopReason instead of failing", async (t) => {
+  const p = await mockProvider(t, (_, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.end(
+      frame({ content: "已生成的报告前半部分" }, "length") + "data: [DONE]\n\n",
+    );
+  });
+  const result = await p.complete([{ role: "user", content: "hi" }], []);
+  assert.equal(result.message.content, "已生成的报告前半部分");
+  assert.equal(result.stopReason, "max_tokens");
+  assert.equal(result.message.tool_calls, undefined);
+});
+
+test("truncated tool calls with unparseable arguments are dropped, complete ones kept", async (t) => {
+  const p = await mockProvider(t, (_, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.end(
+      frame({ content: "部分说明" }) +
+        frame(
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id: "ok-1",
+                function: { name: "t1", arguments: '{"a":1}' },
+              },
+              {
+                index: 1,
+                id: "cut-1",
+                function: { name: "t2", arguments: '{"b":"半截' },
+              },
+            ],
+          },
+          "length",
+        ) +
+        "data: [DONE]\n\n",
+    );
+  });
+  const result = await p.complete([{ role: "user", content: "hi" }], []);
+  assert.equal(result.stopReason, "max_tokens");
+  assert.deepEqual(
+    result.message.tool_calls.map((c) => c.id),
+    ["ok-1"],
+  );
+});
+
+test("anthropic max_tokens truncation delivers partial content instead of failing", async (t) => {
+  const server = await new Promise((resolve) => {
+    const s = http.createServer((req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(
+        "event: message_start\ndata: " +
+          JSON.stringify({
+            type: "message_start",
+            message: { usage: { input_tokens: 4 } },
+          }) +
+          "\n\n" +
+          "event: content_block_delta\ndata: " +
+          JSON.stringify({
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "报告已写一半" },
+          }) +
+          "\n\n" +
+          "event: message_delta\ndata: " +
+          JSON.stringify({
+            type: "message_delta",
+            delta: { stop_reason: "max_tokens" },
+            usage: { output_tokens: 9 },
+          }) +
+          "\n\n" +
+          "event: message_stop\ndata: " +
+          JSON.stringify({ type: "message_stop" }) +
+          "\n\n",
+      );
+    });
+    s.listen(0, "127.0.0.1", () => resolve(s));
+  });
+  t.after(() => server.close());
+  const { AnthropicProvider } = await import("../server/provider.mjs");
+  const p = new AnthropicProvider({
+    apiKey: "x",
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    model: "claude-test",
+  });
+  const result = await p.complete([{ role: "user", content: "hi" }], []);
+  assert.equal(result.message.content, "报告已写一半");
+  assert.equal(result.stopReason, "max_tokens");
 });

@@ -10,6 +10,7 @@ const {
   Tray,
   ipcMain,
   nativeImage,
+  clipboard,
 } = require("electron");
 const { join, resolve, dirname } = require("node:path");
 const { homedir } = require("node:os");
@@ -37,6 +38,29 @@ const e2eMode =
 // 数据目录隔离：设置 MEDICAL_DESKTOP_TEST_DIR 即生效（自动化测试用），
 // --smoke-test 额外启用内建冒烟流程。
 if (testDirectory) app.setPath("userData", resolve(testDirectory));
+// 右键菜单：Electron 默认没有，没有它页面文字只能用 Cmd+C 复制。
+app.on("web-contents-created", (_event, contents) => {
+  contents.on("context-menu", (_e, params) => {
+    if (smokeTest) return;
+    const items = [];
+    if (params.linkURL && !params.hasSelection && params.mediaType === "none")
+      items.push({
+        label: "复制链接",
+        click: () => clipboard.writeText(params.linkURL),
+      });
+    if (params.isEditable) {
+      if (params.hasSelection) items.push({ role: "cut", label: "剪切" });
+      items.push({ role: "paste", label: "粘贴" });
+      items.push({ role: "selectAll", label: "全选" });
+    }
+    if (params.hasSelection || params.editFlags?.canCopy)
+      items.push({ role: "copy", label: "复制" });
+    if (items.length)
+      Menu.buildFromTemplate(items).popup({
+        window: BrowserWindow.fromWebContents(contents) || undefined,
+      });
+  });
+});
 const root = resolve(__dirname, "..");
 const icon = (name) => join(root, "build", "icons", name);
 let runtime,

@@ -36,6 +36,8 @@ export class AgentRuntime {
     permissions.require("model.external", "当前授权不允许调用模型服务");
     let messages = structuredClone(input);
     let text = "";
+    // 单轮输出被长度截断时的自动续写次数：超过后交付部分内容并提示。
+    let truncatedRounds = 0;
     for (let round = 0; round < this.maxRounds; round++) {
       signal.throwIfAborted();
       const updates = await takeInput();
@@ -114,6 +116,25 @@ export class AgentRuntime {
         durationMs: Date.now() - modelStarted,
       });
       const calls = message.tool_calls || [];
+      // 长报告类输出撞上单轮上限时软着陆：自动接续一轮而不是整轮失败；
+      // 连续截断超过两次仍截断，就在已生成内容后附上说明收尾。
+      if (result.stopReason === "max_tokens" && !calls.length) {
+        if (truncatedRounds < 2) {
+          truncatedRounds += 1;
+          messages.push({
+            role: "user",
+            content:
+              "系统提示：上一条回复达到单轮输出长度上限被截断。请从中断处直接继续输出剩余内容，不要重复已输出部分；如内容已实质完成，用一两句话收尾即可。",
+          });
+          await onCheckpoint(structuredClone(messages));
+          emit("message.delta", {
+            text: "\n\n（单轮输出达到上限，自动继续生成……）\n\n",
+          });
+          continue;
+        }
+        text +=
+          "\n\n（输出达到长度上限，以上为已生成的部分内容；回复「继续」可接着生成。）";
+      }
       check(
         Array.isArray(calls) && calls.length <= 128,
         "TOOL_BUDGET",
