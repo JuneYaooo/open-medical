@@ -36,12 +36,19 @@ test("web search uses searxng when configured and falls back to bing rss then du
     { title: "SearX hit", url: "https://s.example/x", snippet: "ok" },
   ]);
 
-  // Default: Bing RSS first.
+  // Default chain: 360 first (skipped when it yields nothing), then Bing RSS.
   let calls = 0;
   const bing = await searchWeb("pelican\u0007bike", {}, null, async (url) => {
     calls++;
-    assert.match(url, /^https:\/\/www\.bing\.com\/search\?q=/);
-    assert.doesNotMatch(url, /%07/); // control characters stripped
+    const host = new URL(url).host;
+    assert.ok(
+      ["www.so.com", "www.bing.com"].includes(host),
+      `unexpected engine host ${host}`,
+    );
+    if (host === "www.bing.com") {
+      assert.match(url, /^https:\/\/www\.bing\.com\/search\?q=/);
+      assert.doesNotMatch(url, /%07/); // control characters stripped
+    }
     return new Response(rss, { headers: { "content-type": "text/xml" } });
   });
   assert.equal(bing.engine, "bing");
@@ -51,16 +58,23 @@ test("web search uses searxng when configured and falls back to bing rss then du
   assert.equal(bing.results[1].url, "http://example.com/b?x=1");
 
   // Bing empty → DuckDuckGo lite fallback with uddg redirect resolution.
-  const duckResult = await searchWeb("test", {}, null, async (url) =>
-    url.startsWith("https://www.bing.com")
-      ? new Response("<rss></rss>", { headers: { "content-type": "text/xml" } })
-      : new Response(duck, { headers: { "content-type": "text/html" } }),
-  );
+  const duckResult = await searchWeb("test", {}, null, async (url) => {
+    const host = new URL(url).host;
+    if (host === "www.bing.com")
+      return new Response("<rss></rss>", {
+        headers: { "content-type": "text/xml" },
+      });
+    if (host === "www.so.com")
+      return new Response("<html><body>captcha</body></html>", {
+        headers: { "content-type": "text/html" },
+      });
+    return new Response(duck, { headers: { "content-type": "text/html" } });
+  });
   assert.equal(duckResult.engine, "duckduckgo");
   assert.equal(duckResult.results[0].url, "https://example.com/c");
   assert.equal(duckResult.results[0].title, "Third result");
 
-  // Both engines empty → explicit error, never fabricated results.
+  // All engines empty → explicit error, never fabricated results.
   await assert.rejects(
     searchWeb(
       "test",
@@ -82,7 +96,9 @@ test("search only ever targets fixed https engine hosts", async () => {
       const target = new URL(url);
       assert.equal(target.protocol, "https:");
       assert.ok(
-        ["www.bing.com", "lite.duckduckgo.com"].includes(target.host),
+        ["www.so.com", "www.bing.com", "lite.duckduckgo.com"].includes(
+          target.host,
+        ),
         target.host,
       );
       return new Response(rss, { headers: { "content-type": "text/xml" } });
@@ -140,8 +156,90 @@ test("permittedURL allows workspace-local files and nothing beyond", async () =>
   });
   // Without a root, local browsing is entirely disabled.
   assert.throws(() => permittedURL(inside, []), { code: "BROWSER_ORIGIN" });
-  // Remote origins still require explicit authorization.
-  assert.throws(() => permittedURL("https://example.com/", [], root), {
-    code: "BROWSER_ORIGIN",
+  // 无白名单（默认）时放行任意 http(s) 来源；配置白名单后收紧。
+  assert.equal(permittedURL("https://example.com/", [], root), "https://example.com/");
+  assert.throws(
+    () => permittedURL("https://evil.example/", ["https://example.com"], root),
+    { code: "BROWSER_ORIGIN" },
+  );
+  assert.equal(
+    permittedURL("https://example.com/a", ["https://example.com"], root),
+    "https://example.com/a",
+  );
+});
+
+test("keyless search falls back past noisy engines to an on-topic one", async () => {
+  const noise = `<?xml version="1.0"?><rss version="2.0"><channel>
+  <item><title>电子（基本粒子之一）_百度百科</title><link>https://baike.baidu.com/item/电子</link><description>原子的重要组成部分</description></item>
+  <item><title>电子发烧友</title><link>https://www.elecfans.com/</link><description>半导体元器件</description></item>
+  </channel></rss>`;
+  const noiseHtml = `<html><body>
+  <h3><a href="https://www.so.com/link?m=wrap" data-mdurl="https://baike.baidu.com/item/电子">电子（基本粒子之一）_百度百科</a></h3>
+  <p class="res-desc">原子的重要组成部分</p>
+  </body></html>`;
+  const duckOnTopic = `<table>
+  <tr><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fccgp.example%2Femr&amp;rut=x">电子病历系统采购项目中标公告</a></td></tr>
+  <tr><td class="result-snippet">电子病历 厂商 报价 相关内容</td></tr>
+  </table>`;
+  const hosts = [];
+  const result = await searchWeb(
+    "电子病历 厂商 报价 方案",
+    {},
+    null,
+    async (url) => {
+      const target = new URL(url);
+      hosts.push(target.host);
+      if (target.host === "www.so.com")
+        return new Response(noiseHtml, {
+          headers: { "content-type": "text/html" },
+        });
+      if (target.host === "www.bing.com")
+        return new Response(noise, {
+          headers: { "content-type": "text/xml" },
+        });
+      return new Response(duckOnTopic, {
+        headers: { "content-type": "text/html" },
+      });
+    },
+  );
+  assert.deepEqual(hosts, [
+    "www.so.com",
+    "www.bing.com",
+    "lite.duckduckgo.com",
+  ]);
+  assert.equal(result.engine, "duckduckgo");
+  assert.match(result.results[0].title, /电子病历/);
+});
+
+test("so360 results expose the real target url from data-mdurl", async () => {
+  const html = `<html><body>
+  <h3><a href="https://www.so.com/link?m=wrap" data-mdurl="https://ccgp.example/emr-bid" rel="noopener">电子病历系统采购项目中标公告</a></h3>
+  <p class="res-desc">电子病历 厂商 报价 相关内容</p>
+  <h3><a href="javascript:;" data-mdurl="">广告位无真实地址</a></h3>
+  </body></html>`;
+  const direct = await searchWeb("电子病历 厂商 报价", {}, null, async (url) => {
+    const host = new URL(url).host;
+    if (host === "www.so.com")
+      return new Response(html, { headers: { "content-type": "text/html" } });
+    throw new Error("should not be called");
   });
+  assert.equal(direct.engine, "so360");
+  assert.equal(direct.results.length, 1);
+  assert.equal(direct.results[0].url, "https://ccgp.example/emr-bid");
+  assert.match(direct.results[0].title, /中标公告/);
+  assert.match(direct.results[0].snippet, /电子病历/);
+});
+
+test("keyless search keeps bing results without an extra duckduckgo call when they match the query", async () => {
+  const rss = `<?xml version="1.0"?><rss version="2.0"><channel>
+  <item><title>电子病历系统排名与选型</title><link>https://hit.example/emr</link><description>主流电子病历厂商对比</description></item>
+  </channel></rss>`;
+  const hosts = [];
+  const result = await searchWeb("电子病历 厂商", {}, null, async (url) => {
+    hosts.push(new URL(url).host);
+    return new Response(rss, { headers: { "content-type": "text/xml" } });
+  });
+  assert.deepEqual(hosts, ["www.so.com", "www.bing.com"]);
+  assert.equal(result.engine, "bing");
+  assert.equal(result.results.length, 1);
 });

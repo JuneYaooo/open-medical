@@ -50,7 +50,9 @@ export function permittedURL(input, origins, root) {
     ["http:", "https:"].includes(url.protocol) &&
       !url.username &&
       !url.password &&
-      origins.includes(url.origin),
+      // 默认放行任意 http(s) 来源（本地单机场景的联网读取基线能力）；
+      // 用户配置了来源白名单后收紧为仅限白名单内来源。
+      (!(origins && origins.length) || origins.includes(url.origin)),
     "BROWSER_ORIGIN",
     "网址不在用户授权的来源内",
     403,

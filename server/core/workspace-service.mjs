@@ -104,6 +104,20 @@ export class WorkspaceService {
     this.advancedMedia = new AdvancedMedia(this);
     this.desktop = new DesktopControl(this);
     this.remoteJobs = new RemoteClient(this);
+    this.migrateNetworkDefaults();
+  }
+  // 一次性迁移（0.9.4）：把"联网读取默认放开"落到存量工作区——仅对从未
+  // 保存过扩展配置（无 w.extensions 记录）且非 minimal 档的工作区开启
+  // browser.read / network（含医疗会话工作区：模型外发确认是独立闸门）；
+  // 用户显式配置过扩展的工作区保持其选择。
+  migrateNetworkDefaults() {
+    for (const w of this.store.list()) {
+      if (w.extensions || w.permissions?.profile === "minimal") continue;
+      this.store.update(w.id, (current) => {
+        current.permissions.grants["browser.read"] = true;
+        current.permissions.grants.network = true;
+      });
+    }
   }
   list() {
     return this.store.list().map((w) => ({
@@ -370,8 +384,12 @@ export class WorkspaceService {
       "未知的工作区类型",
     );
     const files = new WorkspaceFiles(body.root);
+    // 联网读取（web_search / web_fetch / 浏览器基线）对所有工作区默认
+    // 放开：会话侧的模型外发确认、临床安全闸门是独立权限，不受影响。
+    // 配置来源白名单后 web_fetch 自动收紧；其余扩展能力仍默认关闭。
     const permissions = new PermissionEngine({
       profile: "standard",
+      grants: { "browser.read": true, network: true },
     }).snapshot();
     return publicWorkspace(
       this.store.create({
