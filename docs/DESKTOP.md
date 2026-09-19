@@ -37,6 +37,6 @@ npm run package:win
 
 关闭窗口后应用继续运行，计划任务继续执行；菜单“退出医疗工作台”或 Cmd+Q 会取消当前任务并安全关闭数据库。重新启动应用后计划按既定恢复规则处理。桌面版是独立数据空间，不会自动导入开发版已有病历资料；需要时可从原工作台导出后以资料形式导入。
 
-`verify:desktop` 直接启动打包后的真实二进制，在临时数据目录中验证数据库、三子代理产物、OS 沙箱、页面加载和 renderer 无 Node API，并保存验收 JSON 和截图到 `output/desktop-build/verification/`。测试目录随后清理。
+`verify:desktop` 直接启动打包后的真实二进制，在临时数据目录中验证数据库、本地规则路径的 draft 产物收集（0.9 起统一内核，无需模型密钥）、OS 沙箱、页面加载和 renderer 无 Node API，并保存验收 JSON 和截图到 `output/desktop-build/verification/`。测试目录随后清理。
 
 `verify:offline` 检查包内包含完整 UI、运行时和技能，且没有打包开发机的 `.env`、SQLite 数据库或缓存。它递归扫描实际应用资源目录，但不等同于断网安装与运行测试。
