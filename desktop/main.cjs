@@ -100,9 +100,11 @@ async function verify() {
     const created = await (
       await request("/api/sessions", "POST", { title: "桌面包合成验收" })
     ).json();
+    // 0.9.0 统一内核后 delegations 分诊路径已下线；smoke test 在未配置
+    // 模型的离线环境运行，走 mode:"local" 规则路径（消息含"时间线"确定性
+    // 命中 extract_clinical_timeline），验证 draft 产物收集契约。
     const response = await request(`/api/chat/${created.id}`, "POST", {
-      message: "合成测试 2026-01-02 首诊 Hb 98 g/L",
-      delegations: ["timeline", "observations", "medication"],
+      message: "合成测试 时间线 2026-01-02 首诊 Hb 98 g/L",
     });
     const stream = await response.text();
     if (!stream.includes('"type":"message.complete"'))
@@ -110,7 +112,10 @@ async function verify() {
     const saved = await (
       await request(`/api/sessions/${created.id}`, "GET")
     ).json();
-    if (saved.artifacts.length !== 3)
+    if (
+      saved.artifacts.length < 1 ||
+      saved.artifacts.some((a) => a.status !== "draft")
+    )
       throw new Error("Packaged agent drafts missing");
     if (bootstrap.sandbox.available) {
       const response = await request(`/api/chat/${created.id}`, "POST", {
