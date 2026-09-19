@@ -178,23 +178,19 @@ export class DeepSeekProvider {
         calls.set(part.index, call);
       }
     }
+    // 输出长度截断不再整轮失败：有部分内容时交付并带 stopReason 标记，
+    // 由运行层决定续写或收尾；未正常结束仍按协议错误抛出。
+    check(done, "INCOMPLETE_STREAM", "模型流中断或没有正常结束", 502);
     check(
-      done && ["stop", "tool_calls"].includes(finish),
+      ["stop", "tool_calls", "length"].includes(finish),
       "INCOMPLETE_STREAM",
-      finish === "length"
-        ? "模型达到输出上限，本次内容不完整"
-        : "模型流中断或没有正常结束",
+      "模型流异常结束",
       502,
     );
+    const truncated = finish === "length";
     const toolCalls = [...calls.entries()]
       .sort(([a], [b]) => a - b)
       .map(([, call]) => call);
-    check(
-      finish !== "stop" || toolCalls.length === 0,
-      "PROVIDER_PROTOCOL",
-      "模型结束状态与工具调用不一致",
-      502,
-    );
     check(
       new Set(toolCalls.map((c) => c.id)).size === toolCalls.length,
       "PROVIDER_PROTOCOL",
@@ -207,27 +203,45 @@ export class DeepSeekProvider {
       "模型未提供工具调用",
       502,
     );
+    const usableCalls = truncated
+      ? toolCalls.filter((call) => {
+          // 截断流里的工具参数可能是半截 JSON：无法解析的调用直接丢弃，
+          // 避免执行层炸掉；参数完整的调用照常执行。
+          try {
+            JSON.parse(call.function.arguments || "{}");
+            return true;
+          } catch {
+            return false;
+          }
+        })
+      : toolCalls;
     check(
-      content.trim() || toolCalls.length,
-      "EMPTY_OUTPUT",
-      "模型没有返回内容",
+      finish !== "stop" || usableCalls.length === 0,
+      "PROVIDER_PROTOCOL",
+      "模型结束状态与工具调用不一致",
       502,
     );
-    for (const call of toolCalls)
-      check(
-        call.id && call.function.name,
-        "PROVIDER_PROTOCOL",
-        "工具调用缺少标识或名称",
-        502,
-      );
+    check(
+      usableCalls.every((call) => call.id && call.function.name),
+      "PROVIDER_PROTOCOL",
+      "模型工具标识无效",
+      502,
+    );
+    check(
+      content.trim() || usableCalls.length,
+      truncated ? "INCOMPLETE_STREAM" : "EMPTY_OUTPUT",
+      truncated ? "模型达到输出上限，且没有可交付的内容" : "模型没有返回内容",
+      502,
+    );
     return {
       message: {
         role: "assistant",
         content: content || null,
         ...(reasoning ? { reasoning_content: reasoning } : {}),
-        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+        ...(usableCalls.length ? { tool_calls: usableCalls } : {}),
       },
       usage,
+      ...(truncated ? { stopReason: "max_tokens" } : {}),
     };
   }
 }
@@ -619,39 +633,48 @@ export class AnthropicProvider {
         : finish === "end_turn"
           ? "stop"
           : finish;
+    // 输出长度截断不再整轮失败：有部分内容时交付并带 stopReason 标记，
+    // 由运行层决定续写或收尾；未正常结束仍按协议错误抛出。
+    check(done, "INCOMPLETE_STREAM", "模型流中断或没有正常结束", 502);
     check(
-      done && ["stop", "tool_calls"].includes(reason),
+      ["stop", "tool_calls", "max_tokens"].includes(reason),
       "INCOMPLETE_STREAM",
-      finish === "max_tokens"
-        ? "Claude 达到输出上限，本次内容不完整"
-        : "模型流中断或没有正常结束",
+      "模型流异常结束",
       502,
     );
+    const truncated = reason === "max_tokens";
+    const usableCalls = truncated
+      ? toolCalls.filter((call) => {
+          // 截断流里的工具参数可能是半截 JSON：无法解析的调用直接丢弃；
+          // 参数完整的调用照常执行。
+          try {
+            JSON.parse(call.function.arguments || "{}");
+            return true;
+          } catch {
+            return false;
+          }
+        })
+      : toolCalls;
     check(
-      reason !== "stop" || !toolCalls.length,
+      reason !== "stop" || !usableCalls.length,
       "PROVIDER_PROTOCOL",
       "Claude 结束状态与工具调用不一致",
       502,
     );
     check(
-      reason !== "tool_calls" || toolCalls.length,
+      reason !== "tool_calls" || usableCalls.length,
       "PROVIDER_PROTOCOL",
       "Claude 未提供工具调用",
       502,
     );
     check(
-      content.trim() || toolCalls.length,
-      "EMPTY_OUTPUT",
-      "模型没有返回内容",
+      content.trim() || usableCalls.length,
+      truncated ? "INCOMPLETE_STREAM" : "EMPTY_OUTPUT",
+      truncated
+        ? "Claude 达到输出上限，且没有可交付的内容"
+        : "模型没有返回内容",
       502,
     );
-    for (const call of toolCalls)
-      check(
-        call.id && call.function.name && call.function.arguments,
-        "PROVIDER_PROTOCOL",
-        "Claude 工具调用不完整",
-        502,
-      );
     if (usage && usage.total_tokens == null)
       usage.total_tokens =
         Number(usage.input_tokens || 0) + Number(usage.output_tokens || 0);
@@ -660,9 +683,10 @@ export class AnthropicProvider {
         role: "assistant",
         content: content || null,
         ...(reasoning ? { reasoning_content: reasoning } : {}),
-        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+        ...(usableCalls.length ? { tool_calls: usableCalls } : {}),
       },
       usage,
+      ...(truncated ? { stopReason: "max_tokens" } : {}),
     };
   }
 }
