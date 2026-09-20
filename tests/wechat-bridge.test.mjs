@@ -45,7 +45,7 @@ test("wechat bridge is disabled by default and fails closed", async (t) => {
 });
 
 test("readFrontChat archives window texts for one patient and deduplicates re-reads", async (t) => {
-  const f = await fixture(t, { wechatBridge: true });
+  const f = await fixture(t, { wechatBridge: true, wechatBridgePlatform: "darwin" });
   const log = [];
   const texts = [
     "张三：今天血压 150/95，早上忘吃药了",
@@ -80,7 +80,7 @@ test("readFrontChat archives window texts for one patient and deduplicates re-re
 });
 
 test("send uses the phone as contact, logs the outbound draft and refuses to act when WeChat is missing", async (t) => {
-  const f = await fixture(t, { wechatBridge: true });
+  const f = await fixture(t, { wechatBridge: true, wechatBridgePlatform: "darwin" });
   const log = [];
   f.server.wechat.runner = fakeRunner(log, {
     probe: PROBE_OK,
@@ -127,7 +127,7 @@ test("send uses the phone as contact, logs the outbound draft and refuses to act
 });
 
 test("missing automation permission surfaces as an actionable 503 and is cached in status", async (t) => {
-  const f = await fixture(t, { wechatBridge: true });
+  const f = await fixture(t, { wechatBridge: true, wechatBridgePlatform: "darwin" });
   const { AppError } = await import("../server/errors.mjs");
   f.server.wechat.runner = fakeRunner([], {
     probe: new AppError(

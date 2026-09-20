@@ -21,8 +21,17 @@ function directory(t) {
 for (const scenario of ["saved", "unknown"]) {
   test(`SIGKILL recovery preserves ${scenario} tool outcome without replaying effects`, async (t) => {
     const root = directory(t), worker = resolve("tests/fixtures/recovery-worker.mjs");
-    await assert.rejects(exec(process.execPath, [worker, root, "crash", scenario], { timeout: 15000 }),
-      (error) => error.signal === "SIGKILL");
+    // Windows cannot deliver POSIX signals: a self-SIGKILL surfaces as an
+    // abnormal exit code with no signal. The recover phase below verifies the
+    // actual no-replay semantics either way.
+    const crashed = (error) =>
+      process.platform === "win32"
+        ? error.signal == null && typeof error.code === "number" && error.code !== 0
+        : error.signal === "SIGKILL";
+    await assert.rejects(
+      exec(process.execPath, [worker, root, "crash", scenario], { timeout: 15000 }),
+      crashed,
+    );
     const result = await exec(process.execPath, [worker, root, "recover", scenario], { timeout: 15000 });
     assert.deepEqual(JSON.parse(result.stdout), { status: "completed", attempts: 1,
       rounds: scenario === "saved" ? 3 : 2, count: 1 });

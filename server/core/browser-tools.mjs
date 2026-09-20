@@ -2,6 +2,7 @@ import { chromium } from "playwright-core";
 import { check } from "../errors.mjs";
 import { resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Local-only fallbacks so self-verification works without any configuration.
 const browserCandidates = () =>
@@ -37,7 +38,7 @@ export function permittedURL(input, origins, root) {
       "本地文件浏览仅限授权工作区内的文件",
       403,
     );
-    const target = resolve(decodeURIComponent(url.pathname));
+    const target = resolve(fileURLToPath(url));
     check(
       target === root || target.startsWith(root + sep),
       "BROWSER_ORIGIN",

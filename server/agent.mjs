@@ -2,7 +2,7 @@ import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { readFile, stat } from "node:fs/promises";
-import { resolve, dirname, extname, join } from "node:path";
+import { resolve, dirname, extname, join, sep } from "node:path";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -43,7 +43,11 @@ import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
 import { searchIcd9 } from "./medical/icd9.mjs";
 import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
 import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
-import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
+import {
+  createMedicalWorkspaceDomain,
+  medicalWorkspaceEnabled,
+} from "./medical/medical-workspace-domain.mjs";
+import { PermissionEngine } from "./core/permissions.mjs";
 import { SessionBridge } from "./session-bridge.mjs";
 import { EmbeddingService } from "./medical/embeddings.mjs";
 import { LanceVectorStore } from "./medical/vector-store.mjs";
@@ -419,6 +423,71 @@ export function createServer(options = {}) {
     },
   });
   const agentRuntime = sessionBridge.dispatcher;
+
+  // 能力分层快照（W6，文档 4.4/12 的 CapabilitySnapshot 最小实现）：
+  // 在实际组装工具列表的位置（WorkspaceService.registry）之上，把
+  // 「已授权」（权限引擎判定）与「环境就绪」（容器后端等运行事实）
+  // 分开，并给出当前可执行三态与不可用原因/补救动作。先服务测试与
+  // 日志；UI 呈现归后续工作。Docker 判定复用 ProcessRunner.status 的
+  // daemon 探测（0.9.7 起 docker-down 与 missing image 已区分，镜像
+  // 存在性由执行路径的 image() 精确报错，快照只报配置引用）。
+  const capabilitySnapshot = (id) => {
+    const w = workspaces.store.get(id);
+    const engine = new PermissionEngine(w.permissions);
+    // 与 WorkspaceService.capabilities 相同的组装口径（含可委派工具），
+    // 权限过滤改由快照的 authorized 三态表达。
+    const registry = workspaces.registry(id, "manual", { allowDelegate: true });
+    const backend = workspaces.extensions.runner.status();
+    // 容器执行类工具：经 ProcessRunner 在 Docker Linux 容器中运行。
+    // code_execute 同持 process.spawn 权限，但在应用内隔离 Node 环境
+    // 编排工具，不依赖容器后端，故排除。
+    const needsContainer = (name, permission) =>
+      permission === "process.spawn" && name !== "code_execute";
+    const tools = [...registry.tools.values()].map((tool) => {
+      const name = tool.definition.function.name;
+      const authorized =
+        engine.can("tools.execute") && engine.can(tool.permission);
+      const container = needsContainer(name, tool.permission);
+      const ready = container ? backend.available === true : true;
+      return {
+        name,
+        permission: tool.permission,
+        authorized,
+        ready,
+        executable: authorized && ready,
+        ...(!authorized
+          ? {
+              reason: `当前权限不含 ${tool.permission}`,
+              remedy: "在任务设置中授予对应权限后可用",
+            }
+          : !ready
+            ? {
+                reason: backend.reason || "容器执行后端不可用",
+                remedy: "启动 Docker（Linux 容器模式）并导入离线运行时镜像",
+              }
+            : {}),
+      };
+    });
+    return {
+      version: 1,
+      workspaceId: id,
+      domain: workspaces.domain.id,
+      medical: medicalWorkspaceEnabled(w),
+      environment: {
+        container: backend,
+        image: w.extensions?.image || null,
+        pythonSandbox: workspaces.sandbox?.status() || null,
+        vision: workspaces.provider.vision === true,
+      },
+      tools,
+      counts: {
+        total: tools.length,
+        authorized: tools.filter((t) => t.authorized).length,
+        ready: tools.filter((t) => t.ready).length,
+        executable: tools.filter((t) => t.executable).length,
+      },
+    };
+  };
   const secret = options.token || randomBytes(32).toString("hex");
   const scheduler = new MedicalScheduler(store, agentRuntime, {
     ...options.schedulerOptions,
@@ -470,6 +539,8 @@ export function createServer(options = {}) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    // 测试缝:允许 fixture 注入 darwin 以覆盖桥接逻辑;默认真实平台。
+    platform: options.wechatBridgePlatform ?? process.platform,
   });
   const ingestSecret =
     options.ingestSecret || process.env.MEDICAL_INGEST_SECRET || "";
@@ -642,6 +713,14 @@ export function createServer(options = {}) {
       if (path === "/api/bootstrap" && req.method === "GET")
         return send(res, 200, {
           token: secret,
+          // 与 server/platform.mjs 的 App Shell 契约一致：本服务是融合
+          // 应用，显式声明医疗能力可用（前端 medicalEnabled 优先读
+          // capabilities，patientsEnabled 仅为旧客户端兼容回退）。
+          capabilities: {
+            workspaces: true,
+            modelSettings: true,
+            medical: true,
+          },
           model: provider.model,
           modelConfigured: providerConfigured(provider),
           contextBudget: runtime.maxContextChars,
@@ -712,6 +791,67 @@ export function createServer(options = {}) {
           wechat: { enabled: wechat.enabled },
         });
       if (path.startsWith("/api/")) guard(req, true);
+      // 医疗领域能力按需启用（W6）：普通项目默认通用工具面；以下显式
+      // 入口打开医疗叠层。会话型工作区（首页/患者会话）始终医疗，不经
+      // 此路径。这两个入口属于医疗应用组合根，通用平台服务不感知。
+      {
+        const domainParts = path.split("/").filter(Boolean);
+        if (
+          domainParts[0] === "api" &&
+          domainParts[1] === "workspaces" &&
+          domainParts.length === 4 &&
+          domainParts[3] === "capability-snapshot" &&
+          req.method === "GET"
+        )
+          return send(res, 200, capabilitySnapshot(identifier(domainParts[2])));
+        if (
+          domainParts[0] === "api" &&
+          domainParts[1] === "workspaces" &&
+          domainParts.length === 4 &&
+          domainParts[3] === "domain" &&
+          req.method === "POST"
+        ) {
+          const id = identifier(domainParts[2]);
+          const b = await body(req);
+          check(
+            typeof b.enabled === "boolean",
+            "INVALID_INPUT",
+            "enabled 必须为布尔值",
+          );
+          const current = workspaces.get(id);
+          check(
+            current.kind !== "session",
+            "SESSION_DOMAIN",
+            "会话型工作区的医疗能力由会话本身决定，不能切换",
+            409,
+          );
+          check(
+            Number.isSafeInteger(b.revision) && b.revision === current.revision,
+            "REVISION_CONFLICT",
+            "工作区已变化，请刷新",
+            409,
+          );
+          return send(res, 200, workspaces.setModeFlag(id, "medical", b.enabled));
+        }
+        if (path === "/api/workspaces" && req.method === "POST") {
+          const b = await body(req);
+          check(
+            b.domain === undefined || b.domain === "medical",
+            "INVALID_INPUT",
+            "未知的工作领域",
+          );
+          const created = workspaces.create(b);
+          // 创建时明确选择医疗场景：落到工作区 modeFlags.medical 开关，
+          // 与运行时切换共用同一持久化字段与审计语义。
+          if (b.domain === "medical" || b.medical === true)
+            return send(
+              res,
+              201,
+              workspaces.setModeFlag(created.id, "medical", true),
+            );
+          return send(res, 201, created);
+        }
+      }
       if (
         await workspaceApi({
           service: workspaces,
@@ -1531,7 +1671,7 @@ export function createServer(options = {}) {
       const dist = resolve(ROOT, "../dist");
       let target = resolve(dist, `.${path}`);
       check(
-        target === dist || target.startsWith(dist + "/"),
+        target === dist || target.startsWith(dist + sep),
         "PATH",
         "路径无效",
         403,
@@ -1654,6 +1794,9 @@ export function createServer(options = {}) {
   });
   server.store = store;
   server.runtime = runtime;
+  // 供测试与诊断日志直接调用；HTTP 入口为
+  // GET /api/workspaces/:id/capability-snapshot。
+  server.capabilitySnapshot = capabilitySnapshot;
   server.sessionBridge = sessionBridge;
   server.workspaces = workspaces;
   server.materials = materials;

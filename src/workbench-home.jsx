@@ -24,7 +24,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { api } from "./agent-runtime";
+import { api, medicalEnabled } from "./agent-runtime";
 
 export const MEDICAL_WORKFLOWS = [
   {
@@ -238,6 +238,9 @@ export function WorkbenchHome({
   const consentRequired = Boolean(config?.modelConfigured) && accessMode === "each";
   useEffect(() => {
     let live = true;
+    // 双保险:无医疗能力时不请求患者/提醒/收件/风险接口(通用服务上这些
+    // 接口不存在,请求会进入错误态)。外壳也不应在通用模式下渲染本视图。
+    if (!config || !medicalEnabled(config)) return () => {};
     const refresh = async () => {
       try {
         const [people, todo, inbox, risks] = await Promise.all([

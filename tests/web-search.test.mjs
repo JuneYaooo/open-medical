@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { searchWeb, fetchWeb } from "../server/core/web-tools.mjs";
 
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel>
@@ -140,18 +143,18 @@ test("brave search is preferred over keyless engines when a key is present", asy
 
 test("permittedURL allows workspace-local files and nothing beyond", async () => {
   const { permittedURL } = await import("../server/core/browser-tools.mjs");
-  const root = "/tmp/omw-root";
-  const inside = "file:///tmp/omw-root/site/index.html";
+  const root = resolve(tmpdir(), "omw-root");
+  const inside = pathToFileURL(resolve(root, "site/index.html")).href;
   assert.equal(permittedURL(inside, [], root), inside);
   // Traversal-style encodings that escape the root are rejected.
   assert.throws(
-    () => permittedURL("file:///tmp/omw-root/../../etc/passwd", [], root),
+    () => permittedURL(pathToFileURL(root).href + "/../../etc/passwd", [], root),
     { code: "BROWSER_ORIGIN" },
   );
-  assert.throws(() => permittedURL("file:///etc/hosts", [], root), {
+  assert.throws(() => permittedURL(pathToFileURL(resolve(root, "../hosts")).href, [], root), {
     code: "BROWSER_ORIGIN",
   });
-  assert.throws(() => permittedURL("file:///tmp/omw-other/x.html", [], root), {
+  assert.throws(() => permittedURL(pathToFileURL(resolve(root, "../omw-other/x.html")).href, [], root), {
     code: "BROWSER_ORIGIN",
   });
   // Without a root, local browsing is entirely disabled.

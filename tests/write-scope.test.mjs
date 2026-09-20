@@ -120,17 +120,31 @@ test("scope entries are validated with the same path protections as writes", asy
       }),
     { code: "WRITE_SCOPE" },
   );
-  // Symlinked scope entries are rejected like symlinked writes.
+  // Overlap folding depends on the volume: macOS/Windows compare
+  // case-insensitively, so these collide; Linux keeps them distinct.
+  if (["darwin", "win32"].includes(process.platform))
+    assert.throws(() => f.update({ writeScope: ["Docs", "docs/x"] }), {
+      code: "WRITE_SCOPE",
+    });
+  else f.update({ writeScope: ["Docs", "docs/x"] });
+});
+
+test("symlinked scope entries are rejected like symlinked writes", async (t) => {
+  const f = fixture(t);
   mkdirSync(join(f.root, "real"), { recursive: true });
   writeFileSync(join(f.root, "real/f.txt"), "x");
   const { symlinkSync } = await import("node:fs");
-  symlinkSync(join(f.root, "real"), join(f.root, "link-dir"));
+  try {
+    symlinkSync(join(f.root, "real"), join(f.root, "link-dir"));
+  } catch (error) {
+    // Creating symlinks needs Developer Mode/admin on Windows and is
+    // unrestricted on POSIX — skip only when the OS itself denies it.
+    if (error.code === "EPERM" || error.code === "EACCES")
+      t.skip(`symlink creation denied by this platform/account (${error.code})`);
+    throw error;
+  }
   assert.throws(() => f.update({ writeScope: ["link-dir"] }), {
     code: "PATH_DENIED",
-  });
-  // Case-insensitive overlap on macOS/Windows.
-  assert.throws(() => f.update({ writeScope: ["Docs", "docs/x"] }), {
-    code: "WRITE_SCOPE",
   });
 });
 

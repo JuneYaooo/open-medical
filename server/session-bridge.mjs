@@ -10,6 +10,11 @@ import { medicalPolicy } from "../shared/medical.mjs";
 import { runTool, localWork } from "./medical-core.mjs";
 import { consultationNotice, publicSession } from "./runtime.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
+import {
+  assertRunTransition,
+  deriveRunStatus,
+  waitingReasonFor,
+} from "./core/run-status.mjs";
 
 const hashText = (value) => createHash("sha256").update(value).digest("hex");
 const iso = () => new Date().toISOString();
@@ -230,26 +235,44 @@ export class SessionBridge {
   }
 
   // ---------- 投影：workspace → session 形状 ----------
+  // 运行状态判定复用 run-status.mjs 的单一实现（W4）：桥接层只提供
+  // 持久事实（该 run 的 pending 审批数、是否为当前活跃运行），不自行
+  // 推导；status 原值保持不变，derivedStatus/waitingReason 为新增字段。
   project(w) {
-    const runs = (w.runs || []).map((run) => ({
-      id: run.id,
-      requestId: run.requestId,
-      status: run.status,
-      mode: run.mode || "model",
-      policy: run.policy,
-      startedAt: run.startedAt,
-      endedAt: run.endedAt,
-      partial: run.partial,
-      error: run.error,
-      roundsUsed: run.roundsUsed || run.usage?.rounds || 0,
-      usage: {
-        total_tokens: run.usage?.total_tokens || 0,
-        rounds: run.roundsUsed || run.usage?.rounds || 0,
-      },
-      fileIds: run.fileIds || [],
-      artifacts: run.artifacts || [],
-      children: run.children || [],
-    }));
+    const activeRunId = this.service.active.get(w.id)?.run?.id || null;
+    const runFacts = (run) => ({
+      pendingApprovals: (w.approvals || []).filter(
+        (a) => a.status === "pending" && a.runId === run.id,
+      ).length,
+      active: run.id === activeRunId,
+    });
+    const runs = (w.runs || []).map((run) => {
+      const facts = runFacts(run);
+      const waitingReason = waitingReasonFor(run, facts);
+      return {
+        id: run.id,
+        requestId: run.requestId,
+        status: run.status,
+        derivedStatus: deriveRunStatus(run, facts),
+        ...(waitingReason ? { waitingReason } : {}),
+        mode: run.mode || "model",
+        policy: run.policy,
+        startedAt: run.startedAt,
+        endedAt: run.endedAt,
+        partial: run.partial,
+        error: run.error,
+        roundsUsed: run.roundsUsed || run.usage?.rounds || 0,
+        usage: {
+          total_tokens: run.usage?.total_tokens || 0,
+          rounds: run.roundsUsed || run.usage?.rounds || 0,
+        },
+        fileIds: run.fileIds || [],
+        artifacts: run.artifacts || [],
+        children: run.children || [],
+        ...(run.delivery ? { delivery: run.delivery } : {}),
+        ...(run.outcome ? { outcome: run.outcome } : {}),
+      };
+    });
     const intentOf = (runId) =>
       runs.find((r) => r.id === runId)?.policy?.intent;
     const messages = (w.messages || []).map((m) => ({
@@ -489,6 +512,7 @@ export class SessionBridge {
         this.service.store.update(workspaceId, (current) => {
           const target = current.runs.find((r) => r.id === prepared.handle.run.id);
           if (target) {
+            assertRunTransition(target.status, "failed");
             target.status = "failed";
             target.error = message;
           }

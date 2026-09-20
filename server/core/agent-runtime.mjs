@@ -1,4 +1,5 @@
 import { check } from "../errors.mjs";
+import { normalizeDelivery } from "./delivery.mjs";
 
 // Provider + authorized tools + context in, events and complete context out.
 // No medical policy, persistence implementation or transport is imported here.
@@ -32,6 +33,11 @@ export class AgentRuntime {
     onTrace = () => {},
     onRound = () => {},
     offload,
+    // 可选交付验证钩子（W5 seam）：由域/服务层提供，在无 tool_calls 且
+    // beforeComplete 放行的返回点调用；返回 {delivered, evidence, gaps}
+    // 形态（经 normalizeDelivery 归一）。未提供或抛错时保持现状——循环
+    // 照常完成，不附加 delivery 字段（向后兼容）。
+    onDelivery,
   }) {
     permissions.require("model.external", "当前授权不允许调用模型服务");
     let messages = structuredClone(input);
@@ -175,7 +181,44 @@ export class AgentRuntime {
         }
         signal.throwIfAborted();
         await onCheckpoint(structuredClone(messages));
-        return { messages, text, rounds: round + 1 };
+        // 交付证据 seam：完成前由运行时事实核对交付（不是模型自评）。
+        // 钩子异常不阻断完成——按“未能验证”记录事件，不伪造 delivered。
+        let delivery = null;
+        const verify =
+          typeof onDelivery === "function"
+            ? onDelivery
+            : domain?.verifyDelivery;
+        if (typeof verify === "function") {
+          try {
+            delivery = normalizeDelivery(
+              await verify({
+                messages: structuredClone(messages),
+                text,
+                signal,
+                context,
+              }),
+            );
+          } catch (error) {
+            signal.throwIfAborted();
+            emit("delivery.unverified", {
+              reason: error.code || "DELIVERY_CHECK_FAILED",
+              error: error.code ? error.message : "交付检查未能执行",
+            });
+            delivery = null;
+          }
+          if (delivery)
+            emit(delivery.delivered ? "delivery.verified" : "delivery.gaps", {
+              delivered: delivery.delivered,
+              evidence: delivery.evidence.length,
+              gaps: delivery.gaps.length,
+            });
+        }
+        return {
+          messages,
+          text,
+          rounds: round + 1,
+          ...(delivery ? { delivery } : {}),
+        };
       }
       check(
         permissions.can("tools.execute"),

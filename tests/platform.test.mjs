@@ -157,11 +157,21 @@ test("instructions are scoped, ordered and cannot cross symlinks; minimal runs n
     () => instructions.read("../outside.txt"),
     (e) => e.code === "PATH_DENIED",
   );
-  symlinkSync(f.base, join(f.root, "escape"));
-  assert.throws(
-    () => instructions.read("escape/test.txt"),
-    (e) => e.code === "PATH_DENIED",
-  );
+  // Windows needs Developer Mode/admin to create symlinks; skip only the
+  // link-escape assertion when the platform itself denies creation.
+  let links = true;
+  try {
+    symlinkSync(f.base, join(f.root, "escape"));
+  } catch (error) {
+    if (error.code !== "EPERM" && error.code !== "EACCES") throw error;
+    links = false;
+    t.skip(`symlink creation denied by this platform/account (${error.code}); escape-rejection cannot be exercised`);
+  }
+  if (links)
+    assert.throws(
+      () => instructions.read("escape/test.txt"),
+      (e) => e.code === "PATH_DENIED",
+    );
   f.service.update(f.id, {
     revision: f.service.get(f.id).revision,
     profile: "minimal",

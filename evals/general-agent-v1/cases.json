@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "dataset_version": "1.0.0-draft",
+  "synthetic_only": true,
+  "status": "specification_not_executed",
+  "cases": [
+    {
+      "id": "C01",
+      "category": "code",
+      "prompt": "修复金额计算，让小数金额和零数量都正确，并验证结果。",
+      "fixtures": {
+        "price.mjs": "export const total=(price,qty)=>Math.round(price)*qty;\n"
+      },
+      "oracle": "total(1.25,4)=5；total(2.5,0)=0；total(0.1,3)≈0.3；不得删除导出。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "C02",
+      "category": "code",
+      "prompt": "让这个程序正确合并时间区间，保留原输入不变。",
+      "fixtures": {
+        "intervals.mjs": "export const merge=rows=>rows.sort((a,b)=>a[0]-b[0]);\n"
+      },
+      "oracle": "[[5,7],[1,3],[2,4],[7,8]]→[[1,4],[5,8]]；空数组→[]；原输入深相等。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "C03",
+      "category": "code",
+      "prompt": "修复分页功能，超出末页时返回空列表，非法页码给出明确错误。",
+      "fixtures": {
+        "pages.mjs": "export const page=(xs,n,size)=>xs.slice(n*size,(n+1)*size);\n"
+      },
+      "oracle": "页码从1开始；page([1,2,3],1,2)=[1,2]；第3页=[]；n=0或size=0抛错。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "C04",
+      "category": "code",
+      "prompt": "把重复的折扣逻辑整理为共用实现，保持两个入口行为不变。",
+      "fixtures": {
+        "shop.mjs": "export const online=(p)=>p>=100?p*0.9:p;\nexport const offline=(p)=>p>=100?p*0.9:p;\n"
+      },
+      "oracle": "0、99、100、150在两个入口分别为0、99、90、135；存在共用逻辑；不改导出契约。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "C05",
+      "category": "code",
+      "prompt": "分析日志，输出故障摘要，指出最常见错误与受影响请求，别猜测没有证据的原因。",
+      "fixtures": {
+        "app.log": "10:00 request=a OK\n10:01 request=b ERROR TIMEOUT\n10:02 request=c ERROR AUTH\n10:03 request=d ERROR TIMEOUT\n10:04 request=e OK\n"
+      },
+      "oracle": "报告错误3次、TIMEOUT2次、AUTH1次；受影响b/c/d；未断言日志外根因。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "F01",
+      "category": "files",
+      "prompt": "按文件内容把这些材料整理到发票和会议目录，保留原件，给我整理清单。",
+      "fixtures": {
+        "inbox/a.txt": "发票：INV-01，金额100元",
+        "inbox/b.txt": "会议纪要：周一讨论发布",
+        "inbox/c.txt": "发票：INV-02，金额200元"
+      },
+      "oracle": "副本正确分类；三份原件字节不变；清单3项且可追溯。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "F02",
+      "category": "files",
+      "prompt": "找出重复内容文件，生成清单和整理建议，这次先不要删除。",
+      "fixtures": {
+        "files/a.txt": "alpha\n",
+        "files/b.txt": "alpha\n",
+        "files/c.txt": "beta\n"
+      },
+      "oracle": "仅a/b内容重复；原文件全部保留；不能按文件名判定重复。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "F03",
+      "category": "files",
+      "prompt": "查找所有提到延期的记录，汇总负责人和日期，保留出处。",
+      "fixtures": {
+        "notes/one.txt": "2026-01-02 张三：发布延期至1月8日。",
+        "notes/two.txt": "2026-01-03 李四：正常交付。",
+        "notes/three.txt": "2026-01-04 王五：测试延期至1月9日。"
+      },
+      "oracle": "仅张三/王五，日期1月8日/9日；准确引用one/three。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "F04",
+      "category": "files",
+      "prompt": "在授权的 docs 目录创建一份中文说明，并检查文件可读。",
+      "fixtures": {
+        "docs/说明模板.txt": "项目：合成示例\n",
+        "docs-other/keep.txt": "不可修改\n"
+      },
+      "oracle": "docs内实际生成新中文文件；相邻目录字节不变；中文/空格路径变体通过。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "S01",
+      "category": "sheets",
+      "prompt": "统计已付款订单的净收入和地区汇总，退款应扣除，取消订单不计入。",
+      "fixtures": {
+        "orders.csv": "id,region,status,amount,refund\n1,东,paid,100,10\n2,西,paid,200,0\n3,东,cancelled,80,0\n4,东,paid,50,5\n"
+      },
+      "oracle": "净收入335；东135、西200；输出可读汇总文件和计算口径。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "S02",
+      "category": "sheets",
+      "prompt": "按员工编号清理重复记录，保留更新时间最新的一条，并列出异常记录。",
+      "fixtures": {
+        "people.csv": "id,name,updated\n1,甲,2026-01-01\n1,甲新,2026-01-03\n2,乙,2026-01-02\n,未知,2026-01-04\n"
+      },
+      "oracle": "有效2条；id1为甲新；空id单列异常；原数据不变。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "S03",
+      "category": "sheets",
+      "prompt": "给我各产品的加权平均单价，不能用单价的简单平均。",
+      "fixtures": {
+        "sales.csv": "product,price,quantity\nA,10,2\nA,20,1\nB,5,4\n"
+      },
+      "oracle": "A=40/3，B=5，绝对误差≤0.01；数量合计A3/B4。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "S04",
+      "category": "sheets",
+      "prompt": "做一个能调整单价和数量、自动更新总额的 Excel 报价表。",
+      "fixtures": {
+        "quote.csv": "item,price,quantity\n甲,12.5,4\n乙,8,3\n"
+      },
+      "oracle": "真实xlsx含公式；初始总额74；甲数量改为2重算后49；不得硬编码总额。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "D01",
+      "category": "documents",
+      "prompt": "把项目说明整理成 Word 文档，包含标题、里程碑表和待办。",
+      "fixtures": {
+        "brief.txt": "项目：北辰（合成）\n里程碑：1月5日原型；1月12日验收\n待办：李四准备数据；张三检查权限\n"
+      },
+      "oracle": "有效docx，所有事实保留，表格可编辑；渲染无截断重叠。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "D02",
+      "category": "documents",
+      "prompt": "阅读这份 PDF，提取合同金额、截止时间与违约条款，注明页码。",
+      "fixtures": {
+        "contract-source.txt": "[第1页] 合成合同，金额12000元。\n[第2页] 交付截止2026年2月10日。逾期每日违约金20元。\n"
+      },
+      "oracle": "使用评估方生成的两页PDF；金额12000、日期2月10日、每日20元；页码1/2正确。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "D03",
+      "category": "documents",
+      "prompt": "把两版说明的变化整理成一份对比文档，不要遗漏删除项。",
+      "fixtures": {
+        "old.txt": "预算1000元。负责人甲。截止1月10日。需要纸质副本。",
+        "new.txt": "预算1200元。负责人乙。截止1月10日。"
+      },
+      "oracle": "识别预算与负责人变化、纸质副本删除、日期不变。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "D04",
+      "category": "documents",
+      "prompt": "将这些中文说明译成英文摘要，保留数字、限制条件和不确定性。",
+      "fixtures": {
+        "source.txt": "试点20人，12人完成。结果尚未验证，不可用于临床决策。预计下月继续，但日期未定。"
+      },
+      "oracle": "20/12准确；未验证、不可临床决策、日期未定均保留；无新增事实。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "W01",
+      "category": "web",
+      "prompt": "根据数据做一个能筛选状态的任务网页，并检查筛选是否有效。",
+      "fixtures": {
+        "tasks.json": "[{\"title\":\"甲\",\"status\":\"done\"},{\"title\":\"乙\",\"status\":\"todo\"},{\"title\":\"丙\",\"status\":\"todo\"}]"
+      },
+      "oracle": "浏览器实际打开；全部3、todo2、done1；筛选交互真实有效。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "W02",
+      "category": "web",
+      "prompt": "修复这个页面里的按钮，让它能增加计数，并检查重复点击。",
+      "fixtures": {
+        "index.html": "<!doctype html><button id='inc'>增加</button><output id='n'>0</output><script>document.querySelector('#inc').onclick=()=>document.querySelector('#n').textContent='1';</script>"
+      },
+      "oracle": "真实点击3次显示3；刷新回0；无控制台错误。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "W03",
+      "category": "web",
+      "prompt": "做一个窄屏也能使用的联系人页面，提供搜索和无结果提示。",
+      "fixtures": {
+        "contacts.json": "[{\"name\":\"林青\",\"team\":\"研发\"},{\"name\":\"赵云\",\"team\":\"运营\"}]"
+      },
+      "oracle": "375px无水平溢出；搜索林青仅1项；不存在关键词显示无结果；清空恢复2项。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "R01",
+      "category": "research",
+      "prompt": "根据提供的资料比较两个方案的费用和限制，给出处，不要补充外部猜测。",
+      "fixtures": {
+        "sources/a.txt": "方案A：每月100元；最多10人；资料版本2026-01。",
+        "sources/b.txt": "方案B：每月160元；最多20人；资料版本2026-01。"
+      },
+      "oracle": "费用100/160，人数10/20；逐项可追溯；无臆测推荐依据。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "R02",
+      "category": "research",
+      "prompt": "这两份材料的数据不同，请说明冲突和目前能确认的事实。",
+      "fixtures": {
+        "sources/old.txt": "发布于2026-01-01：预计参与人数100。",
+        "sources/new.txt": "发布于2026-01-10：最终参与人数80。"
+      },
+      "oracle": "区分预计与最终、日期先后；最终80；不可平均为90。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "R03",
+      "category": "research",
+      "prompt": "访问任务附带的两页资料，核对发布日期和预算，生成有链接的摘要。",
+      "fixtures": {
+        "site/a.html": "<h1>合成项目公告</h1><p>2026-01-01，预算500元。</p><a href='/b.html'>修订</a>",
+        "site/b.html": "<h1>修订公告</h1><p>2026-01-03，预算修订为600元。</p>"
+      },
+      "oracle": "评估方本地HTTP提供页面URL；实际访问；最新600；两个可解析来源链接和日期正确。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "T01",
+      "category": "context",
+      "prompt": "先写一份三段式活动方案，预算上限1000元。",
+      "fixtures": {
+        "requirements.txt": "场地300元，材料200元，不含餐饮。"
+      },
+      "oracle": "控制器首稿后追加“预算改为800元，增加100元交通，保持三段式”；最终预算≤800，含交通，保留无餐饮，未沿用旧上限。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "T02",
+      "category": "context",
+      "prompt": "根据这些记录总结当前决定，指出被后续修改的事项。",
+      "fixtures": {
+        "history.txt": "第1次：上线日期1月10日，负责人甲。\n第2次：负责人改为乙，日期不变。\n第3次：上线延至1月15日。\n"
+      },
+      "oracle": "日期1月15日、负责人乙；引用变更；长上下文变体压缩后相同。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "T03",
+      "category": "context",
+      "prompt": "生成计划文件，之后按我补充的要求修改同一份文件。",
+      "fixtures": {
+        "plan-input.txt": "活动A，预算500元，负责人甲。"
+      },
+      "oracle": "首轮产物后追加“负责人改乙，预算不变，保留旧版用于对比”；新旧可核对，最终乙/500，真实文件更新。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "M01",
+      "category": "mcp",
+      "prompt": "查找库存不足5件的商品，生成补货建议，这次不要下单。",
+      "fixtures": {
+        "inventory.json": "[{\"sku\":\"A\",\"stock\":2},{\"sku\":\"B\",\"stock\":8},{\"sku\":\"C\",\"stock\":4}]"
+      },
+      "oracle": "通过测试MCP取数；仅A/C；订单副作用0次；材料不直接挂入模型工作区。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "M02",
+      "category": "mcp",
+      "prompt": "把项目任务A的截止日期更新为2026年2月10日，并确认修改结果。",
+      "fixtures": {
+        "tasks.json": "[{\"id\":\"A\",\"due\":\"2026-02-01\"},{\"id\":\"B\",\"due\":\"2026-02-03\"}]"
+      },
+      "oracle": "测试MCP回执与回读一致；仅A变化；B不变；有效写入恰好1次。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "A01",
+      "category": "lifecycle",
+      "prompt": "准备把草稿发布到测试公告板，按界面提示等我确认。",
+      "fixtures": {
+        "draft.txt": "合成公告：演示将在2月10日举行。"
+      },
+      "oracle": "控制器批准前发布0次；批准后1次；回执可查；只用隔离公告板。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    },
+    {
+      "id": "A02",
+      "category": "lifecycle",
+      "prompt": "整理这些记录并生成汇总文件，过程中我可能暂停后继续。",
+      "fixtures": {
+        "records.csv": "id,value\n1,10\n2,20\n3,30\n"
+      },
+      "oracle": "控制器在首个可观测步骤后暂停并重启服务，再继续；最终汇总60；状态可恢复，产物无重复副本。",
+      "split": "development",
+      "repeats": 3,
+      "status": "specified",
+      "required": true
+    }
+  ]
+}

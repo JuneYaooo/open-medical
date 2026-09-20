@@ -7,7 +7,7 @@ import { compactContext } from "./context-manager.mjs";
 import { PermissionEngine } from "./permissions.mjs";
 import { WorkspaceFiles } from "./workspace-files.mjs";
 import { check } from "../errors.mjs";
-import { scopesOverlap } from "./write-scope.mjs";
+import { scopesOverlap, scopeCovers, posixRelative } from "./write-scope.mjs";
 
 const TERMINAL = new Set([
   "completed",
@@ -198,10 +198,15 @@ export class AgentTeam {
       "写入代理必须声明文件清单；其他代理不能声明写入文件",
     );
     const files = new WorkspaceFiles(w.root);
+    // Same canonical form as assertWriteScope/#normalizeWriteScope: real-path
+    // and symlink checks live in files.path; separators are unified for
+    // comparison so Windows `\` and POSIX `/` spellings agree.
     writePaths = [
       ...new Set(
         writePaths.map((p) =>
-          relative(files.root, files.path(p, { create: true, parents: true })),
+          posixRelative(
+            relative(files.root, files.path(p, { create: true, parents: true })),
+          ),
         ),
       ),
     ];
@@ -210,9 +215,7 @@ export class AgentTeam {
     if (Array.isArray(w.writeScope))
       check(
         writePaths.every((p) =>
-          w.writeScope.some(
-            (scope) => p === scope || p.startsWith(scope + "/"),
-          ),
+          w.writeScope.some((scope) => scopeCovers(scope, p)),
         ),
         "WRITE_SCOPE",
         "子代理写入清单超出工作区可写范围",

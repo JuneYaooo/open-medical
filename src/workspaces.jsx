@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { WorkspaceExtensionsPanel } from "./workspace-extensions";
 import { WorkspaceDevelopment } from "./workspace-development";
-import { api } from "./agent-runtime";
+import { api, medicalEnabled } from "./agent-runtime";
 import { sseFrames } from "../shared/sse.mjs";
 import "./workspaces.css";
 import { MediaPanel } from "./workbench/media";
@@ -30,6 +30,8 @@ import { BrowserPanel } from "./workbench/browser";
 import { RichMessage } from "./workbench/message";
 import { DiffView } from "./workbench/diff";
 import { Activity } from "./workbench/activity";
+import { RunStatusNotice, OutcomeCard } from "./workbench/run-status-view";
+import { blockedText, runChipLabel } from "./workbench/run-status";
 import { ComposerTools } from "./workbench/composer-tools";
 import { Artifacts } from "./workbench/artifacts";
 import { IconButton, Modal } from "./components";
@@ -687,9 +689,16 @@ export function WorkspacesView({
       if (abort.current === controller) abort.current = null;
     }
   }
-  const pendingApprovals = current?.approvals.filter(
-    (a) => a.status === "pending",
-  ) || [];
+  const pendingApprovals =
+    current?.approvals.filter((a) => a.status === "pending") || [];
+  // W7 状态呈现：活跃运行 + 待审批数 → 统一等待状态（优先服务端
+  // derivedStatus，通用接口未下发时按同一事实在展示层归一）。
+  const activeRun =
+    current?.runs.findLast((r) => ["running", "queued"].includes(r.status)) ||
+    null;
+  const lastRun = current?.runs.at(-1) || null;
+  // 文案按能力渲染:纯通用模式不宣称医疗工具可用。
+  const medical = medicalEnabled(config);
   return (
     <div className="shell workspace-shell">
       {showCreate && (
@@ -715,7 +724,8 @@ export function WorkspacesView({
             }}
           >
             <p className="muted">
-              选择助手可以读取的本地文件夹。文件修改会单独请求授权，医疗工具在项目任务中同样可用。
+              选择助手可以读取的本地文件夹。文件修改会单独请求授权
+              {medical ? "，医疗工具在项目任务中同样可用。" : "。"}
             </p>
             <label>
               名称
@@ -814,7 +824,7 @@ export function WorkspacesView({
             <h3>项目工作区</h3>
             <p>
               连接一个本地文件夹开始：读取限定在授权目录内，文件修改先查看、再批准。
-              医疗工具（文献、知识库、用药核查）在项目任务中同样可用。
+              {medical ? "医疗工具（文献、知识库、用药核查）在项目任务中同样可用。" : ""}
             </p>
             <button
               className="secondary"
@@ -903,7 +913,7 @@ export function WorkspacesView({
                   }
                 >
                   {running
-                    ? "● 执行中"
+                    ? `● ${runChipLabel(activeRun, pendingApprovals.length) || "执行中"}`
                     : config.modelConfigured
                       ? `${config.model} · ${
                           current.permissions.grants["filesystem.write"]
@@ -958,7 +968,9 @@ export function WorkspacesView({
                   )}
                   <div className="welcome-note">
                     <ShieldCheck size={14} />
-                    读取限定在授权目录内；文献、知识库、用药核查等医疗工具在项目任务中同样可用。
+                    {medical
+                      ? "读取限定在授权目录内；文献、知识库、用药核查等医疗工具在项目任务中同样可用。"
+                      : "读取限定在授权目录内；文件修改按授权档位审批后写入。"}
                   </div>
                 </div>
               )}
@@ -1010,6 +1022,20 @@ export function WorkspacesView({
                   </article>
                 )}
               </div>
+              <RunStatusNotice
+                run={activeRun}
+                pendingCount={pendingApprovals.length}
+                onApprove={() => {
+                  setPanel("review");
+                  setInspectorOpen(true);
+                }}
+              />
+              {!running && lastRun && (lastRun.outcome || lastRun.delivery) && (
+                <OutcomeCard
+                  outcome={lastRun.outcome}
+                  delivery={lastRun.delivery}
+                />
+              )}
               <Artifacts
                 key={current.id}
                 current={current}
@@ -1572,7 +1598,8 @@ export function WorkspacesView({
                   )}
                 </section>
                 <p className="desk-settings-help">
-                  模型连接是本机全局设置；医疗能力、文件权限与扩展配置只作用于当前工作区。
+                  模型连接是本机全局设置；
+                  {medical ? "医疗能力、" : ""}文件权限与扩展配置只作用于当前工作区。
                 </p>
               </div>
               <div hidden={panel !== "settings"}>
@@ -1927,6 +1954,11 @@ export function WorkspacesView({
                         {stateLabel(r.status)} ·{" "}
                         {new Date(r.startedAt).toLocaleString()}
                       </span>
+                      {r.derivedStatus === "blocked" && (
+                        <p className="wb-run-blocked">
+                          受阻：{blockedText(r.waitingReason)}
+                        </p>
+                      )}
                       {r.error && <p>{r.error}</p>}
                       <p>
                         用量：{r.usage?.total_tokens || 0} tokens ·{" "}

@@ -15,6 +15,22 @@ import { WorkspaceFiles } from "../server/core/workspace-files.mjs";
 import { WorkspaceStore } from "../server/core/workspace-store.mjs";
 import { Store } from "../server/store.mjs";
 
+// Creating symlinks needs Developer Mode/admin on Windows and is unrestricted
+// on POSIX — probe the capability and skip only the link-dependent assertions
+// when the OS itself denies creation.
+function trySymlink(t, target, path, what) {
+  try {
+    symlinkSync(target, path);
+    return true;
+  } catch (error) {
+    if (error.code === "EPERM" || error.code === "EACCES") {
+      t.skip(`symlink creation denied by this platform/account (${error.code}); ${what}`);
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function setup(t, options = {}) {
   const root = mkdtempSync(join(tmpdir(), "generic-workspace-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -61,16 +77,22 @@ test("generic workspaces require directory consent and do not become patients or
 test("workspace files reject traversal, protected files, links and unknown arguments", async (t) => {
   const f = await setup(t);
   writeFileSync(join(f.root, ".env"), "SYNTHETIC SECRET");
-  symlinkSync(join(f.root, "note.txt"), join(f.root, "alias.txt"));
-  for (const path of [
+  const links = trySymlink(
+    t,
+    join(f.root, "note.txt"),
+    join(f.root, "alias.txt"),
+    "the alias.txt rejection cannot be exercised",
+  );
+  const denied = [
     "../outside.txt",
     "/etc/passwd",
     ".env",
-    "alias.txt",
     ".SSH/key.txt",
     "MODEL.ENV",
     ".GIT/config",
-  ]) {
+  ];
+  if (links) denied.splice(3, 0, "alias.txt");
+  for (const path of denied) {
     const r = await f.json(f.base + "/tools", "POST", {
       tool: "read_file",
       arguments: { path },
@@ -345,7 +367,6 @@ test("completed-run history forks copy conversations, clear approvals and keep d
 
 test("workspace restart marks active execution and applying approval interrupted without reexecuting", (t) => {
   const root = mkdtempSync(join(tmpdir(), "generic-restart-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const database = join(root, "test.sqlite");
   const store = new Store(database),
     workspaces = new WorkspaceStore(store.db);
@@ -360,11 +381,17 @@ test("workspace restart marks active execution and applying approval interrupted
   });
   store.close();
   const reopened = new Store(database);
-  t.after(() => reopened.close());
   const restored = new WorkspaceStore(reopened.db).get(w.id);
   assert.equal(restored.runs[0].status, "interrupted");
   assert.equal(restored.runs[0].partial, "partial");
   assert.equal(restored.approvals[0].status, "interrupted");
+  // node:test runs after-hooks in registration order: close the sqlite
+  // handle before removing the tree — an open file blocks rmSync with
+  // EPERM on Windows (POSIX tolerates unlinking open files).
+  t.after(() => {
+    reopened.close();
+    rmSync(root, { recursive: true, force: true });
+  });
 });
 
 test("local provider requires no API key, remains loopback-only and rejects redirects", async (t) => {
@@ -570,7 +597,12 @@ test("skill discovery and reading reject symlink escapes", async (t) => {
     "---\nname: escape\ndescription: outside\n---\nNot allowed",
   );
   mkdirSync(join(skillRoot, "escape"));
-  symlinkSync(join(f.root, "outside.md"), join(skillRoot, "escape/SKILL.md"));
+  trySymlink(
+    t,
+    join(f.root, "outside.md"),
+    join(skillRoot, "escape/SKILL.md"),
+    "the escape-skill rejection cannot be exercised",
+  );
   const registry = new SkillRegistry([skillRoot]);
   assert.deepEqual(
     registry.list().map((s) => s.id),

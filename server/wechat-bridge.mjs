@@ -146,6 +146,7 @@ export class WeChatMacBridge {
     processNames = ["微信", "WeChat"],
     runner = defaultRunner,
     probeCacheMs = 30000,
+    platform = process.platform,
   } = {}) {
     Object.assign(this, {
       patients,
@@ -153,13 +154,14 @@ export class WeChatMacBridge {
       processNames,
       runner,
       probeCacheMs,
+      platform,
     });
     this.probe = null;
   }
   status() {
     return {
       enabled: this.enabled,
-      platform: process.platform,
+      platform: this.platform,
       backend: "macos-ui-automation",
       processNames: this.processNames,
       ...(this.enabled
@@ -172,8 +174,9 @@ export class WeChatMacBridge {
   }
   async ensureAvailable() {
     check(this.enabled, "BRIDGE_DISABLED", "微信桥接未启用", 503);
+    // platform 可注入是测试缝(同 extensions.runner);默认仍为真实平台。
     check(
-      process.platform === "darwin",
+      this.platform === "darwin",
       "BRIDGE_UNAVAILABLE",
       "微信桥接只支持 macOS",
       503,
