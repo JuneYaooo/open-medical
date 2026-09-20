@@ -69,6 +69,26 @@ export class ProcessRunner {
         },
       ).trim();
     } catch {
+      // 「Docker 没在运行」和「镜像没导入」的解法完全不同：先探测 daemon，
+      // 避免把 daemon 未启动误报成镜像缺失，引导用户去导入镜像。
+      let daemon = null;
+      try {
+        daemon = execFileSync(
+          this.docker,
+          ["info", "--format", "{{.OSType}}"],
+          {
+            timeout: 4000,
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf8",
+          },
+        ).trim();
+      } catch {}
+      check(
+        daemon === "linux",
+        "SANDBOX_BACKEND",
+        "Docker 未运行或未提供 Linux 容器后端：请先启动 Docker（macOS 可执行 colima start）再重试；不会回退宿主机执行",
+        412,
+      );
       throw new AppError(
         "SANDBOX_IMAGE",
         "本地镜像不存在，请先离线导入；不会自动下载",

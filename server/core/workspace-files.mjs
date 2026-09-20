@@ -39,10 +39,19 @@ const blocked = new Set([
   ".pypirc",
   ".git-credentials",
 ]);
-const forbidden = (part) =>
-  blocked.has(part.toLowerCase()) ||
-  /^\.env(?:\.|$)/i.test(part) ||
-  /\.(?:sqlite(?:-wal|-shm)?|pem|key)$/i.test(part);
+// 按原因给出可操作的替代做法，而不是一句笼统的「受保护」。
+const deniedReason = (part) => {
+  const name = part.toLowerCase();
+  if (name === "node_modules")
+    return "node_modules 由包管理器管理，不可直接写入；离线内联依赖请放入仓库内普通目录（如 src/vendor/<包名>/）并用相对路径导入";
+  if (/^\.env(?:\.|$)/i.test(part))
+    return "环境配置文件（.env*）受保护，不可读写";
+  if (/\.(?:sqlite(?:-wal|-shm)?|pem|key)$/i.test(name))
+    return "数据库与密钥文件（*.sqlite、*.pem、*.key）受保护，不可读写";
+  if (blocked.has(name)) return `${part} 属于受保护的配置或数据，不可读写`;
+  return null;
+};
+const forbidden = (part) => deniedReason(part) !== null;
 export class WorkspaceFiles {
   constructor(root) {
     check(
@@ -101,7 +110,7 @@ export class WorkspaceFiles {
       check(
         !forbidden(part),
         "PATH_DENIED",
-        "此路径属于受保护的配置或数据",
+        deniedReason(part),
         403,
       );
       cursor = join(cursor, part);
