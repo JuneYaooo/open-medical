@@ -90,9 +90,34 @@ export class GitWorkspace {
     check(
       realpathSync(top) === this.root,
       "GIT_SCOPE",
-      "请将仓库根目录作为授权工作区，不能读取父级仓库",
+      "此工作区不是 Git 仓库根（未初始化仓库，或只是仓库的子目录）；git 工具仅在仓库根工作区可用，也不会读取父级仓库。请改用 list_directory / read_file / search_files 了解文件状态，不要重试 git 工具",
       403,
     );
+  }
+  // 运行开始注入的环境事实（数据不是指令）：声明目录与仓库的关系，
+  // 让模型不必用失败的 git 调用来试探。不抛错——非仓库是合法状态。
+  async describe(signal) {
+    let top;
+    try {
+      top = realpathSync(
+        (
+          await this.command(["rev-parse", "--show-toplevel"], { signal })
+        ).trim(),
+      );
+    } catch {
+      return { scope: "none" };
+    }
+    if (top !== this.root) return { scope: "subdir" };
+    const branch = (
+      await this.command(["symbolic-ref", "--quiet", "--short", "HEAD"], {
+        signal,
+      }).catch(() => "")
+    ).trim();
+    let head = null;
+    try {
+      head = await this.head(signal);
+    } catch {}
+    return { scope: "root", branch: branch || null, head };
   }
   visible(path) {
     try {
