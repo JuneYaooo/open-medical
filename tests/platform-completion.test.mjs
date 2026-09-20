@@ -106,7 +106,7 @@ test("team model authorization is explicit and selected provider is actually use
   assert.throws(() => team.spawn({ task: "no", modelProfile: "unknown" }));
 });
 test("PR creation checks published HEAD and deduplicates existing requests", async () => {
-  const remote = new GitRemote("/tmp");
+  const remote = new GitRemote(tmpdir()); // tmpdir() — "/tmp" does not exist on Windows
   remote.repository = async () => "org/repo";
   remote.git.status = async () => ({ head: "abc", branch: "agent/fix" });
   const calls = [];
@@ -349,7 +349,7 @@ test("failed child resumes independently without replacing its task identity", a
 test("push binds exact HEAD and sends credentials only through scoped environment", async () => {
   let tokenCalls = 0,
     push;
-  const remote = new GitRemote("/tmp", {
+  const remote = new GitRemote(tmpdir(), {
     run: async () => {
       tokenCalls++;
       return { stdout: "SYNTHETIC_TOKEN" };

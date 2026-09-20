@@ -114,6 +114,13 @@ export function createWorkspaceServer(options = {}) {
         return send(res, 200, {
           token,
           engine: "generic-runtime",
+          // 领域无关 App Shell 依据:前端据此渲染通用任务入口,
+          // 无医疗能力时不请求医疗接口、不显示医疗默认任务与患者导航。
+          capabilities: {
+            workspaces: true,
+            modelSettings: true,
+            medical: false,
+          },
           runtimeKey: createHash("sha256")
             .update(resolve(databasePath))
             .digest("hex"),
@@ -195,8 +202,9 @@ export function createWorkspaceServer(options = {}) {
         options.dist ||
           resolve(dirname(fileURLToPath(import.meta.url)), "../dist"),
       );
-      // 融合后只有一个前端入口：平台模式也服务同一张医疗工作台页面，
-      // 患者等医疗接口在平台内核上不存在时前端自行降级为空列表。
+      // 融合后只有一个前端入口：平台模式也服务同一张工作台页面。
+      // 前端按 bootstrap capabilities 渲染——通用模式只呈现领域无关的
+      // 任务闭环（创建→执行→产物→继续），不请求也不显示医疗入口。
       const target = await realpath(
         resolve(
           dist,

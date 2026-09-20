@@ -12,6 +12,12 @@ import { PermissionEngine } from "./core/permissions.mjs";
 import { AgentRuntime } from "./core/agent-runtime.mjs";
 import { ToolRegistry } from "./core/tool-registry.mjs";
 import { compactContext } from "./core/context-manager.mjs";
+import {
+  assertRunTransition,
+  deriveRunStatus,
+  waitingReasonFor,
+} from "./core/run-status.mjs";
+import { artifactEvidence, receiptEvidence } from "./core/delivery.mjs";
 
 const {
   system: SYSTEM,
@@ -64,7 +70,16 @@ export function publicSession(session) {
   const { runs, ...rest } = session;
   return {
     ...rest,
-    runs: runs.map(({ providerMessages: _providerMessages, ...run }) => run),
+    // run.status 保留引擎原始取值（兼容旧客户端）；derivedStatus 是 §12
+    // 目标状态的唯一派生结果（run-status.mjs），等待/受阻时附 waitingReason。
+    runs: runs.map(({ providerMessages: _providerMessages, ...run }) => {
+      const waitingReason = waitingReasonFor(run);
+      return {
+        ...run,
+        derivedStatus: deriveRunStatus(run),
+        ...(waitingReason ? { waitingReason } : {}),
+      };
+    }),
   };
 }
 export class MedicalRuntime {
@@ -392,6 +407,10 @@ export class MedicalRuntime {
     let lastPersist = 0,
       persistedLength = 0;
     const artifacts = [];
+    // W5 交付事实：仅记录运行时已发生的回执（沙箱/子代理），供交付钩子
+    // 在完成点核对；不推断、不采信模型的自述。
+    let sandboxReceipt = null;
+    const delegatedReceipts = [];
     const emit = (type, payload = {}) => {
       const event = {
         seq: ++seq,
@@ -456,6 +475,7 @@ export class MedicalRuntime {
         signal: controller.signal,
         onEvent: childEvent,
       });
+      delegatedReceipts.push({ childId: child.id, status: child.status });
       if (child.status === "completed") artifacts.push(...child.artifacts);
       if (child.usage?.total_tokens) {
         run.usage ||= {
@@ -483,6 +503,7 @@ export class MedicalRuntime {
           sources,
           signal: controller.signal,
         });
+        sandboxReceipt = { backend: output.backend, completed: true };
         emit("sandbox.completed", { backend: output.backend });
         return output;
       } catch (error) {
@@ -499,6 +520,8 @@ export class MedicalRuntime {
       });
       emit("policy.evaluated", run.policy);
       controller.signal.throwIfAborted();
+      // 模型循环返回的交付核对结果（无钩子/纯问答时保持 null）。
+      let delivery = null;
       if (handle.body.sandboxCode !== undefined) {
         const output = await sandboxRun(handle.body.sandboxCode);
         emit("message.delta", {
@@ -688,6 +711,43 @@ export class MedicalRuntime {
           run.usage.rounds++;
         };
         const archiveFor = (data) => this.store.archive(sessionId, run.id, data);
+        // W5 交付验证钩子：执行类任务（非咨询问答意图，或期间确有产物/
+        // 沙箱/子代理副作用）在完成点用运行时事实核对交付。证据=结构化
+        // 产物回执（含内容哈希）+沙箱/子代理回执；无任何可核对产物时
+        // delivered=false 并说明缺口。纯问答（consultation 且零副作用）
+        // 返回 null，不触发交付检查，保持原行为。
+        const onDelivery = () => {
+          const effects =
+            artifacts.length > 0 ||
+            sandboxReceipt !== null ||
+            delegatedReceipts.length > 0;
+          const executionClass =
+            effects || run.policy.intent !== "consultation";
+          if (!executionClass) return null;
+          const evidence = artifacts.map((a) => artifactEvidence(a));
+          if (sandboxReceipt)
+            evidence.push(receiptEvidence("sandbox", sandboxReceipt));
+          for (const receipt of delegatedReceipts)
+            evidence.push(receiptEvidence("subagent", receipt));
+          if (effects)
+            return {
+              delivered: true,
+              evidence,
+              gaps: [],
+              method: "runtime-facts",
+            };
+          return {
+            delivered: false,
+            evidence,
+            gaps: [
+              {
+                reason: "no_verifiable_output",
+                detail: `执行类任务（意图 ${run.policy.intent}）结束时没有任何产物类工具结果或执行回执；模型的文字完成说明不构成交付证据。`,
+              },
+            ],
+            method: "runtime-facts",
+          };
+        };
         const result = await this.agent.run({
           domain: MedicalDomain,
           messages,
@@ -698,6 +758,7 @@ export class MedicalRuntime {
           thinking: handle.body.thinking,
           emit,
           onUsage: addUsage,
+          onDelivery,
           // 会话超过预算时自动压缩：保留最近对话，更早历史摘要化，原文
           // 归档后可经 read_context_archive 分段读回（同一预算约束）。
           compact: (compacting) =>
@@ -731,8 +792,17 @@ export class MedicalRuntime {
           s.runs.find((r) => r.id === run.id).providerMessages =
             result.messages.slice(start);
         });
+        delivery = result.delivery || null;
       }
       controller.signal.throwIfAborted();
+      // W5：执行类任务交付未核实（delivered=false）时运行状态仍为
+      // completed，但结果分类记为 answered（回答而非交付）；纯问答与
+      // 交付核实通过的运行不受影响。delivery 为 null 表示未触发检查。
+      const outcome = delivery
+        ? delivery.delivered
+          ? "delivered"
+          : "answered"
+        : null;
       const assistant = {
         id: randomUUID(),
         runId: run.id,
@@ -743,22 +813,28 @@ export class MedicalRuntime {
         // 咨询直答不产出草稿，前端据 intent 区分署名，避免一律标「工作草稿」
         intent: run.policy.intent,
         status: "completed",
+        ...(outcome ? { outcome } : {}),
       };
       this.store.mutate(sessionId, (s) => {
         s.messages.push(assistant);
         s.artifacts.push(...artifacts);
         const saved = s.runs.find((r) => r.id === run.id);
+        // 状态写入经单一转移守卫：非法转移直接失败并保留原状态，
+        // 而不是把重启中断等记录悄悄改写成 completed。
+        assertRunTransition(saved.status, "completed");
         Object.assign(saved, {
           status: "completed",
           partial: text,
           artifacts: artifacts.map((a) => a.id),
           usage: run.usage,
           endedAt: iso(),
+          ...(delivery ? { delivery, outcome } : {}),
         });
       });
       this.store.audit(sessionId, "run.completed", {
         runId: run.id,
         artifactIds: artifacts.map((a) => a.id),
+        ...(outcome ? { outcome } : {}),
       });
       emit("message.complete", {
         text,
@@ -766,8 +842,15 @@ export class MedicalRuntime {
         artifacts,
         usage: run.usage,
         status: "completed",
+        ...(delivery ? { delivery } : {}),
       });
-      return { runId: run.id, text, artifacts, status: "completed" };
+      return {
+        runId: run.id,
+        text,
+        artifacts,
+        status: "completed",
+        ...(delivery ? { delivery, outcome } : {}),
+      };
     } catch (error) {
       const cancelled = controller.signal.aborted;
       const status = cancelled ? "cancelled" : "failed";
@@ -779,16 +862,16 @@ export class MedicalRuntime {
             ? "模型响应超时，保留的部分内容未标为完成。"
             : "执行失败，请检查服务配置后重试。";
       this.store.mutate(sessionId, (s) => {
-        Object.assign(
-          s.runs.find((r) => r.id === run.id),
-          {
-            status,
-            error: message,
-            partial: text,
-            usage: run.usage,
-            endedAt: iso(),
-          },
-        );
+        const saved = s.runs.find((r) => r.id === run.id);
+        // 终态写入同样经单一转移守卫；同状态幂等重写放行。
+        assertRunTransition(saved.status, status);
+        Object.assign(saved, {
+          status,
+          error: message,
+          partial: text,
+          usage: run.usage,
+          endedAt: iso(),
+        });
       });
       this.store.audit(sessionId, `run.${status}`, {
         runId: run.id,

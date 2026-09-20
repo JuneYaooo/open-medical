@@ -9,6 +9,7 @@ import {
   rmSync,
   renameSync,
   chmodSync,
+  existsSync,
 } from "node:fs";
 import { join, resolve, relative, isAbsolute, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -197,7 +198,12 @@ export class PluginPackages {
       try {
         renameSync(staging, target);
       } catch (e) {
-        if (!["EEXIST", "ENOTEMPTY"].includes(e.code)) throw e;
+        // 同 hash 重装是幂等操作：目录已存在即可视为成功。Windows 对
+        // “rename 到已存在目录”报 EPERM 而非 EEXIST，需显式纳入同一分支。
+        const idempotent =
+          ["EEXIST", "ENOTEMPTY"].includes(e.code) ||
+          (e.code === "EPERM" && existsSync(target));
+        if (!idempotent) throw e;
       }
     } finally {
       rmSync(staging, { recursive: true, force: true });

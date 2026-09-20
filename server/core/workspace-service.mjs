@@ -25,7 +25,7 @@ import { SkillRegistry } from "./skills.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
 import { compactContext } from "./context-manager.mjs";
 import { sealInterruptedContext } from "./run-recovery.mjs";
-import { scopesOverlap } from "./write-scope.mjs";
+import { scopesOverlap, scopeCovers, scopeKey, posixRelative } from "./write-scope.mjs";
 import { AgentTeam, registerTeamTools } from "./agent-team.mjs";
 import { executeCode } from "./code-mode.mjs";
 import { ToolRegistry } from "./tool-registry.mjs";
@@ -363,11 +363,16 @@ export class WorkspaceService {
       "此项目的目录读取授权已撤销",
       403,
     );
-    return this.create({
+    // 同一文件夹的新任务继承显式设置的模式开关（如医疗领域），避免
+    // 用户在医疗项目里"新任务"后悄悄丢失领域上下文。
+    const created = this.create({
       root: source.root,
       title: "新任务",
       directoryConsent: true,
     });
+    if (source.modeFlags?.medical)
+      this.setModeFlag(created.id, "medical", true);
+    return created;
   }
   create(body) {
     check(
@@ -482,33 +487,29 @@ export class WorkspaceService {
     // Workspace-level write scope: when set, only the configured subtrees of
     // the authorized root may be written — enforced here so every write entry
     // point (proposals, terminal exports, extensions, subagents) inherits it.
+    // Real-path, traversal and symlink checks stay inside WorkspaceFiles.path;
+    // posixRelative/scopeCovers only unify separators (\ vs /) for comparison
+    // so authorized writes are not rejected by platform spelling.
     const record = this.store.get(id);
-    if (Array.isArray(record.writeScope)) {
-      const files = new WorkspaceFiles(record.root);
-      const canonical = relative(
-        files.root,
-        files.path(path, { create: true, parents: true }),
-      );
+    const team = this.teams.get(id);
+    if (!Array.isArray(record.writeScope) && !team) return;
+    const files = new WorkspaceFiles(record.root);
+    const canonical = posixRelative(
+      relative(files.root, files.path(path, { create: true, parents: true })),
+    );
+    if (Array.isArray(record.writeScope))
       check(
-        record.writeScope.some(
-          (scope) => canonical === scope || canonical.startsWith(scope + "/"),
-        ),
+        record.writeScope.some((scope) => scopeCovers(scope, canonical)),
         "WRITE_SCOPE",
         "此路径不在工作区的可写范围内",
         403,
       );
-    }
-    const team = this.teams.get(id);
     if (!team) return;
-    const files = new WorkspaceFiles(this.store.get(id).root);
-    const canonical = relative(
-      files.root,
-      files.path(path, { create: true, parents: true }),
-    );
     const job = team.jobs.get(runId);
     if (job)
       check(
-        job.role === "writer" && job.writePaths.includes(canonical),
+        job.role === "writer" &&
+          job.writePaths.some((p) => scopeKey(p) === scopeKey(canonical)),
         "AGENT_SCOPE",
         "该文件不在子代理的写入清单中",
         403,
@@ -780,9 +781,11 @@ export class WorkspaceService {
         "WRITE_SCOPE",
         "可写子目录路径格式无效",
       );
-      const rel = relative(
-        files.root,
-        files.path(entry, { create: true, parents: true }),
+      const rel = posixRelative(
+        relative(
+          files.root,
+          files.path(entry, { create: true, parents: true }),
+        ),
       );
       check(
         rel !== "",

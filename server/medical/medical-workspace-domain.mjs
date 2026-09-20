@@ -1,11 +1,16 @@
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 import { TOOL_DEFINITIONS, runTool } from "../medical-core.mjs";
 
-// Medical capability layered on the generic workspace kernel — always on,
-// automatically dispatched: the model decides when a task involves medical
-// work and reaches for the medical toolset; the discipline block keeps
-// outputs provenance-traced, precise and draft-only. Full project
-// permissions are untouched.
+// Medical capability layered on the generic workspace kernel — on demand,
+// never by default for ordinary projects:
+// - session-kind workspaces (home/patient sessions of the medical app) are
+//   medical by construction and keep the full discipline;
+// - project workspaces carry the medical layer only after an explicit,
+//   explainable opt-in (creation with domain:"medical" or the runtime
+//   domain switch), persisted as modeFlags.medical on the workspace record.
+// With the layer on, the model auto-dispatches medical work (patient
+// materials -> provenance-traced proposals; guideline files -> RAG knowledge
+// base). Full project permissions are untouched either way.
 export const MEDICAL_WORKSPACE_DISCIPLINE = `
 本工作台具备医疗领域能力，按任务自动调度，无需用户要求：
 - 用户上传或提及患者资料时：主动读取并整理为结构化患者信息（诊断、用药、过敏、检验，保留文件名与行号溯源）。资料属于已有患者时用 patient_record_propose 提交档案更新提案；能从材料中识别出姓名等基本信息且是一位新患者时，用 patient_create_propose 提交建档提案——两者都由医生确认后写入；整理结果同时以可溯源的时间线/清单呈现在回复中。上传文件、一句话指令即可完成建档或更新，不要让用户手动填表。
@@ -15,6 +20,18 @@ export const MEDICAL_WORKSPACE_DISCIPLINE = `
 - 医学问题先查知识库与文献工具取事实；所有医学结论性输出为待专业医生复核的草稿，引用必须带来源（文档名、页码或行号），不编造。
 
 本会话是医疗工作会话：先判断这轮输入是「问答咨询」还是「资料整理/文书生成」。问答咨询（如"血糖有点高怎么办"）直接回答，用工具补充依据并在结尾提醒具体诊疗请咨询医生；资料整理先 list_skills/read_skill 选择技能模板，再调用时间线（extract_clinical_timeline）、检验摘录（extract_observations）、用药核对（review_medication_safety）、循证规划（build_evidence_question）等工具产出可追溯草稿。消息中以 @技能名 固定技能时先 read_skill 再按其执行。只使用用户提供的材料和工具返回的来源；不得编造文献、指南或病历内容。`;
+
+// 单一判定点：会话型工作区（医疗应用首页/患者会话）始终医疗；普通项目
+// 只有显式打开 modeFlags.medical 后才叠加医疗层。systemFor 与
+// registerTools 共用同一谓词，系统指令和工具面不可能出现半开状态。
+// modeFlags 经 WorkspaceService.setModeFlag 写入：执行期间禁止切换并留
+// 有审计事件；contextIdentity 包含 systemFor 输出，切换即失效旧运行
+// 检查点的复用（不跨纪律混用上下文）。
+export function medicalWorkspaceEnabled(workspace) {
+  return (
+    workspace?.kind === "session" || workspace?.modeFlags?.medical === true
+  );
+}
 
 export function createMedicalWorkspaceDomain({
   plugins = [],
@@ -32,6 +49,13 @@ export function createMedicalWorkspaceDomain({
     // context management, full project permissions.
     id: "generic",
     system: `${GenericDomain.system}\n${MEDICAL_WORKSPACE_DISCIPLINE}`,
+    // 按需分层：未启用医疗的工作区（普通项目）只带通用内核指令，
+    // 不注入医疗纪律文本。
+    systemFor(workspace) {
+      return medicalWorkspaceEnabled(workspace)
+        ? `${GenericDomain.system}\n${MEDICAL_WORKSPACE_DISCIPLINE}`
+        : GenericDomain.system;
+    },
     limits: GenericDomain.limits,
     contextManagement: true,
     allowAutoFileWrites: true,
@@ -60,7 +84,8 @@ export function createMedicalWorkspaceDomain({
     },
     registerTools: ({ registry, workspace }) => {
       // 会话叠层：医疗核心工具 + 全部医疗插件走 runTool 分发；项目
-      // 工作区保持现有插件直注（知识库/提案工具）。
+      // 工作区在显式启用医疗后直注插件（知识库/提案工具），普通项目
+      // 保持纯通用工具面。
       if (workspace.kind === "session") {
         // runTool 按 definitions 校验参数并分发插件：必须同时包含核心与插件。
         const sessionDefinitions = [
@@ -92,6 +117,7 @@ export function createMedicalWorkspaceDomain({
           });
         return;
       }
+      if (!medicalWorkspaceEnabled(workspace)) return;
       for (const plugin of plugins)
         registry.register({
           permission: "tools.execute",

@@ -150,7 +150,19 @@ test("offline plugin installation binds reviewed digest, supports grants, upgrad
   assert.equal((await f.tool("plugin_list")).length, 0);
   await f.manage({ action: "uninstall-plugin", pluginId: "local-tools" });
   assert.equal(f.service.extensions.current(f.id).config.plugins.length, 0);
-  symlinkSync("/etc/passwd", join(source, "escape"));
+});
+
+test("plugin inspect rejects symlink escape when symlinks are creatable", async (t) => {
+  const f = setup(t),
+    source = join(f.root, "source");
+  cpSync(resolve("examples/plugins/local-tools"), source, { recursive: true });
+  try {
+    symlinkSync("/etc/passwd", join(source, "escape"));
+  } catch (error) {
+    if (["EPERM", "EACCES"].includes(error.code))
+      return t.skip(`本机无符号链接创建权限（${error.code}），PLUGIN_SYMLINK 拒绝语义需 POSIX/开发者模式环境覆盖`);
+    throw error;
+  }
   assert.throws(
     () => new PluginPackages(join(f.root, "other")).inspect(source),
     (e) => e.code === "PLUGIN_SYMLINK",

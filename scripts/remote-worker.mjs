@@ -1,5 +1,5 @@
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, relative, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
@@ -24,7 +24,14 @@ export async function executeRemoteJob(
   await mkdir(root, { recursive: true, mode: 0o700 });
   for (const file of job.files) {
     const target = resolve(root, file.path);
-    check(target.startsWith(root + "/"), "REMOTE_PATH", "越界路径");
+    // Containment via relative(): a plain startsWith(root + "/") breaks on
+    // Windows where resolve() yields backslash-separated paths.
+    const rel = relative(root, target);
+    check(
+      rel !== "" && !rel.startsWith("..") && !isAbsolute(rel),
+      "REMOTE_PATH",
+      "越界路径",
+    );
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, file.text, { flag: "wx", mode: 0o600 });
   }

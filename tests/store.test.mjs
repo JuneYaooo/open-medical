@@ -7,9 +7,20 @@ import { Store } from "../server/store.mjs";
 
 test("database survives restart, prevents second active runtime and marks interrupted runs honestly", (t) => {
   const folder = mkdtempSync(join(tmpdir(), "medical-store-"));
-  t.after(() => rmSync(folder, { recursive: true, force: true }));
   const path = join(folder, "test.sqlite");
-  const first = new Store(path);
+  let first = null,
+    second = null;
+  // FIFO:先关库句柄,再删目录;断言提前失败时也能正确清理(否则 Windows EPERM)。
+  // Store.close 非幂等(重复关抛"database is not open"),清理钩子按兜底处理。
+  t.after(() => {
+    for (const store of [first, second]) {
+      try {
+        store?.close();
+      } catch {}
+    }
+  });
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  first = new Store(path);
   const session = first.create();
   first.mutate(session.id, (s) =>
     s.runs.push({
@@ -20,9 +31,12 @@ test("database survives restart, prevents second active runtime and marks interr
     }),
   );
   assert.throws(() => new Store(path), /已有运行时/);
-  assert.equal(statSync(path).mode & 0o777, 0o600);
+  // POSIX 权限位断言:Windows 的 chmod 对已存在文件是 no-op(mode 恒为 0o666),
+  // 该语义由 POSIX 环境覆盖;Windows 侧仅确认文件真实存在。
+  if (process.platform === "win32") assert.ok(statSync(path).isFile());
+  else assert.equal(statSync(path).mode & 0o777, 0o600);
   first.close();
-  const second = new Store(path);
+  second = new Store(path);
   assert.equal(second.get(session.id).runs[0].status, "interrupted");
   assert.equal(second.get(session.id).runs[0].partial, "partial");
   second.close();
@@ -47,7 +61,6 @@ test("transaction rollback preserves prior data and later writes still succeed",
 test("live WAL backup can be reopened and never overwrites existing data", async (t) => {
   const { backupDatabase } = await import("../scripts/backup.mjs");
   const folder = mkdtempSync(join(tmpdir(), "medical-backup-"));
-  t.after(() => rmSync(folder, { recursive: true, force: true }));
   const original = new Store(join(folder, "original.sqlite"));
   t.after(() => original.close());
   const s = original.create({ title: "合成备份测试" });
@@ -60,6 +73,8 @@ test("live WAL backup can be reopened and never overwrites existing data", async
   );
   const restored = new Store(path);
   t.after(() => restored.close());
+  // 最后注册=最后执行:两个库都关掉之后再删临时目录(Windows EPERM)。
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
   assert.equal(restored.get(s.id).messages[0].content, "已提交数据");
   assert.throws(
     () => backupDatabase(join(folder, "original.sqlite"), path),

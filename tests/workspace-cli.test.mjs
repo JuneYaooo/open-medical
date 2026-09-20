@@ -8,7 +8,6 @@ import { WorkspaceDatabase } from "../server/core/database.mjs";
 
 test("standalone CLI persists generic workspaces without importing medical database tables", (t) => {
   const root = mkdtempSync(join(tmpdir(), "standalone-cli-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const database = join(root, "agent.sqlite");
   const run = (args) =>
     spawnSync(
@@ -30,7 +29,10 @@ test("standalone CLI persists generic workspaces without importing medical datab
   assert.equal(list.status, 0);
   assert.equal(JSON.parse(list.stdout)[0].id, workspace.id);
   const db = new WorkspaceDatabase(database);
+  // 钩子按注册顺序(FIFO)执行:先关数据库句柄,再删临时目录,
+  // 否则 Windows 上 rmSync 撞上打开中的 sqlite 文件报 EPERM。
   t.after(() => db.close());
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   const tables = db.db
     .prepare("SELECT name FROM sqlite_master WHERE type='table'")
     .all()

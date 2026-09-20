@@ -8,10 +8,15 @@ import { fixture } from "./helpers.mjs";
 
 test("medical server: model settings GET reflects environment, PUT hot-swaps provider", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "omw-models-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const f = await fixture(t, {
     database: join(dir, "medical.sqlite"),
   });
+  // node:test runs after-hooks in registration order and stops at the first
+  // one that throws: an rmSync registered before the fixture's shutdown
+  // EPERMs on the still-open sqlite file (Windows) and the never-closed
+  // listener then keeps the test process alive forever. Register cleanup
+  // last so server.shutdown() runs first.
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
 
   // GET shows the environment config (no key leakage).
   const initial = (await f.json("/api/model-settings")).data;

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   ArrowUp,
+  Bot,
   BookOpen,
   ChevronRight,
   ClipboardList,
@@ -29,7 +30,13 @@ import {
   CalendarClock,
   AtSign,
 } from "lucide-react";
-import { api, bootstrap, streamTurn, downloadSession } from "./agent-runtime";
+import {
+  api,
+  bootstrap,
+  streamTurn,
+  downloadSession,
+  medicalEnabled,
+} from "./agent-runtime";
 import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import "./style.css";
 import { importMaterial } from "./import-material";
@@ -38,6 +45,8 @@ import { PatientsView } from "./patients";
 import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
 import { RichMessage } from "./workbench/message";
+import { RunStatusNotice, OutcomeCard } from "./workbench/run-status-view";
+import { blockedText, runDerivedStatus } from "./workbench/run-status";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
 import { KnowledgeView } from "./knowledge";
@@ -611,17 +620,39 @@ function App() {
   const selectedArtifact =
     session?.artifacts.find((a) => a.id === artifactId) ||
     session?.artifacts.at(-1);
+  // 统一内核会话执行中可通过 steer 追加要求（与项目工作区入口一致）。
+  const canSteer =
+    busy && session?.kind === "session" && Boolean(persistedRunning?.id);
+  const runOf = (runId) => session?.runs?.find((r) => r.id === runId);
+  const messageMeta = (m) => {
+    if (m.role === "user") return "本轮输入";
+    const outcome = m.outcome || runOf(m.runId)?.outcome;
+    if (outcome === "answered") return "文字回答 · 无产物";
+    if (outcome === "delivered") return "已交付成果";
+    return m.intent === "consultation" ||
+      (m.intent === undefined && !runOf(m.runId)?.artifacts?.length)
+      ? "咨询回复"
+      : "工作草稿";
+  };
   const acceptArtifact = session?.artifacts.find((a) => a.id === acceptId);
   const selectedFileIds = (
     fileSelection[activeId] ||
     session?.files.map((f) => f.id) ||
     []
   ).filter((id) => session?.files.some((f) => f.id === id));
-  const refreshList = async () => {
+  // 能力驱动刷新:通用模式(无医疗能力)只拉工作区列表,不请求 /api/sessions
+  // 等医疗接口;医疗接口偶发不可用时安全降级为空列表,不进全局错误态。
+  // init 的闭包可能捕获旧 config,因此允许显式传入 bootstrap 结果。
+  const refreshList = async (cfg = config) => {
+    const medical = medicalEnabled(cfg);
     const [value, ws, pt] = await Promise.all([
-      api("/api/sessions"),
+      medical
+        ? api("/api/sessions").catch(() => ({ sessions: [] }))
+        : Promise.resolve({ sessions: [] }),
       api("/api/workspaces").catch(() => ({ workspaces: [] })),
-      api("/api/patients").catch(() => ({ patients: [] })),
+      medical
+        ? api("/api/patients").catch(() => ({ patients: [] }))
+        : Promise.resolve({ patients: [] }),
     ]);
     setSessions(value.sessions);
     setWsList(ws.workspaces || []);
@@ -675,10 +706,15 @@ function App() {
       const value = await bootstrap(true);
       setConfig(value);
       setThinking(value.thinking === "enabled" ? "enabled" : "disabled");
-      const list = await refreshList();
-      api("/api/doctor/profile")
-        .then((p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0))
-        .catch(() => {});
+      // 通用模式没有医疗首页:默认进入领域无关的项目工作区视图。
+      if (!medicalEnabled(value)) setView("workspaces");
+      const list = await refreshList(value);
+      if (medicalEnabled(value))
+        api("/api/doctor/profile")
+          .then(
+            (p) => setDoctorMemCount(p.counts?.active ?? p.counts?.confirmed ?? 0),
+          )
+          .catch(() => {});
       if (
         activeRef.current &&
         list.some((item) => item.id === activeRef.current)
@@ -696,10 +732,11 @@ function App() {
   useEffect(() => {
     init();
   }, []);
-  // 当前患者上下文：打开患者会话时跟随；详情供速览卡使用
+  // 当前患者上下文：打开患者会话时跟随；详情供速览卡使用。
+  // 无医疗能力时即便 localStorage 残留患者 ID 也不请求患者接口。
   useEffect(() => {
     const pid = session?.patientId || currentPatientId;
-    if (!pid) {
+    if (!pid || !medicalEnabled(config)) {
       setPatientDetail(null);
       return;
     }
@@ -712,7 +749,7 @@ function App() {
     return () => {
       stale = true;
     };
-  }, [session?.patientId, currentPatientId]);
+  }, [session?.patientId, currentPatientId, config]);
   const switchCurrentPatient = (id) => {
     setCurrentPatientId(id);
     localStorage.setItem("om.currentPatient", id || "");
@@ -782,6 +819,28 @@ function App() {
     e?.preventDefault();
     const text = override.message || draft.trim();
     if (!text || loading) return;
+    // 执行中追加要求：统一内核会话（kind:"session"）走 steer 指令队列，与
+    // 项目工作区一致；旧引擎会话没有该通道，提交会被服务端以「正在执行」
+    // 拒绝并提示，保持原有行为。
+    const executing = activeRun?.busy || Boolean(persistedRunning);
+    if (executing && e && session?.kind === "session" && persistedRunning?.id) {
+      setDraft("");
+      setPickedSkills([]);
+      setMention(null);
+      try {
+        await api(`/api/workspaces/${session.id}/steer`, "POST", {
+          runId: persistedRunning.id,
+          message: text,
+          externalConsent: accessMode === "auto" ? true : consent,
+          requestId: crypto.randomUUID(),
+        });
+        setNotice("补充要求已加入队列，助手会在下一步接收。");
+      } catch (err) {
+        setError(err.message);
+        setDraft(text);
+      }
+      return;
+    }
     let current = refreshedSession || session;
     if (!current) current = await create();
     if (!current || sendingRef.current.has(current.id)) return;
@@ -1070,6 +1129,14 @@ function App() {
   );
   const modelEnabled =
     Boolean(config?.modelConfigured) && accessMode !== "local";
+  // 领域能力:医疗模式渲染完整医疗工作台,通用模式只渲染领域无关 App Shell。
+  const medical = medicalEnabled(config);
+  useEffect(() => {
+    if (config)
+      document.title = medical
+        ? "Open Medical · 医疗工作台"
+        : "Open Agent · 通用工作台";
+  }, [config, medical]);
   const effectiveConsentRequired = modelEnabled && accessMode === "each";
   const fileContent = citation
     ? session?.files.find((f) => f.id === citation.sourceId)?.text ||
@@ -1091,11 +1158,13 @@ function App() {
             <Menu size={18} />
           </button>
           <span className="brand-mark">
-            <Stethoscope size={21} />
+            {medical ? <Stethoscope size={21} /> : <Bot size={21} />}
           </span>
-          <b>Open Medical</b>
+          <b>{medical ? "Open Medical" : "Open Agent"}</b>
           <span className="brand-divider" />
-          <span className="brand-caption">医疗工作台</span>
+          <span className="brand-caption">
+            {medical ? "医疗工作台" : "通用工作台"}
+          </span>
         </div>
         <div className="top-actions">
           {session && (
@@ -1133,12 +1202,14 @@ function App() {
               </span>
             </div>
           )}
-          <PatientSwitcher
-            patients={patientsList}
-            currentId={currentPatientId}
-            onSwitch={(p) => switchCurrentPatient(p.id)}
-            onManage={() => navigate("patients")}
-          />
+          {medical && (
+            <PatientSwitcher
+              patients={patientsList}
+              currentId={currentPatientId}
+              onSwitch={(p) => switchCurrentPatient(p.id)}
+              onManage={() => navigate("patients")}
+            />
+          )}
           <span className={`connection ${config ? "" : "offline"}`}>
             <i />
             {config ? "本机工作空间" : "连接未就绪"}
@@ -1153,13 +1224,15 @@ function App() {
           <IconButton title="运行设置" onClick={() => setModal("settings")}>
             <Settings2 size={18} />
           </IconButton>
-          <IconButton
-            title="计划任务与沙箱"
-            disabled={view !== "workbench" || !session || busy}
-            onClick={() => setModal("tasks")}
-          >
-            <CalendarClock size={18} />
-          </IconButton>
+          {medical && (
+            <IconButton
+              title="计划任务与沙箱"
+              disabled={view !== "workbench" || !session || busy}
+              onClick={() => setModal("tasks")}
+            >
+              <CalendarClock size={18} />
+            </IconButton>
+          )}
         </div>
       </header>
       <div className="product-body">
@@ -1174,22 +1247,27 @@ function App() {
           <button
             className="new-session"
             onClick={() => {
-              setHomeKey((value) => value + 1);
-              navigate("home");
+              // 通用模式的新建入口直达项目工作区;医疗模式回医疗首页。
+              if (medical) {
+                setHomeKey((value) => value + 1);
+                navigate("home");
+              } else openWorkspaces({ create: true });
             }}
           >
             <Plus size={17} />
             新建任务
           </button>
-          <label className="search">
-            <Search size={14} />
-            <input
-              aria-label="搜索任务"
-              placeholder="搜索任务"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
+          {medical && (
+            <label className="search">
+              <Search size={14} />
+              <input
+                aria-label="搜索任务"
+                placeholder="搜索任务"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+          )}
           <p className="nav-label">
             项目
             <button
@@ -1235,115 +1313,119 @@ function App() {
               </p>
             )}
           </nav>
-          <p className="nav-label">
-            今日任务 <span>{sessions.length}</span>
-            {pendingReviews > 0 && (
-              <button
-                className="nav-label-action warn"
-                onClick={() => navigate("review")}
-              >
-                待复核 {pendingReviews}
-              </button>
-            )}
-          </p>
-          <nav className="sessions" aria-label="今日任务">
-            {sessions
-              .filter(
-                (item) =>
-                  !query ||
-                  item.title.toLowerCase().includes(query.toLowerCase()),
-              )
-              .slice(0, 12)
-              .map((item) => (
-                <button
-                  className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
-                  key={item.id}
-                  onClick={() => openTask(item.id)}
-                >
-                  <MessageSquare size={14} />
-                  <span>
-                    <b>{item.title}</b>
-                    <small>
-                      {item.running
-                        ? "执行中"
-                        : item.reviewCount
-                          ? `${item.reviewCount} 份待复核`
-                          : item.patientId
-                            ? "患者工作区"
-                            : "独立任务"}
-                    </small>
-                  </span>
-                </button>
-              ))}
-            {!sessions.length && (
-              <p className="sidebar-empty">
-                任务与成果会保存在这里，随时继续。
-              </p>
-            )}
-          </nav>
-          <p className="nav-label">
-            患者
-            <button
-              className="nav-label-action"
-              onClick={() => openPatient()}
-            >
-              管理
-            </button>
-          </p>
-          <nav className="sessions" aria-label="患者">
-            {patientsList.slice(0, 8).map((p) => (
-              <button
-                key={p.id}
-                className={`session ${currentPatientId === p.id ? "active" : ""}`}
-                onClick={() => {
-                  switchCurrentPatient(p.id);
-                  openPatient({ id: p.id });
-                }}
-              >
-                <Stethoscope size={14} />
-                <span>
-                  <b>{p.name}</b>
-                  <small>
-                    {p.counts?.dueFollowups
-                      ? `${p.counts.dueFollowups} 项随访到期`
-                      : p.counts?.unprocessedMessages
-                        ? `${p.counts.unprocessedMessages} 条新消息`
-                        : "点击查看"}
-                  </small>
-                </span>
-                {(p.counts?.dueFollowups > 0 ||
-                  p.counts?.unprocessedMessages > 0) && (
-                  <em className="nav-dot" />
+          {medical && (
+            <>
+              <p className="nav-label">
+                今日任务 <span>{sessions.length}</span>
+                {pendingReviews > 0 && (
+                  <button
+                    className="nav-label-action warn"
+                    onClick={() => navigate("review")}
+                  >
+                    待复核 {pendingReviews}
+                  </button>
                 )}
+              </p>
+              <nav className="sessions" aria-label="今日任务">
+                {sessions
+                  .filter(
+                    (item) =>
+                      !query ||
+                      item.title.toLowerCase().includes(query.toLowerCase()),
+                  )
+                  .slice(0, 12)
+                  .map((item) => (
+                    <button
+                      className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
+                      key={item.id}
+                      onClick={() => openTask(item.id)}
+                    >
+                      <MessageSquare size={14} />
+                      <span>
+                        <b>{item.title}</b>
+                        <small>
+                          {item.running
+                            ? "执行中"
+                            : item.reviewCount
+                              ? `${item.reviewCount} 份待复核`
+                              : item.patientId
+                                ? "患者工作区"
+                                : "独立任务"}
+                        </small>
+                      </span>
+                    </button>
+                  ))}
+                {!sessions.length && (
+                  <p className="sidebar-empty">
+                    任务与成果会保存在这里，随时继续。
+                  </p>
+                )}
+              </nav>
+              <p className="nav-label">
+                患者
+                <button
+                  className="nav-label-action"
+                  onClick={() => openPatient()}
+                >
+                  管理
+                </button>
+              </p>
+              <nav className="sessions" aria-label="患者">
+                {patientsList.slice(0, 8).map((p) => (
+                  <button
+                    key={p.id}
+                    className={`session ${currentPatientId === p.id ? "active" : ""}`}
+                    onClick={() => {
+                      switchCurrentPatient(p.id);
+                      openPatient({ id: p.id });
+                    }}
+                  >
+                    <Stethoscope size={14} />
+                    <span>
+                      <b>{p.name}</b>
+                      <small>
+                        {p.counts?.dueFollowups
+                          ? `${p.counts.dueFollowups} 项随访到期`
+                          : p.counts?.unprocessedMessages
+                            ? `${p.counts.unprocessedMessages} 条新消息`
+                            : "点击查看"}
+                      </small>
+                    </span>
+                    {(p.counts?.dueFollowups > 0 ||
+                      p.counts?.unprocessedMessages > 0) && (
+                      <em className="nav-dot" />
+                    )}
+                  </button>
+                ))}
+                {!patientsList.length && (
+                  <p className="sidebar-empty">还没有患者档案。</p>
+                )}
+              </nav>
+              <p className="nav-label">
+                工具箱
+                <button
+                  className="nav-label-action"
+                  onClick={() => setToolPanel("__menu")}
+                >
+                  打开
+                </button>
+              </p>
+              <p className="sidebar-empty">
+                随访 · 病例库 · 速查 · 文献 · 科研 · DRG · 知识库
+              </p>
+              <button
+                className="workspace-account"
+                onClick={() => setModal("doctor")}
+              >
+                <span className="avatar">医</span>
+                <span>
+                  <b>医生记忆</b>
+                  <small>档案 · 偏好 · 每晚整理</small>
+                </span>
+                <Settings2 size={15} />
               </button>
-            ))}
-            {!patientsList.length && (
-              <p className="sidebar-empty">还没有患者档案。</p>
-            )}
-          </nav>
-          <p className="nav-label">
-            工具箱
-            <button
-              className="nav-label-action"
-              onClick={() => setToolPanel("__menu")}
-            >
-              打开
-            </button>
-          </p>
-          <p className="sidebar-empty">
-            随访 · 病例库 · 速查 · 文献 · 科研 · DRG · 知识库
-          </p>
-          <button
-            className="workspace-account"
-            onClick={() => setModal("doctor")}
-          >
-            <span className="avatar">医</span>
-            <span>
-              <b>医生记忆</b>
-              <small>档案 · 偏好 · 每晚整理</small>
-            </span>
-            <Settings2 size={15} />
-          </button>
+            </>
+          )}
         </aside>
         <div className="product-content">
           {view === "workspaces" ? (
@@ -1386,6 +1468,16 @@ function App() {
           ) : view === "drg" ? (
             <DrgView />
           ) : view !== "workbench" ? (
+            // bootstrap 未完成前不挂载任何领域视图:医疗首页挂载即请求
+            // /api/patients 等医疗接口,在通用服务上会直接进入错误态。
+            !config ? (
+              <main id="main" className="workbench-hub">
+                <div className="loading-state">
+                  <Loader2 className="spin" />
+                  正在连接本地运行时…
+                </div>
+              </main>
+            ) : (
             <WorkbenchHome
               key={homeKey}
               view={view}
@@ -1414,6 +1506,7 @@ function App() {
               fileInputRef={fileRef}
               onFilesPicked={upload}
             />
+            )
           ) : (
             <div className="shell">
               <main id="main" className="conversation">
@@ -1657,16 +1750,7 @@ function App() {
                         <div className="message-body">
                           <div className="message-meta">
                             <b>{m.role === "user" ? "你" : "医疗工作助理"}</b>
-                            <span>
-                              {m.role === "user"
-                                ? "本轮输入"
-                                : m.intent === "consultation" ||
-                                    (m.intent === undefined &&
-                                      !session?.runs?.find((r) => r.id === m.runId)
-                                        ?.artifacts?.length)
-                                  ? "咨询回复"
-                                  : "工作草稿"}
-                            </span>
+                            <span>{messageMeta(m)}</span>
                           </div>
                           <div className="message-content">
                             {m.role === "user" ? (
@@ -1675,6 +1759,13 @@ function App() {
                               <RichMessage text={m.content} />
                             )}
                           </div>
+                          {m.role !== "user" &&
+                            (m.outcome || runOf(m.runId)?.outcome) && (
+                              <OutcomeCard
+                                outcome={m.outcome || runOf(m.runId)?.outcome}
+                                delivery={runOf(m.runId)?.delivery}
+                              />
+                            )}
                           {m.role !== "user" && (
                             <MemoryNote count={doctorMemCount} />
                           )}
@@ -1706,10 +1797,19 @@ function App() {
                           <Loader2 className="spin" size={17} />
                         </div>
                         <div className="message-body">
+                          <RunStatusNotice
+                            run={persistedRunning}
+                            pendingCount={0}
+                          />
                           <StepsFlow
                             events={activeRun?.events || []}
                             running={busy}
-                            fallbackText="正在思考并调用工具…"
+                            fallbackText={
+                              persistedRunning &&
+                              runDerivedStatus(persistedRunning) !== "running"
+                                ? "任务在等待处理，见上方说明"
+                                : "正在思考并调用工具…"
+                            }
                           />
                           {(activeRun?.partial || persistedRunning?.partial) && (
                             <div className="message-content streaming">
@@ -1761,6 +1861,11 @@ function App() {
                       .map((r) => (
                         <div className="incomplete-run" key={r.id}>
                           <Badge status={r.status} />
+                          {r.derivedStatus === "blocked" && (
+                            <span className="error-text">
+                              受阻：{blockedText(r.waitingReason)}
+                            </span>
+                          )}
                           <p>{r.error}</p>
                           <button
                             className="secondary"
@@ -1915,7 +2020,11 @@ function App() {
                       ref={inputRef}
                       aria-label="医疗工作需求"
                       rows={3}
-                      placeholder="输入问题或任务，如「血糖有点高，27 岁男生，怎么办」；输入 @ 可固定技能…"
+                      placeholder={
+                        canSteer
+                          ? "任务执行中…输入补充要求可直接追加（Enter 发送）"
+                          : "输入问题或任务，如「血糖有点高，27 岁男生，怎么办」；输入 @ 可固定技能…"
+                      }
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
@@ -1966,7 +2075,7 @@ function App() {
                           send(e);
                         }
                       }}
-                      disabled={busy || loading}
+                      disabled={loading || (busy && !canSteer)}
                     />
                     <div className="composer-bottom">
                       <button
@@ -2056,7 +2165,7 @@ function App() {
                           本轮允许外发
                         </label>
                       )}
-                      {busy ? (
+                      {busy && (
                         <button
                           type="button"
                           className="send-button stop"
@@ -2065,10 +2174,12 @@ function App() {
                         >
                           <Square size={15} />
                         </button>
-                      ) : (
+                      )}
+                      {(!busy || canSteer) && (
                         <button
                           className="send-button"
-                          aria-label="发送任务"
+                          type="submit"
+                          aria-label={canSteer ? "追加要求" : "发送任务"}
                           disabled={
                             !draft.trim() ||
                             loading ||
@@ -2631,7 +2742,9 @@ function App() {
         <Modal title="运行设置" onClose={() => setModal(null)}>
           <div className="settings-body">
             <p>
-              医疗策略、会话、资料与复核在本地运行时管理。模型只承担辅助推理。
+              {medical
+                ? "医疗策略、会话、资料与复核在本地运行时管理。模型只承担辅助推理。"
+                : "任务、工作区、审批与产物在本地运行时管理。模型只承担辅助推理。"}
             </p>
             <p className="boundary">
               {config?.modelConfigured
@@ -2642,9 +2755,11 @@ function App() {
               <button className="primary" onClick={() => setModal("model")}>
                 切换模型
               </button>
-              <button className="secondary" onClick={() => setModal("doctor")}>
-                医生档案与记忆
-              </button>
+              {medical && (
+                <button className="secondary" onClick={() => setModal("doctor")}>
+                  医生档案与记忆
+                </button>
+              )}
               <button
                 className="secondary"
                 onClick={async () => {

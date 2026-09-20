@@ -19,12 +19,12 @@ const binary =
       );
 try {
   await new Promise((resolve, reject) => {
+    // ELECTRON_RUN_AS_NODE 必须彻底删除:Electron 44 起空串仍视为已设置,
+    // 会以 Node 模式启动并退出码 9(曾导致打包冒烟误报失败)。
+    const env = { ...process.env, MEDICAL_DESKTOP_TEST_DIR: directory };
+    delete env.ELECTRON_RUN_AS_NODE;
     const child = spawn(binary, ["--smoke-test"], {
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "",
-        MEDICAL_DESKTOP_TEST_DIR: directory,
-      },
+      env,
       stdio: "ignore",
     });
     const timer = setTimeout(() => {

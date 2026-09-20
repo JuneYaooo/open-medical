@@ -1,5 +1,13 @@
 import { sseFrames } from "../shared/sse.mjs";
 let auth;
+// App Shell 能力判定:优先读 bootstrap 的 capabilities(通用平台显式声明),
+// 医疗应用(旧 bootstrap 无 capabilities)回退到 patientsEnabled。
+// 返回 false 时前端不得请求 /api/sessions 等医疗接口、不渲染患者导航与医疗默认任务。
+export function medicalEnabled(config) {
+  if (config?.capabilities)
+    return Boolean(config.capabilities.medical);
+  return Boolean(config?.patientsEnabled);
+}
 export async function bootstrap(force = false) {
   if (force) auth = null;
   if (!auth)

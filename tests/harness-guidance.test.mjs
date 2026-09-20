@@ -13,7 +13,14 @@ function tempDir(label) {
   return dir;
 }
 
-test("image() 把 Docker 未运行与镜像缺失区分开", () => {
+test("image() 把 Docker 未运行与镜像缺失区分开", (t) => {
+  // Node 的安全策略(CVE-2024-27980 修复)禁止 child_process 直接执行
+  // .cmd/.bat,sh 脚本 stub 在 Windows 无法运行;两种场景都会退化为
+  // spawn 失败,区分断言失去意义。需 POSIX sh 或真实 docker.exe 覆盖。
+  if (process.platform === "win32")
+    return t.skip(
+      "Windows 上 Node 禁止直接 spawn .cmd/.bat stub;daemon-down 与镜像缺失区分断言需 POSIX 或真实 docker.exe 覆盖",
+    );
   const dir = tempDir("docker");
   try {
     const down = join(dir, "docker-down");
