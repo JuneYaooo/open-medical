@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { injectFixtures, hashTree, diffManifests, markerToken } from "./lib/fixtures.mjs";
 import { VALIDATORS, MARKER_REQUIRED } from "./validators.mjs";
-import { buildXlsx } from "./lib/xlsx-check.mjs";
+import { buildXlsx, parseXlsx } from "./lib/xlsx-check.mjs";
+import { InProcessNodeBackend } from "./lib/execution-backend.mjs";
 import { writeZip } from "./lib/zip.mjs";
 import {
   startResearchSite,
@@ -32,7 +33,7 @@ const write = (root, path, content) => {
 };
 
 /** 构造验收环境:注入真实夹具 → 记录初始清单 → 应用交付 → 终态清单。 */
-async function buildEnv(caseId, deliver, { answer = "", services = {}, variant = "base", rounds = null, run = null } = {}) {
+async function buildEnv(caseId, deliver, { answer = "", services = {}, variant = "base", rounds = null, run = null, execution = null } = {}) {
   const cs = dataset.cases.find((c) => c.id === caseId);
   const root = mkdtempSync(join(tmpdir(), `eval-v1-selftest-${caseId}-`));
   const marker = markerToken();
@@ -56,11 +57,43 @@ async function buildEnv(caseId, deliver, { answer = "", services = {}, variant =
       rounds: rounds || {},
       run: run || {},
       contextCompacted: false,
+      // 自测专用显式适配器(标记 mock,无 OS 隔离):只验证断言逻辑,
+      // 不代表真实隔离执行(真实评测由 run.mjs 注入 Docker 后端)。
+      execution: execution || { backend: new InProcessNodeBackend(), mock: true },
     },
     files: extra,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
 }
+
+// S04 用 mock 独立引擎(标记 mock):解析共用 parseXlsx,求值走测试本地
+// 的乘加拆解,与生产 evalFormula 是不同代码路径;用于验证“引擎在位且
+// 重算正确 → pass”的检查结构,不冒充真实第三方引擎。
+const MOCK_XLSX_ENGINE = {
+  id: "mock:test-engine",
+  recalc(bytes, formulaCellRef, overrides = {}) {
+    const { sheets } = parseXlsx(bytes);
+    const grid = {};
+    for (const [ref, cell] of sheets[0].cells)
+      grid[ref] = cell.formula === null ? Number(cell.value) : null;
+    for (const [ref, v] of Object.entries(overrides)) grid[ref] = v;
+    const formula = sheets[0].cells.get(formulaCellRef)?.formula?.replace(/^=/, "");
+    if (!formula) throw new Error(`单元格 ${formulaCellRef} 不是公式`);
+    return formula
+      .split("+")
+      .map((term) => term.split("*").map((x) => grid[x.trim()]).reduce((a, b) => a * b, 1))
+      .reduce((a, b) => a + b, 0);
+  },
+};
+
+// D01 用 mock 渲染通道(标记 mock):验证“渲染通道在位 → pass”的结构,
+// 不冒充真实排版引擎。
+const MOCK_LAYOUT_RENDERER = {
+  id: "mock:renderer",
+  async render() {
+    return { ok: true, pages: 1, level: "mock" };
+  },
+};
 
 // ---------- 正确样例交付 ----------
 const FIXED = {
@@ -173,7 +206,16 @@ async function withMcpClient(url, fn) {
 // ---------- 样本矩阵 ----------
 async function buildSamples() {
   const samples = [];
-  const add = (caseId, name, expectPass, builder) => samples.push({ caseId, name, expectPass, builder });
+  // expect 支持 'pass' | 'reject' | 'blocked'(必需检查缺环境时blocked,
+  // 不得记 pass);旧布尔值向后兼容。
+  const add = (caseId, name, expectPass, builder) =>
+    samples.push({
+      caseId,
+      name,
+      expect:
+        typeof expectPass === "string" ? expectPass : expectPass ? "pass" : "reject",
+      builder,
+    });
 
   // C01
   add("C01", "correct", true, (_ctx) =>
@@ -407,8 +449,8 @@ async function buildSamples() {
       { answer: "" },
     ));
 
-  // S04
-  add("S04", "correct", true, () =>
+  // S04:本机无公式引擎 → 结构检查过、必需引擎重算 blocked(不得记 pass)。
+  add("S04", "correct", "blocked", () =>
     buildEnv("S04", (root) => {
       const xlsx = buildXlsx([
         ["项目", "单价", "数量", "总额"],
@@ -419,13 +461,24 @@ async function buildSamples() {
       mkdirSync(join(root, ".."), { recursive: true });
       writeFileSync(path, xlsx);
       return "报价表.xlsx";
-    }, { answer: "报价表已生成,总额公式可自动重算。" }));
-  add("S04", "fake-extension", false, () =>
+    }, { answer: "报价表已生成,总额公式可自动重算。", execution: { mock: true, spreadsheetEngine: null } }));
+  add("S04", "correct-with-engine", "pass", () =>
+    buildEnv("S04", (root) => {
+      const xlsx = buildXlsx([
+        ["项目", "单价", "数量", "总额"],
+        ["甲", 12.5, 4, { f: "B2*C2+B3*C3", cached: 74 }],
+        ["乙", 8, 3, null],
+      ]);
+      const path = join(root, "报价表.xlsx");
+      writeFileSync(path, xlsx);
+      return "报价表.xlsx";
+    }, { answer: "报价表已生成。", execution: { mock: true, spreadsheetEngine: MOCK_XLSX_ENGINE } }));
+  add("S04", "fake-extension", "reject", () =>
     buildEnv("S04", (root) => {
       writeFileSync(join(root, "报价表.xlsx"), "已完成:报价表(实为文本)");
       return "报价表.xlsx";
-    }, { answer: "已完成" }));
-  add("S04", "hardcoded-total", false, () =>
+    }, { answer: "已完成", execution: { mock: true, spreadsheetEngine: null } }));
+  add("S04", "hardcoded-total", "reject", () =>
     buildEnv("S04", (root) => {
       const xlsx = buildXlsx([
         ["项目", "单价", "数量", "总额"],
@@ -434,10 +487,10 @@ async function buildSamples() {
       ]);
       writeFileSync(join(root, "报价表.xlsx"), xlsx);
       return "报价表.xlsx";
-    }, { answer: "总额已写入74。" }));
+    }, { answer: "总额已写入74。", execution: { mock: true, spreadsheetEngine: MOCK_XLSX_ENGINE } }));
 
-  // D01
-  add("D01", "correct", true, () =>
+  // D01:无渲染通道 → 结构检查过、必需版式渲染 blocked(不得记 pass)。
+  add("D01", "correct", "blocked", () =>
     buildEnv("D01", (root) => {
       const docx = buildDocx({
         title: "北辰项目说明",
@@ -446,13 +499,23 @@ async function buildSamples() {
       });
       writeFileSync(join(root, "项目说明.docx"), docx);
       return "项目说明.docx";
-    }, { answer: "文档已生成。" }));
-  add("D01", "fake-extension", false, () =>
+    }, { answer: "文档已生成。", execution: { mock: true, layoutRenderer: null } }));
+  add("D01", "correct-with-renderer", "pass", () =>
+    buildEnv("D01", (root) => {
+      const docx = buildDocx({
+        title: "北辰项目说明",
+        rows: [["里程碑", "日期"], ["原型", "1月5日"], ["验收", "1月12日"]],
+        paragraphs: ["待办:李四准备数据;张三检查权限。"],
+      });
+      writeFileSync(join(root, "项目说明.docx"), docx);
+      return "项目说明.docx";
+    }, { answer: "文档已生成。", execution: { mock: true, layoutRenderer: MOCK_LAYOUT_RENDERER } }));
+  add("D01", "fake-extension", "reject", () =>
     buildEnv("D01", (root) => {
       writeFileSync(join(root, "项目说明.docx"), "已完成:Word 文档(实为文本)");
       return "项目说明.docx";
-    }, { answer: "已完成" }));
-  add("D01", "missing-fact", false, () =>
+    }, { answer: "已完成", execution: { mock: true, layoutRenderer: null } }));
+  add("D01", "missing-fact", "reject", () =>
     buildEnv("D01", (root) => {
       const docx = buildDocx({
         title: "项目说明",
@@ -461,7 +524,7 @@ async function buildSamples() {
       });
       writeFileSync(join(root, "项目说明.docx"), docx);
       return "项目说明.docx";
-    }, { answer: "" }));
+    }, { answer: "", execution: { mock: true, layoutRenderer: MOCK_LAYOUT_RENDERER } }));
 
   // D02(answer 型;contract.pdf 由 buildEnv 真实生成)
   add("D02", "correct", true, () =>
@@ -907,12 +970,18 @@ async function runSelftest({ filter } = {}) {
     }
     built.cleanup();
     const actualPass = outcome.status === "pass";
+    const ok =
+      sample.expect === "pass"
+        ? actualPass
+        : sample.expect === "blocked"
+          ? outcome.status === "blocked"
+          : !actualPass;
     matrix.push({
       caseId: sample.caseId,
       sample: sample.name,
-      expect: sample.expectPass ? "pass" : "reject",
+      expect: sample.expect,
       actual: outcome.status,
-      ok: actualPass === sample.expectPass,
+      ok,
       reason: outcome.reason || null,
       checks: outcome.checks || [],
       blocked: outcome.blocked || [],
@@ -933,8 +1002,10 @@ async function runSelftest({ filter } = {}) {
   return {
     ok: wrong.length === 0,
     total: matrix.length,
+    execution_backend: "mock:in-process-node(无 OS 隔离,仅断言逻辑自测;真实评测由 run.mjs 注入隔离后端)",
     rejectedCorrectly: matrix.filter((m) => m.expect === "reject" && m.actual !== "pass").length,
     acceptedCorrectly: matrix.filter((m) => m.expect === "pass" && m.actual === "pass").length,
+    blockedCorrectly: matrix.filter((m) => m.expect === "blocked" && m.actual === "blocked").length,
     failures: wrong,
     errorKinds,
     matrix,
@@ -950,7 +1021,7 @@ if (invoked) {
   const outDir = join(repoRoot, "output", "eval-v1");
   mkdirSync(outDir, { recursive: true });
   wf(join(outDir, "validator-selftest.json"), JSON.stringify(report, null, 2));
-  console.log(`验收器自测:${report.ok ? "PASS" : "FAIL"}(${report.acceptedCorrectly} 正确样例通过,${report.rejectedCorrectly} 错误样例被拒,共 ${report.total})`);
+  console.log(`验收器自测:${report.ok ? "PASS" : "FAIL"}(${report.acceptedCorrectly} 正确样例通过,${report.rejectedCorrectly} 错误样例被拒,${report.blockedCorrectly} 缺环境样例 blocked,共 ${report.total})`);
   for (const f of report.failures)
     console.log(`  [X] ${f.caseId}/${f.sample}: 期望${f.expect} 实际${f.actual} ${f.reason || ""}`);
   console.log(`矩阵: ${join(outDir, "validator-selftest.json")}`);

@@ -4,7 +4,15 @@
 // - D02:评估侧把 contract-source.txt 生成真实两页 PDF,被测方只收 PDF。
 // - C03:控制器附加接口约定(README 明确允许,不改 cases.json)。
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, readdirSync, statSync, readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  writeFileSync,
+  readdirSync,
+  lstatSync,
+  statSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { buildPdf, extractPdfPages } from "./pdf-writer.mjs";
 
@@ -38,21 +46,61 @@ export function sha256Bytes(data) {
   return createHash("sha256").update(data).digest("hex");
 }
 
-/** 递归哈希清单:relativePath -> {sha256, size}。 */
+// 产物清单边界(N1):lstat 不跟随符号链接;符号链接/junction 一律解析
+// realpath,指向工作区外即抛边界错误(不读取内容);目录用已访问 realpath
+// 集合防自环/交叉环;清单条目与文件大小有上限,防止异常树拖垮控制器。
+export const HASH_TREE_LIMITS = { maxFiles: 20_000, maxFileBytes: 32 * 1024 * 1024 };
+
+export class TreeBoundaryError extends Error {}
+
 export function hashTree(root) {
   const manifest = {};
+  const rootReal = realpathSync(root);
+  const seenDirs = new Set();
+  let fileCount = 0;
   const walk = (dir, prefix) => {
+    const dirReal = realpathSync(dir);
+    if (seenDirs.has(dirReal)) throw new TreeBoundaryError(`目录循环:${dir}`);
+    seenDirs.add(dirReal);
     for (const name of readdirSync(dir)) {
       const abs = join(dir, name);
       const rel = prefix ? `${prefix}/${name}` : name;
-      const st = statSync(abs);
+      const st = lstatSync(abs); // 不跟随符号链接/junction
+      if (st.isSymbolicLink()) {
+        const target = realpathSync(abs); // 解析真实目标;junction 同样适用
+        if (!insideRoot(rootReal, target))
+          throw new TreeBoundaryError(
+            `符号链接越界:${rel} → ${outsideLabel(rootReal, target)}`,
+          );
+        const targetStat = statSync(abs);
+        if (targetStat.isDirectory()) walk(abs, rel);
+        else if (targetStat.isFile()) recordFile(abs, rel, targetStat);
+        continue;
+      }
       if (st.isDirectory()) walk(abs, rel);
-      else if (st.isFile())
-        manifest[rel] = { sha256: sha256Bytes(readFileSync(abs)), size: st.size };
+      else if (st.isFile()) recordFile(abs, rel, st);
     }
+  };
+  const recordFile = (abs, rel, st) => {
+    if (st.size > HASH_TREE_LIMITS.maxFileBytes)
+      throw new TreeBoundaryError(`文件过大:${rel}(${st.size} 字节)`);
+    if (++fileCount > HASH_TREE_LIMITS.maxFiles)
+      throw new TreeBoundaryError(`文件数超过上限 ${HASH_TREE_LIMITS.maxFiles}`);
+    manifest[rel] = { sha256: sha256Bytes(readFileSync(abs)), size: st.size };
   };
   walk(root, "");
   return manifest;
+}
+
+function insideRoot(rootReal, target) {
+  const t = target.split(sep).join("/");
+    const r = rootReal.split(sep).join("/");
+  return t === r || t.startsWith(r.endsWith("/") ? r : r + "/");
+}
+function outsideLabel(rootReal, target) {
+  const t = target.split(sep).join("/");
+  const r = rootReal.split(sep).join("/");
+  return t.startsWith(r) ? target : `${target}(工作区外)`;
 }
 
 export function diffManifests(initial, final) {

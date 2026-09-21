@@ -121,3 +121,20 @@
 
 - 验证集:`evals/general-agent-v1/`(cases.json 30 项 + protocol.json + README 规则),按其 README "接入工作交给实施 Agent" 第 1—7 条执行。
 - 真实模型 blocked 时:完成数据预检、夹具、验收器、验收器自测(正确+错误样例)、模拟协议冒烟;正式 90 次评测记 blocked,不伪造。
+
+## N1—N6 修复轮(2026-09-20 复核后,基线 798cd75)
+
+依据《ZCode下一轮修复指引_0.9.8复核后_2026-09-20.md》。逐包根因/修改/证据/剩余风险详见 `docs/N1-N6修复交付摘要_2026-09-20.md`。环境事实:Docker daemon DOWN(N1 真实容器验证 blocked);无模型凭据(真实评测 blocked);Node 24.19.0 便携版。
+
+| 包 | 状态 | 证据锚点 |
+| --- | --- | --- |
+| N1 执行与验收隔离 | self_verified(宿主逃逸已封死;真实容器路径 blocked=Docker daemon DOWN,无宿主回退) | lib/execution-backend.mjs、validators runModule(nonce 防伪+篡改快照)、hashTree 边界;tests/eval-execution-backend.test.mjs 11 过/1 跳过(带因) |
+| N2 检查级状态与汇总 | self_verified | lib/checks.mjs 单一聚合;validators CheckList 化;S04/D01 必需项缺引擎/渲染 → blocked;selftest 71 样例全绿(含 blocked 期望);run.mjs 正式 stage blocked → exit 2 |
+| N3 通用交付契约主路径 | self_verified(服务集成 10/10 + 真实 Edge 2/2) | WorkspaceService onDelivery 接线+落库 delivery/outcome;AgentRuntime unverified/取消晚到/重试反馈;OutcomeCard 四态;publicWorkspace/SessionBridge 下发 |
+| N4 医疗交付按目标核对 | self_verified | runtime.mjs 回执 ok/失败进缺口、沙箱无产物缺口、consultation→null、待复核语义;tests/medical-delivery.test.mjs 5/5 穿真实 MedicalRuntime;既有 answered→delivery_failed / unverified 为有意语义收紧 |
+| N5 统一模型配置发现 | self_verified | server/core/model-config.mjs 纯函数发现(桌面→repo→环境优先级、跨提供方不拼接、损坏报错、local 合法、脱敏);verify-model/eval-v1 共用;tests/model-config.test.mjs 10/10 |
+| N6 全任务轨迹与预算 | self_verified(mock 协议级;真实模型评测 blocked) | run.mjs 2.0.0-n1n6:trialId+逐轮记录+整项预算(墙钟/轮次/工具调用真实执行)+attempt 目录+变体门控+故障注册表(X02/X04/X07/X11/X12 实现;X01/X03/X05/X06/X08/X09/X10 declared-not-implemented 只出 blocked)+dirty diff 内容哈希 |
+
+上轮遗留核对:W5"通用服务端 delivery 接线"与"评测运行器可信性"两个 pending 已由本轮 N3/N1/N2/N6 关闭;W9 未完成项中"publicWorkspace 下发 derivedStatus/delivery"已随 N3 落地。原 W0—W9 各条目的 self_verified 仅覆盖其当时范围,不自动继承为本轮证据。
+
+真实模型 90 次正式评测、S04 独立引擎、D01 渲染通道、T02 长变体真实压缩:X01/X03/X05/X06/X08/X09/X10 故障触发器为 declared-not-implemented ——均如实 blocked,不阻塞本轮缺陷修复交付;完整 L3 认证未做,与本轮完成分开报告。

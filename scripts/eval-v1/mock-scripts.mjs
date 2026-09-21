@@ -84,4 +84,27 @@ export const SMOKE_SCRIPTS = new Map([
       };
     },
   ],
+  [
+    // A02(X04/X12 基础):先读记录(给控制器一个可中断的 tool.complete
+    // 边界),恢复/取消语义由控制器注入;恢复后写汇总(合计60+运行标记)。
+    "A02",
+    ({ call, userText }) => {
+      const marker = markerFrom(userText);
+      if (call === 1)
+        return { toolCalls: [{ name: "read_file", args: { path: "records.csv" } }] };
+      if (call === 2)
+        return {
+          toolCalls: [
+            {
+              name: "propose_file_write",
+              args: {
+                path: "汇总.md",
+                content: `# 记录汇总\n\n| id | value |\n| --- | --- |\n| 1 | 10 |\n| 2 | 20 |\n| 3 | 30 |\n\n合计:60\n\n运行标记:${marker || "EVAL-MISSING"}\n`,
+              },
+            },
+          ],
+        };
+      return { content: "已完成汇总:三条记录合计 60,过程文件已保留,见 汇总.md。" };
+    },
+  ],
 ]);

@@ -9,11 +9,15 @@ export class AgentRuntime {
     maxRounds = Infinity,
     maxContextChars = 100000,
     maxToolCalls = 8,
+    // 整次运行的工具调用总预算(N6):执行过的调用计数,超出的调用不再执行,
+    // 以结构化错误返回给模型。默认不设限;评测控制器按协议传入真实上限。
+    maxTotalToolCalls = Infinity,
   }) {
     this.provider = provider;
     this.maxRounds = maxRounds;
     this.maxContextChars = maxContextChars;
     this.maxToolCalls = maxToolCalls;
+    this.maxTotalToolCalls = maxTotalToolCalls;
   }
   async run({
     messages: input,
@@ -44,6 +48,11 @@ export class AgentRuntime {
     let text = "";
     // 单轮输出被长度截断时的自动续写次数：超过后交付部分内容并提示。
     let truncatedRounds = 0;
+    // N3:交付验证发现可操作缺口时,反馈执行循环继续修正的已用次数
+    // (有硬上限,防止验证-重试循环吃掉无界预算)。
+    let deliveryRetries = 0;
+    // N6:本运行已真实执行的工具调用数(总预算约束)。
+    let executedToolCalls = 0;
     for (let round = 0; round < this.maxRounds; round++) {
       signal.throwIfAborted();
       const updates = await takeInput();
@@ -181,8 +190,9 @@ export class AgentRuntime {
         }
         signal.throwIfAborted();
         await onCheckpoint(structuredClone(messages));
-        // 交付证据 seam：完成前由运行时事实核对交付（不是模型自评）。
-        // 钩子异常不阻断完成——按“未能验证”记录事件，不伪造 delivered。
+        // 交付证据 seam:完成前由运行时事实核对交付(不是模型自评)。
+        // 钩子异常不阻断完成,但也不丢事实——按“未能验证”持久化明确
+        // 状态(N3),绝不静默当成功。
         let delivery = null;
         const verify =
           typeof onDelivery === "function"
@@ -204,7 +214,19 @@ export class AgentRuntime {
               reason: error.code || "DELIVERY_CHECK_FAILED",
               error: error.code ? error.message : "交付检查未能执行",
             });
-            delivery = null;
+            delivery = normalizeDelivery({
+              delivered: false,
+              unverified: true,
+              evidence: [],
+              gaps: [
+                {
+                  reason: error.code || "delivery_check_failed",
+                  detail: error.code
+                    ? error.message
+                    : "交付检查未能执行(验证器异常),结果未验证",
+                },
+              ],
+            });
           }
           if (delivery)
             emit(delivery.delivered ? "delivery.verified" : "delivery.gaps", {
@@ -212,6 +234,28 @@ export class AgentRuntime {
               evidence: delivery.evidence.length,
               gaps: delivery.gaps.length,
             });
+        }
+        // N3-07:验证期间被取消时,晚到的验证结论一律不采信——取消后不能
+        // 再写成成功。抛出中止,由执行服务的取消路径收敛状态。
+        signal.throwIfAborted();
+        // N3:验证不完整时,若存在可操作缺口且预算允许,把缺口反馈回执行
+        // 循环继续修正;硬上限 2 次,防止验证-重试循环无界消耗。
+        if (
+          delivery &&
+          delivery.delivered === false &&
+          delivery.unverified !== true &&
+          typeof delivery.retryMessage === "string" &&
+          (delivery.gaps || []).some((g) => g && g.actionable === true) &&
+          deliveryRetries < 2
+        ) {
+          deliveryRetries += 1;
+          messages.push({ role: "user", content: delivery.retryMessage });
+          await onCheckpoint(structuredClone(messages));
+          emit("delivery.retry", {
+            attempt: deliveryRetries,
+            gaps: delivery.gaps.length,
+          });
+          continue;
         }
         return {
           messages,
@@ -272,6 +316,17 @@ export class AgentRuntime {
         // an intent whose result was not durably recorded.
         await onCheckpoint(structuredClone(messages), { pendingToolCall: call.id });
         emit("tool.start", { tool: call.function.name, call_id: call.id });
+        // N6:总预算真实执行——超出后调用不执行,以结构化错误回给模型。
+        if (executedToolCalls >= this.maxTotalToolCalls) {
+          const output = {
+            code: "TOOL_BUDGET_EXHAUSTED",
+            error: `工具调用总预算(${this.maxTotalToolCalls})已用尽,本次调用未执行。请基于已有信息收尾,如实说明未完成部分,不要声称已完成未执行的操作。`,
+          };
+          messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
+          await onTrace({ type: "tool.result", call, output, durationMs: 0 });
+          emit("tool.failed", { tool: call.function.name, call_id: call.id, error: output.error });
+          continue;
+        }
         const toolStarted = Date.now();
         let output;
         try {
@@ -282,6 +337,7 @@ export class AgentRuntime {
             signal,
             context,
           });
+          executedToolCalls += 1;
           output = await registry.execute(
             call.function.name,
             args,

@@ -629,6 +629,9 @@ function App() {
     const outcome = m.outcome || runOf(m.runId)?.outcome;
     if (outcome === "answered") return "文字回答 · 无产物";
     if (outcome === "delivered") return "已交付成果";
+    // N3:执行类未完成/未验证不冒充交付,也不降格为文字回答。
+    if (outcome === "delivery_failed") return "交付未完成";
+    if (outcome === "unverified") return "结果未验证";
     return m.intent === "consultation" ||
       (m.intent === undefined && !runOf(m.runId)?.artifacts?.length)
       ? "咨询回复"
