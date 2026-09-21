@@ -476,7 +476,15 @@ export class MedicalRuntime {
         signal: controller.signal,
         onEvent: childEvent,
       });
-      delegatedReceipts.push({ childId: child.id, status: child.status });
+      // N4(复核 R4):回执记录真实状态;失败子任务回执仅作诊断,
+      // 绝不在完成点被当作成功证据。
+      delegatedReceipts.push({
+        childId: child.id,
+        status: child.status,
+        ok: child.status === "completed",
+        artifactCount: (child.artifacts || []).length,
+        error: child.error || null,
+      });
       if (child.status === "completed") artifacts.push(...child.artifacts);
       if (child.usage?.total_tokens) {
         run.usage ||= {
@@ -713,41 +721,89 @@ export class MedicalRuntime {
           run.usage.rounds++;
         };
         const archiveFor = (data) => this.store.archive(sessionId, run.id, data);
-        // W5 交付验证钩子：执行类任务（非咨询问答意图，或期间确有产物/
-        // 沙箱/子代理副作用）在完成点用运行时事实核对交付。证据=结构化
-        // 产物回执（含内容哈希）+沙箱/子代理回执；无任何可核对产物时
-        // delivered=false 并说明缺口。纯问答（consultation 且零副作用）
-        // 返回 null，不触发交付检查，保持原行为。
+        // N4 交付验证钩子(复核 R4 重写):与 N3 共用结果语义(delivery/
+        // normalizeDelivery),只做领域事实收集。
+        // - 纯咨询(consultation)是回答型任务:检索/沙箱回执只是过程,
+        //   返回 null 保持 answered 语义,不因发生过副作用就宣称交付。
+        // - 执行类意图:delivered 必须“有通过结构核对的本 run 产物”且无
+        //   未解决缺口;沙箱成功只证明动作成功,不能抵消缺失产物;失败
+        //   子任务回执进入缺口(诊断),不进证据。
+        // - 草稿 awaiting review:delivered 表示产物已核实存在且待复核,
+        //   不代表医生已确认。
+        // 结构化草稿的最小“按要求核对”:有 id、状态 draft,且除元数据键
+        // 外带至少一个非空内容载荷(observations/events/content 等)。有
+        // artifactId/hash 只证明对象存在,不证明内容满足任务——内容级核对
+        // 由对应验证器/复核承担。
+        const DRAFT_META_KEYS = new Set([
+          "id", "type", "title", "status", "version",
+          "createdAt", "updatedAt", "provenance",
+        ]);
+        const hasPayload = (value) => {
+          if (typeof value === "string") return value.trim().length > 0;
+          if (Array.isArray(value)) return value.length > 0;
+          if (value && typeof value === "object") return Object.keys(value).length > 0;
+          return false;
+        };
+        const isWellFormedDraft = (a) =>
+          Boolean(
+            a &&
+              typeof a.id === "string" &&
+              a.status === "draft" &&
+              Object.entries(a).some(
+                ([key, value]) => !DRAFT_META_KEYS.has(key) && hasPayload(value),
+              ),
+          );
         const onDelivery = () => {
-          const effects =
-            artifacts.length > 0 ||
-            sandboxReceipt !== null ||
-            delegatedReceipts.length > 0;
-          const executionClass =
-            effects || run.policy.intent !== "consultation";
-          if (!executionClass) return null;
-          const evidence = artifacts.map((a) => artifactEvidence(a));
-          if (sandboxReceipt)
-            evidence.push(receiptEvidence("sandbox", sandboxReceipt));
-          for (const receipt of delegatedReceipts)
+          if (run.policy.intent === "consultation") return null;
+          const validArtifacts = artifacts.filter(isWellFormedDraft);
+          const brokenArtifacts = artifacts.filter((a) => !isWellFormedDraft(a));
+          const okDelegations = delegatedReceipts.filter((r) => r.ok);
+          const failedDelegations = delegatedReceipts.filter((r) => !r.ok);
+          const sandboxOk = sandboxReceipt?.completed === true;
+          const evidence = [];
+          const gaps = [];
+          for (const artifact of validArtifacts)
+            evidence.push(artifactEvidence(artifact));
+          for (const receipt of okDelegations)
             evidence.push(receiptEvidence("subagent", receipt));
-          if (effects)
-            return {
-              delivered: true,
-              evidence,
-              gaps: [],
-              method: "runtime-facts",
-            };
+          for (const artifact of brokenArtifacts)
+            gaps.push({
+              reason: "artifact_incomplete",
+              detail: `结构化产物 ${artifact?.id || "(无id)"} 缺少必要内容/状态,未按目标核对通过`,
+              artifactId: artifact?.id || null,
+            });
+          for (const receipt of failedDelegations)
+            gaps.push({
+              reason: "subagent_failed",
+              detail: `子任务 ${receipt.childId} 状态 ${receipt.status},其失败回执仅作诊断,不构成成功证据`,
+              childId: receipt.childId,
+            });
+          if (sandboxOk) evidence.push(receiptEvidence("sandbox", sandboxReceipt));
+          if (sandboxOk && validArtifacts.length === 0 && okDelegations.length === 0)
+            gaps.push({
+              reason: "sandbox_without_deliverable",
+              detail:
+                "沙箱执行成功但没有可核对的交付产物;与目标无关的动作成功不能当作任务完成",
+            });
+          if (evidence.length === 0 && gaps.length === 0)
+            gaps.push({
+              reason: "no_verifiable_output",
+              detail: `执行类任务(意图 ${run.policy.intent})结束时没有任何产物类工具结果或执行回执;模型的文字完成说明不构成交付证据。`,
+            });
+          // 子任务完成/沙箱成功都只证明动作发生过;没有可核对产物时父目标
+          // 不视为完成(N4:子任务 completed 不自动代表父目标全部完成)。
+          if (validArtifacts.length === 0 && gaps.length === 0)
+            gaps.push({
+              reason: "no_artifact_deliverable",
+              detail:
+                "存在执行回执但没有可核对的结构化产物;动作成功不等于父目标完成",
+            });
           return {
-            delivered: false,
+            delivered: validArtifacts.length > 0 && gaps.length === 0,
             evidence,
-            gaps: [
-              {
-                reason: "no_verifiable_output",
-                detail: `执行类任务（意图 ${run.policy.intent}）结束时没有任何产物类工具结果或执行回执；模型的文字完成说明不构成交付证据。`,
-              },
-            ],
+            gaps,
             method: "runtime-facts",
+            note: "delivered 表示本次运行产物已核实存在且待复核;不代表医生已确认或患者侧操作已生效。",
           };
         };
         const result = await this.agent.run({
@@ -798,13 +854,16 @@ export class MedicalRuntime {
         delivery = result.delivery || null;
       }
       controller.signal.throwIfAborted();
-      // W5：执行类任务交付未核实（delivered=false）时运行状态仍为
-      // completed，但结果分类记为 answered（回答而非交付）；纯问答与
-      // 交付核实通过的运行不受影响。delivery 为 null 表示未触发检查。
+      // N3/N4:结果分类统一——delivered(核实交付)/unverified(验证异常)/
+      // delivery_failed(执行类缺口未解决)。执行类任务不再把未完成降格为
+      // answered;answered 保留给本来就是回答的任务(delivery 为 null,
+      // 由 intent=consultation 或纯问答产生)。
       const outcome = delivery
         ? delivery.delivered
           ? "delivered"
-          : "answered"
+          : delivery.unverified
+            ? "unverified"
+            : "delivery_failed"
         : null;
       const assistant = {
         id: randomUUID(),

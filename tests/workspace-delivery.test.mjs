@@ -7,7 +7,7 @@ import { WorkspaceDatabase, WorkspaceService } from '../server/core/index.mjs';
 import { WorkspaceFiles, hashText } from '../server/core/workspace-files.mjs';
 import { SessionBridge } from '../server/session-bridge.mjs';
 
-async function fixture(t, steps = [], { review = false, initial } = {}) {
+async function fixture(t, steps = [], { review = false, initial, message = '创建并核对 report.md', answer = '已创建 report.md，任务完成。' } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'omw-delivery-')), root = join(base, 'project');
   mkdirSync(root);
   if (initial !== undefined) writeFileSync(join(root, 'report.md'), initial);
@@ -18,7 +18,7 @@ async function fixture(t, steps = [], { review = false, initial } = {}) {
     if (typeof step === 'function') return step();
     return { message: step ? { role: 'assistant', content: '', tool_calls: [{ id: `call-${index}`, type: 'function', function: {
       name: step.name, arguments: JSON.stringify(step.args),
-    } }] } : { role: 'assistant', content: '已创建 report.md，任务完成。' } };
+    } }] } : { role: 'assistant', content: answer } };
   } };
   const service = new WorkspaceService(db.db, provider);
   t.after(async () => { await service.extensions.close(); db.close(); rmSync(base, { recursive: true, force: true }); });
@@ -26,7 +26,7 @@ async function fixture(t, steps = [], { review = false, initial } = {}) {
   w = service.update(w.id, { revision: w.revision, profile: 'standard', allowWrite: true,
     approvalPolicy: review ? 'review' : 'workspace-write', autoApplyConsent: !review });
   const prepare = (completion) => service.prepare(w.id, { revision: service.get(w.id).revision,
-    message: '创建并核对 report.md', externalConsent: true, completion });
+    message, externalConsent: true, completion });
   const run = async (completion) => { const handle = prepare(completion); await service.execute(handle); return service.get(w.id).runs.at(-1); };
   return { service, db, root, id: w.id, prepare, run };
 }
@@ -48,7 +48,7 @@ test('modification evidence verifies final content and rejects wrong explicit re
   const f = await fixture(t, [write('updated text', hashText(initial))], { initial });
   const run = await f.run({ files: [{ path: 'report.md', contains: 'absent expected phrase' }] });
   assert.equal(new WorkspaceFiles(f.root).read('report.md').text, 'updated text');
-  assert.equal(run.outcome, 'answered'); assert.equal(run.delivery.delivered, false);
+  assert.equal(run.outcome, 'delivery_failed'); assert.equal(run.delivery.delivered, false);
   assert.ok(run.delivery.gaps.some(g => g.reason === 'file_requirement_failed'));
 });
 
@@ -56,14 +56,14 @@ test('old files, old runs and text claims cannot satisfy current-run file requir
   const f = await fixture(t, [write()]);
   assert.equal((await f.run()).outcome, 'delivered');
   const run = await f.run({ files: [{ path: 'report.md' }] });
-  assert.equal(run.outcome, 'answered'); assert.equal(run.delivery.evidence.length, 0);
+  assert.equal(run.outcome, 'delivery_failed'); assert.equal(run.delivery.evidence.length, 0);
   assert.ok(run.delivery.gaps.some(g => g.reason === 'required_file_not_written'));
 });
 
 test('pending and rejected approval never count as applied delivery', async t => {
   const f = await fixture(t, [write()], { review: true });
   const run = await f.run();
-  assert.equal(run.outcome, 'answered');
+  assert.equal(run.outcome, 'delivery_failed');
   const w = f.service.get(f.id), approval = w.approvals[0];
   assert.equal(approval.status, 'pending');
   f.service.decide(f.id, approval.id, { revision: w.revision, decision: 'reject' });
@@ -76,7 +76,7 @@ test('service checker exception leaves structured gaps and cancellation is not c
   const f = await fixture(t);
   f.service.verifyDelivery = () => { throw new Error('private details'); };
   let run = await f.run();
-  assert.equal(run.outcome, 'answered'); assert.equal(run.delivery.gaps[0].reason, 'delivery_check_failed');
+  assert.equal(run.outcome, 'unverified'); assert.equal(run.delivery.gaps[0].reason, 'delivery_check_failed');
   assert.doesNotMatch(JSON.stringify(run.delivery), /private details/);
   const handle = f.prepare();
   f.service.verifyDelivery = () => { handle.controller.abort(); return { delivered: true }; };
@@ -119,7 +119,7 @@ test('unchanged existing file and failed tool cannot masquerade as delivery', as
 });
 
 test('current artifacts are read back and tampering is a structured gap', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, [], { message: '生成合成测试产物', answer: '产物已生成。' });
   const handle = f.prepare();
   const artifact = f.service.artifacts.save(f.id, 'result.txt', Buffer.from('synthetic artifact'), handle.run.id);
   await f.service.execute(handle);
@@ -137,7 +137,7 @@ test('trusted domain verification may restrict but cannot invent service evidenc
   f.service.domain = { ...f.service.domain, verifyDelivery: () => ({ delivered: false,
     evidence: [], gaps: [{ reason: 'required_content_missing' }] }) };
   const run = await f.run();
-  assert.equal(run.outcome, 'answered');
+  assert.equal(run.outcome, 'delivery_failed');
   assert.ok(run.delivery.gaps.some(g => g.reason === 'required_content_missing'));
 });
 

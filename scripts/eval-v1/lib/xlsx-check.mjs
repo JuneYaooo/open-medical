@@ -302,6 +302,7 @@ export function checkQuoteWorkbook(bytes) {
     ok: recalcOk,
     reason: recalcOk ? null : `数量改为2后重算得 ${recalced},期望49`,
     totalRef: totalCell.ref,
+    qtyRef,
     formula: totalCell.cell.formula,
     initial: totalCell.value,
     recalcedWithQty2: recalced,

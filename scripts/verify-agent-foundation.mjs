@@ -362,7 +362,8 @@ async function scenario(id, dir) {
       const run = await f.run(cases[Number(id) - 1].input, completion);
       assert.equal(run.status, "completed", run.error);
       if (["01", "04", "05"].includes(id)) {
-        assert.equal(run.outcome, "answered");
+        // 0.9.9 distinguishes failed execution delivery from an ordinary answer.
+        assert.equal(run.outcome, id === "01" ? "answered" : "delivery_failed");
         assert.notEqual(run.delivery?.delivered, true);
       } else {
         assert.equal(run.outcome, "delivered", JSON.stringify(run.delivery));

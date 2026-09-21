@@ -204,3 +204,17 @@ Docker CLI 如果完全不产生退出事件，仍由原命令时限控制；不
 - 最新源码的 **48 小时连续负载、Windows 实机、干净安装、正式签名/公证、升级回滚**仍未完成。历史 110/110 短负载、单次真实 SIGKILL、单元测试或本次短时容器验证均不能替代它们。本次没有构建/安装/发布新的签名候选包。
 
 最终冻结源码指纹为 `bf9d9eac7f253fc603c03ecdcbb166c79f2dc7dcff66998a4a69bee9ed42a9ba`。最终本地全量 **633 项：625 通过、8 跳过、0 失败**（明确关闭真实模型 E2E；跳过不是通过），受控 **40/40**，lint/build/diff 检查通过；真实 Docker 崩溃回收测试也包含于最终全量。日志和来源边界见 [本次实现验收清单](../output/framework-robustness-20260921/beta-boundaries/implementation-verification.json)。以上不代表原真实任务已从 5/6 升级，也不代表发布验收完成。
+
+
+## PR #1 合并 main 冲突收尾（2026-09-21）
+
+按用户明确要求，将 Beta 分支 `045b2c3` 与远端 main `b41d76c` 合并后直接推送 main，保留双亲历史，不强推。
+
+- 解决运行时、交付归一化、工作区服务及两份测试的五处冲突。保留严格文件读取/哈希/当前运行证据核验、审批等待边界、领域核验限制，同时接入 0.9.9 的 `delivery_failed` / `unverified`、有界交付修正和工具总预算。
+- 合并后只保留一个主路径交付检查入口，避免两个 `onDelivery` 属性互相覆盖。受控任务及单元测试中，执行未交付的旧 `answered` 状态断言对齐为 `delivery_failed`；问答保持原意，文件/数值/哈希/权限/禁止自动审批断言保留。原真实任务与 240 秒时限未改。
+- 远端新增配置测试改为使用当前平台对应的临时桌面目录；Docker 评测明确使用 Node 入口，真实容器测试使用仓库 output 下的临时挂载目录（兼容 Colima），并核对实际退出码；追加输入测试用同步信号替代固定延迟。
+- 首轮全量 672 项：657 通过、7 失败、8 跳过。失败包含平台测试目录、容器入口/挂载与并发构建时 UI 使用旧构建问题；日志保留在 `output/main-merge-20260921/full-tests.log`。受控检查首次 36/40 的旧状态断言失败也保留在独立时间戳目录中。
+- 修复后先构建再运行全量：**672 项，664 通过、8 跳过、0 失败**，约 150 秒。命令为 `MODEL_E2E=off TEST_FULL_RUNTIME_IMAGE=open-medical-runtime:0.8-full TEST_DOCKER_IMAGE=open-medical-runtime:0.8-full npm test`。日志：`output/main-merge-20260921/full-tests-final.log`。
+- 受控任务 **40/40**，报告：`output/codex-foundation-20260921/2026-09-21T15-50-05-598Z/report.json`；lint/build 通过（保留已有大 bundle 提示），真实 Docker 评测隔离测试通过。
+
+本次是合并回归，不替代真实长任务验收。原真实任务仍为 5/6；48 小时负载、Windows 实机、干净安装、正式签名/公证和升级回滚仍未完成。未操作真实患者数据、未修改全局模型配置、未部署。

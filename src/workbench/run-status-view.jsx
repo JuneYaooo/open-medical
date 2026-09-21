@@ -50,8 +50,10 @@ export function RunStatusNotice({ run, pendingCount = 0, onApprove }) {
   );
 }
 
-// 完成呈现（W7）：区分「已交付」与「已回答但无可验证产物」。
+// 完成呈现（W7/N3）：区分「已交付」「交付未完成」「结果未验证」与「已回答」。
 // - delivered：证据摘要（文件/产物名 + SHA-256 前 8 位）；
+// - delivery_failed：执行类任务缺口未解决，不宣称完成，展示缺口；
+// - unverified：验证器异常/超时，结果未核实，不当作成功；
 // - answered：如实说明没有可核对产物与缺口原因，不宣称完成交付。
 export function OutcomeCard({ outcome, delivery }) {
   if (!outcome && !delivery) return null;
@@ -78,6 +80,44 @@ export function OutcomeCard({ outcome, delivery }) {
             <ul>
               {evidence.slice(0, 5).map((e, i) => (
                 <li key={i}>{evidenceLine(e)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  if (outcome === "unverified" || delivery?.unverified === true)
+    return (
+      <div className="wb-outcome answered" aria-label="交付结果">
+        <TriangleAlert size={15} />
+        <div>
+          <b>结果未验证</b>
+          <p>
+            交付检查未能执行（验证器异常或超时）；本结果未经核实，不能当作已完成交付。
+          </p>
+          {gaps.length > 0 && (
+            <ul>
+              {gaps.slice(0, 3).map((g, i) => (
+                <li key={i}>{gapLine(g)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  if (outcome === "delivery_failed")
+    return (
+      <div className="wb-outcome answered" aria-label="交付结果">
+        <TriangleAlert size={15} />
+        <div>
+          <b>交付未完成</b>
+          <p>
+            任务要求的成果没有全部兑现。以下为运行时核对的缺口；请继续补齐或修改要求。
+          </p>
+          {gaps.length > 0 && (
+            <ul>
+              {gaps.slice(0, 3).map((g, i) => (
+                <li key={i}>{gapLine(g)}</li>
               ))}
             </ul>
           )}

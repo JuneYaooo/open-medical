@@ -84,6 +84,9 @@ export function executionLimits(input = {}, ceiling = {}) {
     maxRounds: [512, 1, 1024],
     maxContextChars: [200000, 10000, 1000000],
     timeoutMs: [3600000, 1000, 86400000],
+    // N6:整次运行的工具调用总预算(默认宽松;评测控制器按协议传入真实
+    // 上限,AgentRuntime 真实执行该约束)。
+    maxTotalToolCalls: [1000000, 1, 1000000],
   };
   check(
     input && typeof input === "object" && !Array.isArray(input),

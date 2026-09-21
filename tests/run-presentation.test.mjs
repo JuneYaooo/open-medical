@@ -318,14 +318,15 @@ test(
     assert.match(deliveredText, /SHA-256 [0-9a-f]{8}/);
     assert.match(deliveredText, /可核对证据/);
 
-    // 第二轮：执行类任务空口完成 → 已回答 + 缺口说明，不得显示成已交付
+    // 第二轮：执行类任务空口完成 → 交付未完成 + 缺口说明，不得显示成已交付
+    // (N3 语义,0.9.9 起:执行类未完成不再降格为“已回答”)
     await page
       .locator(".composer textarea")
       .fill("请整理本次材料的检验数值，生成一份核对表");
     await page.locator(".composer textarea").press("Enter");
     await page.waitForSelector(".wb-outcome.answered", { timeout: 60000 });
     const answeredText = await page.locator(".wb-outcome.answered").innerText();
-    assert.match(answeredText, /已回答，没有可验证产物/);
+    assert.match(answeredText, /交付未完成/);
     assert.match(answeredText, /没有任何产物类工具结果/);
     // 消息署名如实区分，最后一轮不冒充交付
     assert.match(
@@ -335,7 +336,7 @@ test(
         .locator(".message-meta span")
         .last()
         .innerText(),
-      /文字回答/,
+      /交付未完成/,
     );
 
     // 统一内核会话：执行中输入框可用（追加要求入口一致），Enter 走 steer
