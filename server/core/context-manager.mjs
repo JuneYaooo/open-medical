@@ -69,7 +69,9 @@ export async function compactContext({
     if (message.role === "assistant") activeBatch = new Map((message.tool_calls || []).map((call) => [call.id, call]));
     if (message.role === "tool") calls.set(message, activeBatch.get(message.tool_call_id));
   }
-  const records = older.map((message) => {
+  const priorSummary = older.findLast((m) => m.name === "context_summary" && typeof m.content === "string");
+  const newRecords = older.filter((m) => m !== priorSummary);
+  const records = newRecords.map((message) => {
     const content = message.name === "context_summary" && typeof message.content === "string"
       ? message.content.slice(message.content.indexOf("\n") + 1) : message.content;
     const record = { role: message.role, content };
@@ -81,7 +83,7 @@ export async function compactContext({
     }
     return record;
   });
-  let summary = "";
+  let summary = priorSummary ? priorSummary.content.slice(priorSummary.content.indexOf("\n") + 1) : "";
   let truncatedSummaries = 0;
   const summaryLimit = Math.min(2000, Math.floor(maxChars * 0.18));
   const outputReserve = Math.max(256, summaryLimit * 3);
@@ -133,7 +135,7 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
       let excerpt;
       do {
         excerpt = { role: record.role, archived: true, archiveId: reference.id,
-          messageIndex: messages.indexOf(older[offset]), chars: preview.length,
+          messageIndex: messages.indexOf(newRecords[offset]), chars: preview.length,
           preview: preview.slice(0, limit), previewIncomplete: true };
         if (measure(inputFor([excerpt])).fits) break;
         limit = Math.floor(limit / 2);

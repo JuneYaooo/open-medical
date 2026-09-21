@@ -35,7 +35,7 @@ declare(
 );
 declare(
   "local",
-  `terminal_read terminal_wait terminal_write terminal_stop list_directory read_file propose_file_write read_context_archive search_run_history list_skills read_skill list_skill_resources read_skill_resource search_files delegate_task delegate_tasks inspect_file list_artifacts project_instructions propose_file_edit propose_file_delete read_file_proposal revise_file_proposal apply_file_proposal update_plan plugin_list plugin_skill mcp_list memory_list memory_delete spawn_agent list_agent_models list_agents send_agent_message resume_agent cancel_agent wait_agents`,
+  `terminal_read terminal_wait terminal_write terminal_stop list_directory read_file propose_file_write read_context_archive search_run_history list_skills read_skill list_skill_resources read_skill_resource search_files delegate_task delegate_tasks inspect_file list_artifacts project_instructions propose_file_edit propose_file_delete read_file_proposal revise_file_proposal apply_file_proposal submit_for_approval continue_task update_plan plugin_list plugin_skill mcp_list memory_list memory_delete spawn_agent list_agent_models list_agents send_agent_message resume_agent cancel_agent wait_agents`,
 );
 declare("network", `web_fetch web_search`);
 declare("git", `git_status git_diff git_log git_commit`);

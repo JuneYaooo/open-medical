@@ -1,12 +1,18 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { spawn, execFileSync } from "node:child_process";
+import { dockerEndpoint, recoveryCli, bindInteractiveExecution } from "./container-journal.mjs";
 import { createDetachedProcess } from "./detached-process.mjs";
-import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { check, AppError } from "../errors.mjs";
 
 // Every process exposed to tools goes through a container. Never fall back to a host shell.
 export class ProcessRunner {
-  constructor({ docker, limit = 3, drainTimeoutMs = 5000, cleanupTimeoutMs = 2000, finalizationTimeoutMs = 15000, detachedFactory = createDetachedProcess } = {}) {
+  constructor({ journal, docker, limit = 3, drainTimeoutMs = 5000, cleanupTimeoutMs = 2000, finalizationTimeoutMs = 15000, detachedFactory = createDetachedProcess } = {}) {
+    this.journal = journal;
     this.detachedFactory = detachedFactory;
     this.drainTimeoutMs = drainTimeoutMs;
     this.cleanupTimeoutMs = cleanupTimeoutMs;
@@ -174,15 +180,43 @@ export class ProcessRunner {
     );
     signal?.throwIfAborted();
     const { name, args } = this.args(config);
-    const child = config.interactive === false
+    const id = randomUUID();
+    let endpoint, preflightError;
+    if (this.journal) {
+      try { endpoint = dockerEndpoint(this.docker, this.environment()); }
+      catch (error) { preflightError = Object.assign(new Error(`${error.code || "DOCKER_ENDPOINT_UNKNOWN"}: Docker endpoint unavailable; no container started`), { code: error.code }); }
+    }
+    // Persist failures before create differently from a launched process. A
+    // storage failure still throws; it must never allow a container to start.
+    const execution = this.journal && !preflightError ? this.journal.create({ owner,
+      runId: config.runId, sessionId: id, name, endpoint,
+      deadline: Date.now() + Math.min(config.timeoutMs || 60000, 300000) }) : undefined;
+    const failedChild = () => {
+      const child = new EventEmitter();
+      child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      child.kill = () => false;
+      queueMicrotask(() => { child.stdout.end(); child.stderr.end(); child.emit("error", preflightError); });
+      return child;
+    };
+    let identityDirectory, cidfile;
+    if (execution && config.interactive !== false) {
+      identityDirectory = mkdtempSync(join(tmpdir(), "omw-container-id-"));
+      cidfile = join(identityDirectory, "id");
+      args.splice(2, 0, "--cidfile", cidfile, "--label", `omw.execution=${execution.nonce}`,
+        "--label", `omw.installation=${execution.installation}`, "--label", "omw.protocol=1", "--label", "omw.managed=true");
+    }
+    const child = preflightError ? failedChild() : config.interactive === false
       ? this.detachedFactory({ docker: this.docker, args, name, environment: this.environment(),
-          timeoutMs: config.timeoutMs, cleanupTimeoutMs: this.cleanupTimeoutMs })
+          timeoutMs: config.timeoutMs, cleanupTimeoutMs: this.cleanupTimeoutMs, execution, journal: this.journal })
       : spawn(this.docker, args, { env: this.environment(),
           stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    if (execution && config.interactive !== false) bindInteractiveExecution(child, {
+      journal: this.journal, execution, docker: this.docker, environment: this.environment(), cidfile,
+      cleanupFile: () => rmSync(identityDirectory, { recursive: true, force: true }), timeoutMs: this.cleanupTimeoutMs,
+    });
     // Interactive sessions (terminal input via terminal_write, code SDK tool
     // replies on stdin) keep the pipe open; only explicit non-interactive
     // callers get EOF on launch, or reply frames can never be delivered.
-    const id = randomUUID();
     const s = {
       id,
       owner,
@@ -267,7 +301,7 @@ export class ProcessRunner {
         } finally {
           clearTimeout(finalizerTimer);
         }
-        if (child.detached) {
+        if (child.cleanup) {
           try { await child.cleanup(); }
           catch (error) {
             outcome = "failed";
@@ -279,6 +313,8 @@ export class ProcessRunner {
         // Synchronous durable reconciliation runs even when onExit is still
         // blocked in cleanup. It must not introduce another asynchronous wait.
         try {
+          if (execution) this.journal.update(execution.nonce, { status: s.status, outputComplete: s.outputComplete,
+            verificationId: id, exitCode: s.exitCode });
           onSettled?.(s);
         } catch (error) {
           s.status = "failed";
@@ -317,6 +353,14 @@ export class ProcessRunner {
       });
     });
     return this.read(owner, id);
+  }
+  async recoverContainers() {
+    if (!this.journal || !this.journal.db.prepare("SELECT 1 FROM container_executions WHERE json_extract(data, '$.phase') != 'removed' LIMIT 1").get()) return [];
+    try {
+      const environment = this.environment(), endpoint = dockerEndpoint(this.docker, environment);
+      return await this.journal.recover({ endpoint,
+        cli: (args, timeout) => recoveryCli(this.docker, environment, args, timeout) });
+    } catch (error) { return [{ phase: "cleanup_pending", code: error.code || "RECOVERY_UNAVAILABLE" }]; }
   }
   environment() {
     // Docker needs its context location; no model credentials are inherited by child processes.
@@ -364,6 +408,7 @@ export class ProcessRunner {
       error: s.error,
       phase: s.phase,
       outputComplete: s.outputComplete,
+      ...(s.child?.execution ? { execution: { ...s.child.execution } } : {}),
       lifecycle: (Array.isArray(s.lifecycle) ? s.lifecycle : []).map((event) => ({ ...event })),
     };
   }
@@ -412,7 +457,7 @@ export class ProcessRunner {
     if (s.cleanupStarted) return;
     s.cleanupStarted = true;
     s.record("cleanup.start");
-    if (s.child.detached) {
+    if (s.child.cleanup) {
       s.child.cleanup().catch(() => {});
       return;
     }

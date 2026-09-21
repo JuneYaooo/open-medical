@@ -126,3 +126,54 @@ export function collectWorkspaceDelivery(service, id, runId, signal) {
   return normalizeDelivery({ delivered: requirements.kind !== "answer" && evidence.length > 0 && !gaps.length,
     evidence, gaps, warnings, method: requirements.kind === "auto" ? "current-run-facts-only" : "explicit-requirements" });
 }
+
+// A request to pause is not a delivery claim. Only exact current-run proposal
+// snapshots with completed container validation can enter the approval boundary.
+export function collectApprovalReadiness(service, id, runId, request, signal) {
+  signal?.throwIfAborted();
+  if (!request) return null;
+  const w = service.store.get(id), run = w.runs.find((r) => r.id === runId);
+  check(w.approvalPolicy === "review", "APPROVAL_REQUIRED", "此工作区不处于人工审批模式");
+  check(w.permissions.grants["filesystem.read"] && w.permissions.grants["filesystem.write"],
+    "PERMISSION_DENIED", "提案核验需要当前文件读写授权", 403);
+  check(new Set(request.approvalIds).size === request.approvalIds.length &&
+    new Set(request.verificationIds).size === request.verificationIds.length,
+    "APPROVAL_NOT_READY", "提案和验证 ID 不可重复");
+  const owners = new Set([runId, ...(run.children || []).map((c) => c.id)]);
+  const priorApprovals = new Set(run.evidenceBaseline?.approvals || []);
+  const priorExecutions = new Set(run.evidenceBaseline?.executions || []);
+  const pending = w.approvals.filter((a) => owners.has(a.runId) && !priorApprovals.has(a.id) && a.status === "pending");
+  check(pending.length > 0 && pending.length === request.approvalIds.length &&
+    pending.every((a) => request.approvalIds.includes(a.id)), "APPROVAL_NOT_READY", "必须提交本轮全部待审批提案");
+  check(!(run.children || []).some((c) => !["completed"].includes(c.status)) &&
+    ![...service.extensions.runner.sessions.values()].some((s) => s.owner === id && owners.has(s.runId) &&
+      ["running", "finalizing"].includes(s.status)), "TOOLS_RUNNING", "执行或协作任务尚未完成");
+  check(!Object.entries(run.toolFailures || {}).some(([tool, f]) => tool !== "submit_for_approval" && f.affectsDelivery !== false),
+    "APPROVAL_NOT_READY", "仍有未解决的工具失败");
+  const receipts = request.verificationIds.map((rid) => (w.verifications || []).find((v) => v.id === rid));
+  check(receipts.length > 0 && receipts.every((v) => v && owners.has(v.runId) && !priorExecutions.has(v.id) && v.status === "completed" &&
+    v.exitCode === 0 && v.outputComplete === true && v.environment === "isolated-container"),
+    "APPROVAL_NOT_READY", "缺少完整收尾的本轮容器验证收据");
+  const files = new WorkspaceFiles(w.root);
+  const proposals = pending.map((a) => {
+    service.assertWriteScope(id, a.path, runId);
+    // Also checks the underlying source version; approval still checks again.
+    if (a.kind === "file.delete") files.deletion(a.path, a.expectedHash);
+    else files.proposal(a.path, a.content, a.expectedHash);
+    const hash = a.kind === "file.delete" ? null : hashText(a.content);
+    check(receipts.some((v) => v.approvalIds?.includes(a.id) && (hash === null
+      ? !v.inputs?.some((f) => f.path === a.path)
+      : v.inputs?.some((f) => f.path === a.path && f.hash === hash))),
+      "APPROVAL_NOT_READY", "验证收据没有覆盖提案当前内容");
+    return { id: a.id, path: a.path, hash };
+  });
+  for (const required of run.completion?.files || []) {
+    const a = pending.find((p) => p.path === required.path && p.kind !== "file.delete");
+    check(a && (!required.hash || hashText(a.content) === required.hash) &&
+      (required.contains === undefined || a.content.includes(required.contains)),
+      "APPROVAL_NOT_READY", "提案尚未满足显式文件完成条件");
+  }
+  signal?.throwIfAborted();
+  return { phase: "verification_complete", fingerprint: hashText(JSON.stringify(proposals)), approvalIds: pending.map((a) => a.id),
+    verificationIds: receipts.map((v) => v.id), proposals, verifiedAt: new Date().toISOString() };
+}

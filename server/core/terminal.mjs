@@ -284,6 +284,7 @@ export class TerminalTools {
               if (receipt) {
                 receipt.status = session.status;
                 receipt.outputComplete = session.outputComplete;
+                receipt.execution = session.child.execution ? { ...session.child.execution } : undefined;
                 receipt.lifecycle = session.lifecycle.map((event) => ({ ...event }));
               }
             });
@@ -295,6 +296,7 @@ export class TerminalTools {
                 id: session.id,
                 runId: context.runId || "terminal",
                 command,
+                execution: session.child.execution ? { ...session.child.execution } : undefined,
                 exitCode: session.exitCode,
                 outputComplete: session.outputComplete,
                 lifecycle: session.lifecycle.map((event) => ({ ...event })),

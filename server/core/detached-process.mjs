@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 // One container execution, with independently bounded control/log connections.
 // No command is replayed when a Docker connection fails.
 export function createDetachedProcess({ docker, args, name, environment, timeoutMs,
-  cleanupTimeoutMs = 2000, spawnProcess = spawn }) {
+  cleanupTimeoutMs = 2000, spawnProcess = spawn, execution, journal }) {
   const process = new EventEmitter();
   process.stdin = new PassThrough();
   process.stdout = new PassThrough();
@@ -14,7 +14,11 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
   const controller = new AbortController();
   const deadline = Date.now() + Math.min(timeoutMs || 60000, 300000);
   let container = name, cleanupPromise;
-  const ownership = randomUUID();
+  const ownership = execution?.nonce || randomUUID();
+  process.execution = execution || { nonce: ownership, name };
+  const persist = (patch) => {
+    if (journal) process.execution = journal.update(ownership, patch);
+  };
   const record = (event, details = {}) => process.emit("lifecycle", event, details);
   const failure = (code, message) => Object.assign(new Error(`${code}: ${message}`), { code });
 
@@ -69,6 +73,7 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
   process.kill = () => { controller.abort(); return true; };
   process.cleanup = () => {
     cleanupPromise ||= (async () => {
+      persist({ phase: "cleanup_pending" });
       const cleanupDeadline = Date.now() + cleanupTimeoutMs;
       const cleanupCall = (args, phase) => cli(args, { phase, cleanup: true,
         limitMs: Math.max(1, cleanupDeadline - Date.now()) });
@@ -80,13 +85,19 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
           const inspected = await cleanupCall(["inspect", "--format", '{{.Id}} {{index .Config.Labels "omw.execution"}}', name], "cleanup-inspect");
           const [id, label] = inspected.stdout.toString().trim().split(/\s+/);
           if (inspected.code === 0 && /^[a-f0-9]{64}$/.test(id) && label === ownership) {
-            container = id; owned = true; break;
+            container = id; persist({ containerId: id }); owned = true; break;
           }
           if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, Math.min(50, Math.max(0, cleanupDeadline - Date.now()))));
         }
         if (!owned) throw failure("DOCKER_CLEANUP_UNCONFIRMED", "创建连接中断，未确认本次容器身份；未删除其它容器");
       }
       requireSuccess(await cleanupCall(["rm", "-f", container], "cleanup"), "cleanup");
+      if (journal) {
+        const confirmed = await cleanupCall(["inspect", "--format", "{{.Id}}", container], "cleanup-confirm");
+        if (confirmed.code !== 1 || !confirmed.stderr.toString().toLowerCase().includes(`no such object: ${container}`))
+          throw failure("DOCKER_CLEANUP_UNCONFIRMED", "删除后未确认容器已不存在");
+      }
+      persist({ phase: "removed", removalConfirmedAt: Date.now() });
     })();
     return cleanupPromise;
   };
@@ -95,12 +106,15 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
     try {
       // Reuse every resource/mount/network constraint from the regular runner.
       const createArgs = ["create", "--label", "omw.managed=true", "--label", `omw.execution=${ownership}`,
+        ...(execution ? ["--label", `omw.installation=${execution.installation}`, "--label", "omw.protocol=1"] : []),
         ...args.slice(args[1] === "--rm" ? 2 : 1)];
       const created = requireSuccess(await cli(createArgs, { phase: "create" }), "create");
       const id = created.stdout.toString().trim();
       if (!/^[a-f0-9]{64}$/.test(id)) throw failure("DOCKER_IDENTITY", "创建容器未返回有效身份");
       container = id;
+      persist({ containerId: id, phase: "created" });
       requireSuccess(await cli(["start", container], { phase: "start" }), "start");
+      persist({ phase: "started" });
       let state;
       while (true) {
         let waited;
@@ -122,6 +136,7 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
           throw failure("DOCKER_EXIT_EVIDENCE", "容器退出证据不完整或不一致");
         break;
       }
+      persist({ phase: "exited", exitCode: state.ExitCode });
       process.containerExitCode = state.ExitCode;
       record("container.exited", { code: state.ExitCode });
       let logs;
@@ -136,6 +151,7 @@ export function createDetachedProcess({ docker, args, name, environment, timeout
       }
       // Only a complete log response reaches the archive parser. Failed reads
       // cannot leave partial or duplicated archive frames in its accumulator.
+      persist({ phase: "logs_complete" });
       process.stdout.end(logs.stdout);
       process.stderr.end(logs.stderr);
       process.emit("exit", state.ExitCode, null);

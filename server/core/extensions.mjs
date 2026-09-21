@@ -8,6 +8,7 @@ import { check } from "../errors.mjs";
 import { PermissionEngine } from "./permissions.mjs";
 import { hashText, WorkspaceFiles } from "./workspace-files.mjs";
 import { pathToFileURL } from "node:url";
+import { ContainerJournal } from "./container-journal.mjs";
 import { ProcessRunner } from "./process-runner.mjs";
 import { TerminalTools } from "./terminal.mjs";
 import { PluginPackages, identifier } from "./plugins.mjs";
@@ -27,7 +28,21 @@ export class WorkspaceExtensions {
       .prepare("PRAGMA database_list")
       .all()
       .find((d) => d.name === "main")?.file;
-    this.runner = options.runner || new ProcessRunner();
+    this.runner = options.runner || new ProcessRunner({ journal: new ContainerJournal(service.store.db) });
+    // The bounded startup sweep does not replay a tool or infer task success.
+    this.recovery = (this.runner.recoverContainers?.() || Promise.resolve([])).then((results) => {
+      for (const result of results) {
+        const record = result.nonce && this.runner.journal?.get(result.nonce);
+        if (!record?.interrupted) continue;
+        const workspace = service.store.list().find((w) => w.id === record.owner);
+        if (!workspace) continue;
+        service.store.update(record.owner, (w) => {
+          const receipt = w.verifications?.find((v) => v.id === record.sessionId && v.runId === record.runId);
+          if (receipt) { receipt.status = "interrupted"; receipt.outputComplete = false; receipt.execution = record; }
+        });
+      }
+      return results;
+    });
     this.terminal = new TerminalTools(service, this.runner);
     this.packages = new PluginPackages(
       options.directory ||
@@ -69,6 +84,7 @@ export class WorkspaceExtensions {
     }
   }
   async close(id) {
+    await this.recovery;
     await this.service.advancedMedia?.stop(id);
     this.service.pty?.close(id);
     this.service.media?.stop(id);

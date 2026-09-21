@@ -42,6 +42,7 @@ export const RUN_TRANSITIONS = {
     "completed",
   ],
   waiting_approval: [
+    "waiting_input",
     "running",
     "blocked",
     "cancelled",
