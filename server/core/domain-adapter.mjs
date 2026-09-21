@@ -8,9 +8,11 @@ export function defineDomain({
   limits = {},
   beforeTool,
   beforeComplete,
+  verifyDelivery,
   registerTools,
   systemFor,
   runSystemExtras,
+  capabilityFacts,
   contextManagement = false,
   allowAutoFileWrites = false,
 }) {
@@ -27,9 +29,11 @@ export function defineDomain({
   for (const hook of [
     beforeTool,
     beforeComplete,
+    verifyDelivery,
     registerTools,
     systemFor,
     runSystemExtras,
+    capabilityFacts,
   ])
     check(
       hook === undefined || typeof hook === "function",
@@ -42,9 +46,13 @@ export function defineDomain({
     limits: Object.freeze({ ...limits }),
     beforeTool,
     beforeComplete,
+    verifyDelivery,
     registerTools,
     systemFor,
     runSystemExtras,
+    // 能力快照的领域事实（core/capability.mjs 三态之外的领域维度，如
+    // 医疗叠层开关）；未注册时快照不含领域字段。
+    capabilityFacts,
     contextManagement,
     allowAutoFileWrites,
   });

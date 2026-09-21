@@ -18,9 +18,10 @@ try {
 } catch {}
 
 if (existsSync(".env")) process.loadEnvFile(".env");
+const apiKey = process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY || "";
 const MODEL_ENV = [
   `AI_PROVIDER=${process.env.AI_PROVIDER || "anthropic"}`,
-  `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY || ""}`,
+  `ANTHROPIC_API_KEY=${apiKey}`,
   `ANTHROPIC_BASE_URL=${process.env.ANTHROPIC_BASE_URL || "https://api.deepseek.com/anthropic"}`,
   `ANTHROPIC_MODEL=${process.env.ANTHROPIC_MODEL || "deepseek-flash"}`,
 ].join("\n");
@@ -28,7 +29,7 @@ const canRun =
   existsSync(DIST) &&
   existsSync(MAIN) &&
   Boolean(electronPath) &&
-  Boolean(MODEL_ENV.split("\n").find((l) => l.includes("=") && l.split("=")[1])) &&
+  Boolean(apiKey.trim()) &&
   process.env.MODEL_E2E !== "off";
 
 test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质、不产文书", { skip: !canRun }, async (t) => {
@@ -108,6 +109,7 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
   await page.locator(".composer textarea").press("Enter");
   await page.waitForFunction(
     () => !document.querySelector(".send-button.stop"),
+    undefined,
     { timeout: 240000 },
   );
   const last = await page.locator(".message-list .message").last().innerText();

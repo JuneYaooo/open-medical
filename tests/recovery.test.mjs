@@ -83,6 +83,8 @@ test("HTTP shutdown drains background runs and next server resumes original run"
   const run = next.service.get(w.id).runs.at(-1);
   assert.equal(run.id, initial.runId);
   assert.equal(run.status, "completed");
+  assert.equal(run.error, null, "successful recovery must clear the current error");
+  assert.ok(next.service.store.events(w.id, 0, 1000).some(e => e.type === "error"), "historical interruption remains in events");
   assert.equal(run.roundsUsed, 2);
   await next.shutdown();
 });

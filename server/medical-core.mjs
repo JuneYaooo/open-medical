@@ -137,11 +137,22 @@ function artifact(type, title, body) {
     ...body,
   };
 }
+// The trusted run policy determines whether document-producing operations are
+// requested. Keep retrieval available; do not rely on a model obeying prose or
+// hide an already-created draft in the presentation layer.
+const DOCUMENT_TOOLS = new Set([
+  "extract_clinical_timeline", "extract_observations", "build_evidence_question",
+  "review_medication_safety", "build_workflow", "make_review_checklist", "draft_treatment_review",
+]);
+export const medicalToolAllowed = (name, intent) =>
+  intent !== "consultation" || !DOCUMENT_TOOLS.has(name);
+
 export async function runTool(
   name,
   args = {},
   {
     sources = [],
+    intent,
     skills,
     definitions = TOOL_DEFINITIONS,
     plugins = new Map(),
@@ -149,6 +160,8 @@ export async function runTool(
 ) {
   const def = definitions.find((t) => t.function.name === name);
   check(def, "UNKNOWN_TOOL", `未授权的工具：${name}`);
+  check(medicalToolAllowed(name, intent), "DOCUMENT_NOT_REQUESTED",
+    "本轮为咨询问答，未请求创建文书；请读取资料或检索依据后直接回答", 403);
   check(
     args && typeof args === "object" && !Array.isArray(args),
     "INVALID_TOOL_ARGS",

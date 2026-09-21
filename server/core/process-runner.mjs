@@ -1,11 +1,16 @@
 import { spawn, execFileSync } from "node:child_process";
+import { createDetachedProcess } from "./detached-process.mjs";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { check, AppError } from "../errors.mjs";
 
 // Every process exposed to tools goes through a container. Never fall back to a host shell.
 export class ProcessRunner {
-  constructor({ docker, limit = 3 } = {}) {
+  constructor({ docker, limit = 3, drainTimeoutMs = 5000, cleanupTimeoutMs = 2000, finalizationTimeoutMs = 15000, detachedFactory = createDetachedProcess } = {}) {
+    this.detachedFactory = detachedFactory;
+    this.drainTimeoutMs = drainTimeoutMs;
+    this.cleanupTimeoutMs = cleanupTimeoutMs;
+    this.finalizationTimeoutMs = finalizationTimeoutMs;
     this.docker =
       docker ||
       [
@@ -159,7 +164,7 @@ export class ProcessRunner {
     args.push("--entrypoint", command[0], image, ...command.slice(1));
     return { name, args };
   }
-  start(owner, config, { signal, onExit, stdoutTransform } = {}) {
+  start(owner, config, { signal, onExit, onSettled, stdoutTransform } = {}) {
     check(
       [...this.sessions.values()].filter((s) => s.status === "running").length <
         this.limit,
@@ -169,15 +174,14 @@ export class ProcessRunner {
     );
     signal?.throwIfAborted();
     const { name, args } = this.args(config);
-    const child = spawn(this.docker, args, {
-      env: this.environment(),
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    const child = config.interactive === false
+      ? this.detachedFactory({ docker: this.docker, args, name, environment: this.environment(),
+          timeoutMs: config.timeoutMs, cleanupTimeoutMs: this.cleanupTimeoutMs })
+      : spawn(this.docker, args, { env: this.environment(),
+          stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     // Interactive sessions (terminal input via terminal_write, code SDK tool
     // replies on stdin) keep the pipe open; only explicit non-interactive
     // callers get EOF on launch, or reply frames can never be delivered.
-    if (config.interactive === false) child.stdin.end();
     const id = randomUUID();
     const s = {
       id,
@@ -190,8 +194,26 @@ export class ProcessRunner {
       offset: 0,
       startedAt: Date.now(),
       exitCode: null,
+      phase: "running",
+      lifecycle: [],
+      outputComplete: false,
+      finalizationController: new AbortController(),
     };
     this.sessions.set(id, s);
+    s.record = (event, details = {}) => {
+      // Preserve the spawn record and the latest transitions, including final
+      // failure/cleanup evidence after a long series of wait-state probes.
+      if (s.lifecycle.length >= 40) s.lifecycle.splice(1, 1);
+      s.lifecycle.push({ event, elapsedMs: Date.now() - s.startedAt, ...details });
+    };
+    s.record("spawned", { interactive: config.interactive !== false });
+    child.on("lifecycle", (event, details) => s.record(event, details));
+    child.stdin.on("error", (error) => s.record("stdin.error", { code: error.code }));
+    s.stdinErrorHandled = true;
+    for (const [name, stream] of [["stdin", child.stdin], ["stdout", child.stdout], ["stderr", child.stderr]])
+      for (const event of ["end", "finish", "close"])
+        stream.once(event, () => s.record(`${name}.${event}`));
+    if (config.interactive === false) child.stdin.end();
     const append = (data) => {
       s.output += data.toString();
       if (s.output.length > 128000) {
@@ -211,36 +233,88 @@ export class ProcessRunner {
     const stop = () => this.stop(owner, id);
     signal?.addEventListener("abort", stop, { once: true });
     const timer = setTimeout(stop, Math.min(config.timeoutMs || 60000, 300000));
+    let drainTimer;
     s.done = new Promise((resolve) => {
-      const finish = async (code, error) => {
-        if (s.finished) return;
-        s.finished = true;
+      const finish = async (code, error, outputComplete = false) => {
+        if (s.finishing) return;
+        s.finishing = true;
         clearTimeout(timer);
-        signal?.removeEventListener("abort", stop);
+        clearTimeout(drainTimer);
+        clearTimeout(s.killTimer);
         s.exitCode = code;
-        const finalStatus =
-          s.status === "cancelled"
-            ? "cancelled"
-            : error || code !== 0
-              ? "failed"
-              : "completed";
-        if (error) append(error.message);
+        s.outputComplete = outputComplete;
+        if (error) { s.error = error.message; append(error.message); }
+        const finalStatus = s.status === "cancelled" ? "cancelled"
+          : error || s.error || code !== 0 || !outputComplete ? "failed" : "completed";
         s.status = finalStatus === "cancelled" ? "cancelled" : "finalizing";
+        s.phase = "finalizing";
+        s.record("finalization.start");
+        let finalizerTimer, outcome = finalStatus;
         try {
-          s.result = await onExit?.(s);
-          s.status = finalStatus;
+          s.result = await Promise.race([
+            Promise.resolve().then(() => onExit?.(s)),
+            new Promise((_, reject) => {
+              finalizerTimer = setTimeout(() => {
+                const error = new Error("PROCESS_FINALIZATION_TIMEOUT: 文件收尾未在限定时间内完成");
+                s.finalizationController.abort(error);
+                reject(error);
+              }, this.finalizationTimeoutMs);
+            }),
+          ]);
         } catch (e) {
-          s.status = "failed";
+          outcome = "failed";
           s.error = e.message;
+        } finally {
+          clearTimeout(finalizerTimer);
         }
+        if (child.detached) {
+          try { await child.cleanup(); }
+          catch (error) {
+            outcome = "failed";
+            s.error = error.message;
+          }
+        }
+        signal?.removeEventListener("abort", stop);
+        s.status = s.status === "cancelled" ? "cancelled" : outcome;
+        // Synchronous durable reconciliation runs even when onExit is still
+        // blocked in cleanup. It must not introduce another asynchronous wait.
+        try {
+          onSettled?.(s);
+        } catch (error) {
+          s.status = "failed";
+          s.error = error.message;
+          s.record("settlement.error");
+        }
+        s.finished = true;
+        s.phase = "finished";
+        s.record("finalization.end", { status: s.status });
         resolve(this.read(owner, id));
-        // Bound retained scrollback; running sessions are never evicted.
         for (const [key, value] of this.sessions)
-          if (this.sessions.size > 30 && ["completed", "failed", "cancelled"].includes(value.status) && value.finished && key !== id)
+          if (this.sessions.size > 30 && value.finished && key !== id)
             this.sessions.delete(key);
       };
-      child.on("error", (e) => finish(null, e));
-      child.on("close", (code) => finish(code));
+      s.forceFinish = (error) => {
+        child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+        return finish(s.exitCode, error, false);
+      };
+      child.once("exit", (code, signal) => {
+        s.exitCode = code;
+        s.record("child.exit", { code, signal });
+        clearTimeout(timer);
+        if (s.finishing) return;
+        s.phase = "draining";
+        if (s.status !== "cancelled") s.status = "finalizing";
+        drainTimer = setTimeout(() => {
+          s.record("drain.timeout");
+          this.cleanup(s);
+          s.forceFinish(new Error("PROCESS_DRAIN_TIMEOUT: 进程已退出但输出流未完整关闭"));
+        }, this.drainTimeoutMs);
+      });
+      child.once("error", (error) => { s.record("child.error", { code: error.code }); finish(child.containerExitCode ?? null, error); });
+      child.once("close", (code, signal) => {
+        s.record("child.close", { code, signal });
+        finish(code, undefined, child.stdout.readableEnded && child.stderr.readableEnded);
+      });
     });
     return this.read(owner, id);
   }
@@ -288,6 +362,9 @@ export class ProcessRunner {
       truncated: cursor < s.offset,
       result: s.result,
       error: s.error,
+      phase: s.phase,
+      outputComplete: s.outputComplete,
+      lifecycle: (Array.isArray(s.lifecycle) ? s.lifecycle : []).map((event) => ({ ...event })),
     };
   }
   write(owner, id, input, eof = false) {
@@ -331,17 +408,40 @@ export class ProcessRunner {
       if (abort) signal?.removeEventListener("abort", abort);
     }
   }
+  cleanup(s) {
+    if (s.cleanupStarted) return;
+    s.cleanupStarted = true;
+    s.record("cleanup.start");
+    if (s.child.detached) {
+      s.child.cleanup().catch(() => {});
+      return;
+    }
+    const killer = spawn(this.docker, ["rm", "-f", s.name], {
+      env: this.environment(), stdio: "ignore", windowsHide: true,
+    });
+    const timer = setTimeout(() => {
+      s.record("cleanup.timeout");
+      killer.kill("SIGKILL");
+    }, this.cleanupTimeoutMs);
+    timer.unref();
+    killer.once("error", () => clearTimeout(timer));
+    killer.once("close", (code) => { clearTimeout(timer); s.record("cleanup.end", { code }); });
+  }
   stop(owner, id) {
     const s = this.get(owner, id);
-    if (s.status !== "running") return this.read(owner, id);
+    if (s.finished || s.status === "cancelled") return this.read(owner, id);
     s.status = "cancelled";
-    const killer = spawn(this.docker, ["rm", "-f", s.name], {
-      env: this.environment(),
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    killer.on("error", () => {});
-    s.child.kill();
+    s.record("cancel.requested");
+    s.finalizationController.abort(new Error("执行已取消"));
+    if (!s.finishing) {
+      if (!s.child.detached) this.cleanup(s);
+      s.child.kill();
+      s.killTimer = setTimeout(() => {
+        s.record("kill.escalated");
+        s.child.kill("SIGKILL");
+        s.forceFinish(new Error("PROCESS_CLEANUP_TIMEOUT: 取消后强制关闭进程连接"));
+      }, this.cleanupTimeoutMs);
+    }
     return this.read(owner, id);
   }
   async close(owner) {
@@ -349,7 +449,7 @@ export class ProcessRunner {
       (s) => !owner || s.owner === owner,
     );
     for (const s of sessions)
-      if (s.status === "running") this.stop(s.owner, s.id);
+      if (!s.finished) this.stop(s.owner, s.id);
     await Promise.allSettled(sessions.map((s) => s.done));
   }
 }

@@ -15,6 +15,8 @@ export class ModelProfiles {
       id,
       provider: config.provider,
       model: config.model,
+      contextWindow: config.contextWindow ?? null,
+      maxTokens: config.maxTokens ?? 8192,
       baseUrl: config.baseUrl,
       hasKey: Boolean(config.apiKey),
       identity: hashText(JSON.stringify(config)),

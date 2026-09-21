@@ -218,7 +218,16 @@ export class TerminalTools {
       const marker = "\nOMW_OUTPUT_" + randomUUID() + "\n";
       let pending = "",
         archive = "",
-        collecting = false;
+        collecting = false,
+        session;
+      const endInput = () => {
+        // The wrapper emits this marker only after the interactive command has
+        // exited. Half-close Docker attach stdin, while continuing to drain the
+        // artifact stream and requiring the real child exit/status below.
+        if (collecting && session?.status === "running" &&
+            !session.child.stdin.destroyed && !session.child.stdin.writableEnded)
+          this.runner.write(id, session.id, "", true);
+      };
       const stdoutTransform = (data) => {
         if (collecting) {
           archive += data.toString();
@@ -236,6 +245,7 @@ export class TerminalTools {
           archive = pending.slice(index + marker.length);
           pending = "";
           collecting = true;
+          endInput();
           return output;
         }
         let keep = Math.min(pending.length, marker.length - 1);
@@ -247,9 +257,9 @@ export class TerminalTools {
       };
       // All writes stay in size-limited container tmpfs. Never extract archives to the host.
       const wrapper =
-        'cp -R /input/. /work/ || exit 125; chmod -R u+w /work; /bin/sh -c "$1"; status=$?; printf "%s" "$2"; if [ "$status" -eq 0 ]; then tar -C /work --exclude=node_modules --exclude=.git --exclude=.venv --exclude=__pycache__ -cf - . | base64; fi; exit "$status"';
+        'cp -R /input/. /work/ || exit 125; chmod -R u+w /work; /bin/sh -c "$1"; status=$?; printf "%s" "$2"; if [ "$status" -eq 0 ]; then tar -C /work --exclude=node_modules --exclude=.git --exclude=.venv --exclude=__pycache__ -cf /tmp/omw-output.tar . || exit 126; base64 /tmp/omw-output.tar || exit 126; fi; exit "$status"';
       const authority = JSON.stringify(w.permissions);
-      return this.runner.start(
+      const started = this.runner.start(
         id,
         {
           image: w.extensions.image,
@@ -259,13 +269,25 @@ export class TerminalTools {
           timeoutMs,
           resources: "code",
           network,
-          // 交互会话与一次性命令共用此入口；保持 stdin 打开以支持
-          // terminal_write，命令自身退出即结束。
-          interactive: true,
+          // User terminal sessions accept input; generated document/archive
+          // commands explicitly close stdin at launch.
+          interactive: context.interactive !== false,
         },
         {
           signal: context.signal,
           stdoutTransform,
+          onSettled: (session) => {
+            // The runner's final status includes cancellation and bounded
+            // cleanup failure, which can happen after archive validation.
+            this.service.store.update(id, (current) => {
+              const receipt = current.verifications?.find((item) => item.id === session.id);
+              if (receipt) {
+                receipt.status = session.status;
+                receipt.outputComplete = session.outputComplete;
+                receipt.lifecycle = session.lifecycle.map((event) => ({ ...event }));
+              }
+            });
+          },
           onExit: async (session) => {
             try {
               if (pending) session.output += pending;
@@ -274,11 +296,13 @@ export class TerminalTools {
                 runId: context.runId || "terminal",
                 command,
                 exitCode: session.exitCode,
+                outputComplete: session.outputComplete,
+                lifecycle: session.lifecycle.map((event) => ({ ...event })),
                 status:
                   session.status === "cancelled"
                     ? "cancelled"
-                    : session.exitCode === 0
-                      ? "completed"
+                    : session.exitCode === 0 && session.outputComplete && !session.error
+                      ? "finalizing"
                       : "failed",
                 approvalIds,
                 inputs: [...stagedHashes].map(([path, hash]) => ({
@@ -295,23 +319,34 @@ export class TerminalTools {
                   verification,
                 ];
               });
-              if (session.exitCode !== 0 || session.status === "cancelled")
+              if (session.exitCode !== 0 || session.status === "cancelled" || !session.outputComplete || session.error)
                 return {
                   proposals: [],
                   message: "执行失败或已取消，不生成文件提案",
                 };
-              if (context.discardOutputs)
+              const acceptVerification = () => {
+                session.finalizationController.signal.throwIfAborted();
+                context.signal?.throwIfAborted();
+                // Keep the durable receipt provisional until onSettled has
+                // also observed staging/container cleanup completion.
+              };
+              if (context.discardOutputs) {
+                acceptVerification();
                 return {
                   verificationId: session.id,
                   testedApprovals: approvalIds,
                   proposals: [],
                   message: "只验证任务，不导出容器修改",
                 };
+              }
               check(collecting, "TERMINAL_OUTPUT", "进程未完成文件输出协议");
               const output = await readOutputArchive(
                   Buffer.from(archive, "base64"),
                 ),
                 changes = [];
+              session.finalizationController.signal.throwIfAborted();
+              context.signal?.throwIfAborted();
+              acceptVerification();
               const current = this.service.store.get(id);
               if (
                 JSON.stringify(current.permissions) !== authority ||
@@ -444,12 +479,23 @@ export class TerminalTools {
                 truncated: changes.length > available,
                 message: applied.length ? "已按工作区自动写入策略应用文件变更；版本与测试结果已保存" : "文件写入和删除均需逐项批准；测试结果已保存",
               };
+            } catch (error) {
+              // A successful command is not a successful export. Archive
+              // validation/cancellation failures must invalidate its receipt.
+              this.service.store.update(id, (current) => {
+                const receipt = current.verifications?.find((item) => item.id === session.id);
+                if (receipt) receipt.status = session.status === "cancelled" ? "cancelled" : "failed";
+              });
+              throw error;
             } finally {
               await rm(directory, { recursive: true, force: true });
             }
           },
         },
       );
+      session = this.runner.get(id, started.id);
+      endInput();
+      return started;
     } catch (e) {
       await rm(directory, { recursive: true, force: true });
       throw e;

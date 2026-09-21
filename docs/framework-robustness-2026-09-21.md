@@ -1,0 +1,157 @@
+# 运行时健壮性设计与验收（2026-09-21）
+
+本轮针对两个实际问题：长任务反复读取已知资料并耗尽压缩时间；工具已输出内容但进程/管道/产物收尾状态无法明确闭合。采用现有 AgentRuntime、SQLite 检查点和权限体系，不替换框架。所有测试数据为合成数据，没有操作真实患者库、改全局模型配置、安装或发布候选包，也没有 commit/push。
+
+## 开源机制核查
+
+研究固定提交的实际代码，而非只看项目介绍。以下是设计参考，没有把上游实现复制进产品。
+
+| 项目 | 核查版本与许可 | 采用的机制思想及边界 |
+| --- | --- | --- |
+| pi | `c7cdb460aa8a0cebef3446c4166729b8a0d97ead`，MIT | 每轮准备/停止边界、结构化目标与进展、压缩之后重新采集用户追加要求；所查循环没有默认重复读取检测。 |
+| ZCode | `872ad960de7ec172591f7e1952f7849229f94521`，Apache-2.0，第三方组件另见 NOTICE | 稳定调用签名、重复提醒、压缩前本地裁剪与快速回填保护；提醒本身不会阻止循环。 |
+| Hermes | `faa13e49f81480771ceeb55991bb0c27edf1a5fb`，MIT | 确定性裁剪、独立工具循环检测、需要输入时才启用 Docker `-i`、区分退出与输出排空；其文件去重缓存会在压缩后清除，不能直接当作持久证据账本。 |
+
+主要原始来源：[pi agent loop](https://github.com/earendil-works/pi/blob/c7cdb460aa8a0cebef3446c4166729b8a0d97ead/packages/agent/src/agent-loop.ts)、[ZCode model-anomaly](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/core/src/runtime/helpers/model-anomaly.ts)、[ZCode microcompact](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/core/src/compact/microcompact.ts)、[Hermes guardrails](https://github.com/NousResearch/hermes-agent/blob/faa13e49f81480771ceeb55991bb0c27edf1a5fb/agent/tool_guardrails.py)、[Hermes context compressor](https://github.com/NousResearch/hermes-agent/blob/faa13e49f81480771ceeb55991bb0c27edf1a5fb/agent/context_compressor.py)。
+
+[逐文件研究与永久链接](../output/framework-robustness-20260921/reference/pi-zcode-findings.md)、[保存的来源清单及 SHA256](../output/framework-robustness-20260921/reference/sources.json)。参考机制不等于上游能保证所有任务成功或外部副作用恰好执行一次。
+
+## 设计与实现
+
+### 证据记录独立于模型摘要
+
+新增 `server/core/run-progress.mjs`，注册工具通过可信的 `observation` 元数据声明版本字段和正文字段。当前覆盖文本文件及受作用域保护的归档读取。记录包含规范化工具参数（含路径和读取范围）、真实结果哈希、源版本、完整结果归档引用、明确标为不完整的摘录及重复次数，最多保留 64 项。
+
+每次普通读取仍先授权、检查领域边界和参数，再实际读取文件。不存在以“此前读过”为由跳过权限或返回陈旧缓存的路径。文件版本变化形成新观察；待审批提案不当成已经修改文件。历史观察始终只代表当时版本，不作为交付凭证。
+
+完整结果先存入已有工作区/授权/模型作用域的归档，随后才可裁剪上下文正文。归档读取直接沿用原引用，不再递归创建包裹归档。原始工具轨迹不变，工具调用与结果仍配对。模型请求中最多注入一份读取记录，作为助理资料而非高优先级用户指令；它的大小受实际模型窗口、校准、工具 schema、输出预留及当前指令空间共同限制。
+
+`WorkspaceService` 将状态和完成的工具结果一起保存到检查点，并在保存后发布 `tool.complete`。同逻辑任务恢复可继续使用状态；新的普通任务不继承旧重复次数，授权或模型身份不相容时不能恢复旧上下文。公开工作区和历史列表隐藏私有运行状态，避免把归档摘录额外暴露给 UI。
+
+### 裁剪、检测、一次重新规划、最后有界停止
+
+运行时先对已归档的大结果做确定性裁剪，再测量预算；仍超限才调用模型摘要。读取记录跨摘要保留，压缩期间到达的新用户要求在下一次模型请求前重新采集。
+
+进展判断依据实际观察版本和执行状态，不依据模型说“已完成”。相同读取、交替读取、重复失败都可被识别。普通列目录与轮询既不计为重复读取，也不能抹掉已有重复历史；草稿提案同样不能重置循环。实际版本变化、已应用修改和新用户输入可以开启新的进展阶段。
+
+在重复读取且没有进展时，先安排一次重新规划。仅在下一次模型请求及其工具批次内，重复的版本化读取工具暂缓执行；归档、计划、写入等其他原本授权的工具仍可用。下一轮恢复全部正常读取能力，包括真正的新文件和新范围。此阶段如果仅返回文字计划，不会调用完成/交付验证，会进入正常下一轮。
+
+暂停策略在模型请求前写入检查点，且为本轮不可变上下文。运行时、工具注册表及 SDK 在领域/扩展钩子之前检查策略，模型不能通过自行传入 `pausedTools: []` 绕过它。这个限制是短暂的执行调度，不修改用户权限。若调整策略后仍持续无进展，以 `AGENT_NO_PROGRESS` 返回未完成，保留检查点与真实收据，不无限续跑、不伪造文件或交付成功。
+
+### 工具生命周期有明确阶段
+
+`extensions.mjs` 对内部生成且不读取 stdin 的文档/归档命令使用非交互启动。普通终端和代码 SDK 保留交互；命令完成标记处的半关闭仍保留。
+
+`ProcessRunner` 分别记录启动、stdin/stdout/stderr 关闭、真实子进程退出、输出排空、清理及产物收尾。真实退出后不再用原执行定时器错误地取消任务，改用独立 5 秒排空边界；清理命令 2 秒边界并支持强制终止；成果收尾 15 秒边界。现有命令执行时限没有延长。
+
+退出码为 0 仅说明命令退出成功。验证记录先进入 `finalizing`；必须确认输出完整、归档解析成功且未取消，才能变为 `completed`。排空超时、损坏归档或收尾取消均不接受成果，已有验证也不能残留成功状态。会话和收据保存仅含阶段、时间、退出码等信息的生命周期记录，不包含额外命令正文或秘密。
+
+Docker CLI 如果完全不产生退出事件，仍由原命令时限控制；不会根据 stdout 看起来完整就推断成功。独立清理边界不是宿主 OS、Docker daemon 或临床有效性的全面认证。
+
+独立复核发现并修复了一个末尾一致性缺口：归档已经验证，但 `finally` 的临时目录删除挂起时，runner 最终失败而旧收据仍可能为成功。现在 runner 在最终结束时通过同步 `onSettled` 回写收据状态和输出完整性，不引入另一个无界异步等待。新增清理挂起、清理期间取消、清理拒绝三个真实子进程回归，并确认迟到的清理完成不能恢复成功收据。底层删除可能仍未成功，但会话和收据不会把它伪装成一次正常收尾。
+
+## 验证与失败保留
+
+初版进展检测的真实两轮任务为 5/6：第一轮长任务在约 83 秒以无进展结束，第二轮约 98 秒完成。[原始记录](../output/framework-robustness-20260921/live/report.json)。这证明了有界停止，但不能当作任务完成，因此进一步加入一次重新规划阶段；后续成绩单独记录，不覆盖失败。
+
+确定性回归覆盖版本变化、范围区分、归档可恢复性、交替重复、草稿和中性工具绕过、64 项淘汰、小模型窗口、检查点顺序、压缩期间用户追加要求、重新规划后新文件可读取、计划轮不得完成、归档重复及 SDK 防绕过。独立复核还验证完整 286KB 中文归档的精确哈希、截断拒绝、非零退出及取消期间不接受产物。
+
+真实已安装镜像的文档创建与回读 20/20 通过，最长 174ms；Office/PDF/ZIP 3/3 通过。[文档生命周期记录](../output/beta-readiness-20260921/document-lifecycle-noninteractive-probe.json)。这些是真实容器测试，循环控制回归中的合成模型不能替代真实模型任务成绩。
+
+第二轮设计的真实验收为 4/6，两个长任务均遇到模型 API 400。[记录](../output/framework-robustness-20260921/live-replan/report.json)。诊断将同一实际请求单独重放：助理末尾的运行时提醒被兼容端点当作助理预填充并要求思考内容；控制提醒改为系统消息后，该请求返回 200。[失败诊断](../output/framework-robustness-20260921/provider-phase-probe.json)、[修正后诊断](../output/framework-robustness-20260921/provider-phase-control-role-probe.json)。
+
+修正明确区分运行时控制和用户原始要求：控制提醒不伪装成助理预填充；重新规划的文字响应后使用标记为 `runtime_control` 的续行消息建立有效协议边界。当前用户要求选择器跳过此类控制消息，不能让控制消息覆盖真实最新要求。另修复同一批次 16 个同签名失败被累计为 16 次重试的问题；失败重试按独立批次累计，原有批次上限及硬预算测试保持原样通过。
+
+后续真实批次仍为 5/6：一条长任务已产生待审批草稿且三个终端验证正常完成，但压缩器返回 2067 字符，超过原先 2000 字符上限，被框架直接判为失败。[原始记录](../output/framework-robustness-20260921/live-final/report.json)。因此又修复了摘要长度这个框架脆弱点，而不是延长任务时限或放宽交付断言。
+
+### 原始要求与有损摘要分离
+
+压缩逐字保留当前逻辑任务的初始要求和追加要求，按原先顺序保留且不与尾部重复；`runtime_control` 不算用户要求。活跃消息由可信运行时标记为 `runtime_task_input`，读取账本预算同步为这些原文留空间。已完成旧任务的用户消息属于可归档历史；直接调用压缩器、没有活跃标记时仍至少保护真实最新用户消息。活跃要求本身累计超出预算时明确返回 `CONTEXT_LIMIT`，不会暗中丢弃早期约束。
+
+仅当模型返回合法助理文本但长度超限时，对非权威摘要做 Unicode 安全截断，明确标注不完整并记录 `truncatedSummaries`。原始历史归档、持久化审批事实、用户原文不截断，完整摘要仍保存在模型轨迹中。取消、离线错误、空摘要、工具调用摘要、归档错误及预算错误继续显式传播；没有用宽泛 catch 掩盖这些失败。
+
+开发中的 `live-bounded` 批次为 4/6，两个长任务遇到另一处同类协议错误：无可保留尾部时，压缩后请求以助理摘要结束。[保留记录](../output/framework-robustness-20260921/live-bounded/report.json)、[实际错误诊断](../output/framework-robustness-20260921/provider-summary-boundary-probe.json)。修复后始终把该情况下的真实最新用户消息放在摘要之后，避免生成助理预填充；新增经过实际 Anthropic 适配器转换的请求边界测试。该批次修复期间源码发生变化，报告为 `frozenSource: false`，不计作最终冻结验收。
+
+专项回归覆盖连续两次超长摘要、活跃用户原文及审批状态保留、Unicode 边界、原始轨迹完整、预算不足拒绝、取消传播、无尾部协议边界及 SDK 限制。最终任务、全量回归及候选核验结果在源码冻结后记录于本报告末尾。
+
+### 分页不得挤掉原始来源
+
+`live-acceptance` 开发批次为 4/6：长任务一次达到模型输出上限，一次在约 235 秒以无进展结束；文档和 MCP 两轮通过。收尾一致性修复期间源码变化，因此该批次也不作冻结验收。[原始结果](../output/framework-robustness-20260921/live-acceptance/report.json)。
+
+完整轨迹显示，不同归档分页范围占用了同一读取账本，挤掉原始文件的观察记录，并增加后续重新读取。现在总量仍限制为 64 项，其中归档分页最多 16 项；分页检测条目不会一加入就被淘汰，否则相同分页会被误当成新进展。展示时优先呈现直接来源，只有对应来源确实已显示，才抑制同归档的重复分页行。哈希仅在展示时缩为明确标记的 `hashPrefix`，不得作为 `expectedHash`；私有状态、变化检测、裁剪匹配及归档仍使用完整值。路径、范围、授权和实际执行完全不变。
+
+新增回归用 16 个来源和 90 次分页验证来源仍保留并能完整列入受限账本；用 64 个来源占满账本后反复读取同一归档页，验证重复检测仍会有界停止。容量限制外的记录明确显示省略，不承诺无限记忆。
+
+### 非交互任务的容器退出与输出读取解耦
+
+来源优先版本的冻结真实验收为 5/6，长任务分别为 23.5 秒完成、112.9 秒无进展停止；文档与 MCP 两轮通过。[冻结记录](../output/framework-robustness-20260921/live-source-priority/report.json)。独立核对两轮均实际读取 16 份完整来源；文档 19 条收据状态一致，三个非零退出为布局参数错误，均成功重试，最终创建和回读通过。[原文读取核对](../output/framework-robustness-20260921/independent-source-priority.json)、[收据与重试审计](../output/framework-robustness-20260921/document-receipt-audit.json)。前一个核对脚本保留了“每次文档尝试都成功”的严格失败结果，后一个报告区分了失败尝试与成功恢复，没有把非零退出改成成功。
+
+但随后全量 563 项回归中仍出现一次真实 PDF 创建输出后停滞：560 通过、1 失败、2 跳过。该次没有 Docker CLI 退出事件，120 秒后被取消。公开输出不含内部归档帧，因此不能仅凭日志断定是 Python、归档还是 Docker attach。[原始失败](../output/framework-robustness-20260921/regression-source-priority.log)。追加 20 次真实定向 PDF 操作全部通过，但不能据此抹掉偶发失败或宣称根因消失。[定向诊断](../output/framework-robustness-20260921/pdf-lifecycle-diagnosis.json)。
+
+因此继续改造非交互执行路径：容器执行、真实退出确认、完整日志读取、归档验收、容器清理分开管理。读取连接故障时只允许重读同一容器的日志，不能重新执行原始任务。交互终端及 SDK 仍需要 stdin，继续走现有流式路径。Docker 官方分别定义了 [wait 的容器退出码语义](https://docs.docker.com/reference/cli/docker/container/wait/) 和 [logs 的日志读取语义](https://docs.docker.com/reference/cli/docker/container/logs/)；具体安全边界仍需本项目测试验证，不能靠命令返回零推断产物有效。
+
+新增 `server/core/detached-process.mjs`：复用既有容器资源、网络、只读挂载参数；每个任务只 create/start 一次，等待连接与容器执行分开计时。等待连接异常时检查同一容器状态；退出码确认后才完整读取日志，失败读取最多重试一次且不会重复向归档解析器发布半截内容。任务原有总时限不增加。产物验收后才有界删除容器，并同步回写最终收据；日志失败仍保留已经确认的真实容器退出码，但不能因此把失败改成成功。
+
+未知创建结果的清理需要核对随机所有权标签，再按不可变容器 ID 删除，避免名称冲突或复用造成误删除。只有运行器自身的 `--rm` 选项被替换，任务命令的同名参数不改变。另修复原先 `tar | base64` 没有检查生产者失败的问题，改为在容器 tmpfs 生成临时 tar 并分别核对 tar/base64 退出状态；真实 80MB 输出触发 tmpfs 限制后返回 126、失败收据和零提案。[产物生产失败核对](../output/framework-robustness-20260921/detached-archive-failure.json)。
+
+首批新路径真实 PDF 创建/读取 20/20，通过的完整 Office/PDF/ZIP 回归为 3/3。[PDF 压力记录](../output/framework-robustness-20260921/detached-pdf-stress.json)、[文档回归](../output/framework-robustness-20260921/detached-document-regression.log)。宿主进程硬崩溃、创建远端完成超过清理窗口等情况下仍可能残留带 `omw.managed` / `omw.execution` 标签的容器，尚未实现重启后的遗留容器回收器；本轮不声称该边界已经解决。
+
+### 活跃要求的作用域
+
+受控 40 任务的一轮回归为 38/40，两次均在历史压缩场景失败：早期实现把所有旧任务用户消息也视作不可压缩要求，导致窗口被历史占满。[失败记录](../output/codex-foundation-20260921/2026-09-21T11-07-25-413Z/report.json)。修复采用上述活跃任务标记，没有扩大预算或更改原验收断言。
+
+新的普通任务清除旧历史的活跃标记；恢复任务沿相同授权和上下文身份的 `resumes` 链，从持久化用户消息恢复初始要求与已消费的追加要求。未消费的 queued 输入仍由 `takeInput` 交付，避免提前注入或重复消费。重建按逆序逐次匹配并补齐缺失原文，保留重复文本的出现次数与先后顺序，不以文本集合合并用户消息。
+
+### 最新批次与归档页语义
+
+活跃作用域修复后，受控任务为 40/40、短负载为 110/110；短负载约 8 秒，`durationTargetMet:false`，不能计作 48 小时测试。全量回归 577 项中 575 通过、2 项可选宿主 Office 依赖跳过、0 失败；lint/build 及隔离候选启动验证通过。候选只作本地 ad-hoc 签名，没有安装或发布。
+
+随后的冻结真实 `live-detached` 批次为 **4/6，整体失败**：长任务分别在 128.3 秒、196.7 秒触发无进展停止；文档分别 84.9 秒、14.1 秒通过，MCP 分别 12.6 秒、10.6 秒通过。没有提高单任务 240 秒限制或覆盖旧失败记录。[原始报告](../output/framework-robustness-20260921/live-detached/report.json)。
+
+第一轮独立诊断确认已实际读取全部 16 份来源；两条活跃用户要求完整保留。从 trace 26 起，主请求中已有全部来源及合计 136。14 次工具失败分别为 5 次重新规划暂缓读取和 9 次同批超过 8 调用限制，没有文件权限或归档读取失败。
+
+但 trace 41 返回的完整归档页带有 `offset=0,totalChars=1993,nextOffset=null`，经微裁剪后丢失了分页元数据，只剩 160 字符摘录及 `incomplete:true`。后续摘要把摘录不完整理解成资料未读完，并混淆归档 JSON 的序列化长度与源文件正文长度。这是可复现的呈现语义缺陷，触发后续修复：[补丁设计](../output/framework-robustness-20260921/patch-plans/archive-page-microcompact.md)。保留这些字段能消除该歧义，但不能保证任意模型都能完成任务。
+
+硬崩溃后容器回收另有[具体设计审查](../output/framework-robustness-20260921/orphan-recovery-design.md)：需要持久化创建意图、运行实例租约、不可变容器 ID 与随机 nonce 的联合验证；不能仅凭 managed 标签自动删除容器。该回收器尚未实现。
+
+`live-detached` 的[原样严格审计](../output/framework-robustness-20260921/independent-detached.json)失败；两轮实际完整读取均为 16/16，但长任务未完成。文档严格检查还捕获第一轮 3 次 ENOENT 路径尝试，以及一次额外 PNG OCR 初始 running、最终 cancelled；不能记为全部工具尝试成功。[原样文档审计](../output/framework-robustness-20260921/document-receipt-detached.json)。另按同一 session ID 关联终态、按最终产物 ID/hash 回读的[终态审计](../output/framework-robustness-20260921/document-terminal-detached.json)确认两轮 PDF/Excel/Markdown 最终内容合格，失败尝试仍原样列出。
+
+该 OCR 在运行约 62.5 秒时取消，清理命令 2 秒后报 `DOCKER_STAGE_TIMEOUT`，未确认真实容器退出码。证据表现为执行仍在运行时取消，不是已有退出事件后的输出排空停滞；也不能据此宣称清理已完成。最终收据保留 cancelled、outputComplete=false 及清理失败事件。
+
+### 新工具结果与旧结果分开裁剪
+
+修复增加统一观察结果缩略表示：归档页保留 `offset/totalChars/nextOffset/returnedChars`、`contentKind=archive-json-page` 和 `hashScope=archive-json`。`previewIncomplete` 仅表示展示摘录不完整；`reachedArchiveEnd` 仅表示当前范围到达末尾，非零 offset 不代表前缀已读。源文件结果则明确为 `file-text/source-file`，不混用两种长度或 hash。
+
+微裁剪只优先处理旧工具批次，最新批次保留全文；取消每次重复读取后立即裁掉返回正文的路径。若最新批次超过窗口，仍按现有预算进入完整记录摘要；单个结果达到硬上限时允许明确归档降级，使用同样分页元数据。最终预算检查不变，不承诺超大原文必然完整进入主模型。
+
+新增 9 项归档与压缩测试，其中用与失败轨迹等长的 1993 字符归档页验证完整记录及 0/null 元数据进入摘要，覆盖非零末页、非末页、硬归档不递归、重复读取后全文返回、重复调用 ID 和多工具批次。既有“裁剪不触发摘要”测试调整为旧批次加小最新批次并保留原断言；原大最新批次场景另加严格完整摘要断言，没有删除该覆盖。相关 58 项测试全部通过，4 个改动文件 lint 通过；全量和真实任务另行记录。
+
+独立审查发现重复检测的有限窗口边界：归档页保留 16 项时循环 17 页可反复被识别为新观察，68 轮探针未触发无进展停止。这不是无限任务保证；WorkspaceService 仍执行累计运行时限和轮数预算（默认 1 小时、512 轮，本轮真实验收 240 秒）。若要更早识别这种跨窗口循环，需要把紧凑访问签名/范围覆盖进度与摘录展示额度分离；本轮不声称已解决所有分页循环。
+
+该版本首次全量为 586 项、583 通过、1 失败、2 跳过。[保留日志](../output/framework-robustness-20260921/regression-page.log)。失败在 `detached wait-hang` 测试的 rm 计数：夹具给清理 80ms，而把“收到 rm”记录放在新 Node 子进程启动后的首行，并行负载下可能来不及记录就被终止。产品时限不变；故障注入改用受控子进程流执行同一合成 CLI 程序，保留所有启动/删除次数和收据断言，新增挂起进程必须被 kill 的断言。成功、日志重读和等待恢复仍有真实 OS 子进程覆盖，实际 Docker 路径另由真实文档和候选验证覆盖。目标 10/10、生命周期组合 24/24、lint 通过；不将这次夹具修改当作生产清理成功的证据。
+
+## 当前源码回归结果
+
+[全量最终日志](../output/framework-robustness-20260921/regression-page-final.log)：**586 项，584 通过、0 失败、2 跳过**，145.1 秒。跳过项仍为可选宿主 Office/Python 依赖，实际 Docker 文档链路另测。`npm run lint`、`npm run build` 和 `git diff --check` 通过，构建保留原有大 chunk 提示。
+
+[受控任务最终报告](../output/codex-foundation-20260921/2026-09-21T11-35-27-244Z/report.json)：**40/40**，前后代码指纹一致，明确为脚本模型、真实产品工具及合成数据。[短负载最终报告](../output/framework-robustness-20260921/short-load-page/report.json)：**110/110**，4 次服务重启、1 次强制中断检查、10 次压缩；约 8.5 秒，48 小时目标未达到。二者不能代替真实模型或长时负载验证。
+
+[候选包核验](../output/framework-robustness-20260921/candidate-page-verification.json)通过：源码/文件清单一致，隔离 Electron 启动、渲染器隔离、临时数据库、成果创建及 macOS sandbox 冒烟通过，启动后完整性仍一致。macOS arm64 候选位于 `output/framework-robustness-20260921/candidate-page/Open Medical-darwin-arm64`，本地 ad-hoc 签名；未安装、未发布，不代表发行签名/公证、Windows 或升级回滚已通过。
+
+## 当前源码真实模型结果
+
+[最终冻结批次](../output/framework-robustness-20260921/live-page/report.json)：**5/6 通过，1 次长任务失败，整体未达标**。`frozenSource:true`，零重试，原任务与断言不变，单任务 240 秒上限不变。
+
+| 场景 | 第一轮 | 第二轮 |
+| --- | --- | --- |
+| 长对话、压缩、中断与 SQLite 恢复 | 通过，132.0 秒 | 无进展失败，208.5 秒 |
+| PDF、Excel、Markdown 生成与独立回读 | 通过，8.9 秒 | 通过，10.7 秒 |
+| 本地 HTTP MCP 临时失败与恢复 | 通过，10.5 秒 | 通过，11.0 秒 |
+
+第一轮长任务独立诊断确认原始要求完整、16 份原文全部进入主模型或摘要，最终逐项 Units、完整源哈希、合计 136 与追加标记准确。10 次摘要模型调用合计约 102.4 秒，仍有明显摘要开销；该轮没有调用 read_context_archive，因此归档分页元数据修复在本轮仍属于专项回归覆盖，不能冒充真实模型验证。[逐轮诊断](../output/framework-robustness-20260921/page-continuity-diagnosis.json)。
+
+第二轮诊断未发现新的确定性信息丢失：16 份原文、两条活跃要求均保留；12 次成功归档读取首次完整进入后续主模型/摘要，分页 0/null 元数据正确；已交付给后续请求的新读取没有即时硬裁。21 次摘要模型调用约 146.0 秒，没有超长摘要截断。25 次批次超限和 1 次尚未批准的宿主 summary.md 读取 ENOENT 均如实返回。模型已经生成正确待审批提案，且 5 次实际容器验证成功；最新摘要仍明确保留提案和验证事实，但模型继续读取和验证，最终触发无进展失败。该证据指向任务推进与等待审批的终止策略，不能把待审批提案或失败终态改记为成功交付。
+
+[最终来源/严格执行审计](../output/framework-robustness-20260921/independent-page.json)确认两轮均完整实际读取 16/16 来源；[文档收据审计](../output/framework-robustness-20260921/document-receipt-page.json)两轮通过；[生命周期审计](../output/framework-robustness-20260921/lifecycle-page.json)为 13/13 完成，无取消或清理错误。另一个[格式敏感内容审计](../output/framework-robustness-20260921/document-terminal-page.json)保留失败：旧正则只接受数值前为空白，实际正确 PDF 使用 `Alpha = 4`、`Alpha: 4` 等排版；原报告没有修改。对应产物 ID/hash、原始回读文本、Excel 精确单元格及所有失败尝试见[审计说明](../output/framework-robustness-20260921/page-audit-notes.json)。正式真实验收中的 PDF/Excel 内容条件均通过，不能用辅助正则的假阴性否认已经检查的内容，也不能删除假阴性记录。
+
+[机器可读最终汇总](../output/framework-robustness-20260921/final-acceptance.json)明确标记 `taskMatrixPassed:false`、`readyForGeneralRelease:false`。当前仍是工程 Beta：本轮完成了可审查的框架加固与测试，长任务两轮稳定完成目标仍未通过。后续需要结构化的任务推进/等待审批终止协议、更独立的跨窗口访问进度记录，以及崩溃后的执行所有权和容器回收；48 小时负载、Windows、正式签名和升级回滚仍未验证。不能用已有正确草稿自动批准、无限续跑或改变完成判据来掩盖剩余问题。

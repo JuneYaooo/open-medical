@@ -760,7 +760,7 @@ export class WorkspaceExtensions {
               artifactIds: a.artifactId ? [a.artifactId] : a.artifactIds || [],
               timeoutMs: 120000,
             },
-            { ...c, discardOutputs: action === "read" || c.discardOutputs },
+            { ...c, interactive: false, discardOutputs: action === "read" || c.discardOutputs },
           );
           return this.runner.wait(id, session.id, 30000, c.signal);
         },
@@ -783,7 +783,7 @@ export class WorkspaceExtensions {
           const session = await this.terminal.start(id, {
             command: `python /opt/agent-tools/document.py --base64 ${encoded}`,
             paths: action === "create" ? a.paths : [a.path], timeoutMs: 120000,
-          }, { ...c, discardOutputs: action === "list" || c.discardOutputs });
+          }, { ...c, interactive: false, discardOutputs: action === "list" || c.discardOutputs });
           return this.runner.wait(id, session.id, 30000, c.signal);
         });
     tool(

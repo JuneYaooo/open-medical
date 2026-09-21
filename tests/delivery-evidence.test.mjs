@@ -76,7 +76,7 @@ test("AgentRuntime delivery seam: domain.verifyDelivery supported; failure keeps
   });
   assert.equal(delivered.delivery.delivered, true);
   assert.equal(delivered.delivery.evidence[0].kind, "file");
-  // 钩子抛错：运行照常完成、不附加 delivery，只记“未能验证”事件
+  // 检查异常须保留结构化缺口，不能把验证失败当成未请求验证。
   const events = [];
   const unverified = await runtime.run({
     ...base,
@@ -87,7 +87,8 @@ test("AgentRuntime delivery seam: domain.verifyDelivery supported; failure keeps
       },
     },
   });
-  assert.equal("delivery" in unverified, false);
+  assert.equal(unverified.delivery.delivered, false);
+  assert.equal(unverified.delivery.gaps[0].reason, "delivery_check_failed");
   assert.ok(events.some((e) => e.type === "delivery.unverified"));
   // 无钩子：既有行为完全不变
   const untouched = await runtime.run(base);

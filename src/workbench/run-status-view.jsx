@@ -60,6 +60,7 @@ export function OutcomeCard({ outcome, delivery }) {
     : delivery?.delivered === true;
   const evidence = delivery?.evidence || [];
   const gaps = delivery?.gaps || [];
+  const warnings = delivery?.warnings || [];
   if (delivered)
     return (
       <div className="wb-outcome delivered" aria-label="交付结果">
@@ -69,6 +70,10 @@ export function OutcomeCard({ outcome, delivery }) {
           <span className="wb-outcome-count">
             {evidence.length > 0 ? `${evidence.length} 项可核对证据` : "交付已核实"}
           </span>
+          {delivery?.method === "current-run-facts-only" && (
+            <p>已核对本次产物或执行回执；未指定的内容要求仍需复核。</p>
+          )}
+          {warnings.map((warning, i) => <p key={`warning-${i}`}>{warning.tool}: {warning.detail}</p>)}
           {evidence.length > 0 && (
             <ul>
               {evidence.slice(0, 5).map((e, i) => (
@@ -83,10 +88,9 @@ export function OutcomeCard({ outcome, delivery }) {
     <div className="wb-outcome answered" aria-label="交付结果">
       <TriangleAlert size={15} />
       <div>
-        <b>已回答，没有可验证产物</b>
+        <b>{evidence.length ? "已回答，交付尚未核实" : "已回答，没有可验证产物"}</b>
         <p>
-          助手给出了文字回答，但结束时没有可核对的产物或执行回执；以下为运行时核对的缺口。
-          如需文件类成果，请继续明确要生成的文件。
+          运行已结束。问答无需文件；执行任务的产物、回执或指定条件尚未全部核实。
         </p>
         {gaps.length > 0 && (
           <ul>

@@ -1,3 +1,4 @@
+import { medicalToolAllowed } from "./medical-core.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { MedicalDomain } from "./domains/medical.mjs";
@@ -625,7 +626,7 @@ export class MedicalRuntime {
         ];
         const start = messages.length - 1;
         const registry = new ToolRegistry(
-          this.toolDefinitions.map((definition) => ({
+          this.toolDefinitions.filter((definition) => medicalToolAllowed(definition.function.name, run.policy?.intent)).map((definition) => ({
             definition,
             permission:
               definition.function.name === "sandbox_python"
@@ -685,6 +686,7 @@ export class MedicalRuntime {
               } else
                 output = await runTool(name, args, {
                   sources,
+                  intent: run.policy?.intent,
                   skills: this.skills,
                   definitions: this.toolDefinitions,
                   plugins: this.toolPlugins,
@@ -761,8 +763,9 @@ export class MedicalRuntime {
           onDelivery,
           // 会话超过预算时自动压缩：保留最近对话，更早历史摘要化，原文
           // 归档后可经 read_context_archive 分段读回（同一预算约束）。
-          compact: (compacting) =>
+          compact: (compacting, budgetOptions) =>
             compactContext({
+              ...budgetOptions,
               messages: compacting,
               provider: this.provider,
               model: handle.body.model || this.provider.model,

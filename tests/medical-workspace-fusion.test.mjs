@@ -4,7 +4,28 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PermissionEngine } from "../server/core/permissions.mjs";
+import { ProcessRunner } from "../server/core/process-runner.mjs";
 import { fixture } from "./helpers.mjs";
+
+// B1 起模型可见工具列表按真实就绪过滤：本测试断言「通用内核工具面完整」，
+// 需要容器后端与镜像就绪的确定状态，因此注入 runner 桩（不启动真实 Docker）。
+class ReadyRunnerStub extends ProcessRunner {
+  constructor() {
+    super({ docker: "docker" });
+  }
+  status() {
+    return {
+      available: true,
+      backend: "docker-linux",
+      host: process.platform,
+      network: false,
+      hostFilesystem: false,
+    };
+  }
+  image() {
+    return "sha256:" + "a".repeat(64);
+  }
+}
 
 // Fusion with on-demand medical layering (W6): ordinary project workspaces
 // keep the pure generic tool surface; the medical layer (discipline text +
@@ -14,7 +35,10 @@ import { fixture } from "./helpers.mjs";
 // session-bridge tests.
 test("ordinary project workspaces carry generic tools only, no medical discipline", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "omw-fusion-"));
-  const f = await fixture(t, { database: join(dir, "medical.sqlite") });
+  const f = await fixture(t, {
+    database: join(dir, "medical.sqlite"),
+    extensions: { runner: new ReadyRunnerStub() },
+  });
   // Register the cleanup AFTER the fixture: node:test runs after-hooks in
   // registration order and stops at the first failure, so an rmSync before
   // server.shutdown() would EPERM on the open sqlite file (Windows) and the
@@ -33,6 +57,16 @@ test("ordinary project workspaces carry generic tools only, no medical disciplin
   });
   assert.equal(created.status, 201);
   const wsId = created.data.id;
+  // B1：code_execute 经 runner 在工作区镜像内运行，模型可见需已配置镜像。
+  f.server.workspaces.store.update(wsId, (w) => {
+    w.extensions = {
+      plugins: [],
+      mcpServers: [],
+      origins: [],
+      memory: { provider: "lsa" },
+      image: "open-medical-runtime:0.8-full",
+    };
+  });
 
   const names = f.server.workspaces
     .registry(wsId, "run-check")

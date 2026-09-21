@@ -13,7 +13,7 @@ export class ModelSettings {
   provider() { return this.saved.provider ? createProvider(this.saved) : this.initial; }
   public() {
     const p = this.provider();
-    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, maxTokens: p.maxTokens || 8192 };
+    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, contextWindow: p.contextWindow ?? null, maxTokens: p.maxTokens || 8192 };
   }
   candidate(body) {
     check(kinds.includes(body.provider), 'MODEL_SETTINGS', '请选择支持的模型协议');
@@ -28,6 +28,8 @@ export class ModelSettings {
     const apiKey = body.apiKey?.trim() || (body.provider === previous.provider && baseUrl === previous.baseUrl.replace(/\/$/, '') ? existing.apiKey : '');
     check(body.provider === 'local' || Boolean(apiKey), 'MODEL_SETTINGS', '请填写 API Key；更换协议或接口地址时须重新输入密钥');
     const config = { provider: body.provider, baseUrl, model: body.model.trim(), apiKey: apiKey || '', timeoutMs: Number(body.timeoutMs ?? 90000), maxTokens: Number(body.maxTokens ?? 8192) };
+    if (body.contextWindow != null) config.contextWindow = Number(body.contextWindow);
+    else if (body.model.trim() === previous.model && existing.contextWindow) config.contextWindow = existing.contextWindow;
     createProvider(config);
     return config;
   }

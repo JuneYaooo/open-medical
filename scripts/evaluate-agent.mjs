@@ -12,8 +12,11 @@ const { values } = parseArgs({ options: {
   case: { type: "string", default: "all" }, repeat: { type: "string", default: "3" },
   image: { type: "string", default: "open-medical-runtime:0.8-full" }, directory: { type: "string" },
   "claude-code-provider": { type: "string" },
+  "timeout-ms": { type: "string", default: "600000" },
 } });
 const caseNames = ["repair", "repair-auto", "documents", "team", "continuity", "mcp"];
+const timeoutMs = Number(values["timeout-ms"]);
+if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error("Invalid task timeout");
 const repeats = Number(values.repeat), cases = values.case === "all" ? caseNames : [values.case];
 if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20 || cases.some((c) => !caseNames.includes(c)))
   throw new Error("Use --case=all|repair|repair-auto|documents|team|continuity|mcp --repeat=1..20");
@@ -24,7 +27,7 @@ mkdirSync(directory, { recursive: true, mode: 0o700 });
 const report = { startedAt: Date.now(), provider: provider.provider, model: provider.model,
   sourceFingerprint: sourceFingerprint(),
   platform: process.platform, arch: process.arch, syntheticDataOnly: true, modelType: "real-provider",
-  status: "running", results: [] };
+  timeoutMs, status: "running", results: [] };
 const save = () => writeFileSync(join(directory, "report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
 if (!providerConfigured(provider)) {
   report.status = "blocked"; report.reason = "No configured model credentials; no real model requests were made";
@@ -89,7 +92,7 @@ if (!providerConfigured(provider)) {
       consent: true, server: { id: "inventory", transport: "http", url: mcp.url, allowedTools: ["inventory"] } });
     const handle = service.prepare(w.id, { revision: service.get(w.id).revision, message: prompt,
       externalConsent: true, resumeOnRestart: name === "continuity",
-      limits: { maxRounds: 48, timeoutMs: 600000, maxContextChars: name === "continuity" ? 16000 : 60000 } });
+      limits: { maxRounds: 48, timeoutMs, maxContextChars: name === "continuity" ? 16000 : 60000 } });
     let interrupted = false;
     let execution = await service.execute(handle, (event) => {
       if (name === "continuity" && !interrupted && event.type === "tool.complete") {

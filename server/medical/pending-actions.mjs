@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { check, string } from "../errors.mjs";
+import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { validateClinicalInput } from "../patients.mjs";
 
 // Agent-proposed, doctor-confirmed write-backs. The model never writes
@@ -7,7 +8,12 @@ import { validateClinicalInput } from "../patients.mjs";
 // structured payload; only the doctor's confirm applies it through the
 // same deterministic services the UI uses (proposal pattern from the
 // mediwise/MDT references — LLM proposes, deterministic code applies).
-const TYPES = ["patient-create", "patient-update", "followup-create", "case-save"];
+const TYPES = [
+  "patient-create",
+  "patient-update",
+  "followup-create",
+  "case-save",
+];
 
 export class PendingActions {
   // services are accessor functions (e.g. () => patients) so the registry
@@ -28,13 +34,16 @@ export class PendingActions {
   row(id) {
     check(typeof id === "string" && id, "INVALID_INPUT", "提案编号无效");
     const row = this.store.db
-      .prepare("SELECT id,type,patient_id,status,payload,summary,created_at,updated_at FROM pending_actions WHERE id=?")
+      .prepare(
+        "SELECT id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at FROM pending_actions WHERE id=?",
+      )
       .get(id);
     check(row, "NOT_FOUND", "待确认提案不存在", 404);
     return {
       id: row.id,
       type: row.type,
       patientId: row.patient_id,
+      baseRevision: row.base_revision,
       status: row.status,
       payload: JSON.parse(row.payload),
       summary: row.summary,
@@ -49,10 +58,18 @@ export class PendingActions {
       `提案类型须为：${TYPES.join("/")}`,
     );
     const title = string(summary, "提案摘要", 300);
+    check(
+      payload && typeof payload === "object" && !Array.isArray(payload),
+      "INVALID_INPUT",
+      "提案内容必须是对象",
+    );
     let resolvedPatientId = null;
+    let baseRevision = null;
     if (type === "patient-update" || type === "followup-create") {
       check(patientId, "INVALID_INPUT", "该提案需要患者编号");
-      resolvedPatientId = this.patients.row(patientId).id;
+      const patient = this.patients.row(patientId);
+      resolvedPatientId = patient.id;
+      baseRevision = patient.revision;
     }
     let normalized = payload;
     if (type === "patient-update") {
@@ -65,11 +82,11 @@ export class PendingActions {
       normalized = fields;
     }
     if (type === "patient-create") {
-      check(
-        typeof payload.name === "string" && payload.name.trim(),
-        "INVALID_INPUT",
-        "建档提案需要患者姓名",
-      );
+      normalized = {
+        ...payload,
+        name: string(payload.name, "患者姓名", 80),
+        ...validateClinicalInput(payload),
+      };
     }
     if (type === "followup-create") {
       check(
@@ -79,8 +96,11 @@ export class PendingActions {
       );
     }
     if (type === "case-save") {
-      if (patientId) resolvedPatientId = this.patients.row(patientId).id;
-      else
+      if (patientId) {
+        const patient = this.patients.row(patientId);
+        resolvedPatientId = patient.id;
+        baseRevision = patient.revision;
+      } else
         check(
           typeof payload.diagnosis === "string" && payload.diagnosis.trim(),
           "INVALID_INPUT",
@@ -91,13 +111,24 @@ export class PendingActions {
     const id = randomUUID();
     this.store.db
       .prepare(
-        "INSERT INTO pending_actions(id,type,patient_id,status,payload,summary,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO pending_actions(id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
       )
-      .run(id, type, resolvedPatientId, "pending", JSON.stringify(normalized), title, time, time);
+      .run(
+        id,
+        type,
+        resolvedPatientId,
+        baseRevision,
+        "pending",
+        JSON.stringify(normalized),
+        title,
+        time,
+        time,
+      );
     return {
       id,
       type,
       patientId: resolvedPatientId,
+      baseRevision,
       status: "pending",
       payload: normalized,
       summary: title,
@@ -124,7 +155,7 @@ export class PendingActions {
     }
     return this.store.db
       .prepare(
-        `SELECT id,type,patient_id,status,payload,summary,created_at,updated_at FROM pending_actions
+        `SELECT id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at FROM pending_actions
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC LIMIT 100`,
       )
       .all(...args)
@@ -132,6 +163,7 @@ export class PendingActions {
         id: row.id,
         type: row.type,
         patientId: row.patient_id,
+        baseRevision: row.base_revision,
         status: row.status,
         payload: JSON.parse(row.payload),
         summary: row.summary,
@@ -140,69 +172,73 @@ export class PendingActions {
       }));
   }
   confirm(id) {
-    const action = this.row(id);
-    check(
-      action.status === "pending",
-      "ACTION_RESOLVED",
-      "该提案已处理",
-      409,
-    );
-    let applied;
-    if (action.type === "patient-create") {
-      const { name, gender, birthYear, phone, groups, tags, note } =
-        action.payload;
-      const patient = this.patients.create({
-        name,
-        gender,
-        birthYear,
-        phone,
-        groups,
-        tags,
-        note,
-      });
-      // 建档提案里的临床字段随档案一起写入（走患者更新校验）。
-      const clinical = validateClinicalInput(action.payload);
-      if (Object.keys(clinical).length)
-        this.patients.update(patient.id, {
-          expectedRevision: patient.revision,
-          ...clinical,
-        });
-      applied = this.patients.row(patient.id);
-    } else if (action.type === "patient-update") {
-      const current = this.patients.row(action.patientId);
-      applied = this.patients.update(action.patientId, {
-        expectedRevision: current.revision,
-        ...action.payload,
-      });
-    } else if (action.type === "followup-create") {
-      applied = this.followups.create(action.patientId, action.payload);
-    } else {
+    return sqliteTransaction(this.store.db, () => {
+      const action = this.row(id);
+      check(
+        action.status === "pending",
+        "ACTION_RESOLVED",
+        "该提案已处理",
+        409,
+      );
       if (action.patientId) {
-        const patient = this.patients.row(action.patientId);
-        applied = this.cases.fromPatient(patient, {
-          summary: action.payload.summary,
-          outcome: action.payload.outcome,
-        });
-      } else {
-        applied = this.cases.addCase(action.payload);
+        check(
+          Number.isSafeInteger(action.baseRevision) && action.baseRevision >= 0,
+          "ACTION_CONFLICT",
+          "该提案缺少生成时的患者档案版本，无法安全采纳；请保留当前档案并重新生成提案。",
+          409,
+        );
+        check(
+          this.patients.row(action.patientId).revision === action.baseRevision,
+          "ACTION_CONFLICT",
+          "患者档案在提案生成后已变化，旧提案不能覆盖当前记录；请刷新档案并重新生成提案。",
+          409,
+        );
       }
-    }
-    const time = new Date().toISOString();
-    this.store.db
-      .prepare("UPDATE pending_actions SET status='applied',updated_at=? WHERE id=?")
-      .run(time, id);
-    return { ok: true, action: this.row(id), applied };
+      let applied;
+      if (action.type === "patient-create") {
+        // The registry validates all supplied fields before creating any record.
+        const patient = this.patients.create(action.payload);
+        applied = this.patients.row(patient.id);
+      } else if (action.type === "patient-update") {
+        applied = this.patients.update(action.patientId, {
+          ...action.payload,
+          expectedRevision: action.baseRevision,
+        });
+      } else if (action.type === "followup-create") {
+        applied = this.followups.create(action.patientId, action.payload);
+      } else {
+        if (action.patientId) {
+          const patient = this.patients.row(action.patientId);
+          applied = this.cases.fromPatient(patient, {
+            summary: action.payload.summary,
+            outcome: action.payload.outcome,
+          });
+        } else {
+          applied = this.cases.addCase(action.payload);
+        }
+      }
+      const time = new Date().toISOString();
+      const updated = this.store.db
+        .prepare(
+          "UPDATE pending_actions SET status='applied',updated_at=? WHERE id=? AND status='pending'",
+        )
+        .run(time, id);
+      check(
+        updated.changes === 1,
+        "ACTION_CONFLICT",
+        "提案确认状态未写入，请刷新后重试；本次变更已回滚。",
+        409,
+      );
+      return { ok: true, action: this.row(id), applied };
+    });
   }
   reject(id) {
     const action = this.row(id);
-    check(
-      action.status === "pending",
-      "ACTION_RESOLVED",
-      "该提案已处理",
-      409,
-    );
+    check(action.status === "pending", "ACTION_RESOLVED", "该提案已处理", 409);
     this.store.db
-      .prepare("UPDATE pending_actions SET status='rejected',updated_at=? WHERE id=?")
+      .prepare(
+        "UPDATE pending_actions SET status='rejected',updated_at=? WHERE id=?",
+      )
       .run(new Date().toISOString(), id);
     return { ok: true, action: this.row(id) };
   }

@@ -1,3 +1,4 @@
+import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { DatabaseSync } from "node:sqlite";
 import {
   mkdirSync,
@@ -104,6 +105,11 @@ export class Store {
       CREATE TABLE IF NOT EXISTS pending_actions (id TEXT PRIMARY KEY, type TEXT NOT NULL, patient_id TEXT, status TEXT NOT NULL, payload TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_actions_patient ON pending_actions(patient_id,status);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      // Existing proposals have no trustworthy base version. Keep NULL rather
+      // than backfilling today's revision: confirmation must fail closed.
+      const pendingColumns = this.db.prepare("PRAGMA table_info(pending_actions)").all();
+      if (!pendingColumns.some((column) => column.name === "base_revision"))
+        this.db.exec("ALTER TABLE pending_actions ADD COLUMN base_revision INTEGER");
       // Vectors carry their embedding model; pre-model tables are derived
       // data and are simply rebuilt by reindex.
       const vectorCols = this.db.prepare("PRAGMA table_info(guideline_chunk_vectors)").all();
@@ -116,7 +122,7 @@ export class Store {
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.
       // All migrations are additive; session rows are unchanged.
-      const SCHEMA_VERSION = "6";
+      const SCHEMA_VERSION = "7";
       const schemaRow = this.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version");
@@ -223,8 +229,7 @@ export class Store {
     return session;
   }
   mutate(id, update) {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
+    return sqliteTransaction(this.db, () => {
       const data = this.get(id);
       update(data);
       data.revision++;
@@ -232,12 +237,8 @@ export class Store {
       this.db
         .prepare("UPDATE sessions SET data=? WHERE id=?")
         .run(JSON.stringify(data), id);
-      this.db.exec("COMMIT");
       return data;
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    });
   }
   delete(id) {
     this.get(id);

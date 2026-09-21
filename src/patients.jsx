@@ -50,19 +50,36 @@ const fmtDate = (value) =>
 // 提案卡明细：渲染结构化字段而非原始 JSON
 const proposalDetail = (type, payload = {}) => {
   const parts = [];
-  if (payload.name) parts.push(type === "followup-create" ? `计划 ${payload.name}` : `姓名 ${payload.name}`);
+  if (payload.name)
+    parts.push(
+      type === "followup-create"
+        ? `计划 ${payload.name}`
+        : `姓名 ${payload.name}`,
+    );
   if (payload.gender === "male") parts.push("男");
   if (payload.gender === "female") parts.push("女");
   if (payload.birthYear) parts.push(`${payload.birthYear} 年生`);
   if (payload.phone) parts.push(payload.phone);
   if (payload.diagnoses?.length)
-    parts.push(`诊断 ${payload.diagnoses.map((d) => d.name).filter(Boolean).join("、")}`);
+    parts.push(
+      `诊断 ${payload.diagnoses
+        .map((d) => d.name)
+        .filter(Boolean)
+        .join("、")}`,
+    );
   if (payload.diagnosis) parts.push(`诊断 ${payload.diagnosis}`);
   if (payload.medications?.length)
-    parts.push(`用药 ${payload.medications.map((m) => m.name).filter(Boolean).join("、")}`);
-  if (payload.allergies?.length) parts.push(`过敏 ${payload.allergies.join("、")}`);
+    parts.push(
+      `用药 ${payload.medications
+        .map((m) => m.name)
+        .filter(Boolean)
+        .join("、")}`,
+    );
+  if (payload.allergies?.length)
+    parts.push(`过敏 ${payload.allergies.join("、")}`);
   if (payload.labs?.length) parts.push(`检验 ${payload.labs.length} 项待录入`);
-  if (payload.visits?.length) parts.push(`就诊 ${payload.visits.length} 次待录入`);
+  if (payload.visits?.length)
+    parts.push(`就诊 ${payload.visits.length} 次待录入`);
   return parts.join(" · ");
 };
 export function parsePastedMessages(raw) {
@@ -107,6 +124,8 @@ export function PatientsView({
   const [risks, setRisks] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [createProposals, setCreateProposals] = useState([]);
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const proposalInFlight = useRef(false);
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
@@ -172,6 +191,32 @@ export function PatientsView({
     if (!detail) return;
     await openPatient(detail.id, tab);
     await refresh();
+  };
+  const resolveProposal = async (proposal, decision) => {
+    if (proposalInFlight.current) return;
+    proposalInFlight.current = true;
+    setProposalBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api(`/api/pending-actions/${proposal.id}/${decision}`, "POST", {});
+      if (detail) await refreshPatient();
+      else await refresh();
+      setNotice(
+        decision === "reject"
+          ? "提案已忽略。"
+          : proposal.type === "patient-create"
+            ? "建档提案已确认，患者已创建。"
+            : "提案已确认写入。",
+      );
+    } catch (err) {
+      // A revision conflict leaves the proposal pending and the doctor's edits
+      // intact; display the server's recovery instruction instead of dropping it.
+      setError(err.message);
+    } finally {
+      proposalInFlight.current = false;
+      setProposalBusy(false);
+    }
   };
   useEffect(() => {
     refresh().catch((err) => setError(err.message));
@@ -465,28 +510,15 @@ export function PatientsView({
               <div className="hub-risk-actions">
                 <button
                   className="text-button"
-                  onClick={async () => {
-                    await api(
-                      `/api/pending-actions/${proposal.id}/confirm`,
-                      "POST",
-                      {},
-                    );
-                    setNotice("建档提案已确认，患者已创建。");
-                    await refresh();
-                  }}
+                  disabled={proposalBusy}
+                  onClick={() => resolveProposal(proposal, "confirm")}
                 >
                   确认建档
                 </button>
                 <button
                   className="text-button"
-                  onClick={async () => {
-                    await api(
-                      `/api/pending-actions/${proposal.id}/reject`,
-                      "POST",
-                      {},
-                    );
-                    await refresh();
-                  }}
+                  disabled={proposalBusy}
+                  onClick={() => resolveProposal(proposal, "reject")}
                 >
                   忽略
                 </button>
@@ -685,7 +717,7 @@ export function PatientsView({
                     (a.status === "active" ? 0 : 1) -
                       (b.status === "active" ? 0 : 1) ||
                     { critical: 0, warning: 1, info: 2 }[a.severity] -
-                    { critical: 0, warning: 1, info: 2 }[b.severity],
+                      { critical: 0, warning: 1, info: 2 }[b.severity],
                 )}
                 busy={busy}
                 onDraft={(r) =>
@@ -731,19 +763,15 @@ export function PatientsView({
                       <div className="hub-risk-actions">
                         <button
                           className="text-button"
-                          onClick={async () => {
-                            await api(`/api/pending-actions/${proposal.id}/confirm`, "POST", {});
-                            await openPatient(detail.id, tab);
-                          }}
+                          disabled={proposalBusy}
+                          onClick={() => resolveProposal(proposal, "confirm")}
                         >
                           采纳写入
                         </button>
                         <button
                           className="text-button"
-                          onClick={async () => {
-                            await api(`/api/pending-actions/${proposal.id}/reject`, "POST", {});
-                            await openPatient(detail.id, tab);
-                          }}
+                          disabled={proposalBusy}
+                          onClick={() => resolveProposal(proposal, "reject")}
                         >
                           忽略
                         </button>
@@ -761,7 +789,10 @@ export function PatientsView({
                   items={[
                     // 无标题且无时间的条目是历史空壳（旧版技能正文快照），时间线上没有可读信息
                     ...session.artifacts
-                      .filter((a) => (a.title || a.summary || a.payload) && a.createdAt)
+                      .filter(
+                        (a) =>
+                          (a.title || a.summary || a.payload) && a.createdAt,
+                      )
                       .map((a) => ({
                         sort: a.createdAt,
                         date: fmtDate(a.createdAt),
@@ -790,9 +821,7 @@ export function PatientsView({
                       sort: j.nextDue,
                       date: fmtDate(j.nextDue),
                       text: `随访：${j.name}（${
-                        j.intervalDays
-                          ? `每 ${j.intervalDays} 天`
-                          : "按需安排"
+                        j.intervalDays ? `每 ${j.intervalDays} 天` : "按需安排"
                       }${j.status !== "active" ? ` · ${j.status === "paused" ? "已暂停" : j.status}` : ""}）`,
                     })),
                   ].sort((a, b) => new Date(b.sort) - new Date(a.sort))}

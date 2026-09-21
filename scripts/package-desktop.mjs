@@ -4,14 +4,16 @@ import {
 } from "./runtime-dependencies.mjs";
 import { packager } from "@electron/packager";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { argument, reserveCandidateOutput, prohibited, captureSource, sourceManifestName, inventory, sealCandidate } from "./desktop-candidate.mjs";
 import { execFileSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
-const arg = (name) =>
-  process.argv.find((value) => value.startsWith(`--${name}=`))?.split("=")[1];
+const arg = (name) => argument(process.argv.slice(2), name);
+const customOut = arg("out") ?? arg("output-dir");
+const outputRoot = customOut === undefined ? join(root, "release") : await reserveCandidateOutput(root, customOut);
 const targetPlatform =
   arg("platform") || process.env.TARGET_PLATFORM || process.platform;
 const targetArch = arg("arch") || process.env.TARGET_ARCH || process.arch;
@@ -22,11 +24,16 @@ try {
     stdio: "inherit",
   });
   // Explicit allowlist: never copy patient databases, .env, screenshots or tests.
+  const source = customOut === undefined ? null : await captureSource(root);
+  const safeSource = (path) => {
+    const name = relative(root, path).split(sep).join("/");
+    return !prohibited(name) && name !== "server/data" && !name.startsWith("server/data/");
+  };
   for (const entry of ["dist", "desktop", "shared", "skills", "examples", "build/icons"])
-    await cp(join(root, entry), join(stage, entry), { recursive: true });
+    await cp(join(root, entry), join(stage, entry), { recursive: true, filter: safeSource });
   await cp(join(root, "server"), join(stage, "server"), {
     recursive: true,
-    filter: (source) => !source.startsWith(join(root, "server/data")),
+    filter: safeSource,
   });
   await cp(join(root, ".env.example"), join(stage, ".env.example"));
   await mkdir(join(stage, "scripts"));
@@ -59,6 +66,10 @@ try {
       2,
     ),
   );
+  if (source) await writeFile(join(stage, sourceManifestName), JSON.stringify(source, null, 2) + "\n");
+  // Fail before exporting a candidate if dependencies or copied assets contain
+  // credential/database files or links outside the staged application.
+  await inventory(stage);
   const zipDirectory = join(root, "output/desktop-build");
   const cachedApp = join(root, "node_modules/electron/dist/Electron.app");
   let apps;
@@ -69,7 +80,7 @@ try {
     existsSync(cachedApp)
   ) {
     // APFS copy-on-write avoids extracting another 300MB runtime on low-disk Macs.
-    const output = join(root, `release/Open Medical-darwin-${targetArch}`);
+    const output = join(outputRoot, `Open Medical-darwin-${targetArch}`);
     const bundle = join(output, "Open Medical.app");
     await mkdir(output, { recursive: true });
     await rm(bundle, { recursive: true, force: true });
@@ -122,7 +133,7 @@ try {
   } else
     apps = await packager({
       dir: stage,
-      out: join(root, "release"),
+      out: outputRoot,
       name: "Open Medical",
       appBundleId: "local.openmedical.workbench",
       platform: targetPlatform,
@@ -137,7 +148,7 @@ try {
       )
         ? { electronZipDir: zipDirectory }
         : {}),
-      overwrite: true,
+      overwrite: customOut === undefined,
       asar: false,
       prune: false,
       appCategoryType: "public.app-category.productivity",
@@ -148,12 +159,22 @@ try {
     await cp(
       join(stage, "desktop", "install-win.cmd"),
       join(
-        root,
-        "release",
+        outputRoot,
         `Open Medical-win32-${targetArch}`,
         "install-open-medical.cmd",
       ),
     );
+  }
+  if (source) {
+    if ((await captureSource(root)).fingerprint !== source.fingerprint)
+      throw new Error("Workspace changed during packaging; candidate is not sealed");
+    for (const output of apps) {
+      const appPath = targetPlatform === "darwin" ? "Open Medical.app/Contents/Resources/app" : "resources/app";
+      const binary = targetPlatform === "darwin" ? "Open Medical.app/Contents/MacOS/Open Medical"
+        : targetPlatform === "win32" ? "Open Medical.exe" : "Open Medical";
+      await sealCandidate(output, { platform: targetPlatform, arch: targetArch, appPath, binary,
+        sourceFingerprint: source.fingerprint, signing: targetPlatform === "darwin" && process.platform === "darwin" && targetArch === process.arch && existsSync(cachedApp) ? "local-ad-hoc" : "none" });
+    }
   }
   console.log(apps.join("\n"));
 } finally {
