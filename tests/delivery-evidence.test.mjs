@@ -76,7 +76,8 @@ test("AgentRuntime delivery seam: domain.verifyDelivery supported; failure keeps
   });
   assert.equal(delivered.delivery.delivered, true);
   assert.equal(delivered.delivery.evidence[0].kind, "file");
-  // 钩子抛错：运行照常完成、不附加 delivery，只记“未能验证”事件
+  // 钩子抛错(N3-06 语义,0.9.9 起):运行照常完成,但不再静默丢失事实——
+  // 持久化明确的 unverified 交付状态与原因,只记“未能验证”事件。
   const events = [];
   const unverified = await runtime.run({
     ...base,
@@ -87,7 +88,9 @@ test("AgentRuntime delivery seam: domain.verifyDelivery supported; failure keeps
       },
     },
   });
-  assert.equal("delivery" in unverified, false);
+  assert.equal(unverified.delivery.unverified, true);
+  assert.equal(unverified.delivery.delivered, false);
+  assert.equal(unverified.delivery.gaps[0].reason, "delivery_check_failed");
   assert.ok(events.some((e) => e.type === "delivery.unverified"));
   // 无钩子：既有行为完全不变
   const untouched = await runtime.run(base);
@@ -100,7 +103,7 @@ test("AgentRuntime delivery seam: domain.verifyDelivery supported; failure keeps
   assert.equal(bare.gaps[0].reason, "no_verifiable_output");
 });
 
-test("medical runtime: execution task with empty claim gets delivered=false and answered outcome", async () => {
+test("medical runtime: execution task with empty claim gets delivered=false and delivery_failed outcome", async () => {
   const store = new Store(":memory:");
   try {
     const provider = {
@@ -120,26 +123,27 @@ test("medical runtime: execution task with empty claim gets delivered=false and 
     const result = await runtime.execute(handle);
     assert.equal(result.status, "completed");
     assert.equal(handle.run.policy.intent, "observations");
-    // 状态仍是 completed，但结果分类是 answered（回答而非交付）
+    // N3/N4 语义(0.9.9 起):状态仍是 completed,但执行类任务没有可核对
+    // 产物时结果分类是 delivery_failed,不再降格为 answered。
     assert.equal(result.delivery.delivered, false);
-    assert.equal(result.outcome, "answered");
+    assert.equal(result.outcome, "delivery_failed");
     assert.ok(
       result.delivery.gaps.some((g) => g.reason === "no_verifiable_output"),
     );
     const saved = store.get(session.id).runs[0];
     assert.equal(saved.status, "completed");
-    assert.equal(saved.outcome, "answered");
+    assert.equal(saved.outcome, "delivery_failed");
     assert.equal(saved.delivery.delivered, false);
-    assert.equal(store.get(session.id).messages.at(-1).outcome, "answered");
+    assert.equal(store.get(session.id).messages.at(-1).outcome, "delivery_failed");
     // 事件流包含缺口事实与完成分类
     const log = store.eventLog(session.id);
     assert.ok(log.some((e) => e.type === "delivery.gaps"));
     const complete = log.find((e) => e.type === "message.complete");
     assert.equal(complete.payload.delivery.delivered, false);
-    // 旧字段语义未变：publicSession 投影保留原 status 并携带派生字段
+    // 旧字段语义未变：投影保留原 status 并携带派生字段
     const projected = store.get(session.id);
     assert.equal(projected.runs[0].status, "completed");
-    assert.equal(projected.runs[0].outcome, "answered");
+    assert.equal(projected.runs[0].outcome, "delivery_failed");
   } finally {
     store.close();
   }

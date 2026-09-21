@@ -88,9 +88,10 @@ export async function startMockModel(scripts, { defaultCase = "C02" } = {}) {
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   return {
     baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
-    /** 运行器切换当前任务脚本。 */
+    /** 运行器切换当前任务脚本(每次试验激活时重置调用计数)。 */
     activate: (id) => {
       activeCase = id;
+      counters.set(id, 0);
     },
     requestCount: () => history.length,
     history: () => history,

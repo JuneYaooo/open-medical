@@ -23,6 +23,7 @@ import { WorkspaceScheduler } from "./workspace-scheduler.mjs";
 import { WorkspaceRecovery } from "./workspace-recovery.mjs";
 import { SkillRegistry } from "./skills.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { receiptEvidence, artifactEvidence, scanFileClaims, scanFileTargets } from "./delivery.mjs";
 import { compactContext } from "./context-manager.mjs";
 import { sealInterruptedContext } from "./run-recovery.mjs";
 import { scopesOverlap, scopeCovers, scopeKey, posixRelative } from "./write-scope.mjs";
@@ -1918,6 +1919,79 @@ export class WorkspaceService {
         (this.domain.runSystemExtras
           ? "\n" + this.domain.runSystemExtras(w, run, handle).filter(Boolean).join("\n")
           : "");
+      // N3 通用交付核对(复核 R3):主执行路径接入交付验证。任务类型按
+      // 运行时事实判定——目标要求/写入回执/结构化产物/交付声明任一存在即
+      // 执行类;纯问答(零事实)返回 null,保持原行为,不强制生成文件。
+      // 目标=任务消息中带创建动词的文件要求(目标版本随 run 固化);证据=
+      // 本 run 审批落盘回执(含哈希)与产物回执;声明/目标未兑现 → 缺口。
+      const deliveryTargets = scanFileTargets(message);
+      if (deliveryTargets.length)
+        this.store.update(id, (current) => {
+          const target = current.runs.find((r) => r.id === run.id);
+          if (target) target.deliveryTargets = deliveryTargets;
+        });
+      const genericDeliveryCheck = ({ text }) => {
+        const writes = this.store
+          .get(id)
+          .approvals.filter(
+            (a) => a.runId === run.id && a.status === "applied" && a.path,
+          );
+        const artifacts = run.artifacts || [];
+        const claims = scanFileClaims(text);
+        if (
+          writes.length === 0 &&
+          artifacts.length === 0 &&
+          claims.length === 0 &&
+          deliveryTargets.length === 0
+        )
+          return null;
+        const evidence = [];
+        const gaps = [];
+        for (const approval of writes)
+          evidence.push(
+            receiptEvidence("file-write", {
+              path: approval.path,
+              hash: approval.result?.hash ?? null,
+              approvalId: approval.id,
+            }),
+          );
+        for (const artifact of artifacts) evidence.push(artifactEvidence(artifact));
+        const writtenNames = new Set(
+          writes.map((a) => a.path.split("/").pop().toLowerCase()),
+        );
+        for (const target of deliveryTargets) {
+          if (writtenNames.has(target.file.toLowerCase())) continue;
+          gaps.push({
+            reason: "target_not_fulfilled",
+            detail: `任务要求${target.verb}“${target.file}”,本次运行没有对应写入回执(已有旧文件不自动算本次完成)`,
+            file: target.file,
+            actionable: true,
+          });
+        }
+        for (const claim of claims) {
+          if (writtenNames.has(claim.file.toLowerCase())) continue;
+          gaps.push({
+            reason: "claimed_file_missing",
+            detail: `回答声明已${claim.verb}“${claim.file}”,但本次运行没有对应写入回执`,
+            file: claim.file,
+            actionable: true,
+          });
+        }
+        return {
+          delivered: (writes.length > 0 || artifacts.length > 0) && gaps.length === 0,
+          evidence,
+          gaps,
+          method: "runtime-facts",
+          ...(gaps.some((g) => g.actionable)
+            ? {
+                retryMessage:
+                  "交付验证未通过:" +
+                  gaps.map((g) => g.detail).join(";") +
+                  "。请使用文件工具实际创建/更新这些交付物后再结束;确实无法完成时如实说明,不要声称已完成。",
+              }
+            : {}),
+        };
+      };
       const result = await new AgentRuntime({
         provider: this.provider,
         ...run.limits,
@@ -2093,7 +2167,24 @@ export class WorkspaceService {
         ...(handle.thinking ? { thinking: handle.thinking } : {}),
         emit,
         onUsage,
+        // N3:主路径交付验证。handle.deliveryVerifier 是仅限进程内(测试/
+        // 领域适配)的覆盖缝,不来自任何 API 输入。
+        onDelivery:
+          typeof handle.deliveryVerifier === "function"
+            ? handle.deliveryVerifier
+            : genericDeliveryCheck,
       });
+      // N3:完成落库消费 result.delivery/outcome——不再无条件 completed 丢
+      // 交付事实。结果分类:delivered(核实交付)/unverified(验证异常)/
+      // delivery_failed(执行类但缺口未解决);纯问答 delivery 为 null。
+      const delivery = result.delivery || null;
+      const outcome = !delivery
+        ? null
+        : delivery.delivered
+          ? "delivered"
+          : delivery.unverified
+            ? "unverified"
+            : "delivery_failed";
       this.store.update(id, (current) => {
         Object.assign(
           current.runs.find((r) => r.id === run.id),
@@ -2105,12 +2196,14 @@ export class WorkspaceService {
             contextMessages: result.messages.filter(
               (m) => !["system", "developer"].includes(m.role),
             ),
+            ...(delivery ? { delivery, outcome } : {}),
           },
         );
         current.messages.push({
           role: "assistant",
           content: result.text,
           runId: run.id,
+          ...(outcome ? { outcome } : {}),
         });
       });
       let finalRounds = 0;
@@ -2128,9 +2221,14 @@ export class WorkspaceService {
           total_tokens: run.usage?.total_tokens || 0,
           rounds: finalRounds,
         },
+        ...(delivery ? { delivery, outcome } : {}),
       });
       this.notify(id, run.id, "completed");
-      return { status: "completed", runId: run.id };
+      return {
+        status: "completed",
+        runId: run.id,
+        ...(delivery ? { delivery, outcome } : {}),
+      };
     } catch (error) {
       const status =
         controller.signal.reason?.code === "RUN_INTERRUPTED"

@@ -41,11 +41,13 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
     args: [MAIN, "--e2e"],
     cwd: process.cwd(),
     timeout: 60000,
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: "",
-      MEDICAL_DESKTOP_TEST_DIR: directory,
-    },
+    // Windows 下空串仍会被 Electron 视为 run-as-node(曾致进程秒退,
+    // 此前因 dist 缺失 skip 未暴露);必须真正删除该变量。
+    env: (() => {
+      const launchEnv = { ...process.env, MEDICAL_DESKTOP_TEST_DIR: directory };
+      delete launchEnv.ELECTRON_RUN_AS_NODE;
+      return launchEnv;
+    })(),
   });
   t.after(async () => {
     try {
