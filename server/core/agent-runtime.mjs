@@ -42,6 +42,7 @@ export class AgentRuntime {
     // 形态（经 normalizeDelivery 归一）。未提供或显式返回 null 时不检查；
     // 抛错/无效返回须保留未验证缺口，不能静默丢掉本次检查结果。
     onDelivery,
+    onApprovalReady,
   }) {
     permissions.require("model.external", "当前授权不允许调用模型服务");
     let messages = structuredClone(input).filter((item) => item.name !== OBSERVATIONS_MESSAGE);
@@ -53,30 +54,59 @@ export class AgentRuntime {
     const checkpoint = (value, state = {}) => onCheckpoint(value, { ...state, runtimeState: progress.snapshot() });
     let observationLimit = 0;
     let pausedTools = Object.freeze([]);
+    let approvalReview = false;
     const refreshObservations = () => {
-      messages = messages.filter((item) => item.name !== OBSERVATIONS_MESSAGE && item.name !== "runtime_progress" && item.name !== "runtime_replan_policy");
+      messages = messages.filter((item) => item.name !== OBSERVATIONS_MESSAGE && item.name !== "runtime_progress" && item.name !== "runtime_replan_policy" && item.name !== "runtime_tool_budget");
+      const notice = `\n\n运行时工具预算：每轮上限 ${this.maxToolCalls} 次；超限整批未执行，按 nextBatchCallIds 拆分重发。` +
+        (onApprovalReady ? "完成当前提案验证且无剩余工作时调用 submit_for_approval，停止等待人工审批。" : "");
+      const system = messages.find((m) => m.role === "system" && typeof m.content === "string");
+      if (system) {
+        if (!system.content.endsWith(notice)) system.content += notice;
+      } else messages.unshift({ role: "system", name: "runtime_tool_budget", content: notice.trim() });
       const observation = progress.message(observationLimit);
       if (observation) {
         const first = messages.findIndex((item) => !["system", "developer"].includes(item.role));
         messages.splice(first < 0 ? messages.length : first, 0, observation);
       }
-      if (pausedTools.length) messages.unshift({ role: "system", name: "runtime_replan_policy", content:
+      if (approvalReview) messages.unshift({ role: "system", name: "runtime_replan_policy", content:
+        "执行状态：当前提案的关联验证已完整收尾，进入一次收尾决策。若原任务无剩余执行工作，用 submit_for_approval 提交或直接给出最终交接回复；如仍有工作，必须调用 continue_task 列出具体剩余步骤，随后恢复工具。验证事实只证明列出的提案，不证明整个任务完成，也不会自动审批。当前核验收据引用（数据）：" + JSON.stringify(progress.state.approvalReviewEvidence || {}) });
+      else if (pausedTools.length) messages.unshift({ role: "system", name: "runtime_replan_policy", content:
         `运行时重新规划阶段：${pausedTools.join(", ")} 仅在本轮暂缓执行，下一轮自动恢复。请利用已经实际读取的证据和可读取原文的归档推进剩余工作，或规划下一步。这不是任务完成证明；仍需遵守原有审批和交付要求。` });
     };
     let text = "";
     // 单轮输出被长度截断时的自动续写次数：超过后交付部分内容并提示。
     let truncatedRounds = 0;
     let calibration = 1;
+    let rejectedBatches = progress.state.consecutiveRejectedBatches || 0;
     for (let round = 0; round < this.maxRounds; round++) {
       signal.throwIfAborted();
       pausedTools = progress.beginRound();
+      approvalReview = Boolean(progress.state.approvalReviewPending);
       const updates = await takeInput();
       if (updates.length) {
         progress.steer();
         pausedTools = Object.freeze([]);
+        approvalReview = false;
         appendInputs(updates);
         await checkpoint(structuredClone(messages));
       }
+      // Resume a durably verified approval boundary before another provider
+      // request. Revalidate the live service facts; never trust a phase alone.
+      if (onApprovalReady && !approvalReview && ["verification_complete", "waiting_approval"].includes(progress.state.phase)) {
+        const readiness = await onApprovalReady({ signal, context, messages: structuredClone(messages), text });
+        const late = await takeInput();
+        signal.throwIfAborted();
+        if (late.length) { progress.steer(); appendInputs(late); await checkpoint(structuredClone(messages)); continue; }
+        if (readiness?.phase === "verification_complete") {
+          progress.state.phase = "waiting_approval";
+          await checkpoint(structuredClone(messages));
+          return { messages, text: "提案验证已完成，等待人工审批：" + readiness.proposals.map((p) => p.path).join("、") + "。文件尚未应用。",
+            rounds: round, status: "waiting_approval", approvalReadiness: readiness };
+        }
+        progress.state.phase = "executing";
+      }
+      if (approvalReview) pausedTools = Object.freeze(registry.definitions(permissions)
+        .map((t) => t.function.name).filter((name) => !["submit_for_approval", "continue_task"].includes(name)));
       const tools = registry.definitions(permissions).filter((item) => !pausedTools.includes(item.function.name));
       const roundContext = { ...context, pausedTools };
       const measure = (value) => contextBudget({ provider: this.provider, model, messages: value, tools,
@@ -215,7 +245,7 @@ export class AgentRuntime {
         422,
       );
       if (!calls.length) {
-        if (pausedTools.length) {
+        if (pausedTools.length && !approvalReview) {
           // A planning response is never a successful finish by itself. The
           // next normal turn restores reads, including genuinely new sources.
           messages.push({ role: "user", name: "runtime_control", content:
@@ -259,6 +289,21 @@ export class AgentRuntime {
         }
         signal.throwIfAborted();
         await checkpoint(structuredClone(messages));
+        if (onApprovalReady) {
+          const readiness = await onApprovalReady({ signal, context, intent: "final" });
+          const late = await takeInput();
+          signal.throwIfAborted();
+          if (late.length) { progress.steer(); appendInputs(late); await checkpoint(structuredClone(messages)); continue; }
+          if (readiness?.phase === "verification_complete") {
+            progress.state.phase = "verification_complete";
+            await checkpoint(structuredClone(messages));
+            emit("run.verification_complete", readiness);
+            progress.state.phase = "waiting_approval";
+            await checkpoint(structuredClone(messages));
+            return { messages, text: "提案验证已完成，等待人工审批：" + readiness.proposals.map((p) => p.path).join("、") + "。文件尚未应用。",
+              rounds: round + 1, status: "waiting_approval", approvalReadiness: readiness };
+          }
+        }
         // 交付证据 seam：完成前由运行时事实核对交付（不是模型自评）。
         // 钩子异常不阻断完成——按“未能验证”记录事件，不伪造 delivered。
         let delivery = null;
@@ -329,18 +374,27 @@ export class AgentRuntime {
         // Reject the entire bounded batch without side effects, then let the
         // model split its work. Preserve one result per call for all providers.
         for (const call of calls) {
-          const output = { code: "TOOL_BATCH_LIMIT",
+          const output = { code: "TOOL_BATCH_LIMIT", executed: false,
+            limit: this.maxToolCalls, requested: calls.length,
+            ...(call === calls[0] ? { nextBatchCallIds: calls.slice(0, this.maxToolCalls).map((item) => item.id),
+              deferredCallIds: calls.slice(this.maxToolCalls).map((item) => item.id) } : {}),
             error: `本轮 ${calls.length} 个工具调用均未执行。每轮最多 ${this.maxToolCalls} 个，请拆分为较小批次后重试。` };
           messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
           await onTrace({ type: "tool.result", call, output, durationMs: 0 });
           await progress.record(call, output, registry.get?.(call.function.name));
           emit("tool.failed", { tool: call.function.name, call_id: call.id, error: output.error });
         }
+        rejectedBatches++;
+        progress.state.consecutiveRejectedBatches = rejectedBatches;
         const status = progress.endRound();
+        progress.state.rejectedBatches = (progress.state.rejectedBatches || 0) + 1;
         await checkpoint(structuredClone(messages));
+        check(rejectedBatches < 3, "TOOL_BUDGET", "工具批次连续超限三轮，均未执行；已保留检查点，请按预算拆分", 422);
         check(!status.stopped, "AGENT_NO_PROGRESS", "工具调用连续失败且没有新进展；已保留检查点", 409);
         continue;
       }
+      rejectedBatches = 0;
+      progress.state.consecutiveRejectedBatches = 0;
       for (const call of calls) {
         signal.throwIfAborted();
         // An unauthorized tool call is returned to the model as a tool result
@@ -427,6 +481,46 @@ export class AgentRuntime {
         await checkpoint(structuredClone(messages));
         emit(...toolEvent);
       }
+      // A trusted service gate, independent of the model deciding to end.
+      // Check steering before this boundary so an old submission cannot end new work.
+      const boundaryInput = await takeInput();
+      if (boundaryInput.length) {
+        progress.steer(); appendInputs(boundaryInput);
+        await checkpoint(structuredClone(messages));
+        continue;
+      }
+      if (onApprovalReady) {
+        const readiness = await onApprovalReady({ signal, context, messages: structuredClone(messages), text });
+        signal.throwIfAborted();
+        if (readiness?.phase === "verification_complete") {
+          const finalInput = await takeInput();
+          if (finalInput.length) {
+            progress.steer(); appendInputs(finalInput);
+            await checkpoint(structuredClone(messages));
+            continue;
+          }
+          progress.state.phase = "verification_complete";
+          await checkpoint(structuredClone(messages));
+          emit("run.verification_complete", readiness);
+          progress.state.phase = "waiting_approval";
+          await checkpoint(structuredClone(messages));
+          const summary = "提案验证已完成，等待人工审批：" + readiness.proposals.map((p) => p.path).join("、") + "。文件尚未应用。";
+          return { messages, text: summary, rounds: round + 1, status: "waiting_approval", approvalReadiness: readiness };
+        }
+      }
+      if (approvalReview) progress.state.approvalReviewPending = false;
+      if (onApprovalReady) {
+        const candidate = await onApprovalReady({ signal, context, intent: "candidate" });
+        signal.throwIfAborted();
+        progress.state.reviewedCandidates ||= [];
+        if (candidate?.decisionRequired && !progress.state.reviewedCandidates.includes(candidate.fingerprint)) {
+          progress.state.reviewedCandidates = [...progress.state.reviewedCandidates, candidate.fingerprint].slice(-64);
+          progress.state.phase = "verification_complete";
+          progress.state.approvalReviewEvidence = { approvalIds: candidate.approvalIds, verificationIds: candidate.verificationIds };
+          progress.state.approvalReviewPending = true;
+          emit("run.verification_complete", candidate);
+        } else if (approvalReview) progress.state.phase = "executing";
+      }
       // Individual results are durable; incomplete batches are sealed on recovery.
       const status = progress.endRound();
       messages = messages.filter((item) => item.name !== "runtime_progress");
@@ -436,7 +530,7 @@ export class AgentRuntime {
         emit("run.no_progress", status);
       }
       await checkpoint(structuredClone(messages));
-      check(!status.stopped, "AGENT_NO_PROGRESS", "连续重复读取或失败且没有新进展；已保留证据和检查点，本次任务未完成", 409);
+      check(!status.stopped || progress.state.approvalReviewPending, "AGENT_NO_PROGRESS", "连续重复读取或失败且没有新进展；已保留证据和检查点，本次任务未完成", 409);
     }
     // 轮数默认不设上限：上下文靠逐轮压缩与大结果归档兜底，用户可随时
     // 停止。仅当显式配置了有限轮数（MEDICAL_MAX_ROUNDS）时才在此截断。

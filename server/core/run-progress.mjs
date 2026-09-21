@@ -54,6 +54,11 @@ export class RunProgress {
     };
     this.state.observations = retainObservations(this.state.observations || []);
     this.state.failures = (this.state.failures || []).slice(-LIMIT);
+    // Exact access memory and interval coverage are independent of excerpts.
+    // Never evict identities into apparent progress. At capacity, unknown reads
+    // cannot claim novelty; the ordinary time/round guards remain in force.
+    this.state.visits = (this.state.visits || []).slice(0, 2048);
+    this.state.coverage = (this.state.coverage || []).slice(0, 128);
     this.progress = false; this.repeated = 0; this.failures = 0;
     this.repeatedTools = new Set();
     this.failureKeys = new Set();
@@ -69,6 +74,10 @@ export class RunProgress {
     return Object.freeze([...paused]);
   }
   steer() {
+    this.state.phase = "executing";
+    this.state.approvalReviewPending = false;
+    this.state.reviewedCandidates = [];
+    for (const visit of this.state.visits) visit.repeats = 0;
     this.state.stalledRounds = 0;
     this.state.failures = [];
     this.state.recoveryPending = [];
@@ -99,15 +108,45 @@ export class RunProgress {
     }
     const resultHash = hash(output);
     const old = this.state.observations.find((entry) => entry.key === key);
-    const unchanged = old?.resultHash === resultHash;
-    let reference = spec.archiveReference ? output[spec.archiveReference] : unchanged ? old.archiveId : undefined;
+    const visitKey = hash([key, resultHash]);
+    const visit = this.state.visits.find((item) => item.key === visitKey);
+    let unchanged = old?.resultHash === resultHash || Boolean(visit);
+    let newCoverage = false;
+    if (call.function.name === "read_context_archive" && Number.isSafeInteger(output.offset) && output.offset >= 0) {
+      const identity = hash([output[spec.archiveReference], output[spec.revision]]);
+      let coverage = this.state.coverage.find((item) => item.key === identity);
+      if (!coverage && this.state.coverage.length < 128) {
+        coverage = { key: identity, ranges: [] }; this.state.coverage.push(coverage);
+      }
+      if (coverage) {
+        const start = output.offset, end = start + output[spec.content].length;
+        const covered = coverage.ranges.some(([a, b]) => a <= start && b >= end);
+        if (!covered && end > start) {
+          const merged = [];
+          for (const range of [...coverage.ranges, [start, end]].sort((a, b) => a[0] - b[0])) {
+            const last = merged.at(-1);
+            if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+            else merged.push([...range]);
+          }
+          if (merged.length <= 128) { coverage.ranges = merged; newCoverage = true; }
+          else this.state.memorySaturated = true;
+        }
+        unchanged ||= covered;
+      } else this.state.memorySaturated = true;
+    }
+    if (!visit && this.state.visits.length >= 2048 && !newCoverage) {
+      unchanged = true; this.state.memorySaturated = true;
+    }
+    if (visit) visit.repeats++;
+    else if (this.state.visits.length < 2048) this.state.visits.push({ key: visitKey, repeats: 0 });
+    let reference = spec.archiveReference ? output[spec.archiveReference] : old?.resultHash === resultHash ? old.archiveId : undefined;
     if (!reference && archive) reference = (await archive(output))?.id;
     const content = output[spec.content];
     const entry = {
       key, resultHash, tool: call.function.name, args: JSON.parse(call.function.arguments),
       revision: output[spec.revision], archiveId: reference,
       excerpt: content.slice(0, 256), chars: content.length,
-      repeats: unchanged ? old.repeats + 1 : 0,
+      repeats: unchanged ? Math.max((old?.repeats || 0) + 1, visit?.repeats || 0, this.state.stalledRounds + 1) : 0,
     };
     this.state.observations = retainObservations([...this.state.observations.filter((item) => item.key !== key), entry]);
     this.progress ||= !unchanged;
@@ -183,6 +222,34 @@ export class RunProgress {
       count++;
       return { ...message, content: JSON.stringify(presentation) };
     });
-    return { messages: result, count };
+    // Coalesce only complete, text-free, already archived read batches whose
+    // identical results are retained later. Raw traces/archives remain intact.
+    const groups = [];
+    for (const message of result) {
+      if (message.role === "tool" && groups.length) groups.at(-1).push(message);
+      else groups.push([message]);
+    }
+    const seen = new Set(), retained = [];
+    let coalesced = 0;
+    for (const group of groups.reverse()) {
+      const head = group[0], batch = head.tool_calls;
+      let key;
+      if (head.role === "assistant" && !head.content && batch?.length && group.length === batch.length + 1) {
+        try {
+          const records = batch.map((call, index) => {
+            const message = group[index + 1], output = JSON.parse(message.content);
+            if (message.tool_call_id !== call.id || !this.archivedResult(call, output) && !output.archived) throw new Error();
+            if (!this.state.observations.some((o) => o.key === signature(call))) throw new Error();
+            return [signature(call), output];
+          });
+          key = hash(records);
+        } catch { /* Unarchived or incomplete batches are retained verbatim. */ }
+      }
+      if (key && seen.has(key)) { coalesced++; continue; }
+      if (key) seen.add(key);
+      retained.unshift(...group);
+    }
+    return { messages: retained, count: count + coalesced, coalesced };
+
   }
 }

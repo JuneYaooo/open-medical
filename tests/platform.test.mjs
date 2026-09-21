@@ -517,7 +517,10 @@ test(
       join(f.root, "add.test.cjs"),
       "const test=require('node:test');const assert=require('node:assert/strict');test('add',()=>assert.equal(require('./add.cjs')(3,2),5));\n",
     );
-    assert.equal((await f.run("fix addition and verify")).status, "completed");
+    assert.equal((await f.run("fix addition and verify")).status, "waiting_approval");
+    const waiting = f.service.get(f.id).runs.at(-1);
+    assert.equal(waiting.outcome, "awaiting_approval");
+    assert.equal(waiting.delivery, null);
     assert.match(readFileSync(join(f.root, "add.cjs"), "utf8"), /a-b/);
     const w = f.service.get(f.id);
     assert.equal(w.verifications.length, 2);

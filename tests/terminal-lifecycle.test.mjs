@@ -21,6 +21,7 @@ async function fixture(t, { exitCode = 0, afterMarkerDelay = 0 } = {}) {
   pack.entry({ name: 'receipt.txt' }, 'synthetic exported content'); pack.finalize(); await packed;
   const archive = Buffer.concat(chunks).toString('base64');
   const runner = service.extensions.runner;
+  runner.journal = null; // This fixture uses a Node subprocess, not a Docker daemon.
   runner.docker = process.execPath;
   // Controlled Docker-attach lifecycle fixture, not an OS isolation test.
   // The command first needs interactive input, then emits a split final marker;

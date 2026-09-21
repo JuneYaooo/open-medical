@@ -21,7 +21,8 @@ for (const mode of ["timeout", "cancel", "reject"]) {
       w.extensions = { ...w.extensions, image: "sha256:" + "a".repeat(64) };
     });
     const runner = service.extensions.runner;
-    runner.docker = process.execPath;
+    runner.journal = null; // This fixture uses a Node subprocess, not a Docker daemon.
+  runner.docker = process.execPath;
     runner.detachedFactory = ({ docker, args, environment }) => spawn(docker, args, { env: environment, stdio: ["pipe", "pipe", "pipe"] });
     runner.finalizationTimeoutMs = 80;
     // Actual child lifecycle, with no Docker or host tool execution fallback.

@@ -1,4 +1,5 @@
 import { check } from "../errors.mjs";
+import { collectApprovalReadiness } from "./workspace-delivery.mjs";
 import { WorkspaceFiles } from "./workspace-files.mjs";
 import { ProjectInstructions } from "./project-instructions.mjs";
 import { GitWorkspace } from "./git-workspace.mjs";
@@ -190,6 +191,31 @@ export function registerCodingTools(
       check(proposal, "APPROVAL_STATE", "提案不存在", 404);
       service.assertWriteScope(id, proposal.path, runId);
       return service.applyAutomatic(id, a.approvalId);
+    },
+  );
+  if (planWritable && service.store.get(id).approvalPolicy === "review") add(
+    "continue_task", "验证完成后的收尾阶段：如果原任务仍有未完成步骤，列出具体剩余步骤以恢复执行；不会应用提案。",
+    "tools.execute", { remainingSteps: { type: "array", minItems: 1, maxItems: 20,
+      items: { type: "string", minLength: 1, maxLength: 300 } } },
+    (args) => {
+      service.store.update(id, (w) => {
+        const run = w.runs.find((r) => r.id === runId);
+        run.approvalDeferral = { fingerprint: run.approvalCandidate?.fingerprint, remainingSteps: args.remainingSteps };
+        delete run.approvalSubmission; delete run.approvalCandidate;
+      });
+      return { status: "executing", remainingSteps: args.remainingSteps };
+    },
+  );
+  if (planWritable && service.store.get(id).approvalPolicy === "review") add(
+    "submit_for_approval",
+    "工作与验证已完成时提交人工审批并停止本次执行。先用 terminal_start 的 approvalIds 验证当前提案，再提供完整提案和验证收据 ID。框架检查关联、内容版本和收尾；不会批准或应用文件。仅在没有剩余执行步骤时调用。",
+    "filesystem.write",
+    { approvalIds: { type: "array", minItems: 1, maxItems: 20, items: str },
+      verificationIds: { type: "array", minItems: 1, maxItems: 50, items: str } },
+    (request, context) => {
+      const readiness = collectApprovalReadiness(service, id, runId, request, context.signal);
+      service.store.update(id, (w) => { w.runs.find((r) => r.id === runId).approvalSubmission = request; });
+      return readiness;
     },
   );
   if (planWritable)

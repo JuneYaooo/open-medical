@@ -1,5 +1,5 @@
 import { normalizeDelivery } from "./delivery.mjs";
-import { completionRequirements, collectWorkspaceDelivery } from "./workspace-delivery.mjs";
+import { completionRequirements, collectWorkspaceDelivery, collectApprovalReadiness } from "./workspace-delivery.mjs";
 import { imageMime } from "../../shared/image-input.mjs";
 import { mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -1546,6 +1546,15 @@ export class WorkspaceService {
       approved ? "approval.applied" : "approval.rejected",
       { approvalId, path: approval.path },
     );
+    this.store.update(id, (current) => {
+      const run = current.runs.find((r) => r.id === approval.runId);
+      if (run?.status === "waiting_approval" &&
+          !current.approvals.some((a) => a.runId === run.id && a.status === "pending")) {
+        run.status = "waiting_input";
+        run.awaitingInput = true;
+        run.outcome = "approval_resolved";
+      }
+    });
     return this.get(id);
   }
   applyAutomatic(id, approvalId) {
@@ -1665,7 +1674,7 @@ export class WorkspaceService {
       const prior = w.runs.find((r) => r.id === body.resumeRunId);
       check(
         prior &&
-          ["failed", "cancelled", "interrupted"].includes(prior.status) &&
+          ["failed", "cancelled", "interrupted", "waiting_input", "waiting_approval"].includes(prior.status) &&
           prior.authority === hashText(JSON.stringify(w.permissions)) &&
           (prior.providerMessages?.length || prior.contextMessages?.length) &&
           prior.contextIdentity === this.contextIdentity(id),
@@ -1989,6 +1998,10 @@ export class WorkspaceService {
           (i) => i.status === "queued" && !consumed.has(i.id),
         );
         for (const item of queued) consumed.add(item.id);
+        if (queued.length) this.store.update(id, (current) => {
+          const saved = current.runs.find((r) => r.id === run.id);
+          delete saved.approvalSubmission; delete saved.approvalCandidate; delete saved.approvalDeferral;
+        });
         return queued.map((i) => ({ role: "user", content: i.message }));
       };
       const checkpoint = (messages, state = {}) =>
@@ -2161,13 +2174,6 @@ export class WorkspaceService {
               "终端尚未完成，不能将任务标记完成。请用 terminal_wait 等待。",
               409,
             );
-            await this.extensions.runHooks(
-              id,
-              "run_end",
-              { status: "completed" },
-              controller.signal,
-              run.id,
-            );
           },
         },
         context: {
@@ -2176,6 +2182,39 @@ export class WorkspaceService {
           ...(handle.sources?.length ? { sources: handle.sources } : {}),
         },
         onDelivery: ({ signal }) => this.verifyDelivery(id, run.id, signal),
+        onApprovalReady: async ({ signal, intent, messages = [], text = "" }) => {
+          let request = this.store.get(id).runs.find((r) => r.id === run.id).approvalSubmission;
+          if (!request && ["final", "candidate"].includes(intent)) {
+            const w = this.store.get(id), saved = w.runs.find((r) => r.id === run.id);
+            const owners = new Set([run.id, ...(saved.children || []).map((c) => c.id)]);
+            const pending = w.approvals.filter((a) => owners.has(a.runId) && a.status === "pending");
+            if (w.approvalPolicy !== "review" || !pending.length) return null;
+            request = { approvalIds: pending.map((a) => a.id), verificationIds: (w.verifications || [])
+              .filter((v) => owners.has(v.runId) && v.status === "completed" && v.exitCode === 0 &&
+                v.approvalIds?.some((aid) => pending.some((a) => a.id === aid))).map((v) => v.id) };
+          }
+          if (!request || team.hasPending()) return null;
+          try {
+            const candidate = collectApprovalReadiness(this, id, run.id, request, signal);
+            if (intent === "candidate") {
+              const saved = this.store.get(id).runs.find((r) => r.id === run.id);
+              if (saved.approvalDeferral?.fingerprint === candidate.fingerprint) return null;
+              this.store.update(id, (w) => { w.runs.find((r) => r.id === run.id).approvalCandidate = candidate; });
+              return { ...candidate, decisionRequired: true };
+            }
+            if (intent !== "final") await this.domain.beforeComplete?.({ signal, context: { workspaceId: id, runId: run.id },
+              messages, text, status: "waiting_approval" });
+            const readiness = collectApprovalReadiness(this, id, run.id, request, signal);
+            this.store.update(id, (w) => { w.runs.find((r) => r.id === run.id).approvalSubmission = request; });
+            return readiness;
+          }
+          catch (error) {
+            signal.throwIfAborted();
+            emit("approval.not_ready", { code: error.code || "APPROVAL_CHECK_FAILED" });
+            this.store.update(id, (w) => { delete w.runs.find((r) => r.id === run.id).approvalSubmission; });
+            return null;
+          }
+        },
         onCheckpoint: checkpoint,
         runtimeState: resumed?.runtimeState,
         takeInput,
@@ -2264,14 +2303,18 @@ export class WorkspaceService {
         onUsage,
       });
       controller.signal.throwIfAborted();
-      const outcome = result.delivery?.delivered === true ? "delivered" : "answered";
+      const finalStatus = result.status === "waiting_approval" ? "waiting_approval" : "completed";
+      await this.extensions.runHooks(id, "run_end", { status: finalStatus }, controller.signal, run.id);
+      controller.signal.throwIfAborted();
+      const outcome = finalStatus === "waiting_approval" ? "awaiting_approval" : result.delivery?.delivered === true ? "delivered" : "answered";
       this.store.update(id, (current) => {
         Object.assign(
           current.runs.find((r) => r.id === run.id),
           {
             outcome,
             delivery: result.delivery || null,
-            status: "completed",
+            approvalReadiness: result.approvalReadiness || null,
+            status: finalStatus,
             error: null,
             partial: result.text,
             usage: run.usage,
@@ -2300,14 +2343,14 @@ export class WorkspaceService {
         text: result.text,
         outcome,
         delivery: result.delivery || null,
-        status: "completed",
+        status: finalStatus,
         usage: {
           total_tokens: run.usage?.total_tokens || 0,
           rounds: finalRounds,
         },
       });
-      this.notify(id, run.id, "completed");
-      return { status: "completed", runId: run.id, outcome, delivery: result.delivery || null };
+      this.notify(id, run.id, finalStatus);
+      return { status: finalStatus, runId: run.id, outcome, delivery: result.delivery || null };
     } catch (error) {
       const status =
         controller.signal.reason?.code === "RUN_INTERRUPTED"
