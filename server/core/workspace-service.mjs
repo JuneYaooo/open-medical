@@ -25,6 +25,7 @@ import { WorkspaceScheduler } from "./workspace-scheduler.mjs";
 import { WorkspaceRecovery } from "./workspace-recovery.mjs";
 import { SkillRegistry } from "./skills.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { scanFileClaims, scanFileTargets } from "./delivery.mjs";
 import { compactContext } from "./context-manager.mjs";
 import { TASK_INPUT_MESSAGE } from "./run-progress.mjs";
 import { sealInterruptedContext } from "./run-recovery.mjs";
@@ -2096,6 +2097,62 @@ export class WorkspaceService {
         (this.domain.runSystemExtras
           ? "\n" + this.domain.runSystemExtras(w, run, handle).filter(Boolean).join("\n")
           : "");
+      // N3 通用交付核对(复核 R3):主执行路径接入交付验证。任务类型按
+      // 运行时事实判定——目标要求/写入回执/结构化产物/交付声明任一存在即
+      // 执行类;纯问答(零事实)返回 null,保持原行为,不强制生成文件。
+      // 目标=任务消息中带创建动词的文件要求(目标版本随 run 固化);证据=
+      // 本 run 审批落盘回执(含哈希)与产物回执;声明/目标未兑现 → 缺口。
+      const deliveryTargets = run.completion?.kind === "answer" ? [] : scanFileTargets(message);
+      if (deliveryTargets.length)
+        this.store.update(id, (current) => {
+          const target = current.runs.find((r) => r.id === run.id);
+          if (target) target.deliveryTargets = deliveryTargets;
+        });
+      const genericDeliveryCheck = async ({ text, signal }) => {
+        const facts = await this.verifyDelivery(id, run.id, signal);
+        const claims = run.completion?.kind === "answer" ? [] : scanFileClaims(text);
+        const saved = this.store.get(id).runs.find((r) => r.id === run.id);
+        if (saved.completion?.kind !== "execution" && !claims.length && !deliveryTargets.length &&
+            !facts.evidence.length && facts.gaps.every((g) => g.reason === "no_current_run_evidence"))
+          return null;
+        const evidence = facts.evidence;
+        const gaps = [...facts.gaps];
+        const writtenNames = new Set(evidence.filter((e) => e.kind === "file")
+          .map((e) => e.path.split("/").pop().toLowerCase()));
+        for (const target of deliveryTargets) {
+          if (writtenNames.has(target.file.toLowerCase())) continue;
+          gaps.push({
+            reason: "target_not_fulfilled",
+            detail: `任务要求${target.verb}“${target.file}”,本次运行没有对应写入回执(已有旧文件不自动算本次完成)`,
+            file: target.file,
+            actionable: true,
+          });
+        }
+        for (const claim of claims) {
+          if (writtenNames.has(claim.file.toLowerCase())) continue;
+          gaps.push({
+            reason: "claimed_file_missing",
+            detail: `回答声明已${claim.verb}“${claim.file}”,但本次运行没有对应写入回执`,
+            file: claim.file,
+            actionable: true,
+          });
+        }
+        return {
+          ...facts,
+          delivered: facts.delivered && gaps.length === 0,
+          evidence,
+          gaps,
+          method: "runtime-facts",
+          ...(gaps.some((g) => g.actionable)
+            ? {
+                retryMessage:
+                  "交付验证未通过:" +
+                  gaps.map((g) => g.detail).join(";") +
+                  "。请使用文件工具实际创建/更新这些交付物后再结束;确实无法完成时如实说明,不要声称已完成。",
+              }
+            : {}),
+        };
+      };
       const result = await new AgentRuntime({
         provider: this.provider,
         ...run.limits,
@@ -2181,7 +2238,6 @@ export class WorkspaceService {
           runId: run.id,
           ...(handle.sources?.length ? { sources: handle.sources } : {}),
         },
-        onDelivery: ({ signal }) => this.verifyDelivery(id, run.id, signal),
         onApprovalReady: async ({ signal, intent, messages = [], text = "" }) => {
           let request = this.store.get(id).runs.find((r) => r.id === run.id).approvalSubmission;
           if (!request && ["final", "candidate"].includes(intent)) {
@@ -2301,18 +2357,27 @@ export class WorkspaceService {
         ...(handle.thinking ? { thinking: handle.thinking } : {}),
         emit,
         onUsage,
+        // N3:主路径交付验证。handle.deliveryVerifier 是仅限进程内(测试/
+        // 领域适配)的覆盖缝,不来自任何 API 输入。
+        onDelivery:
+          typeof handle.deliveryVerifier === "function"
+            ? handle.deliveryVerifier
+            : genericDeliveryCheck,
       });
       controller.signal.throwIfAborted();
       const finalStatus = result.status === "waiting_approval" ? "waiting_approval" : "completed";
       await this.extensions.runHooks(id, "run_end", { status: finalStatus }, controller.signal, run.id);
       controller.signal.throwIfAborted();
-      const outcome = finalStatus === "waiting_approval" ? "awaiting_approval" : result.delivery?.delivered === true ? "delivered" : "answered";
+      const delivery = result.delivery || null;
+      const outcome = finalStatus === "waiting_approval" ? "awaiting_approval"
+        : !delivery ? (run.completion?.kind === "answer" ? "answered" : undefined) : delivery.delivered ? "delivered"
+          : delivery.unverified ? "unverified" : "delivery_failed";
       this.store.update(id, (current) => {
         Object.assign(
           current.runs.find((r) => r.id === run.id),
           {
-            outcome,
-            delivery: result.delivery || null,
+            ...(outcome ? { outcome } : {}),
+            ...(delivery || finalStatus === "waiting_approval" ? { delivery } : {}),
             approvalReadiness: result.approvalReadiness || null,
             status: finalStatus,
             error: null,
@@ -2327,8 +2392,8 @@ export class WorkspaceService {
         current.messages.push({
           role: "assistant",
           content: result.text,
-          outcome,
           runId: run.id,
+          ...(outcome ? { outcome } : {}),
         });
       });
       let finalRounds = 0;
@@ -2350,7 +2415,7 @@ export class WorkspaceService {
         },
       });
       this.notify(id, run.id, finalStatus);
-      return { status: finalStatus, runId: run.id, outcome, delivery: result.delivery || null };
+      return { status: finalStatus, runId: run.id, ...(outcome ? { outcome } : {}), ...(delivery || finalStatus === "waiting_approval" ? { delivery } : {}) };
     } catch (error) {
       const status =
         controller.signal.reason?.code === "RUN_INTERRUPTED"

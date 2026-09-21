@@ -15,14 +15,20 @@ test("model config candidates cover desktop userData, legacy names, then repo .e
     ...process.env,
     APPDATA: "C:\\Users\\someone\\AppData\\Roaming",
   });
+  // N5 起 source 细化到具体目录名;sourceCategory 仍是 desktop/repo 两类。
   assert.deepEqual(
     candidates.map((c) => c.source),
     [
-      "desktop:" + process.platform,
-      "desktop:" + process.platform,
-      "desktop:" + process.platform,
+      `desktop:${process.platform}:Open Medical Workbench`,
+      `desktop:${process.platform}:Open Agent`,
+      `desktop:${process.platform}:Open Medical`,
       "repo",
     ],
+  );
+  assert.ok(
+    candidates.every(
+      (c) => c.sourceCategory === "desktop" || c.sourceCategory === "repo",
+    ),
   );
   assert.ok(candidates[0].file.includes("Open Medical Workbench"));
   assert.ok(candidates[1].file.includes("Open Agent"));

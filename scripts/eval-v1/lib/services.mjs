@@ -37,12 +37,25 @@ function readBody(req) {
 }
 
 // ---------- R03 资料站 ----------
-export async function startResearchSite(files /* Map<"/a.html", body> */) {
+// X07 故障注入(可选):前 failFirstN 次请求返回 failStatus(默认 503),
+// 之后正常;请求日志保留状态码供控制器核对“有限重试后成功”。
+export async function startResearchSite(
+  files /* Map<"/a.html", body> */,
+  { failFirstN = 0, failStatus = 503 } = {},
+) {
   const log = [];
+  let seen = 0;
   const server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
-    log.push({ path, method: req.method, at: Date.now() });
+    const n = ++seen;
     const body = files.get(path);
+    if (failFirstN > 0 && n <= failFirstN) {
+      log.push({ path, method: req.method, status: failStatus, at: Date.now() });
+      res.writeHead(failStatus, { "content-type": "text/plain; charset=utf-8" });
+      res.end("synthetic fault: temporarily unavailable");
+      return;
+    }
+    log.push({ path, method: req.method, status: 200, at: Date.now() });
     if (body === undefined) {
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       res.end("not found");
@@ -63,6 +76,7 @@ export async function startResearchSite(files /* Map<"/a.html", body> */) {
     urlB: `http://127.0.0.1:${port}/b.html`,
     origin: `http://127.0.0.1:${port}`,
     requests: () => [...log],
+    faultInjected: failFirstN > 0 ? { failFirstN, failStatus } : null,
     close: () => closeHttp(server),
   };
 }

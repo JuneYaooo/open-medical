@@ -79,7 +79,7 @@ export function collectWorkspaceDelivery(service, id, runId, signal) {
         continue;
       }
       currentFiles.set(approval.path, read);
-      evidence.push({ kind: "file", path: approval.path, hash: read.hash, readable: true,
+      evidence.push({ kind: "file", source: "file-write", path: approval.path, hash: read.hash, readable: true,
         bytes: Buffer.byteLength(read.text), runId, approvalId: approval.id });
     } catch (error) {
       gaps.push({ reason: "file_unverified", path: approval.path, code: error.code || "READ_FAILED",

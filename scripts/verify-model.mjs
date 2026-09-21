@@ -1,9 +1,7 @@
-import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createProvider, OpenAIProvider } from "../server/provider.mjs";
+import { discoverModelConfig } from "../server/core/model-config.mjs";
 
 // 模型配置自检与真实工具调用验证(W3 / P0-3)。
 //   node scripts/verify-model.mjs             真实模型分阶段验证;无配置时 exit 2(blocked)
@@ -11,51 +9,12 @@ import { createProvider, OpenAIProvider } from "../server/provider.mjs";
 //                                             工具调用、429 重试、长输出),无需任何凭据,
 //                                             不代表真实模型可用性。
 // 阶段检查结果逐项输出;不得只以“回复 OK”判定兼容。
+// N5:配置发现共用 server/core/model-config.mjs(无副作用;不再在本脚本
+// 里 process.loadEnvFile 污染环境)。
 
 const SYNTHETIC = process.argv.includes("--synthetic");
 
-// 与 desktop/main.cjs 的发现顺序保持一致：Electron userData 优先（含遗留目录名），再回退仓库 .env
-export function modelConfigCandidates(env = process.env) {
-  const dir =
-    process.platform === "darwin"
-      ? join(homedir(), "Library", "Application Support")
-      : process.platform === "win32"
-        ? env.APPDATA || join(homedir(), "AppData", "Roaming")
-        : join(homedir(), ".config");
-  const candidates = ["Open Medical Workbench", "Open Agent", "Open Medical"].map(
-    (name) => ({
-      source: `desktop:${process.platform}`,
-      file: join(dir, name, "model.env"),
-    }),
-  );
-  candidates.push({ source: "repo", file: ".env" });
-  return candidates;
-}
-
-function discoverModelConfig(env = process.env) {
-  const searched = [];
-  if (
-    env.AI_PROVIDER ||
-    env.MODEL_PROVIDER ||
-    env.OPENAI_API_KEY ||
-    env.AI_API_KEY ||
-    env.ANTHROPIC_API_KEY ||
-    env.LOCAL_MODEL_BASE_URL
-  )
-    return { source: "environment", searched };
-  for (const candidate of modelConfigCandidates(env)) {
-    searched.push(candidate);
-    if (existsSync(candidate.file)) {
-      try {
-        process.loadEnvFile(candidate.file);
-      } catch (error) {
-        return { source: candidate.source, error: error.message, searched };
-      }
-      return { source: candidate.source, file: candidate.file, searched };
-    }
-  }
-  return { source: null, searched };
-}
+export { modelConfigCandidates } from "../server/core/model-config.mjs";
 
 const statusTool = {
   type: "function",
@@ -327,16 +286,26 @@ export async function syntheticMode() {
 
 async function realMode() {
   const discovery = discoverModelConfig();
-  const provider = createProvider();
-  if (discovery.error || (!provider.local && !provider.apiKey)) {
+  const provider = discovery.ok
+    ? createProvider({
+        provider: discovery.provider,
+        apiKey: discovery.apiKey,
+        baseUrl: discovery.baseUrl,
+        model: discovery.model,
+        ...(discovery.timeoutMs ? { timeoutMs: discovery.timeoutMs } : {}),
+      })
+    : null;
+  if (!discovery.ok || (!provider.local && !provider.apiKey)) {
     console.error(
       JSON.stringify(
         {
           result: "blocked",
-          reason: discovery.error || "未找到模型凭据配置",
+          reason: discovery.ok ? "配置校验不完整" : discovery.error,
           configDiscovery: {
-            source: discovery.source,
+            source: discovery.source || null,
+            sourceCategory: discovery.sourceCategory || null,
             searched: discovery.searched.map((c) => c.file),
+            notes: discovery.notes,
           },
           note: "没有进行真实模型验证；不得以合成结果冒充。可将 model.env 放到上述任一位置后重跑。",
         },
@@ -365,7 +334,7 @@ async function realMode() {
           model: provider.model,
           configDiscovery: {
             source: discovery.source,
-            file: discovery.file,
+            sourceCategory: discovery.sourceCategory,
           },
           checks,
           syntheticOnly: false,
