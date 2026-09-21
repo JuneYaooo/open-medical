@@ -6,7 +6,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runSelftest } from "../scripts/eval-v1/selftest.mjs";
-import { buildPdf, extractPdfPages } from "../scripts/eval-v1/lib/pdf-writer.mjs";
+import {
+  buildPdf,
+  extractPdfPages,
+} from "../scripts/eval-v1/lib/pdf-writer.mjs";
 import {
   buildXlsx,
   parseXlsx,
@@ -30,10 +33,18 @@ test("代表性验收器矩阵:C02/S01/S04/D02 正确样例通过、错误样例
 });
 
 test("D02 夹具:自研 PDF 写入器 → pdfjs-dist 独立读回(两页、内容、页归属)", async () => {
-  const { bytes } = buildPdf([
+  const { bytes, fontPath, glyphCount, fontHash } = buildPdf([
     ["合成合同(评估夹具)", "金额12000元。"],
     ["交付截止2026年2月10日。", "逾期每日违约金20元。"],
   ]);
+  assert.ok(fontPath.endsWith(".ttf"));
+  assert.ok(glyphCount > 10);
+  assert.match(fontHash, /^[0-9a-f]{64}$/);
+  // Explicit font selection must fail rather than substituting a missing glyph.
+  assert.throws(
+    () => buildPdf([["\u{10FFFF}"], ["fixture"]], { fontPath }),
+    /字体缺少字形/,
+  );
   const pages = await extractPdfPages(bytes);
   assert.equal(pages.length, 2);
   assert.match(pages[0], /12000/);
@@ -64,7 +75,12 @@ test("S04 机制:真实 xlsx 闭环与降级公式重算 74→49", () => {
   // 文本冒充 xlsx 在 ZIP 结构层就被拒。
   assert.throws(() => readZip(Buffer.from("已完成:报价表", "utf8")), /ZIP/);
   // 迷你求值器:SUMPRODUCT 与改值重算。
-  const grid = new Map([["B2", 12.5], ["C2", 4], ["B3", 8], ["C3", 3]]);
+  const grid = new Map([
+    ["B2", 12.5],
+    ["C2", 4],
+    ["B3", 8],
+    ["C3", 3],
+  ]);
   assert.equal(evalFormula("SUMPRODUCT(B2:B3,C2:C3)", grid), 74);
   grid.set("C2", 2);
   assert.equal(evalFormula("B2*C2+B3*C3", grid), 49);

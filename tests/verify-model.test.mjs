@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { modelConfigCandidates, syntheticMode } from "../scripts/verify-model.mjs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  modelConfigCandidates,
+  syntheticMode,
+} from "../scripts/verify-model.mjs";
 
 test("model config candidates cover desktop userData, legacy names, then repo .env", () => {
   const candidates = modelConfigCandidates({
@@ -10,7 +17,12 @@ test("model config candidates cover desktop userData, legacy names, then repo .e
   });
   assert.deepEqual(
     candidates.map((c) => c.source),
-    ["desktop:" + process.platform, "desktop:" + process.platform, "desktop:" + process.platform, "repo"],
+    [
+      "desktop:" + process.platform,
+      "desktop:" + process.platform,
+      "desktop:" + process.platform,
+      "repo",
+    ],
   );
   assert.ok(candidates[0].file.includes("Open Medical Workbench"));
   assert.ok(candidates[1].file.includes("Open Agent"));
@@ -18,16 +30,31 @@ test("model config candidates cover desktop userData, legacy names, then repo .e
   assert.equal(candidates[3].file, ".env");
 });
 
-test("real mode without credentials reports blocked with searched paths and exits 2", () => {
-  // 独立进程运行，避免污染当前进程 env；本机当前无任何模型配置（W0 基线事实）
+test("real mode without credentials reports blocked with searched paths and exits 2", (t) => {
+  // Isolate both discovery locations and environment; never inspect host credentials.
+  const isolated = mkdtempSync(join(tmpdir(), "omw-model-discovery-"));
+  t.after(() => rmSync(isolated, { recursive: true, force: true }));
+  const script = fileURLToPath(
+    new URL("../scripts/verify-model.mjs", import.meta.url),
+  );
+  const env = {
+    HOME: isolated,
+    USERPROFILE: isolated,
+    APPDATA: join(isolated, "AppData"),
+    ...(process.platform === "win32"
+      ? { SYSTEMROOT: process.env.SYSTEMROOT }
+      : {}),
+  };
   let stdout = "";
   let code = 0;
   try {
-    stdout = execFileSync(
-      process.execPath,
-      ["scripts/verify-model.mjs"],
-      { cwd: process.cwd(), encoding: "utf8" },
-    );
+    stdout = execFileSync(process.execPath, [script], {
+      cwd: isolated,
+      env,
+      encoding: "utf8",
+      timeout: 15000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } catch (error) {
     code = error.status ?? 1;
     stdout = error.stdout ?? "";
@@ -36,7 +63,13 @@ test("real mode without credentials reports blocked with searched paths and exit
   const report = JSON.parse(stdout);
   assert.equal(report.result, "blocked");
   assert.equal(code, 2);
-  assert.ok(report.configDiscovery.searched.length >= 4);
+  assert.equal(report.configDiscovery.source, null);
+  assert.equal(report.configDiscovery.searched.length, 4);
+  for (const path of report.configDiscovery.searched)
+    assert.ok(
+      resolve(isolated, path).startsWith(isolated + "/") ||
+        resolve(isolated, path).startsWith(isolated + "\\"),
+    );
   assert.match(report.note, /model\.env/);
 });
 
@@ -45,7 +78,9 @@ test("synthetic mode verifies provider protocol stack without credentials", asyn
   assert.equal(report.result, "passed");
   assert.equal(report.syntheticOnly, true);
   assert.equal(report.realModel, false);
-  const byName = Object.fromEntries(report.checks.map((c) => [c.name, c.status]));
+  const byName = Object.fromEntries(
+    report.checks.map((c) => [c.name, c.status]),
+  );
   assert.equal(byName["retry-429-backoff"], "passed");
   assert.equal(byName["sse-tool-call"], "passed");
   assert.equal(byName["sse-stream-deltas"], "passed");

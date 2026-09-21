@@ -18,7 +18,11 @@ import { artifactLines } from "../shared/medical.mjs";
 import { SkillRegistry } from "./skills.mjs";
 import { MedicalScheduler } from "./scheduler.mjs";
 import { MEDICAL_AGENTS } from "./subagents.mjs";
-import { PatientRegistry, composeDigest } from "./patients.mjs";
+import {
+  PatientRegistry,
+  composeDigest,
+  selectDigestMessages,
+} from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
@@ -27,34 +31,29 @@ import { GuidelineLibrary, knowledgeTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
-import { ResearchService, researchTools as researchToolPlugins } from "./medical/research.mjs";
+import {
+  ResearchService,
+  researchTools as researchToolPlugins,
+} from "./medical/research.mjs";
 import { DrgService, drgTools } from "./medical/drg.mjs";
 import {
   evaluateMedicationSafety,
   assessAdverseReaction,
   specialPopulationCautions,
 } from "./medical/med-safety.mjs";
-import {
-  calculateScale,
-  listScales,
-  scaleTools,
-} from "./medical/scales.mjs";
+import { calculateScale, listScales, scaleTools } from "./medical/scales.mjs";
 import { searchLabKnowledge } from "./medical/lab-knowledge.mjs";
 import { searchIcd9 } from "./medical/icd9.mjs";
-import { PendingActions, pendingActionTools } from "./medical/pending-actions.mjs";
-import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
 import {
-  createMedicalWorkspaceDomain,
-  medicalWorkspaceEnabled,
-} from "./medical/medical-workspace-domain.mjs";
-import { PermissionEngine } from "./core/permissions.mjs";
+  PendingActions,
+  pendingActionTools,
+} from "./medical/pending-actions.mjs";
+import { doctorMemoryTools } from "./medical/doctor-profile.mjs";
+import { createMedicalWorkspaceDomain } from "./medical/medical-workspace-domain.mjs";
 import { SessionBridge } from "./session-bridge.mjs";
 import { EmbeddingService } from "./medical/embeddings.mjs";
 import { LanceVectorStore } from "./medical/vector-store.mjs";
-import {
-  MaterialLibrary,
-  materialSearchTools,
-} from "./medical/materials.mjs";
+import { MaterialLibrary, materialSearchTools } from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -105,7 +104,8 @@ function send(res, status, data) {
   res.end(JSON.stringify(data));
 }
 function errorResponse(res, error) {
-  if (!(error instanceof AppError)) console.error("服务内部错误:", error?.stack || error);
+  if (!(error instanceof AppError))
+    console.error("服务内部错误:", error?.stack || error);
   send(res, error instanceof AppError ? error.status : 500, {
     error: error instanceof AppError ? error.message : "服务发生错误",
     code: error.code || "INTERNAL",
@@ -203,8 +203,7 @@ export function createServer(options = {}) {
         : []),
     ]);
   const doctor = options.doctor || new DoctorProfile(store);
-  const literature =
-    options.literature || new LiteratureService(store);
+  const literature = options.literature || new LiteratureService(store);
   const embedder = options.embedder || new EmbeddingService();
   const pending = new PendingActions(store, {
     patients: () => patients,
@@ -247,7 +246,11 @@ export function createServer(options = {}) {
           name: "knowledge_base_status",
           description:
             "查看医学知识库当前状态：文档数、向量索引块数、嵌入方式（云端/本地 Ollama/未配置）与模型。用于在用户想建知识库时给出准确的环境建议。",
-          parameters: { type: "object", properties: {}, additionalProperties: false },
+          parameters: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
         },
       },
       execute: async () => {
@@ -285,73 +288,86 @@ export function createServer(options = {}) {
       execute: (args) => guidelines.addDocument(args),
     },
     ...doctorMemoryTools(doctor),
-      ...literatureTools(literature),
-      ...knowledgeTools(guidelines),
-      ...caseTools(cases),
-      ...drgTools(drg),
-      {
-        definition: {
-          type: "function",
-          function: {
-            name: "medication_safety_check",
-            description:
-              "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药），可选 populations 做特殊人群（妊娠/儿童/肾功能不全/肝功能不全/老年）提示。内置规则集非穷尽，结果为提示性草稿。",
-            parameters: {
-              type: "object",
-              properties: {
-                medications: { type: "array", items: { type: "string" } },
-                allergies: { type: "array", items: { type: "string" } },
-                populations: { type: "array", items: { type: "string" } },
-              },
-              required: ["medications"],
-              additionalProperties: false,
+    ...literatureTools(literature),
+    ...knowledgeTools(guidelines),
+    ...caseTools(cases),
+    ...drgTools(drg),
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "medication_safety_check",
+          description:
+            "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药），可选 populations 做特殊人群（妊娠/儿童/肾功能不全/肝功能不全/老年）提示。内置规则集非穷尽，结果为提示性草稿。",
+          parameters: {
+            type: "object",
+            properties: {
+              medications: { type: "array", items: { type: "string" } },
+              allergies: { type: "array", items: { type: "string" } },
+              populations: { type: "array", items: { type: "string" } },
             },
+            required: ["medications"],
+            additionalProperties: false,
           },
         },
-        execute: (args) => medicationSafetyCheck(args),
       },
-      {
-        definition: {
-          type: "function",
-          function: {
-            name: "assess_adverse_reaction",
-            description:
-              "把当前用药清单与临床表现做匹配，筛查可能的药物不良反应（内置常见药组知识表）。提示性筛查，非因果判定。",
-            parameters: {
-              type: "object",
-              properties: {
-                medications: { type: "array", items: { type: "string" } },
-                findings: { type: "string" },
-              },
-              required: ["medications", "findings"],
-              additionalProperties: false,
+      execute: (args) => medicationSafetyCheck(args),
+    },
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "assess_adverse_reaction",
+          description:
+            "把当前用药清单与临床表现做匹配，筛查可能的药物不良反应（内置常见药组知识表）。提示性筛查，非因果判定。",
+          parameters: {
+            type: "object",
+            properties: {
+              medications: { type: "array", items: { type: "string" } },
+              findings: { type: "string" },
             },
+            required: ["medications", "findings"],
+            additionalProperties: false,
           },
         },
-        execute: (args) => assessAdverseReaction(args),
       },
-      ...scaleTools(),
-      {
-        definition: {
-          type: "function",
-          function: {
-            name: "lab_knowledge_search",
-            description:
-              "查询常见检验指标的意义速查（升高/降低的常见原因与建议核查项）。参考范围以报告单为准。",
-            parameters: {
-              type: "object",
-              properties: {
-                query: { type: "string" },
-                limit: { type: "integer" },
-              },
-              required: ["query"],
-              additionalProperties: false,
+      execute: (args) => assessAdverseReaction(args),
+    },
+    ...scaleTools(),
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "lab_knowledge_search",
+          description:
+            "查询常见检验指标的意义速查（升高/降低的常见原因与建议核查项）。参考范围以报告单为准。",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              limit: { type: "integer" },
             },
+            required: ["query"],
+            additionalProperties: false,
           },
         },
-        execute: (args) => searchLabKnowledge(args),
       },
+      execute: (args) => searchLabKnowledge(args),
+    },
   ];
+
+  // These are application-owned implementations: local store/rules with optional
+  // semantic fallbacks; literature alone requires the public fetch backend.
+  for (const plugin of knowledgeToolPlugins)
+    plugin.capability = {
+      backend: ["literature_search", "literature_fetch"].includes(
+        plugin.definition.function.name,
+      )
+        ? "network"
+        : "local",
+    };
+  const localPlugins = (items) =>
+    items.map((plugin) => ({ ...plugin, capability: { backend: "local" } }));
 
   // Context budgets are env-tunable; explicit options.runtimeOptions wins.
   const envNumber = (name, fallback) => {
@@ -368,7 +384,7 @@ export function createServer(options = {}) {
     skills,
     toolPlugins: options.toolPlugins || [
       ...knowledgeToolPlugins,
-      ...researchToolPlugins(research),
+      ...localPlugins(researchToolPlugins(research)),
     ],
     doctor,
   });
@@ -376,14 +392,14 @@ export function createServer(options = {}) {
     domain: createMedicalWorkspaceDomain({
       plugins: [
         ...knowledgeToolPlugins,
-        ...pendingActionTools(pending, doctor),
+        ...localPlugins(pendingActionTools(pending, doctor)),
       ],
       // 会话叠层：医疗核心工具经 runTool 分发这些插件（材料 sources、
       // readOnly 约定与旧医疗会话一致）。
       sessionPlugins: [
         ...knowledgeToolPlugins,
-        ...researchToolPlugins(research),
-        ...pendingActionTools(pending, doctor),
+        ...localPlugins(researchToolPlugins(research)),
+        ...localPlugins(pendingActionTools(pending, doctor)),
       ],
       skills,
       doctor,
@@ -409,85 +425,25 @@ export function createServer(options = {}) {
     doctor,
     plugins: [
       ...knowledgeToolPlugins,
-      ...researchToolPlugins(research),
-      ...pendingActionTools(pending, doctor),
+      ...localPlugins(researchToolPlugins(research)),
+      ...localPlugins(pendingActionTools(pending, doctor)),
     ],
     contextBudget:
       options.runtimeOptions?.maxContextChars ??
       envNumber("MEDICAL_CONTEXT_BUDGET", 80000),
     maxRounds:
-      options.runtimeOptions?.maxRounds ??
-      envNumber("MEDICAL_MAX_ROUNDS", 512),
+      options.runtimeOptions?.maxRounds ?? envNumber("MEDICAL_MAX_ROUNDS", 512),
     onMaterialIngest: (file) => {
       materials.ingest(file).catch(() => {});
     },
   });
   const agentRuntime = sessionBridge.dispatcher;
 
-  // 能力分层快照（W6，文档 4.4/12 的 CapabilitySnapshot 最小实现）：
-  // 在实际组装工具列表的位置（WorkspaceService.registry）之上，把
-  // 「已授权」（权限引擎判定）与「环境就绪」（容器后端等运行事实）
-  // 分开，并给出当前可执行三态与不可用原因/补救动作。先服务测试与
-  // 日志；UI 呈现归后续工作。Docker 判定复用 ProcessRunner.status 的
-  // daemon 探测（0.9.7 起 docker-down 与 missing image 已区分，镜像
-  // 存在性由执行路径的 image() 精确报错，快照只报配置引用）。
-  const capabilitySnapshot = (id) => {
-    const w = workspaces.store.get(id);
-    const engine = new PermissionEngine(w.permissions);
-    // 与 WorkspaceService.capabilities 相同的组装口径（含可委派工具），
-    // 权限过滤改由快照的 authorized 三态表达。
-    const registry = workspaces.registry(id, "manual", { allowDelegate: true });
-    const backend = workspaces.extensions.runner.status();
-    // 容器执行类工具：经 ProcessRunner 在 Docker Linux 容器中运行。
-    // code_execute 同持 process.spawn 权限，但在应用内隔离 Node 环境
-    // 编排工具，不依赖容器后端，故排除。
-    const needsContainer = (name, permission) =>
-      permission === "process.spawn" && name !== "code_execute";
-    const tools = [...registry.tools.values()].map((tool) => {
-      const name = tool.definition.function.name;
-      const authorized =
-        engine.can("tools.execute") && engine.can(tool.permission);
-      const container = needsContainer(name, tool.permission);
-      const ready = container ? backend.available === true : true;
-      return {
-        name,
-        permission: tool.permission,
-        authorized,
-        ready,
-        executable: authorized && ready,
-        ...(!authorized
-          ? {
-              reason: `当前权限不含 ${tool.permission}`,
-              remedy: "在任务设置中授予对应权限后可用",
-            }
-          : !ready
-            ? {
-                reason: backend.reason || "容器执行后端不可用",
-                remedy: "启动 Docker（Linux 容器模式）并导入离线运行时镜像",
-              }
-            : {}),
-      };
-    });
-    return {
-      version: 1,
-      workspaceId: id,
-      domain: workspaces.domain.id,
-      medical: medicalWorkspaceEnabled(w),
-      environment: {
-        container: backend,
-        image: w.extensions?.image || null,
-        pythonSandbox: workspaces.sandbox?.status() || null,
-        vision: workspaces.provider.vision === true,
-      },
-      tools,
-      counts: {
-        total: tools.length,
-        authorized: tools.filter((t) => t.authorized).length,
-        ready: tools.filter((t) => t.ready).length,
-        executable: tools.filter((t) => t.executable).length,
-      },
-    };
-  };
+  // 能力分层快照（W6/B1）：三态判定与运行事实探测提取到
+  // core/capability.mjs，由 WorkspaceService.capabilitySnapshot 提供
+  // 共用实现；医疗入口（下方 capability-snapshot 路由）与通用平台 API
+  //（workspace-api 的同名 action）返回同一口径，不再各自组装。
+  const capabilitySnapshot = (id) => workspaces.capabilitySnapshot(id);
   const secret = options.token || randomBytes(32).toString("hex");
   const scheduler = new MedicalScheduler(store, agentRuntime, {
     ...options.schedulerOptions,
@@ -553,13 +509,7 @@ export function createServer(options = {}) {
     check(messages.length, "NOT_FOUND", "没有待处理的患者消息", 404);
     // Stay inside the runtime's 20000-char message budget; leftovers remain
     // unprocessed and can be digested again.
-    const trimmed = [];
-    let budget = 12000;
-    for (const message of messages) {
-      if (message.text.length > budget) break;
-      budget -= message.text.length;
-      trimmed.push(message);
-    }
+    const trimmed = selectDigestMessages(messages);
     check(
       providerConfigured(runtime.provider),
       "MODEL_NOT_CONFIGURED",
@@ -581,7 +531,12 @@ export function createServer(options = {}) {
       isolatedContext: true,
     });
     const run = await track(agentRuntime.execute(handle));
-    if (run.status === "completed") patients.markProcessed(pid, run.runId);
+    if (run.status === "completed")
+      patients.markProcessed(
+        pid,
+        run.runId,
+        trimmed.map((message) => message.id),
+      );
     return run;
   };
   const tasks = new Set();
@@ -796,14 +751,8 @@ export function createServer(options = {}) {
       // 此路径。这两个入口属于医疗应用组合根，通用平台服务不感知。
       {
         const domainParts = path.split("/").filter(Boolean);
-        if (
-          domainParts[0] === "api" &&
-          domainParts[1] === "workspaces" &&
-          domainParts.length === 4 &&
-          domainParts[3] === "capability-snapshot" &&
-          req.method === "GET"
-        )
-          return send(res, 200, capabilitySnapshot(identifier(domainParts[2])));
+        // capability-snapshot 由 workspaceApi 的共用 action 提供（B1：
+        // 医疗入口与通用平台同一实现），此处只保留医疗叠层切换入口。
         if (
           domainParts[0] === "api" &&
           domainParts[1] === "workspaces" &&
@@ -831,7 +780,11 @@ export function createServer(options = {}) {
             "工作区已变化，请刷新",
             409,
           );
-          return send(res, 200, workspaces.setModeFlag(id, "medical", b.enabled));
+          return send(
+            res,
+            200,
+            workspaces.setModeFlag(id, "medical", b.enabled),
+          );
         }
         if (path === "/api/workspaces" && req.method === "POST") {
           const b = await body(req);
@@ -895,9 +848,18 @@ export function createServer(options = {}) {
               return send(res, 201, scheduler.create(id, await body(req)));
             if (parts.length === 5) {
               const job = scheduler.get(parts[4]);
-              check(job.sessionId === id, "NOT_FOUND", "计划不属于当前会话", 404);
+              check(
+                job.sessionId === id,
+                "NOT_FOUND",
+                "计划不属于当前会话",
+                404,
+              );
               if (req.method === "PATCH")
-                return send(res, 200, scheduler.update(job.id, await body(req)));
+                return send(
+                  res,
+                  200,
+                  scheduler.update(job.id, await body(req)),
+                );
               if (req.method === "DELETE") {
                 scheduler.delete(job.id, (await body(req)).revision);
                 return send(res, 200, { ok: true });
@@ -905,7 +867,8 @@ export function createServer(options = {}) {
             }
           }
           if (parts.length === 3) {
-            if (req.method === "GET") return send(res, 200, sessionBridge.get(id));
+            if (req.method === "GET")
+              return send(res, 200, sessionBridge.get(id));
             if (req.method === "PATCH") {
               const b = await body(req);
               sessionBridge.renameSession(id, b.title);
@@ -943,7 +906,8 @@ export function createServer(options = {}) {
               const projected = sessionBridge.get(id);
               check(
                 !projected.runs.some(
-                  (r) => r.status === "running" || r.fileIds?.includes(parts[4]),
+                  (r) =>
+                    r.status === "running" || r.fileIds?.includes(parts[4]),
                 ),
                 "SOURCE_IN_USE",
                 "此材料已被执行记录引用。可取消勾选以排除后续任务；如需清除全部资料，请删除会话。",
@@ -1289,7 +1253,11 @@ export function createServer(options = {}) {
       }
       if (path === "/api/model-settings/test" && req.method === "POST") {
         const input = await body(req);
-        return send(res, 200, await track(models.test(models.candidate(input))));
+        return send(
+          res,
+          200,
+          await track(models.test(models.candidate(input))),
+        );
       }
       if (path === "/api/scales" && req.method === "GET")
         return send(res, 200, { scales: listScales() });
@@ -1336,11 +1304,13 @@ export function createServer(options = {}) {
         if (parts[2] === "import" && req.method === "POST")
           return send(res, 200, drg.importWeights((await body(req)).weights));
       }
-      if (parts[0] === "api" && parts[1] === "research" && req.method === "POST") {
+      if (
+        parts[0] === "api" &&
+        parts[1] === "research" &&
+        req.method === "POST"
+      ) {
         const b = await body(req);
-        const researchSessionId = b.sessionId
-          ? identifier(b.sessionId)
-          : null;
+        const researchSessionId = b.sessionId ? identifier(b.sessionId) : null;
         const sources = researchSessionId
           ? sessionBridge.isSessionWorkspace(researchSessionId)
             ? (sessionBridge.materialsOf(researchSessionId) || []).map(
@@ -1356,17 +1326,24 @@ export function createServer(options = {}) {
           : [];
         if (parts[2] === "profile")
           return send(res, 200, research.profile({ ...b, sources }));
-        if (parts[2] === "test") return send(res, 200, research.test({ ...b, sources }));
+        if (parts[2] === "test")
+          return send(res, 200, research.test({ ...b, sources }));
         if (parts[2] === "sample-size")
           return send(res, 200, research.sampleSize(b));
         if (parts[2] === "deidentify")
           return send(res, 200, research.deidentify({ ...b, sources }));
       }
-      if (parts[0] === "api" && parts[1] === "cases" && parts[2] === "similar" && req.method === "POST")
+      if (
+        parts[0] === "api" &&
+        parts[1] === "cases" &&
+        parts[2] === "similar" &&
+        req.method === "POST"
+      )
         return send(res, 200, cases.similar(await body(req)));
       if (parts[0] === "api" && parts[1] === "cases" && parts.length === 3) {
         if (req.method === "GET") return send(res, 200, cases.get(parts[2]));
-        if (req.method === "DELETE") return send(res, 200, cases.removeCase(parts[2]));
+        if (req.method === "DELETE")
+          return send(res, 200, cases.removeCase(parts[2]));
       }
       if (path === "/api/icd10" && req.method === "GET")
         return send(res, 200, {
@@ -1455,7 +1432,11 @@ export function createServer(options = {}) {
             return send(res, 200, { jobs: followups.list(pid) });
           if (parts.length === 4 && req.method === "POST")
             return send(res, 201, followups.create(pid, await body(req)));
-          if (parts.length === 5 && parts[4] === "apply" && req.method === "POST")
+          if (
+            parts.length === 5 &&
+            parts[4] === "apply" &&
+            req.method === "POST"
+          )
             return send(
               res,
               201,
@@ -1513,7 +1494,9 @@ export function createServer(options = {}) {
           });
           const name = article.pmid
             ? `PMID-${article.pmid}.md`
-            : `DOI-${String(article.doi).replace(/[^A-Za-z0-9.-]/g, "_").slice(0, 80)}.md`;
+            : `DOI-${String(article.doi)
+                .replace(/[^A-Za-z0-9.-]/g, "_")
+                .slice(0, 80)}.md`;
           const sessionId = identifier(b.sessionId);
           const materialInput = {
             name,
@@ -1554,7 +1537,8 @@ export function createServer(options = {}) {
         if (sub[0] === "reindex" && req.method === "POST")
           return send(res, 200, await guidelines.reindex());
         if (sub.length === 1 && sub[0] !== "search") {
-          if (req.method === "GET") return send(res, 200, guidelines.get(sub[0]));
+          if (req.method === "GET")
+            return send(res, 200, guidelines.get(sub[0]));
           if (req.method === "DELETE")
             return send(res, 200, guidelines.removeDocument(sub[0]));
         }
@@ -1575,7 +1559,11 @@ export function createServer(options = {}) {
             });
           if (parts.length === 3 && req.method === "POST") {
             const b = await body(req);
-            return send(res, 201, runtime.doctor.addMemory({ ...b, kind: "explicit" }));
+            return send(
+              res,
+              201,
+              runtime.doctor.addMemory({ ...b, kind: "explicit" }),
+            );
           }
           if (parts.length === 4 && req.method === "DELETE") {
             const id = Number(parts[3]);
@@ -1591,15 +1579,13 @@ export function createServer(options = {}) {
               return send(
                 res,
                 200,
-                runtime.doctor.pinMemory(
-                  id,
-                  (await body(req)).pinned === true,
-                ),
+                runtime.doctor.pinMemory(id, (await body(req)).pinned === true),
               );
           }
         }
         if (parts[2] === "consolidate" && req.method === "POST") {
-          if (parts.length === 3) return send(res, 200, runtime.doctor.consolidate());
+          if (parts.length === 3)
+            return send(res, 200, runtime.doctor.consolidate());
           if (parts[3] === "model") {
             const b = await body(req);
             return send(
@@ -1617,7 +1603,8 @@ export function createServer(options = {}) {
       if (match && req.method === "POST") {
         const id = identifier(match[1]);
         if (!sessionBridge.isSessionWorkspace(id)) store.get(id);
-        if (match[2]) return send(res, 200, { cancelled: sessionBridge.cancel(id) });
+        if (match[2])
+          return send(res, 200, { cancelled: sessionBridge.cancel(id) });
         const prepared = sessionBridge.prepareSend(id, await body(req));
         res.writeHead(200, {
           "Content-Type": "text/event-stream; charset=utf-8",
@@ -1660,9 +1647,7 @@ export function createServer(options = {}) {
         const b = await body(req);
         const sessionId = identifier(b.sessionId);
         const prepared = sessionBridge.prepareSend(sessionId, b);
-        const result = await track(
-          sessionBridge.executeSend(prepared),
-        );
+        const result = await track(sessionBridge.executeSend(prepared));
         return send(res, result.status === "completed" ? 200 : 422, result);
       }
       if (path.startsWith("/api/"))
@@ -1754,9 +1739,7 @@ export function createServer(options = {}) {
                 return reply(sessionBridge.get(identifier(p.session_id)));
               if (rpc.method === "prompt.cancel")
                 return reply({
-                  cancelled: sessionBridge.cancel(
-                    identifier(p.session_id),
-                  ),
+                  cancelled: sessionBridge.cancel(identifier(p.session_id)),
                 });
               if (rpc.method === "prompt.submit") {
                 const id = identifier(p.session_id);
@@ -1765,7 +1748,10 @@ export function createServer(options = {}) {
                   message: p.text,
                 });
                 owned.add(id);
-                reply({ status: "streaming", run_id: prepared.handle?.run?.id });
+                reply({
+                  status: "streaming",
+                  run_id: prepared.handle?.run?.id,
+                });
                 try {
                   await sessionBridge.executeSend(prepared, (event) =>
                     write({ jsonrpc: "2.0", method: "event", params: event }),
@@ -1853,7 +1839,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // 不让整个进程（及其余会话）随之退出。
   process.on("unhandledRejection", (reason) => {
     const message =
-      reason instanceof Error ? `${reason.message}\n${reason.stack}` : String(reason);
+      reason instanceof Error
+        ? `${reason.message}\n${reason.stack}`
+        : String(reason);
     console.error(`[unhandledRejection] ${message}`);
   });
   process.on("uncaughtException", (error) => {

@@ -10,18 +10,36 @@ import { stat, readFile } from "node:fs/promises";
 // - receiptEvidence：外部操作回执引用（沙箱后端、审批应用结果、子任务
 //   完成记录等），只引用运行时已发生的回执，不伪造。
 export function normalizeDelivery(value) {
-  if (!value || typeof value !== "object") return null;
-  const delivered = value.delivered === true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const evidence = Array.isArray(value.evidence)
-    ? value.evidence.filter((e) => e && typeof e === "object")
+    ? value.evidence.filter((e) => {
+        if (!e || typeof e !== "object" || Array.isArray(e) || e.gap) return false;
+        if (e.kind === "file")
+          return typeof e.path === "string" && e.path.length > 0 &&
+            e.readable === true && typeof e.hash === "string" && /^[a-f0-9]{64}$/i.test(e.hash);
+        return e.kind === "receipt" && typeof e.source === "string" && e.source.length > 0 &&
+          (!Object.hasOwn(e, "exitCode") || e.exitCode === 0) &&
+          e.ok !== false && e.success !== false &&
+          !["pending", "running", "failed", "cancelled", "interrupted", "rejected"].includes(e.status);
+      })
     : [];
   const gaps = Array.isArray(value.gaps)
     ? value.gaps
         .map((g) =>
           typeof g === "string" ? { reason: "gap", detail: g } : g,
         )
-        .filter((g) => g && typeof g === "object")
+        .filter((g) => g && typeof g === "object" && !Array.isArray(g))
     : [];
+  if (Array.isArray(value.evidence) && evidence.length !== value.evidence.length)
+    gaps.push({ reason: "invalid_delivery_evidence",
+      detail: "交付证据包含缺失、不可读或不符合契约的条目，尚未完整核实。" });
+  if (value.gaps !== undefined && (!Array.isArray(value.gaps) ||
+      value.gaps.some((g) => typeof g !== "string" && (!g || typeof g !== "object" || Array.isArray(g)))))
+    gaps.push({ reason: "invalid_delivery_gaps", detail: "交付缺口格式无效，无法确认已经全部解决。" });
+  // The producer verifies the facts; normalization only enforces the evidence
+  // contract. A claimed success with no usable evidence or unresolved gaps is
+  // never a verified delivery. A readable file alone does not prove task quality.
+  const delivered = value.delivered === true && evidence.length > 0 && gaps.length === 0;
   if (!delivered && !gaps.length)
     gaps.push({
       reason: "no_verifiable_output",
@@ -31,6 +49,10 @@ export function normalizeDelivery(value) {
     delivered,
     evidence,
     gaps,
+    ...(Array.isArray(value.warnings) && value.warnings.length ? {
+      warnings: value.warnings.filter((item) => item && typeof item === "object" &&
+        !Array.isArray(item) && typeof item.reason === "string" && typeof item.detail === "string"),
+    } : {}),
     ...(typeof value.method === "string" ? { method: value.method } : {}),
     verifiedAt: typeof value.verifiedAt === "string" ? value.verifiedAt : new Date().toISOString(),
   };
@@ -68,9 +90,9 @@ export async function fileDeliveryEvidence(path) {
 // approval:<id>），receipt 携带回执本身的引用字段。
 export function receiptEvidence(source, receipt = {}) {
   return {
+    ...receipt,
     kind: "receipt",
     source,
-    ...receipt,
     verifiedAt: new Date().toISOString(),
   };
 }

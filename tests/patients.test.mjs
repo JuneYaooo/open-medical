@@ -47,7 +47,10 @@ test("patient creation links a clinical workspace session and supports revision-
   assert.equal(deleteSession.status, 409);
   const removed = await f.json(`/api/patients/${patient.id}`, "DELETE");
   assert.equal(removed.status, 200);
-  assert.equal((await f.json(`/api/sessions/${patient.sessionId}`)).status, 404);
+  assert.equal(
+    (await f.json(`/api/sessions/${patient.sessionId}`)).status,
+    404,
+  );
   assert.equal((await f.json("/api/patients")).data.patients.length, 0);
 });
 
@@ -104,7 +107,11 @@ test("ingest requires its own secret, matches patients by hint and deduplicates 
     { "x-ingest-secret": "s3cret" },
   );
   assert.equal(first.status, 201);
-  assert.deepEqual(await first.json(), { stored: 2, duplicates: 0, unassigned: 1 });
+  assert.deepEqual(await first.json(), {
+    stored: 2,
+    duplicates: 0,
+    unassigned: 1,
+  });
   const again = await ingest(
     {
       messages: [
@@ -118,7 +125,11 @@ test("ingest requires its own secret, matches patients by hint and deduplicates 
     },
     { "x-ingest-secret": "s3cret" },
   );
-  assert.deepEqual(await again.json(), { stored: 0, duplicates: 1, unassigned: 0 });
+  assert.deepEqual(await again.json(), {
+    stored: 0,
+    duplicates: 1,
+    unassigned: 0,
+  });
   const assigned = (await f.json(`/api/patients/${patient.id}/messages`)).data
     .messages;
   assert.equal(assigned.length, 1);
@@ -132,7 +143,11 @@ test("ingest requires its own secret, matches patients by hint and deduplicates 
   });
   assert.equal(ack.status, 200);
   assert.equal(
-    (await f.json(`/api/inbox/${inbox[0].id}/assign`, "POST", { patientId: patient.id })).status,
+    (
+      await f.json(`/api/inbox/${inbox[0].id}/assign`, "POST", {
+        patientId: patient.id,
+      })
+    ).status,
     409,
   );
   // Manual paste from the UI uses the token route and lands on the patient.
@@ -143,7 +158,9 @@ test("ingest requires its own secret, matches patients by hint and deduplicates 
   const messages = (await f.json(`/api/patients/${patient.id}/messages`)).data
     .messages;
   assert.equal(messages.length, 3);
-  assert.ok(messages.every((m) => m.channel === "manual" || m.channel === "ingest"));
+  assert.ok(
+    messages.every((m) => m.channel === "manual" || m.channel === "ingest"),
+  );
 });
 
 test("follow-up due date creates a reminder, auto-digests consented messages and pauses on failure", async (t) => {
@@ -168,7 +185,10 @@ test("follow-up due date creates a reminder, auto-digests consented messages and
     followupOptions: { now: () => now, autoStart: false },
   });
   const patient = (
-    await f.json("/api/patients", "POST", { name: "随访患者", phone: "13900003333" })
+    await f.json("/api/patients", "POST", {
+      name: "随访患者",
+      phone: "13900003333",
+    })
   ).data;
   const due = new Date(now + 1000).toISOString();
   const job = (
@@ -184,15 +204,15 @@ test("follow-up due date creates a reminder, auto-digests consented messages and
   now += 2000;
   await f.server.followups.tick();
   assert.equal(calls, 0);
-  assert.equal(
-    (await f.json("/api/reminders")).data.reminders.length,
-    1,
-  );
+  assert.equal((await f.json("/api/reminders")).data.reminders.length, 1);
   // Ingest messages and let the next occurrence auto-digest them. The first
   // occurrence already advanced nextDue by one full interval, so jump 8 days.
   await fetch(f.origin + "/api/ingest/messages", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-ingest-secret": "s3cret" },
+    headers: {
+      "content-type": "application/json",
+      "x-ingest-secret": "s3cret",
+    },
     body: JSON.stringify({
       messages: [
         {
@@ -220,7 +240,10 @@ test("follow-up due date creates a reminder, auto-digests consented messages and
   // Provider failure pauses the plan instead of silently replaying it.
   await fetch(f.origin + "/api/ingest/messages", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-ingest-secret": "s3cret" },
+    headers: {
+      "content-type": "application/json",
+      "x-ingest-secret": "s3cret",
+    },
     body: JSON.stringify({
       messages: [
         {
@@ -324,9 +347,8 @@ test("manual digest requires consent, marks messages processed and produces a re
     },
   };
   const f = await fixture(t, { provider });
-  const patient = (
-    await f.json("/api/patients", "POST", { name: "摘要患者" })
-  ).data;
+  const patient = (await f.json("/api/patients", "POST", { name: "摘要患者" }))
+    .data;
   await f.json(`/api/patients/${patient.id}/messages`, "POST", {
     messages: [{ direction: "in", text: "今天开始吃新药后有点头晕" }],
   });
@@ -347,9 +369,7 @@ test("manual digest requires consent, marks messages processed and produces a re
     .messages;
   assert.ok(messages.every((m) => m.processed));
   const session = (await f.json(`/api/sessions/${patient.sessionId}`)).data;
-  const checklist = session.artifacts.find(
-    (a) => a.type === "checklist",
-  );
+  const checklist = session.artifacts.find((a) => a.type === "checklist");
   assert.ok(checklist);
   assert.equal(checklist.status, "draft");
   const review = await f.json(
@@ -388,7 +408,8 @@ test("draft_treatment_review produces a bounded draft artifact through the model
                 function: {
                   name: "draft_treatment_review",
                   arguments: JSON.stringify({
-                    summary: "患者目前使用二甲双胍控制血糖，最近记录提示依从性下降。",
+                    summary:
+                      "患者目前使用二甲双胍控制血糖，最近记录提示依从性下降。",
                     concerns: ["两周内两次空腹血糖高于目标值"],
                     infoGaps: ["材料未记录糖化血红蛋白"],
                     questions: ["是否需要调整复查频率"],
@@ -407,13 +428,16 @@ test("draft_treatment_review produces a bounded draft artifact through the model
     },
   };
   const f = await fixture(t, { provider });
-  const patient = (
-    await f.json("/api/patients", "POST", { name: "评估患者" })
-  ).data;
-  const file = await f.json(`/api/sessions/${patient.sessionId}/files`, "POST", {
-    name: "病例.txt",
-    text: "2026-09-01 空腹血糖 8.9 mmol/L\n2026-09-05 空腹血糖 9.4 mmol/L",
-  });
+  const patient = (await f.json("/api/patients", "POST", { name: "评估患者" }))
+    .data;
+  const file = await f.json(
+    `/api/sessions/${patient.sessionId}/files`,
+    "POST",
+    {
+      name: "病例.txt",
+      text: "2026-09-01 空腹血糖 8.9 mmol/L\n2026-09-05 空腹血糖 9.4 mmol/L",
+    },
+  );
   assert.equal(file.status, 201);
   const run = await f.chat(patient.sessionId, "请评估治疗方案", {
     mode: "model",
@@ -454,30 +478,29 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
     CREATE INDEX event_log_session ON event_log(session_id,id);
     CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     INSERT INTO meta VALUES ('schema_version','2');`);
-  legacy
-    .prepare("INSERT INTO sessions VALUES (?,?)")
-    .run(
-      "legacy-1",
-      JSON.stringify({
-        id: "legacy-1",
-        title: "旧版会话",
-        createdAt: 1,
-        updatedAt: 1,
-        revision: 0,
-        messages: [],
-        files: [],
-        artifacts: [],
-        runs: [],
-      }),
-    );
+  legacy.prepare("INSERT INTO sessions VALUES (?,?)").run(
+    "legacy-1",
+    JSON.stringify({
+      id: "legacy-1",
+      title: "旧版会话",
+      createdAt: 1,
+      updatedAt: 1,
+      revision: 0,
+      messages: [],
+      files: [],
+      artifacts: [],
+      runs: [],
+    }),
+  );
   legacy.close();
   const store = new Store(file);
   try {
     assert.equal(store.get("legacy-1").title, "旧版会话");
     assert.equal(
-      store.db.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
-        .value,
-      "6",
+      store.db
+        .prepare("SELECT value FROM meta WHERE key=?")
+        .get("schema_version").value,
+      "7",
     );
     for (const table of [
       "patients",
@@ -494,10 +517,225 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
     assert.equal(
       check.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "6",
+      "7",
     );
     check.close();
   } finally {
     store.close();
   }
 });
+
+for (const automatic of [false, true]) {
+  for (const [label, texts, consumed] of [
+    [
+      "count overflow",
+      Array.from({ length: 70 }, (_, i) => `synthetic-message-${i}`),
+      50,
+    ],
+    [
+      "character overflow",
+      Array.from({ length: 3 }, (_, i) => `${i}`.repeat(5000)),
+      2,
+    ],
+  ]) {
+    test(`${automatic ? "scheduled" : "manual"} digest marks only its consumed snapshot: ${label} and concurrent arrival`, async (t) => {
+      let f, patient;
+      const provider = {
+        apiKey: "synthetic",
+        model: "mock",
+        async complete() {
+          await f.json(`/api/patients/${patient.id}/messages`, "POST", {
+            messages: [{ direction: "in", text: "concurrent-new-message" }],
+          });
+          return {
+            message: { role: "assistant", content: "已整理输入消息。" },
+            usage: { total_tokens: 1 },
+          };
+        },
+      };
+      f = await fixture(t, { provider, followupOptions: { autoStart: false } });
+      patient = (
+        await f.json("/api/patients", "POST", { name: "合成摘要患者" })
+      ).data;
+      await f.json(`/api/patients/${patient.id}/messages`, "POST", {
+        messages: texts.map((text) => ({ direction: "in", text })),
+      });
+      const before = (await f.json(`/api/patients/${patient.id}/messages`)).data
+        .messages;
+      const ordered = automatic ? [...before].reverse() : before;
+      const expectedIds = ordered
+        .slice(0, consumed)
+        .map((m) => m.id)
+        .sort((a, b) => a - b);
+      if (automatic) {
+        const job = (
+          await f.json(`/api/patients/${patient.id}/followups`, "POST", {
+            name: "快照测试",
+            intervalDays: 7,
+            firstDueAt: new Date(Date.now() + 1000).toISOString(),
+            externalConsent: true,
+          })
+        ).data;
+        assert.equal((await f.server.followups.execute(job)).digest, true);
+      } else {
+        const response = await f.json(
+          `/api/patients/${patient.id}/messages/digest`,
+          "POST",
+          { externalConsent: true },
+        );
+        assert.equal(response.data.status, "completed");
+      }
+      const after = (await f.json(`/api/patients/${patient.id}/messages`)).data
+        .messages;
+      assert.deepEqual(
+        after
+          .filter((m) => m.processed)
+          .map((m) => m.id)
+          .sort((a, b) => a - b),
+        expectedIds,
+      );
+      assert.equal(
+        after.filter((m) => !m.processed).length,
+        texts.length + 1 - consumed,
+      );
+      assert.equal(
+        after.find((m) => m.text === "concurrent-new-message").processed,
+        false,
+      );
+    });
+  }
+}
+
+test("oversized first digest input is rejected without executing or marking any message", async (t) => {
+  let calls = 0;
+  const f = await fixture(t, {
+    provider: {
+      apiKey: "synthetic",
+      model: "mock",
+      complete() {
+        calls++;
+        throw new Error("unexpected");
+      },
+    },
+    followupOptions: { autoStart: false },
+  });
+  const patient = (
+    await f.json("/api/patients", "POST", { name: "超长合成输入" })
+  ).data;
+  const db = f.server.followups.store.db;
+  db.prepare(
+    "INSERT INTO patient_messages(patient_id,channel,direction,time,external_id,processed,data) VALUES (?,?,?,?,?,0,?)",
+  ).run(
+    patient.id,
+    "manual",
+    "in",
+    new Date().toISOString(),
+    null,
+    JSON.stringify({ text: "x".repeat(12001) }),
+  );
+  const manual = await f.json(
+    `/api/patients/${patient.id}/messages/digest`,
+    "POST",
+    { externalConsent: true },
+  );
+  assert.equal(manual.status, 422);
+  const job = (
+    await f.json(`/api/patients/${patient.id}/followups`, "POST", {
+      name: "超长测试",
+      intervalDays: 7,
+      firstDueAt: new Date(Date.now() + 1000).toISOString(),
+      externalConsent: true,
+    })
+  ).data;
+  assert.equal((await f.server.followups.execute(job)).status, "failed");
+  assert.equal(calls, 0);
+  assert.equal(
+    db
+      .prepare("SELECT processed FROM patient_messages WHERE patient_id=?")
+      .get(patient.id).processed,
+    0,
+  );
+});
+
+for (const status of ["failed", "cancelled"]) {
+  test(`scheduled digest ${status} leaves the entire snapshot pending`, async (t) => {
+    const f = await fixture(t, {
+      provider: { apiKey: "synthetic", model: "mock" },
+      followupOptions: { autoStart: false },
+    });
+    const patient = (
+      await f.json("/api/patients", "POST", { name: "失败合成输入" })
+    ).data;
+    await f.json(`/api/patients/${patient.id}/messages`, "POST", {
+      messages: Array.from({ length: 70 }, (_, i) => ({
+        direction: "in",
+        text: `pending-${i}`,
+      })),
+    });
+    const job = (
+      await f.json(`/api/patients/${patient.id}/followups`, "POST", {
+        name: "失败测试",
+        intervalDays: 7,
+        firstDueAt: new Date(Date.now() + 1000).toISOString(),
+        externalConsent: true,
+      })
+    ).data;
+    f.server.followups.runtime = {
+      provider: { apiKey: "synthetic" },
+      prepare() {
+        return { run: { id: "synthetic-run" } };
+      },
+      async execute() {
+        return { status, runId: "synthetic-run" };
+      },
+    };
+    assert.equal((await f.server.followups.execute(job)).status, "failed");
+    const messages = (await f.json(`/api/patients/${patient.id}/messages`)).data
+      .messages;
+    assert.equal(messages.length, 70);
+    assert.ok(messages.every((m) => !m.processed));
+  });
+}
+
+for (const cancel of [false, true]) {
+  test(`manual digest ${cancel ? "cancelled" : "failed"} leaves all inputs pending`, async (t) => {
+    let f, patient;
+    const provider = {
+      apiKey: "synthetic",
+      model: "mock",
+      async complete() {
+        if (!cancel) throw new Error("synthetic digest failure");
+        const response = await f.json(
+          `/api/chat/${patient.sessionId}/cancel`,
+          "POST",
+          {},
+        );
+        assert.equal(response.data.cancelled, true);
+        return {
+          message: { role: "assistant", content: "late synthetic result" },
+          usage: { total_tokens: 1 },
+        };
+      },
+    };
+    f = await fixture(t, { provider });
+    patient = (
+      await f.json("/api/patients", "POST", { name: "手动失败合成输入" })
+    ).data;
+    await f.json(`/api/patients/${patient.id}/messages`, "POST", {
+      messages: Array.from({ length: 70 }, (_, i) => ({
+        direction: "in",
+        text: `pending-${i}`,
+      })),
+    });
+    const result = await f.json(
+      `/api/patients/${patient.id}/messages/digest`,
+      "POST",
+      { externalConsent: true },
+    );
+    assert.equal(result.data.status, cancel ? "cancelled" : "failed");
+    const messages = (await f.json(`/api/patients/${patient.id}/messages`)).data
+      .messages;
+    assert.equal(messages.length, 70);
+    assert.ok(messages.every((m) => !m.processed));
+  });
+}

@@ -1,3 +1,4 @@
+import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { check } from "../errors.mjs";
 
@@ -137,7 +138,7 @@ export class WorkspaceStore {
       ORDER BY id DESC LIMIT ?`).all(id, before, query,
         ...(authority !== undefined ? [authority, identity] : []), limit);
     return { entries: rows.map((row) => {
-      const { contextMessages: _context, providerMessages: _provider, children: _children, ...run } = JSON.parse(row.data);
+      const { contextMessages: _context, providerMessages: _provider, runtimeState: _runtimeState, children: _children, ...run } = JSON.parse(row.data);
       return { cursor: row.id, run, messages: JSON.parse(row.messages) };
     }), nextCursor: rows.length === limit ? rows.at(-1).id : null };
   }
@@ -149,8 +150,7 @@ export class WorkspaceStore {
     return JSON.parse(row.data);
   }
   update(id, callback, revision) {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
+    return sqliteTransaction(this.db, () => {
       const workspace = this.get(id);
       if (revision !== undefined)
         check(
@@ -165,12 +165,8 @@ export class WorkspaceStore {
       this.db
         .prepare("UPDATE agent_workspaces SET data=? WHERE id=?")
         .run(JSON.stringify(workspace), id);
-      this.db.exec("COMMIT");
       return workspace;
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    });
   }
   event(id, runId, type, payload) {
     const time = new Date().toISOString();
@@ -346,6 +342,7 @@ export class WorkspaceStore {
         .digest("hex");
       for (const run of w.runs) {
         delete run.contextMessages;
+        delete run.runtimeState;
         if (run.authority === sourceAuthority && run.status === "completed") {
           // Continue from the visible transcript, not historic tool invocations or approvals.
           run.providerMessages = w.messages

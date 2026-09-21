@@ -1,5 +1,5 @@
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
-import { TOOL_DEFINITIONS, runTool } from "../medical-core.mjs";
+import { TOOL_DEFINITIONS, runTool, medicalToolAllowed } from "../medical-core.mjs";
 
 // Medical capability layered on the generic workspace kernel — on demand,
 // never by default for ordinary projects:
@@ -59,6 +59,10 @@ export function createMedicalWorkspaceDomain({
     limits: GenericDomain.limits,
     contextManagement: true,
     allowAutoFileWrites: true,
+    // 能力快照的领域事实：医疗叠层开关走共享判定点，通用内核不感知。
+    capabilityFacts(workspace) {
+      return { medical: medicalWorkspaceEnabled(workspace) };
+    },
     // 会话型工作区：注入医生偏好摘要、策略、固定技能与材料索引。
     runSystemExtras(workspace, run, handle) {
       if (workspace.kind !== "session") return [];
@@ -82,7 +86,7 @@ export function createMedicalWorkspaceDomain({
           : "",
       ].filter(Boolean);
     },
-    registerTools: ({ registry, workspace }) => {
+    registerTools: ({ registry, workspace, runId }) => {
       // 会话叠层：医疗核心工具 + 全部医疗插件走 runTool 分发；项目
       // 工作区在显式启用医疗后直注插件（知识库/提案工具），普通项目
       // 保持纯通用工具面。
@@ -92,16 +96,19 @@ export function createMedicalWorkspaceDomain({
           ...TOOL_DEFINITIONS,
           ...sessionPlugins.map((plugin) => plugin.definition),
         ];
+        const intent = workspace.runs?.find((run) => run.id === runId)?.policy?.intent;
         const execute = (name, args, context) =>
           runTool(name, args, {
             sources: context.sources || [],
+            intent,
             skills,
             definitions: sessionDefinitions,
             plugins: sessionPluginMap,
           });
-        for (const definition of TOOL_DEFINITIONS)
+        for (const definition of TOOL_DEFINITIONS.filter((definition) => medicalToolAllowed(definition.function.name, intent)))
           registry.register({
             permission: "tools.execute",
+            capability: { backend: "local" },
             definition,
             execute: (args, context) =>
               execute(definition.function.name, args, context),
@@ -112,6 +119,7 @@ export function createMedicalWorkspaceDomain({
           registry.register({
             permission: "tools.execute",
             definition: plugin.definition,
+            capability: plugin.capability,
             execute: (args, context) =>
               execute(plugin.definition.function.name, args, context),
           });
@@ -122,6 +130,7 @@ export function createMedicalWorkspaceDomain({
         registry.register({
           permission: "tools.execute",
           definition: plugin.definition,
+          capability: plugin.capability,
           execute: plugin.execute,
         });
     },

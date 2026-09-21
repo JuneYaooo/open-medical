@@ -1,7 +1,11 @@
 import { providerConfigured } from "./core/provider-status.mjs";
 import { randomUUID } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
-import { composeDigest } from "./patients.mjs";
+import {
+  composeDigest,
+  selectDigestMessages,
+  markDigestProcessed,
+} from "./patients.mjs";
 
 // Durable per-patient follow-up queue. Same semantics as MedicalScheduler:
 // synchronous claim on the single database owner, missed intervals advance,
@@ -146,9 +150,7 @@ export class FollowUpManager {
     return JSON.parse(row.data);
   }
   listPlans() {
-    if (
-      !this.store.db.prepare("SELECT id FROM followup_plans LIMIT 1").get()
-    )
+    if (!this.store.db.prepare("SELECT id FROM followup_plans LIMIT 1").get())
       for (const plan of BUILTIN_PLANS)
         this.store.db
           .prepare("INSERT INTO followup_plans VALUES (?,?)")
@@ -201,12 +203,7 @@ export class FollowUpManager {
   }
   removePlan(id) {
     const plan = this.planRow(id);
-    check(
-      !plan.builtin,
-      "PLAN_BUILTIN",
-      "内置模板不能删除",
-      409,
-    );
+    check(!plan.builtin, "PLAN_BUILTIN", "内置模板不能删除", 409);
     this.store.db.prepare("DELETE FROM followup_plans WHERE id=?").run(id);
     return { ok: true };
   }
@@ -396,10 +393,11 @@ export class FollowUpManager {
   pendingMessages(patient, limit = 50) {
     return this.store.db
       .prepare(
-        "SELECT direction, channel, time, data FROM patient_messages WHERE patient_id=? AND processed=0 ORDER BY time ASC, id ASC LIMIT ?",
+        "SELECT id, direction, channel, time, data FROM patient_messages WHERE patient_id=? AND processed=0 ORDER BY time ASC, id ASC LIMIT ?",
       )
       .all(patient.id, limit)
       .map((row) => ({
+        id: row.id,
         direction: row.direction,
         channel: row.channel,
         time: row.time,
@@ -434,13 +432,7 @@ export class FollowUpManager {
       const patient = this.patientRow(job.patientId);
       // Keep the composed message inside the runtime's 20000-char budget;
       // anything left over stays unprocessed for the next occurrence.
-      const messages = [];
-      let budget = 12000;
-      for (const message of this.pendingMessages(patient)) {
-        if (message.text.length > budget) break;
-        budget -= message.text.length;
-        messages.push(message);
-      }
+      const messages = selectDigestMessages(this.pendingMessages(patient));
       const reminder = this.createReminder(
         patient,
         job,
@@ -472,11 +464,12 @@ export class FollowUpManager {
           const run = await this.runtime.execute(handle);
           result.runId = run.runId;
           if (run.status === "completed") {
-            this.store.db
-              .prepare(
-                "UPDATE patient_messages SET processed=1, data=json_set(data,'$.digestRunId',json_quote(?)) WHERE patient_id=? AND processed=0",
-              )
-              .run(run.runId, patient.id);
+            markDigestProcessed(
+              this.store,
+              patient.id,
+              run.runId,
+              messages.map((message) => message.id),
+            );
             result.digest = true;
           } else {
             result = {

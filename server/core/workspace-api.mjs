@@ -161,6 +161,12 @@ export async function workspaceApi({
     send(res, 200, service.capabilities(id));
     return true;
   }
+  // 能力分层快照（B1）：与模型可调用列表共用 WorkspaceService 判定；
+  // 展示全部工具及 authorized/ready/executable 三态与稳定原因码。
+  if (id && action === "capability-snapshot" && req.method === "GET") {
+    send(res, 200, service.capabilitySnapshot(id));
+    return true;
+  }
   if (id && action === "history" && req.method === "GET") {
     send(
       res,

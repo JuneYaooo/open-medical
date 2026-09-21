@@ -1,3 +1,4 @@
+import { contextBudget, assertContextBudget } from "./context-budget.mjs";
 import { requestProvider } from "./provider-request.mjs";
 import { providerConfigured } from "./provider-status.mjs";
 import { sseFrames } from "../../shared/sse.mjs";
@@ -12,6 +13,8 @@ export class DeepSeekProvider {
     timeoutMs = 90000,
     thinking = "disabled",
     maxTokens = 8192,
+    contextWindow,
+    contextWindows,
     fetchImpl = fetch,
   } = {}) {
     this.apiKey = apiKey;
@@ -38,6 +41,9 @@ export class DeepSeekProvider {
     this.thinking = thinking;
     this.includeThinking = true;
     this.maxTokens = maxTokens;
+    if (contextWindow !== undefined) check(Number.isInteger(contextWindow) && contextWindow >= 512 && contextWindow <= 10000000, "PROVIDER_CONFIG", "模型上下文窗口须为 512–10000000 token");
+    this.contextWindow = contextWindow;
+    this.contextWindows = contextWindows;
     this.fetch = fetchImpl;
     const url = new URL(this.baseUrl);
     if (local)
@@ -64,6 +70,8 @@ export class DeepSeekProvider {
       onDelta = () => {},
       onStatus = () => {},
       model = this.model,
+      maxTokens = this.maxTokens,
+      budget,
       thinking = this.thinking,
     } = {},
   ) {
@@ -73,6 +81,9 @@ export class DeepSeekProvider {
       "服务端尚未配置模型",
       503,
     );
+    assertContextBudget(contextBudget({ provider: this, model, messages, tools,
+      maxChars: budget?.maxChars ?? 100000, calibration: budget?.calibration,
+      outputReserve: maxTokens + (this.provider === "anthropic" && thinking === "enabled" ? 4096 : 0) }));
     const combined = AbortSignal.any([
       ...(signal ? [signal] : []),
       AbortSignal.timeout(this.timeoutMs),
@@ -85,7 +96,7 @@ export class DeepSeekProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(this.includeThinking ? { thinking: { type: thinking } } : {}),
-      max_tokens: this.maxTokens,
+      max_tokens: maxTokens,
     };
     const response = await requestProvider(this.fetch, `${this.baseUrl}/chat/completions`, {
         method: "POST",
@@ -283,8 +294,11 @@ export class ResponsesProvider extends OpenAIProvider {
     {
       signal,
       model = this.model,
+      maxTokens = this.maxTokens,
+      budget,
       onDelta = () => {},
       onStatus = () => {},
+      thinking,
     } = {},
   ) {
     check(
@@ -317,6 +331,9 @@ export class ResponsesProvider extends OpenAIProvider {
           arguments: call.function.arguments,
         });
     }
+    assertContextBudget(contextBudget({ provider: this, model, messages, tools,
+      maxChars: budget?.maxChars ?? 100000, calibration: budget?.calibration,
+      outputReserve: maxTokens + (this.provider === "anthropic" && thinking === "enabled" ? 4096 : 0) }));
     const combined = AbortSignal.any([
       ...(signal ? [signal] : []),
       AbortSignal.timeout(this.timeoutMs),
@@ -327,7 +344,7 @@ export class ResponsesProvider extends OpenAIProvider {
       stream: true,
       store: false,
       include: ["reasoning.encrypted_content"],
-      max_output_tokens: this.maxTokens,
+      max_output_tokens: maxTokens,
       ...(this.reasoningEffort
         ? { reasoning: { effort: this.reasoningEffort } }
         : {}),
@@ -432,9 +449,10 @@ export class ResponsesProvider extends OpenAIProvider {
 }
 
 function anthropicMessages(messages) {
-  const system = messages.find((m) => m.role === "system")?.content || "";
+  const system = messages.filter((m) => ["system", "developer"].includes(m.role))
+    .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content)).join("\n\n");
   const out = [];
-  for (const message of messages.filter((m) => m.role !== "system")) {
+  for (const message of messages.filter((m) => !["system", "developer"].includes(m.role))) {
     if (message.role === "tool") {
       const previous = out.at(-1);
       const block = {
@@ -476,6 +494,8 @@ export class AnthropicProvider {
     model = "claude-sonnet-4-5",
     timeoutMs = 90000,
     maxTokens = 8192,
+    contextWindow,
+    contextWindows,
     fetchImpl = fetch,
   } = {}) {
     this.apiKey = apiKey;
@@ -483,6 +503,9 @@ export class AnthropicProvider {
     this.model = model;
     this.timeoutMs = timeoutMs;
     this.maxTokens = maxTokens;
+    if (contextWindow !== undefined) check(Number.isInteger(contextWindow) && contextWindow >= 512 && contextWindow <= 10000000, "PROVIDER_CONFIG", "模型上下文窗口须为 512–10000000 token");
+    this.contextWindow = contextWindow;
+    this.contextWindows = contextWindows;
     this.fetch = fetchImpl;
     this.provider = "anthropic";
     const url = new URL(this.baseUrl);
@@ -512,6 +535,8 @@ export class AnthropicProvider {
       onDelta = () => {},
       onStatus = () => {},
       model = this.model,
+      maxTokens = this.maxTokens,
+      budget,
       thinking = this.thinking,
     } = {},
   ) {
@@ -521,6 +546,9 @@ export class AnthropicProvider {
       "服务端尚未配置模型",
       503,
     );
+    assertContextBudget(contextBudget({ provider: this, model, messages, tools,
+      maxChars: budget?.maxChars ?? 100000, calibration: budget?.calibration,
+      outputReserve: maxTokens + (this.provider === "anthropic" && thinking === "enabled" ? 4096 : 0) }));
     const combined = AbortSignal.any([
       ...(signal ? [signal] : []),
       AbortSignal.timeout(this.timeoutMs),
@@ -532,7 +560,7 @@ export class AnthropicProvider {
       model,
       system: converted.system,
       messages: converted.messages,
-      max_tokens: this.maxTokens + (thinking === "enabled" ? thinkBudget : 0),
+      max_tokens: maxTokens + (thinking === "enabled" ? thinkBudget : 0),
       ...(thinking === "enabled"
         ? { thinking: { type: "enabled", budget_tokens: thinkBudget } }
         : {}),
@@ -713,6 +741,8 @@ export function createProvider({
         options.timeoutMs ?? process.env.AI_TIMEOUT_MS ?? 90000,
       ),
       maxTokens: Number(options.maxTokens ?? process.env.AI_MAX_TOKENS ?? 8192),
+      contextWindow: options.contextWindow,
+      contextWindows: options.contextWindows,
       fetchImpl: options.fetchImpl,
     });
   if (kind === "local")
@@ -728,6 +758,8 @@ export function createProvider({
         options.timeoutMs ?? process.env.AI_TIMEOUT_MS ?? 90000,
       ),
       maxTokens: Number(options.maxTokens ?? process.env.AI_MAX_TOKENS ?? 8192),
+      contextWindow: options.contextWindow,
+      contextWindows: options.contextWindows,
       fetchImpl: options.fetchImpl,
     });
   if (kind === "anthropic" || kind === "claude")
@@ -747,6 +779,8 @@ export function createProvider({
           process.env.ANTHROPIC_MAX_TOKENS ??
           8192,
       ),
+      contextWindow: options.contextWindow,
+      contextWindows: options.contextWindows,
       fetchImpl: options.fetchImpl,
     });
   if (
@@ -773,6 +807,8 @@ export function createProvider({
         options.timeoutMs ?? process.env.AI_TIMEOUT_MS ?? 90000,
       ),
       maxTokens: Number(options.maxTokens ?? process.env.AI_MAX_TOKENS ?? 8192),
+      contextWindow: options.contextWindow,
+      contextWindows: options.contextWindows,
       fetchImpl: options.fetchImpl,
     });
   return new DeepSeekProvider({
@@ -792,6 +828,8 @@ export function createProvider({
         process.env.AI_TIMEOUT_MS ??
         90000,
     ),
+    contextWindow: options.contextWindow,
+    contextWindows: options.contextWindows,
     fetchImpl: options.fetchImpl,
   });
 }

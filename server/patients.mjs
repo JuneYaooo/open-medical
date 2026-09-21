@@ -87,7 +87,8 @@ export class PatientRegistry {
       name: name.trim(),
       gender: optionalChoice(input.gender, ["male", "female", "unknown"]),
       birthYear: optionalInt(input.birthYear, 1900, new Date().getFullYear()),
-      phone: input.phone === undefined ? "" : string(input.phone, "联系电话", 20),
+      phone:
+        input.phone === undefined ? "" : string(input.phone, "联系电话", 20),
       groups: optionalStrings(input.groups, "分组", 10, 40),
       tags: optionalStrings(input.tags, "标签", 20, 40),
       note: input.note === undefined ? "" : string(input.note, "备注", 2000),
@@ -166,9 +167,14 @@ export class PatientRegistry {
     if (input.allergies !== undefined)
       patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
     if (input.labs !== undefined) patient.labs = optionalLabs(input.labs);
-    if (input.visits !== undefined) patient.visits = optionalVisits(input.visits);
+    if (input.visits !== undefined)
+      patient.visits = optionalVisits(input.visits);
     if (input.archived !== undefined) {
-      check(typeof input.archived === "boolean", "INVALID_INPUT", "归档状态无效");
+      check(
+        typeof input.archived === "boolean",
+        "INVALID_INPUT",
+        "归档状态无效",
+      );
       patient.archived = input.archived;
     }
     patient.revision++;
@@ -196,7 +202,9 @@ export class PatientRegistry {
       pseudoId,
       gender: patient.gender || "unknown",
       ageBand:
-        age !== null ? `${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9}` : null,
+        age !== null
+          ? `${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9}`
+          : null,
       diagnoses: patient.diagnoses || [],
       medications: (patient.medications || []).map((m) => ({
         name: m.name,
@@ -222,9 +230,7 @@ export class PatientRegistry {
       "请先停止该患者的执行再删除档案",
       409,
     );
-    this.store.db
-      .prepare("DELETE FROM follow_ups WHERE patient_id=?")
-      .run(id);
+    this.store.db.prepare("DELETE FROM follow_ups WHERE patient_id=?").run(id);
     this.store.db.prepare("DELETE FROM reminders WHERE patient_id=?").run(id);
     this.store.db
       .prepare("DELETE FROM patient_messages WHERE patient_id=?")
@@ -298,9 +304,7 @@ export class PatientRegistry {
   }
   ingest(messages, { fallbackChannel = "ingest", patientId = null } = {}) {
     check(
-      Array.isArray(messages) &&
-        messages.length > 0 &&
-        messages.length <= 200,
+      Array.isArray(messages) && messages.length > 0 && messages.length <= 200,
       "INVALID_INPUT",
       "每次最多导入 200 条消息",
     );
@@ -404,12 +408,7 @@ export class PatientRegistry {
       )
       .get(id);
     check(row, "NOT_FOUND", "消息不存在", 404);
-    check(
-      !row.patient_id,
-      "CONFLICT",
-      "该消息已归属患者",
-      409,
-    );
+    check(!row.patient_id, "CONFLICT", "该消息已归属患者", 409);
     if (
       row.external_id &&
       this.store.db
@@ -425,13 +424,40 @@ export class PatientRegistry {
     this.store.audit(patient.sessionId, "messages.assigned", { messageId });
     return { ok: true };
   }
-  markProcessed(patientId, runId) {
-    this.store.db
-      .prepare(
-        "UPDATE patient_messages SET processed=1, data=json_set(data,'$.digestRunId',json_quote(?)) WHERE patient_id=? AND processed=0",
-      )
-      .run(runId, patientId);
+  markProcessed(patientId, runId, messageIds) {
+    return markDigestProcessed(this.store, patientId, runId, messageIds);
   }
+}
+// IDs are captured by the server before model execution, never supplied by it.
+export function markDigestProcessed(store, patientId, runId, messageIds) {
+  check(
+    Array.isArray(messageIds) &&
+      messageIds.every((id) => Number.isSafeInteger(id) && id > 0),
+    "INVALID_INPUT",
+    "摘要消息快照无效",
+  );
+  if (!messageIds.length) return;
+  store.db
+    .prepare(
+      `UPDATE patient_messages SET processed=1, data=json_set(data,'$.digestRunId',json_quote(?)) WHERE patient_id=? AND processed=0 AND id IN (${messageIds.map(() => "?").join(",")})`,
+    )
+    .run(runId, patientId, ...messageIds);
+}
+export function selectDigestMessages(pending) {
+  const messages = [];
+  let budget = 12000;
+  for (const message of pending.slice(0, 50)) {
+    if (message.text.length > budget) break;
+    budget -= message.text.length;
+    messages.push(message);
+  }
+  check(
+    !pending.length || messages.length > 0,
+    "DIGEST_INPUT_TOO_LARGE",
+    "首条待处理消息超过摘要输入预算，请先拆分消息",
+    422,
+  );
+  return messages;
 }
 export function composeDigest(messages, patientName = "患者") {
   const lines = messages
@@ -445,7 +471,11 @@ export function composeDigest(messages, patientName = "患者") {
 }
 function optionalChoice(value, choices) {
   if (value === undefined || value === null || value === "") return null;
-  check(choices.includes(value), "INVALID_INPUT", `取值须为 ${choices.join("/")}`);
+  check(
+    choices.includes(value),
+    "INVALID_INPUT",
+    `取值须为 ${choices.join("/")}`,
+  );
   return value;
 }
 function optionalInt(value, min, max) {
@@ -464,8 +494,14 @@ function optionalStrings(value, label, maxCount, maxLen) {
     "INVALID_INPUT",
     `${label}最多 ${maxCount} 个`,
   );
-  const items = value.map((v) => string(v, label, maxLen).trim()).filter(Boolean);
-  check(new Set(items).size === items.length, "INVALID_INPUT", `${label}不能重复`);
+  const items = value
+    .map((v) => string(v, label, maxLen).trim())
+    .filter(Boolean);
+  check(
+    new Set(items).size === items.length,
+    "INVALID_INPUT",
+    `${label}不能重复`,
+  );
   return items;
 }
 const clinicalDate = (value, label) => {
@@ -498,11 +534,19 @@ function structuredList(value, label, maxCount, build) {
 // Normalized clinical-field validation shared with the agent proposal flow.
 export function validateClinicalInput(input = {}) {
   return {
-    ...(input.diagnoses !== undefined ? { diagnoses: optionalDiagnoses(input.diagnoses) } : {}),
-    ...(input.medications !== undefined ? { medications: optionalMedications(input.medications) } : {}),
-    ...(input.allergies !== undefined ? { allergies: optionalStrings(input.allergies, "过敏史", 20, 120) } : {}),
+    ...(input.diagnoses !== undefined
+      ? { diagnoses: optionalDiagnoses(input.diagnoses) }
+      : {}),
+    ...(input.medications !== undefined
+      ? { medications: optionalMedications(input.medications) }
+      : {}),
+    ...(input.allergies !== undefined
+      ? { allergies: optionalStrings(input.allergies, "过敏史", 20, 120) }
+      : {}),
     ...(input.labs !== undefined ? { labs: optionalLabs(input.labs) } : {}),
-    ...(input.visits !== undefined ? { visits: optionalVisits(input.visits) } : {}),
+    ...(input.visits !== undefined
+      ? { visits: optionalVisits(input.visits) }
+      : {}),
   };
 }
 function optionalDiagnoses(value) {
@@ -517,7 +561,9 @@ function optionalMedications(value) {
   return structuredList(value, "用药", 60, (item) => ({
     name: string(item.name, "药名", 120),
     ...(item.dose ? { dose: string(item.dose, "剂量", 60) } : {}),
-    ...(item.frequency ? { frequency: string(item.frequency, "频次", 60) } : {}),
+    ...(item.frequency
+      ? { frequency: string(item.frequency, "频次", 60) }
+      : {}),
     ...(item.note ? { note: string(item.note, "备注", 200) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
   }));

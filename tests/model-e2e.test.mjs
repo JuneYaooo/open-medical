@@ -56,6 +56,7 @@ async function sendAndWaitDone(page, text) {
   // 等待本轮执行结束：发送键从“停止”恢复为可用的发送态
   await page.waitForFunction(
     () => !document.querySelector(".send-button.stop"),
+    undefined,
     { timeout: 240000 },
   );
 }
@@ -77,11 +78,24 @@ test("真实模型 · 咨询直接答：不产文书、回答引用材料", { sk
     page,
     "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。",
   );
+  const session = await f.json(`/api/sessions/${p.data.sessionId}`);
+  assert.equal(session.status, 200);
+  const run = session.data.runs.at(-1);
+  const events = await f.json(`/api/workspaces/${p.data.sessionId}/events`);
+  assert.equal(events.status, 200);
+  const diagnostic = JSON.stringify({
+    intent: run?.policy?.intent,
+    status: run?.status,
+    artifacts: (run?.artifacts || []).map(({type, status, readOnly}) => ({type, status, readOnly})),
+    tools: [...new Set((events.data.events || []).filter((event) => event.run_id === run?.id && event.type === "tool.start").map((event) => event.payload.tool))],
+  });
+  t.diagnostic(diagnostic);
+  assert.equal(run?.status, "completed", `咨询运行必须正常完成；${diagnostic}`);
   // 直接回答：有实质回答文本
   const last = await page.locator(".message-list .message").last().innerText();
-  assert.ok(last.length > 30, "模型应给出实质回答");
+  assert.ok(last.length > 30, `模型应给出实质回答；${diagnostic}`);
   // 咨询不产文书：对话内不应出现产物卡
-  assert.equal(await page.locator(".artifact-inline").count(), 0, "咨询不应产生文书产物");
+  assert.equal(await page.locator(".artifact-inline").count(), 0, `咨询不应产生文书产物；${diagnostic}`);
 });
 
 test("真实模型 · 文书整理：工具调用 + 产物 + 验收通过", { skip: !canRun }, async (t) => {

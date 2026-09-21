@@ -191,3 +191,23 @@ test("patient sessions are unified workspaces and are removed with the patient",
   const gone = await f.json(`/api/sessions/${patient.sessionId}`);
   assert.equal(gone.status, 404);
 });
+
+test('consultation enforces no-document policy in both model engines before tool execution', async t => {
+  for (const legacy of [false, true]) {
+    let calls = 0;
+    const provider = { ...stubProvider, complete: async (_messages, tools) => {
+      assert.ok(!tools.some(tool => tool.function.name === 'review_medication_safety'));
+      assert.ok(tools.some(tool => tool.function.name === 'read_source'));
+      // Unsolicited calls must be refused too, not merely omitted from discovery.
+      return calls++ === 0 ? call('review_medication_safety', {}) : answer('咨询只需依据资料直接回答，无需创建文书。');
+    } };
+    const f = await fixture(t, { provider });
+    const session = legacy ? await f.legacy('legacy consultation') : await f.session('kernel consultation');
+    const response = await f.chat(session.id, '出院后饮食能吃辛辣的吗？请直接回答。', { mode: 'model', externalConsent: true });
+    assert.equal(response.status, 200);
+    const current = (await f.json(`/api/sessions/${session.id}`)).data;
+    assert.equal(current.runs.at(-1).status, 'completed');
+    assert.equal(current.artifacts.length, 0);
+    assert.ok(response.events.some(e => e.type === 'tool.failed'));
+  }
+});
