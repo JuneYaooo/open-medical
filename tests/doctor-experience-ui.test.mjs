@@ -287,3 +287,16 @@ test("new task stays focused and agenda round-trip preserves draft on desktop an
     await f.page.screenshot({path:`output/doctor-workbench-8h-20260922/screenshots/new-task-${width}.png`});
   }
 });
+
+test('Chinese literature topic opens an unsent English-search planning task with filters', {skip},async(t)=>{
+ const f=await browserFixture(t);await f.page.goto(f.origin);
+ await f.page.getByRole('button',{name:'打开',exact:true}).click();
+ await f.page.getByRole('button',{name:'文献检索 PubMed 检索与导入',exact:true}).click();
+ await f.page.locator('.literature-query').fill('颞叶癫痫感知性症状');
+ await f.page.getByPlaceholder('起始年',{exact:true}).fill('2020');
+ await f.page.getByRole('button',{name:'让助手规划检索',exact:true}).click();
+ const input=f.page.getByRole('textbox',{name:'医疗工作需求',exact:true});await input.waitFor();
+ await f.page.waitForFunction(()=>document.querySelector('.composer textarea')?.value.includes('颞叶癫痫'));
+ assert.match(await input.inputValue(),/2–4 组英文/);assert.match(await input.inputValue(),/2020/);
+ assert.equal(f.server.workspaces.store.list().flatMap(w=>f.server.workspaces.store.get(w.id).runs||[]).length,0);
+});

@@ -32,6 +32,11 @@ export function LiteratureView({ onOpenTask }) {
     setError("");
     setResults(null);
     try {
+      if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u.test(searchQuery)) {
+        const session = await api("/api/sessions", "POST", { title: `文献检索 · ${searchQuery.slice(0, 40)}` });
+        await onOpenTask(session.id, { draft: `请检索以下主题的论文：${searchQuery}。先提取核心医学概念并改写为 2–4 组英文检索式，分组检索、去重，核对摘要相关性后列出文献和出处。首选来源 ${options.source || source}。${yearFrom ? `起始年 ${yearFrom}。` : ""}${yearTo ? `结束年 ${yearTo}。` : ""}不要把未命中说成没有相关论文。` });
+        return;
+      }
       const params = new URLSearchParams({
         query: searchQuery,
         source: options.source || source,
@@ -133,7 +138,7 @@ export function LiteratureView({ onOpenTask }) {
           <input
             className="literature-query"
             value={query}
-            placeholder="检索词（仅检索词会发送给文献源）"
+            placeholder="英文关键词，或用中文描述论文主题"
             onChange={(e) => setQuery(e.target.value)}
           />
           <select value={source} onChange={(e) => setSource(e.target.value)}>
@@ -156,9 +161,10 @@ export function LiteratureView({ onOpenTask }) {
           />
           <button type="submit" disabled={busy || !query.trim()}>
             {busy ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
-            检索
+            {/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u.test(query) ? "让助手规划检索" : "检索"}
           </button>
         </form>
+        {/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u.test(query) && <p className="muted">将打开任务并填入主题；发送后由助手转为英文、分组检索。</p>}
         {error && (
           <p className="form-error" role="alert">
             {error}

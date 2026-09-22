@@ -2740,9 +2740,9 @@ function App() {
                   {toolPanel === "knowledge" && <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />}
                   {toolPanel === "literature" && (
                     <LiteratureView
-                      onOpenTask={(id) => {
+                      onOpenTask={async (id, options) => {
                         setToolPanel(null);
-                        openTask(id);
+                        await openTask(id, options);
                       }}
                     />
                   )}

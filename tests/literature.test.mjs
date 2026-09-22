@@ -277,3 +277,44 @@ test("body timeout is caught and retried, and valid zero results do not switch s
   const result=await service.search({query:"diabetes",source:"europepmc"});
   assert.equal(calls,2);assert.equal(result.count,0);assert.equal(result.fallback,undefined);
 });
+
+test('agent rejects untranslated input before network and requests reformulation', async(t)=>{
+  let calls=0;const service=newLiterature(t,async()=>{calls++;return europeResponse();});
+  const result=await literatureTools(service)[0].execute({query:'颞叶癫痫感知性症状'});
+  assert.equal(result.code,'LITERATURE_REWRITE_REQUIRED');assert.equal(calls,0);
+  assert.match(result.error,/尚未执行检索/);
+});
+
+test('grouped searches deduplicate identifiers and retain queries, source and partial failures',async(t)=>{
+  const service=newLiterature(t,europeResponse);
+  const seen=[];
+  service.search=async({query,yearFrom,limit})=>{
+    seen.push({query,yearFrom,limit});
+    if(query==='failed search')throw new Error('network timeout');
+    return {source:'europepmc',count:1,articles:[{pmid:'123',doi:'10.1/TEST',title:'Example'}]};
+  };
+  const result=await literatureTools(service)[0].execute({queries:['temporal epilepsy aura','temporal epilepsy sensory','failed search'],yearFrom:2020,limit:3});
+  assert.equal(result.count,1);assert.equal(result.partial,true);
+  assert.equal(result.searches.length,3);assert.equal(result.searches[2].status,'failed');
+  assert.equal(result.articles[0].matchedQueries.length,2);assert.deepEqual(result.articles[0].sources,['europepmc']);
+  assert.ok(seen.every(s=>s.yearFrom===2020&&s.limit===3));
+});
+
+test('group validation is bounded, zero is distinct from failure, all-failed never reports zero',async(t)=>{
+  const service=newLiterature(t,europeResponse);let calls=0;
+  service.search=async()=>{calls++;return {source:'pubmed',count:0,articles:[]};};
+  for(const queries of [['one'],['same','same'],['中文','English'],['a','b','c','d','e']])
+    await assert.rejects(service.searchGroups({queries}),e=>e.code==='INVALID_INPUT');
+  assert.equal(calls,0);
+  const result=await service.searchGroups({queries:['core terms','broader terms']});
+  assert.equal(result.count,0);assert.equal(result.partial,false);assert.ok(result.searches.every(s=>s.status==='ok'));
+  service.search=async()=>{throw new Error('offline');};
+  await assert.rejects(service.searchGroups({queries:['core terms','broader terms']}),e=>e.code==='LITERATURE_UNAVAILABLE');
+});
+
+test('English medical search terms may retain accents such as déjà vu',async(t)=>{
+  const service=newLiterature(t,europeResponse);
+  service.search=async()=>({source:'pubmed',count:0,articles:[]});
+  const result=await service.searchGroups({queries:['temporal epilepsy déjà vu','temporal epilepsy aura']});
+  assert.equal(result.searches.length,2);
+});

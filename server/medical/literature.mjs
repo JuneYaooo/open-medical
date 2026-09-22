@@ -164,6 +164,39 @@ export class LiteratureService {
     if (!fallbackReason) this.cacheSet(cacheKey, result);
     return result;
   }
+  async searchGroups({ queries, ...options }) {
+    check(Array.isArray(queries) && queries.length >= 2 && queries.length <= 4,
+      "INVALID_INPUT", "请提供 2–4 组英文检索式：核心概念、同义词扩展、必要时较宽泛检索");
+    const normalized = [...new Set(queries.map((q) => this.normalizeQuery(q)))];
+    check(normalized.length >= 2 && normalized.every((q) => /[a-zA-Z]/.test(q) && !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u.test(q)),
+      "INVALID_INPUT", "queries 需为至少两组不同的英文检索式；先提取医学概念和同义词，不发送患者身份信息");
+    // Sequential groups respect public API quotas; each retains its own outcome.
+    const searches = [], articles = [], byId = new Map();
+    for (const query of normalized) {
+      try {
+        const result = await this.search({ ...options, query });
+        searches.push({ query, source: result.source, count: result.count, status: "ok",
+          ...(result.fallback ? { fallback: true, fallbackReason: result.fallbackReason } : {}) });
+        for (const article of result.articles) {
+          const keys = [article.pmid && `pmid:${article.pmid}`, article.doi && `doi:${article.doi.toLowerCase()}`,
+            !article.pmid && !article.doi && `title:${article.title.toLowerCase()}:${article.year}`].filter(Boolean);
+          let saved = keys.map((key) => byId.get(key)).find(Boolean);
+          if (!saved) { saved = { ...article, matchedQueries: [], sources: [] }; articles.push(saved); }
+          if (!saved.matchedQueries.includes(query)) saved.matchedQueries.push(query);
+          if (!saved.sources.includes(result.source)) saved.sources.push(result.source);
+          for (const key of keys) byId.set(key, saved);
+        }
+      } catch (error) {
+        if (error.code === "INVALID_INPUT") throw error;
+        searches.push({ query, status: "failed", error: error.message });
+      }
+    }
+    if (searches.every((s) => s.status === "failed"))
+      throw new AppError("LITERATURE_UNAVAILABLE", `所有检索组均失败，不能判定为零文献：${searches.map((s) => s.error).join("；")}`, 502);
+    return { searches, articles, count: articles.length,
+      partial: searches.some((s) => s.status === "failed"),
+      note: "结果已按 PMID / DOI 去重。各组计数为本次取回数量，非数据库总量；逐项核对摘要与问题相关性。零结果仅说明这些检索式未命中，不代表没有相关文献。" };
+  }
   async searchPubMed(text, from, to, limit, sort = "relevance") {
     const terms = [text];
     if (from || to)
@@ -311,19 +344,23 @@ export function literatureTools(literature) {
     {
       definition: definition(
         "literature_search",
-        "检索公开医学文献库（PubMed 或 Europe PMC）。只发送检索词，不发送患者资料。返回标题、期刊、年份与证据类型提示。",
+        "检索 PubMed / Europe PMC。主题问题先提取核心概念，将非英文问题改写为英文医学检索词，提供 queries（2–4 组）：核心概念 AND 症状、同义词 OR 扩展、较宽泛检索。保持原意，歧义分组，不虚构已核实的 MeSH。只发送脱敏关键词。返回分组检索记录、去重文献与命中来源；取摘要核实相关性再引用。query 单组仅用于精确查找或补充检索。",
         {
           query: textDef,
+          queries: { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
           source: textDef,
           yearFrom: { type: "integer" },
           yearTo: { type: "integer" },
           limit: { type: "integer" },
         },
-        ["query"],
+        [],
       ),
       // 参数类错误返回给模型自适应重试，而不是作为 rejection 逃逸。
       execute: async (args) => {
         try {
+          if (args.queries !== undefined) return await literature.searchGroups(args);
+          if (typeof args.query === "string" && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u.test(args.query))
+            return { code: "LITERATURE_REWRITE_REQUIRED", error: "尚未执行检索。请把用户主题提取为英文医学概念，生成 2–4 组不同 queries（核心概念、同义词、宽泛检索）后重新调用。不要把本提示当作零结果，也不要要求用户自行翻译。" };
           return await literature.search(args);
         } catch (error) {
           if (error instanceof Error && error.code === "INVALID_INPUT")
