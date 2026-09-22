@@ -23,6 +23,7 @@ test("doctor experience: results receipt, review, communication and follow-up fo
   const patient = (await f.json("/api/patients", "POST", { name: "何跟进", patientNumber: "DEMO-TRACK" })).data;
   await f.json(`/api/patients/${patient.id}/care-tasks`, "POST", { title: "复查报告返回后核对", kind: "test", dueAt: new Date(Date.now() - 10000).toISOString() });
   await f.page.goto(f.origin);
+  await f.page.getByRole("button", { name: "今日待办", exact: true }).click();
   await f.page.locator(".agenda-item", { hasText: "复查报告返回后核对" }).click();
   await f.page.getByRole("button", { name: "登记已收到结果", exact: true }).click();
   await f.page.getByLabel("结果来源", { exact: true }).fill("合成患者上传的复查报告");
@@ -121,6 +122,7 @@ test("doctor experience: today's agenda opens the correct patient and tracks com
   const risk = (await f.json("/api/patients", "POST", { name: "钱复核", patientNumber: "DEMO-032", labs: [{ item: "血钾", value: 2.5, unit: "mmol/L", date: "2026-09-21" }] })).data;
   f.server.patients.ingest([{ direction: "in", text: "合成复诊反馈" }], { patientId: risk.id });
   await f.page.goto(f.origin);
+  await f.page.getByRole("button", { name: "今日待办", exact: true }).click();
   await f.page.locator(".agenda-item").first().waitFor();
   assert.match(await f.page.locator(".agenda-item").first().innerText(), /钱复核/);
   await f.page.screenshot({ path: "output/doctor-workbench-8h-20260922/screenshots/today-agenda.png", fullPage: false });
@@ -139,7 +141,7 @@ test("doctor experience: same-name registration offers existing chart or explici
   const f = await browserFixture(t);
   await f.json("/api/patients", "POST", { name: "周同名", patientNumber: "DEMO-A", birthYear: 1960 });
   await f.page.goto(f.origin);
-  await f.page.getByRole("button", { name: "患者建档", exact: true }).click();
+  await f.page.getByRole("button", { name: "建档", exact: true }).click();
   await f.page.locator(".modal-form input").first().fill("周同名");
   await f.page.locator(".identity-matches").waitFor();
   assert.equal(await f.page.getByRole("button", { name: "创建患者档案", exact: true }).isDisabled(), true);
@@ -180,7 +182,9 @@ test("doctor experience: knowledge source review and retirement remain visible i
   const f = await browserFixture(t);
   await f.json("/api/knowledge", "POST", { title: "门诊随访合成资料", collection: "门诊资料", text: "合成随访资料，需要核对患者反馈、来源日期和后续计划。".repeat(8) });
   await f.page.goto(f.origin);
-  await f.page.getByRole("button", { name: "构建知识库", exact: true }).click();
+  await f.page.getByRole("button", { name: "打开", exact: true }).click();
+  await f.page.getByRole("button", { name: "知识库 指南导入与检索", exact: true }).click();
+  await f.page.getByRole("button", { name: "整页打开 knowledge", exact: true }).click();
   await f.page.getByRole("button", { name: /门诊随访合成资料/ }).click();
   await f.page.getByRole("button", { name: "管理来源与版本", exact: true }).click();
   await f.page.getByLabel("来源链接", { exact: true }).fill("https://example.org/synthetic-followup");
@@ -257,4 +261,29 @@ test("doctor experience: narrow screens keep context and settings reachable with
   }
   await f.page.setViewportSize({ width: 390, height: 844 });
   await f.page.screenshot({ path: "output/doctor-workbench-8h-20260922/screenshots/mobile-patient-fixed.png" });
+});
+
+
+test("new task stays focused and agenda round-trip preserves draft on desktop and narrow screens", {skip}, async(t)=>{
+  const f=await browserFixture(t);await f.page.goto(f.origin);
+  await f.page.getByRole("heading",{name:"这次需要做什么？"}).waitFor();
+  assert.equal(await f.page.getByRole("region",{name:"今日待办",exact:true}).count(),0);
+  assert.equal(await f.page.getByRole("heading",{name:"继续最近的工作"}).count(),0);
+  const input=f.page.getByRole("textbox",{name:"医疗任务内容",exact:true});
+  assert.ok((await input.boundingBox()).y<400);
+  await input.fill("保留这份未发送的任务草稿");
+  await f.page.getByRole("button",{name:"今日待办",exact:true}).click();
+  await f.page.getByRole("region",{name:"今日待办",exact:true}).waitFor();
+  await f.page.getByRole("button",{name:"返回新建任务",exact:true}).click();
+  assert.equal(await input.inputValue(),"保留这份未发送的任务草稿");
+  await f.page.getByRole("button",{name:"更多场景",exact:true}).click();
+  await f.page.getByRole("button",{name:/出院小结草稿/}).click();
+  assert.match(await input.inputValue(),/出院小结/);
+  await f.page.getByRole("button",{name:"新建任务",exact:true}).click();
+  assert.equal(await input.inputValue(),"");
+  for(const width of [1200,390,320]){
+    await f.page.setViewportSize({width,height:850});
+    assert.ok(await f.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await f.page.screenshot({path:`output/doctor-workbench-8h-20260922/screenshots/new-task-${width}.png`});
+  }
 });

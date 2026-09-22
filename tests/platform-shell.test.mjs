@@ -225,7 +225,7 @@ test(
     );
     await page.waitForSelector(".hub-scenarios", { timeout: 15000 });
     const body = await page.evaluate(() => document.body.innerText);
-    assert.equal(body.includes("你的医疗工作伙伴"), true);
+    assert.equal(body.includes("这次需要做什么？"), true);
     assert.equal(body.includes("接口不存在"), false);
     assert.equal(sessionsStatus, 200);
     assert.deepEqual(pageErrors, []);

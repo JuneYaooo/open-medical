@@ -207,6 +207,7 @@ export function WorkbenchHome({
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("clinical");
+  const [showAgenda, setShowAgenda] = useState(false);
   const [showAllFlows, setShowAllFlows] = useState(false);
   const [runtimeOptions, setRuntimeOptions] = useState(false);
   const [taskType, setTaskType] = useState("medical");
@@ -429,34 +430,16 @@ export function WorkbenchHome({
       )}
       {isHome ? (
         <>
-          <DoctorAgenda onPatient={onPatient} onOpenTask={onOpenTask} onView={onView} />
-          <section className="care-entry" aria-label="医生工作入口">
-            <div>
-              <b>接诊 → 整理 → 复核 → 随访</b>
-              <p>围绕患者持续工作，也可随时开始通用 Agent 任务。</p>
-            </div>
-            <div className="toolbar-actions">
-              <button
-                className="secondary"
-                onClick={() => onPatient({ create: true })}
-              >
-                患者建档
-              </button>
-              <button className="secondary" onClick={() => onView("knowledge")}>
-                构建知识库
-              </button>
-              <button className="secondary" onClick={() => onOpenProjects({})}>
-                通用 Agent
-              </button>
-            </div>
-          </section>
-          <section className={`hub-intro ${patients.length || sessions.length ? "hub-intro-compact" : ""}`}>
-            <div className="hub-intro-mark">
-              <Stethoscope size={25} />
-            </div>
-            <span className="hub-kicker">你的医疗工作伙伴</span>
-            <h1>整理材料、写文书、找依据</h1>
-            <p>选择患者或附上资料，告诉我这次要完成什么。</p>
+          <nav className="hub-start-nav" aria-label="工作入口">
+            <button className="text-button" onClick={() => setShowAgenda(!showAgenda)}>
+              {showAgenda ? "返回新建任务" : "今日待办"}<ArrowRight size={14} />
+            </button>
+            <button className="text-button" onClick={() => onView("tasks")}>任务记录<History size={14} /></button>
+          </nav>
+          {showAgenda ? <DoctorAgenda onPatient={onPatient} onOpenTask={onOpenTask} onView={onView} /> : <>
+          <section className="hub-intro hub-intro-compact">
+            <h1>这次需要做什么？</h1>
+            <p>直接描述需求，或添加材料开始。患者相关任务可关联档案。</p>
           </section>
           <form className="hub-composer" onSubmit={submit}>
             <div className="hub-composer-caption">
@@ -793,9 +776,9 @@ export function WorkbenchHome({
                   ? `将沿用「${selectedPatient.name}」的病例材料直接发起任务，发送后仍可在右侧核对范围。Enter 发送 · Shift + Enter 换行`
                   : "临床任务围绕患者与诊疗材料，AI 产出均为待你复核的草稿。Enter 发送 · Shift + Enter 换行"}
           </p>
-          <section className="hub-scenarios" aria-label="医疗工作场景">
+          <section className={`hub-scenarios ${showAllFlows || category !== "clinical" ? "" : "hub-scenarios-compact"}`} aria-label="医疗工作场景">
             <div className="hub-section-head">
-              <h2>从常用场景开始</h2>
+              <h2>常用场景</h2>
               <div className="hub-category" aria-label="场景分类">
                 <button
                   aria-pressed={category === "clinical"}
@@ -820,6 +803,7 @@ export function WorkbenchHome({
                 <button
                   key={flow.id}
                   className={`hub-scene ${flow.id === flowId ? "selected" : ""}`}
+                  title={flow.desc}
                   aria-pressed={flow.id === flowId}
                   onClick={() => chooseFlow(flow)}
                 >
@@ -835,17 +819,9 @@ export function WorkbenchHome({
                 </button>
               ))}
             </div>
-            {category === "clinical" && <button className="text-button hub-more-flows" onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起更多场景" : "更多场景：住院、交班、不良反应与流程图"}</button>}
+            {category === "clinical" && <button className="text-button hub-more-flows" onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起更多场景" : "更多场景"}</button>}
           </section>
-          <section className="hub-recent">
-            <div className="hub-section-head">
-              <h2>继续最近的工作</h2>
-              <button className="text-button" onClick={() => onView("tasks")}>
-                查看全部 <ArrowRight size={13} />
-              </button>
-            </div>
-            {taskList(4)}
-          </section>
+          </>}
         </>
       ) : (
         <section className="hub-history">

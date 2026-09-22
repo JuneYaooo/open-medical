@@ -4826,3 +4826,18 @@ nav.toolbox .session b{font-weight:500;}
 .proposal-added { background: #ecf5ef; color: #285941; }
 .proposal-removed { background: #fff1eb; color: #874c32; }
 @media (max-width: 620px) { .proposal-comparison { grid-template-columns: 1fr; } }
+
+/* New-task entry: keep composing primary; agenda/history have explicit entrances. */
+.hub-start-nav { display: flex; justify-content: flex-end; gap: 20px; max-width: 900px; margin: 18px auto 0; }
+.hub-start-nav .text-button { display: inline-flex; align-items: center; gap: 6px; }
+.hub-scenarios-compact .hub-scene-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hub-scenarios-compact .hub-scene { min-height: 48px; padding: 10px 12px; flex-direction: row; align-items: center; gap: 10px; background: transparent; }
+.hub-scenarios-compact .hub-scene-icon { margin: 0; width: 26px; height: 26px; background: transparent; flex-shrink: 0; }
+.hub-scenarios-compact .hub-scene p,
+.hub-scenarios-compact .hub-scene small { display: none; }
+.hub-scenarios-compact .hub-scene:hover,
+.hub-scenarios-compact .hub-scene.selected { background: #f0f5ed; }
+@media (max-width: 600px) {
+  .hub-scenarios-compact .hub-scene-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hub-scenarios-compact .hub-scene { padding: 8px; gap: 6px; }
+}
