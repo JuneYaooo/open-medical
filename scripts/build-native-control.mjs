@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 if (process.platform === "darwin") {
   mkdirSync("desktop/bin", { recursive: true });
-  execFileSync(
+  for (const name of ["native-control", "native-ocr"]) execFileSync(
     "swiftc",
-    ["desktop/native-control.swift", "-o", "desktop/bin/native-control"],
+    [`desktop/${name}.swift`, "-o", `desktop/bin/${name}`],
     { stdio: "inherit" },
   );
 }

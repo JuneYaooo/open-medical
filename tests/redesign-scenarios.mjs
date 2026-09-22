@@ -27,11 +27,13 @@ export const SCENARIOS = [
     name: '患者建档 → 左栏/切换器联动，详情页风险与时间线可用',
     fn: async ({ page, seed, origin: _origin }) => {
   await page.locator('.nav-label button', { hasText: "管理" }).click();
-  await page.locator('button:has-text("新建患者")').first().click();
+  await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
+  await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("测试患者甲");
   await page.locator('.modal-form button:has-text("创建患者档案")').click();
   await page.waitForSelector(".detail-head");
   assert.match(await page.locator(".detail-head").innerText(), /测试患者甲/);
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForTimeout(400);
   assert.ok(
     await page
@@ -41,6 +43,7 @@ export const SCENARIOS = [
     "左栏患者列表未出现新患者",
   );
   assert.match(await page.locator(".patient-pill").innerText(), /测试患者甲/);
+  await page.getByRole("button", { name: "诊疗辅助", exact: true }).click();
   assert.ok(await page.locator(".pt-sec", { hasText: "关键事件时间线" }).isVisible());
   // 写入检验 → 评估风险 → 概览出现风险卡
   const patient = (await seed.json("/api/patients")).data.patients[0];
@@ -67,7 +70,8 @@ export const SCENARIOS = [
     fn: async ({ page, seed: _seed, origin: _origin }) => {
   // 先用界面建档
   await page.locator('.nav-label button', { hasText: "管理" }).click();
-  await page.locator('button:has-text("新建患者")').first().click();
+  await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
+  await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("验收流程患者");
   await page.locator('.modal-form button:has-text("创建患者档案")').click();
   await page.waitForSelector(".detail-head");
@@ -133,7 +137,8 @@ export const SCENARIOS = [
     name: '风险 → 一键生成处理建议草稿，跳转会话并预填',
     fn: async ({ page, seed, origin: _origin }) => {
   await page.locator('.nav-label button', { hasText: "管理" }).click();
-  await page.locator('button:has-text("新建患者")').first().click();
+  await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
+  await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("风险流转患者");
   await page.locator('.modal-form button:has-text("创建患者档案")').click();
   await page.waitForSelector(".detail-head");
@@ -176,7 +181,7 @@ export const SCENARIOS = [
     ].join("\n"),
   });
   void work;
-  await page.goto(origin);
+  await page.goto(origin + "/?view=home");
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', {
@@ -252,7 +257,7 @@ export const SCENARIOS = [
   });
   const p = await seed.json("/api/patients", "POST", { name: "知识引用患者" });
   void p;
-  await page.goto(origin);
+  await page.goto(origin + "/?view=home");
   await page.waitForSelector(".app-navigation");
   // 首页一次发送独立任务（本地档位快速完成）
   await page.locator(".app-navigation .new-session").click();
@@ -276,7 +281,7 @@ export const SCENARIOS = [
     name: '@患者：无患者会话中 @ 唤出引用菜单，选中后出速览卡与 chip',
     fn: async ({ page, seed, origin }) => {
   await seed.json("/api/patients", "POST", { name: "引用目标患者", tags: ["糖尿病"] });
-  await page.goto(origin);
+  await page.goto(origin + "/?view=home");
   await page.waitForSelector(".app-navigation");
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("整理一下");
@@ -300,7 +305,7 @@ export const SCENARIOS = [
     name: "出院记录.txt",
     text: "2026-08-12 入院行 PCI。\n2026-08-14 血钾 4.2 mmol/L。\n2026-08-20 出院带药阿司匹林。",
   });
-  await page.goto(origin);
+  await page.goto(origin + "/?view=home");
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "目标卡患者" })
@@ -332,7 +337,7 @@ export const SCENARIOS = [
     name: "出院记录.txt",
     text: "2026-08-12 入院行 PCI。\n2026-08-20 出院。",
   });
-  await page.goto(origin);
+  await page.goto(origin + "/?view=home");
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "记忆标注患者" })
@@ -445,6 +450,7 @@ export const SCENARIOS = [
     await page.locator('.nav-label button:has-text("打开")').click();
     await page.waitForSelector(".tool-slide");
     await page.locator('.ts-menu button:has-text("随访计划")').click();
+    await page.getByRole("button", { name: "计划与模板", exact: true }).click();
     await page.waitForSelector(".tool-slide .followup-apply select");
     await page.locator(".tool-slide .followup-apply select").first().selectOption({ index: 1 });
     await page.locator(".tool-slide .followup-apply select").nth(1).selectOption({ label: "随访模板患者" });
@@ -514,6 +520,7 @@ export const SCENARIOS = [
     void p;
     await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "消息导入患者" }).click();
     await page.waitForSelector(".detail-head");
+    await page.getByRole('button', { name: '沟通与随访', exact: true }).click();
     await page.locator('.tab-row button:has-text("消息记录")').click();
     await page.locator('.paste-box:has-text("粘贴消息记录") textarea').fill("2026-09-07 09:12 | 患者 | 今天血压 150/95，偶有头晕");
     await page.locator('button:has-text("导入到该患者")').click();

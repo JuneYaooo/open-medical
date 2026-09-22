@@ -31,7 +31,7 @@ test(
     const page = await browser.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(f.origin);
+    await page.goto(f.origin + "/?view=home");
     await page
       .locator('.app-navigation nav[aria-label="患者"] .session', {
         hasText: patient.name,

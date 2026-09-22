@@ -632,7 +632,7 @@ export function WorkbenchHome({
                   disabled={attached}
                 >
                   <UserPlus size={15} />
-                  建档
+                  上传资料建档
                 </button>
               )}
               {taskType === "medical" && !isFollowup && (
@@ -652,7 +652,7 @@ export function WorkbenchHome({
                     type="file"
                     multiple
                     hidden
-                    accept=".txt,.md,.csv,.json,.pdf"
+                    accept=".png,.jpg,.jpeg,.webp,.txt,.md,.markdown,.csv,.tsv,.json,.pdf,.xlsx,.docx"
                     onChange={onFilesPicked}
                   />
                   <button

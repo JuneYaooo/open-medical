@@ -1,3 +1,5 @@
+import { IntakeBackground } from "./intake-background";
+import { MaterialDetails } from "./material-details";
 import { patientOptionLabel } from "./patient-labels";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -40,6 +42,7 @@ import {
 } from "./agent-runtime";
 import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import "./style.css";
+import "./business-layout.css";
 import { importMaterial } from "./import-material";
 import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
@@ -531,7 +534,11 @@ function App() {
   const [pickedSkills, setPickedSkills] = useState([]),
     [mention, setMention] = useState(null),
     [mentionIndex, setMentionIndex] = useState(0);
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("view");
+    return ["home", "patients", "followups", "research"].includes(requested) ? requested : "patients";
+  });
+  const [largeText, setLargeText] = useState(() => localStorage.getItem("om.largeText") === "true");
   const [workspaceTarget, setWorkspaceTarget] = useState(null);
   const [activeWsId, setActiveWsId] = useState("");
   const [wsList, setWsList] = useState([]);
@@ -1016,7 +1023,7 @@ function App() {
       setConsent(false);
       await updateSession();
       setTab("materials");
-      setNotice("材料已保存。PDF 仅保存抽取文字，表格顺序和空白页需对照原件。");
+      setNotice("材料已保存。图片保留原图，可用本地 OCR 或视觉模型读取；PDF、Word、Excel 保存抽取文本，请核对来源和缺失信息。");
       if (homePending.current?.id === current.id) {
         const fresh = await api(`/api/sessions/${current.id}`);
         setHomeFileCount(fresh.files.length);
@@ -1154,7 +1161,8 @@ function App() {
       session?.messages.find((m) => m.id === citation.sourceId)?.content
     : null;
   return (
-    <div className="agent-app">
+    <div className={`agent-app ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
+      {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
       <a href="#main" className="skip-link">
         跳到工作区
       </a>
@@ -1255,6 +1263,15 @@ function App() {
           />
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
+          {medical && <>
+            <p className="business-nav-label">医生工作空间</p>
+            <nav className="business-nav" aria-label="主要业务">
+              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "科研", BookOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={21} />{label}</button>)}
+            </nav>
+            <button className="business-agent-link" onClick={() => { setHomeKey(v => v + 1); navigate("home"); }}><MessageSquare size={18} />AI 工作台</button>
+          </>}
+          <details className="advanced-nav" open={!medical || ["home", "workbench", "workspaces", "review"].includes(view)}>
+            <summary>任务、项目与工具</summary>
           <button
             className="new-session"
             onClick={() => {
@@ -1437,6 +1454,8 @@ function App() {
               </button>
             </>
           )}
+          </details>
+          {medical && <div className="business-preferences"><button aria-pressed={largeText} onClick={() => { setLargeText(!largeText); localStorage.setItem("om.largeText", String(!largeText)); }}>Aa · {largeText ? "恢复标准字号" : "大字模式"}</button><button onClick={() => setModal("settings")}>设置与连接</button></div>}
         </aside>
         <div className="product-content">
           {view === "workspaces" ? (
@@ -1453,9 +1472,9 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "patients" ? (
+          ) : view === "patients" && medical ? (
             <PatientsView
-              key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}`}
+              key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}
               initialPatientId={patientRoute.id}
               initialTab={patientRoute.tab}
@@ -1471,11 +1490,11 @@ function App() {
             <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
-          ) : view === "followups" ? (
+          ) : view === "followups" && medical ? (
             <FollowupsView onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
           ) : view === "cases" ? (
             <CasesView />
-          ) : view === "research" ? (
+          ) : view === "research" && medical ? (
             <ResearchView />
           ) : view === "drg" ? (
             <DrgView />
@@ -2105,7 +2124,7 @@ function App() {
                       <button
                         type="button"
                         className="attach-button"
-                        title="添加材料：TXT / Markdown / CSV / JSON / PDF"
+                        title="添加材料：图片 / PDF / Word / Excel / TXT / Markdown / CSV / JSON"
                         onClick={() => fileRef.current?.click()}
                         disabled={busy || uploading || !config}
                       >
@@ -2132,7 +2151,7 @@ function App() {
                         type="file"
                         multiple
                         hidden
-                        accept=".txt,.md,.csv,.json,.pdf"
+                        accept=".png,.jpg,.jpeg,.webp,.txt,.md,.markdown,.csv,.tsv,.json,.pdf,.xlsx,.docx"
                         onChange={upload}
                       />
                       <span className="tb-divider" />
@@ -2400,8 +2419,7 @@ function App() {
                               <h3>原文是每次整理的起点</h3>
                               <p>
                                 支持
-                                TXT、Markdown、CSV、JSON（≤2MB），以及可选文字的
-                                PDF（≤20MB / 300 页）。材料自动建立本地检索索引。
+                                图片（PNG/JPG/WebP，≤4MB）、PDF（≤20MB，文字层最多300页、扫描页最多30页）、Word、Excel（≤20MB）及 TXT、Markdown、CSV、JSON（≤2MB）。扫描资料可使用本地 OCR 读取。
                               </p>
                               <button
                                 className="secondary"
@@ -2479,17 +2497,9 @@ function App() {
                                   {(file.size / 1024).toFixed(1)} KB ·{" "}
                                   {file.text.split("\n").length} 行
                                 </small>
-                                {file.extraction && (
-                                  <small>
-                                    PDF 文本 · {file.extraction.pageCount} 页 ·
-                                    未保存原件
-                                    {file.extraction.emptyPages.length
-                                      ? ` · 第 ${file.extraction.emptyPages.join("、")} 页无文字`
-                                      : ""}
-                                  </small>
-                                )}
+                                <MaterialDetails file={file} sessionId={activeId} />
                                 <p className="file-preview">
-                                  {file.text.slice(0, 110)}
+                                  {file.extraction?.type === "image" ? "原图已保存。提问时可识别病历文字；模糊内容和数值请对照原图核对。" : file.text.replace(/\n\[PDF 第 \d+ 页扫描图\] artifactId:.*$/gm, "").slice(0, 110)}
                                 </p>
                               </div>
                             ))

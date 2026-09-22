@@ -218,7 +218,8 @@ export class AgentRuntime {
       const message = result.message;
       if (!streamed && typeof message.content === "string")
         delta(message.content);
-      messages.push(message);
+      const emptyTruncation = result.stopReason === "max_tokens" && !message.content?.trim() && !message.tool_calls?.length;
+      if (!emptyTruncation) messages.push(message);
       await onTrace({
         type: "model.response",
         round: round + 1,
@@ -235,8 +236,9 @@ export class AgentRuntime {
           messages.push({
             role: "user",
             name: "runtime_control",
-            content:
-              "系统提示：上一条回复达到单轮输出长度上限被截断。请从中断处直接继续输出剩余内容，不要重复已输出部分；如内容已实质完成，用一两句话收尾即可。",
+            content: emptyTruncation
+              ? "系统提示：上一轮输出额度耗尽，没有可用回答；不完整工具调用均未执行。请缩短推理和输出，每次仅提交一个简短、完整的工具调用；重新生成完整参数，不要续接半段 JSON。已保存的工具结果仍有效。"
+              : "系统提示：上一条回复达到单轮输出长度上限被截断。请从中断处直接继续输出剩余内容，不要重复已输出部分；如内容已实质完成，用一两句话收尾即可。",
           });
           await checkpoint(structuredClone(messages));
           emit("message.delta", {
@@ -244,6 +246,7 @@ export class AgentRuntime {
           });
           continue;
         }
+        check(!emptyTruncation, "OUTPUT_LIMIT", "模型连续达到单轮输出上限，尚未生成可用结果；资料和已保存批次笔记仍在，可重试或调整模型输出设置", 502);
         text +=
           "\n\n（输出达到长度上限，以上为已生成的部分内容；回复「继续」可接着生成。）";
       }
@@ -497,8 +500,8 @@ export class AgentRuntime {
         } catch (error) {
           signal.throwIfAborted();
           output = {
-            error: error.code ? error.message : "工具执行失败",
-            code: error.code || "TOOL_ERROR",
+            error: error instanceof SyntaxError ? "工具参数不是有效 JSON，请修正引号、转义和结构后重新调用；本次未执行" : error.code ? error.message : "工具执行失败",
+            code: error instanceof SyntaxError ? "INVALID_TOOL_ARGS" : error.code || "TOOL_ERROR",
           };
           toolEvent = ["tool.failed", {
             tool: call.function.name,

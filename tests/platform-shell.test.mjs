@@ -217,7 +217,9 @@ test(
         sessionsStatus = res.status();
     });
     await page.goto(origin);
-    await page.waitForSelector('nav[aria-label="患者"]', { timeout: 15000 });
+    await page.waitForSelector('nav[aria-label="主要业务"]', { timeout: 15000 });
+    await page.waitForSelector(".patients-view");
+    await page.getByRole("button", { name: "AI 工作台", exact: true }).click();
     assert.match(await page.locator(".brand-caption").innerText(), /医疗工作台/);
     assert.equal(
       await page.locator('nav[aria-label="最近任务"]').count(),

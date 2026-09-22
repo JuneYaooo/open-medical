@@ -47,7 +47,7 @@ export async function api(path, options = {}, dataOrRetried = false) {
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `请求失败（${res.status}）`);
+    throw Object.assign(new Error(data.error || `请求失败（${res.status}）`), { code: data.code, status: res.status });
   }
   return options.raw ? res : res.json();
 }

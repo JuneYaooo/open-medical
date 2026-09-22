@@ -39,13 +39,13 @@ test(
       })
     ).data;
     f.server.followups.createReminder(patient, job, "待联系患者并登记反馈");
-    await f.page.goto(f.origin);
+    await f.page.goto(f.origin + "/?view=home");
     await f.page
       .locator('.app-navigation nav[aria-label="患者"] .session', {
         hasText: patient.name,
       })
       .click();
-    await f.page.getByRole("button", { name: /1 · 完善档案/ }).click();
+    await f.page.getByRole("button", { name: "临床资料", exact: true }).click();
     await f.page.getByPlaceholder("药名", { exact: true }).fill("测试药品");
     await f.page.route(`**/api/patients/${patient.id}`, async (route) => {
       if (route.request().method() !== "PATCH") return route.continue();
@@ -70,6 +70,7 @@ test(
       0,
     );
     await f.page.unroute(`**/api/patients/${patient.id}`);
+    await f.page.getByRole("button", { name: "沟通与随访", exact: true }).click();
     await f.page.getByRole("button", { name: "随访计划", exact: true }).click();
     await f.page.getByRole("button", { name: "登记结果", exact: true }).click();
     await f.page
@@ -98,7 +99,8 @@ test(
         hasText: patient.name,
       })
       .click();
-    await f.page.getByRole("button", { name: /4 · 随访与反馈/ }).click();
+    await f.page.getByRole("button", { name: "沟通与随访", exact: true }).click();
+    await f.page.getByRole("button", { name: "随访计划", exact: true }).click();
     await f.page.getByRole("button", { name: /^随访记录/ }).click();
     await f.page
       .getByText("已核实患者反馈，保留随访记录。", { exact: true })
@@ -116,10 +118,10 @@ test(
   { skip },
   async (t) => {
     const f = await browserFixture(t);
-    await f.page.goto(f.origin);
-    await f.page
-      .getByRole("button", { name: "构建知识库", exact: true })
-      .click();
+    await f.page.goto(f.origin + "/?view=home");
+    await f.page.getByRole("button", { name: "打开", exact: true }).click();
+    await f.page.getByRole("button", { name: /知识库/ }).click();
+    await f.page.getByRole("button", { name: /^整页打开/ }).click();
     await f.page.locator('.guidelines-view input[type="file"]').setInputFiles({
       name: "随访记录规范.txt",
       mimeType: "text/plain",

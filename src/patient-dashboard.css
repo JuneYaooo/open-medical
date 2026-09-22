@@ -1,0 +1,65 @@
+.patient-dashboard { color:var(--ink); margin-bottom:28px; min-width:0; }
+.chart-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:4px 0 24px; }
+.chart-heading h2 { font-size:26px; letter-spacing:-.6px; margin:6px 0 8px; }
+.chart-heading p,.chart-section header p { margin:0; color:#64766c; font-size:12px; line-height:1.7; }
+.chart-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); background:#eaf1eb; border-radius:12px; padding:20px 0; margin-bottom:24px; }
+.chart-metrics a { color:inherit; text-decoration:none; display:flex; align-items:center; gap:12px; padding:0 22px; border-right:1px solid #d5e1d6; font-size:12px; }
+.chart-metrics a:last-child { border:0; }
+.chart-metrics a:hover { color:var(--accent); }
+.chart-metrics b { display:block; font-size:28px; font-variant-numeric:tabular-nums; line-height:1.4; }
+.chart-metrics small { font-size:11px; font-weight:400; color:#64766c; }
+.chart-history { padding:24px 28px; background:#fff; border-left:3px solid var(--accent); margin-bottom:24px; }
+.chart-history h3,.chart-section h3 { margin:0; font-size:17px; }
+.chart-history p { font-size:14px; line-height:1.95; white-space:pre-wrap; overflow-wrap:anywhere; margin:14px 0 0; max-width:90ch; }
+.chart-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.chart-tags span { background:var(--soft); padding:4px 9px; font-size:12px; }
+.chart-columns { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:24px; align-items:start; }
+.chart-section { background:#fff; padding:24px; border-radius:10px; margin-bottom:24px; min-width:0; scroll-margin-top:24px; }
+.chart-section>header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-bottom:18px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.chart-section header>small { color:#64766c; font-size:11px; flex-shrink:0; }
+.chart-problems,.chart-meds { list-style:none; margin:0; padding:0; }
+.chart-problems li,.chart-meds li { padding:14px 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+.chart-problems li:last-child,.chart-meds li:last-child { border:0; padding-bottom:0; }
+.chart-problems li:first-child,.chart-meds li:first-child { padding-top:0; }
+.chart-problems b,.chart-meds b { font-size:14px; line-height:1.7; }
+.chart-problems small { display:block; font-size:11px; color:#64766c; margin-top:4px; }
+.chart-source { margin-top:7px; font-size:11px; color:#64766c; }
+.chart-source summary { cursor:pointer; }
+.chart-source p { overflow-wrap:anywhere; line-height:1.7; margin-bottom:0; }
+.chart-allergies { background:var(--soft); padding:14px; margin-bottom:20px; font-size:12px; }
+.chart-allergies.recorded { background:#faf0e3; }
+.chart-allergies p { margin:6px 0 0; }
+.chart-med-title { display:flex; justify-content:space-between; gap:10px; }
+.chart-med-status { font-size:10px; flex-shrink:0; padding:3px 7px; background:var(--soft); height:fit-content; }
+.chart-med-status.active { color:var(--accent); background:#eaf2eb; }
+.chart-med-status.stopped { color:#65716a; }
+.chart-meds p { font-size:12px; line-height:1.7; margin:6px 0; }
+.chart-empty { color:#64766c; font-size:13px; line-height:1.8; padding:10px 0; }
+.chart-lab-picker { display:flex; align-items:center; gap:16px; font-size:12px; }
+.chart-lab-picker select { max-width:100%; min-width:0; padding:8px 12px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+.chart-lab-summary { display:flex; justify-content:space-between; gap:16px; margin:24px 0 4px; }
+.chart-lab-summary span { font-size:12px; color:#64766c; }
+.chart-labs svg { width:100%; max-height:260px; display:block; }
+.chart-labs svg text { fill:#64766c; font-size:12px; font-variant-numeric:tabular-nums; }
+.chart-table-wrap { overflow:auto; margin-top:18px; }
+.chart-table-wrap table { border-collapse:collapse; width:100%; font-size:12px; text-align:left; font-variant-numeric:tabular-nums; }
+.chart-table-wrap caption { text-align:left; padding:0 0 10px; color:#64766c; }
+.chart-table-wrap th,.chart-table-wrap td { border-bottom:1px solid var(--border); padding:10px 12px; vertical-align:top; }
+.chart-table-wrap th { background:var(--soft); font-weight:500; }
+.chart-table-wrap td:last-child { max-width:360px; overflow-wrap:anywhere; }
+.chart-timeline { list-style:none; padding:0; margin:0; }
+.chart-timeline li { position:relative; border-left:1px solid #ceddd1; padding:0 0 26px 20px; margin-left:5px; }
+.chart-timeline li:before { content:''; position:absolute; width:7px; height:7px; background:var(--accent); border-radius:50%; left:-4px; top:5px; }
+.chart-timeline time { font-size:11px; color:#64766c; font-variant-numeric:tabular-nums; }
+.chart-timeline h4 { font-size:14px; margin:8px 0; line-height:1.7; }
+.chart-timeline p { font-size:12px; line-height:1.9; margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.chart-source-search { display:flex; flex-direction:column; gap:8px; font-size:12px; }
+.chart-source-search input { padding:10px; border:1px solid var(--border); border-radius:6px; width:100%; }
+.chart-files { max-height:650px; overflow:auto; margin-top:12px; }
+.chart-files>details { padding:12px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.chart-files>details>summary { display:flex; align-items:center; gap:8px; cursor:pointer; overflow-wrap:anywhere; }
+.chart-files>details>summary svg { flex-shrink:0; }
+.chart-files pre { white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:12px; line-height:1.8; background:var(--soft); padding:12px; max-height:400px; overflow:auto; }
+.chart-files details details { margin-top:10px; }
+@media(max-width:850px) { .chart-columns { grid-template-columns:1fr; gap:0; } .chart-heading { flex-wrap:wrap; } .chart-metrics a { padding:0 12px; gap:8px; } }
+@media(max-width:520px) { .chart-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 0; } .chart-metrics a:nth-child(2) { border:0; } .chart-section,.chart-history { padding:18px; } .chart-lab-picker { flex-direction:column; align-items:stretch; gap:8px; } }

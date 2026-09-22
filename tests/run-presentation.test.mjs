@@ -296,7 +296,7 @@ test(
     const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
     const pageErrors = [];
     page.on("pageerror", (err) => pageErrors.push(err.message));
-    await page.goto(origin);
+    await page.goto(origin + "/?view=home");
     await page.waitForSelector('nav[aria-label="最近任务"]', { timeout: 15000 });
 
     // 打开注入的旧内核会话，进入工作台对话

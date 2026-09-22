@@ -152,6 +152,10 @@ export async function runTool(
   args = {},
   {
     sources = [],
+    sourceSessionId,
+    sourceFileIds,
+    sourceInput,
+    patientId,
     intent,
     skills,
     definitions = TOOL_DEFINITIONS,
@@ -224,6 +228,10 @@ export async function runTool(
     const result = await plugins
       .get(name)
       .execute(args, {
+        sourceSessionId,
+        sourceFileIds,
+        sourceInput,
+        patientId,
         sources: sources.map((s) => ({
           id: s.id,
           name: s.name,

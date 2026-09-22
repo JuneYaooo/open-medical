@@ -219,7 +219,8 @@ export class DeepSeekProvider {
           // 截断流里的工具参数可能是半截 JSON：无法解析的调用直接丢弃，
           // 避免执行层炸掉；参数完整的调用照常执行。
           try {
-            JSON.parse(call.function.arguments || "{}");
+            if (!call.function.arguments?.trim()) return false;
+            JSON.parse(call.function.arguments);
             return true;
           } catch {
             return false;
@@ -239,7 +240,7 @@ export class DeepSeekProvider {
       502,
     );
     check(
-      content.trim() || usableCalls.length,
+      truncated || content.trim() || usableCalls.length,
       truncated ? "INCOMPLETE_STREAM" : "EMPTY_OUTPUT",
       truncated ? "模型达到输出上限，且没有可交付的内容" : "模型没有返回内容",
       502,
@@ -474,7 +475,12 @@ function anthropicMessages(messages) {
           type: "tool_use",
           id: call.id,
           name: call.function.name,
-          input: JSON.parse(call.function.arguments),
+          // The previous call may have failed JSON parsing. Preserve its raw
+          // arguments for model repair without crashing history serialization.
+          input: (() => {
+            try { const value = JSON.parse(call.function.arguments); if (value && typeof value === "object" && !Array.isArray(value)) return value; } catch {}
+            return { invalid_json_arguments: call.function.arguments };
+          })(),
         });
       out.push({ role: "assistant", content });
       continue;
@@ -676,7 +682,8 @@ export class AnthropicProvider {
           // 截断流里的工具参数可能是半截 JSON：无法解析的调用直接丢弃；
           // 参数完整的调用照常执行。
           try {
-            JSON.parse(call.function.arguments || "{}");
+            if (!call.function.arguments?.trim()) return false;
+            JSON.parse(call.function.arguments);
             return true;
           } catch {
             return false;
@@ -696,10 +703,10 @@ export class AnthropicProvider {
       502,
     );
     check(
-      content.trim() || usableCalls.length,
+      truncated || content.trim() || usableCalls.length,
       truncated ? "INCOMPLETE_STREAM" : "EMPTY_OUTPUT",
       truncated
-        ? "Claude 达到输出上限，且没有可交付的内容"
+        ? "模型达到输出上限，且没有可交付的内容"
         : "模型没有返回内容",
       502,
     );

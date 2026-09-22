@@ -69,6 +69,7 @@ for (const scenario of SCENARIOS) {
   if (scenario.desktopSkip) continue; // 桌面端下载行为不同，跳过
   test(`桌面 · ${scenario.name}`, { skip: !canRun }, async (t) => {
     const { page, seed, origin } = await openDesktopApp(t);
+    await page.goto(origin + "/?view=home");
     await scenario.fn({ page, seed, origin });
   });
 }

@@ -3,7 +3,7 @@
 export async function extractPdfText(
   bytes,
   getDocument,
-  { timeoutMs = 60000, maxPages = 300, maxChars = 400000, pdfOptions = {} } = {},
+  { timeoutMs = 60000, maxPages = 300, maxChars = 400000, allowEmpty = false, pdfOptions = {} } = {},
 ) {
   if (bytes.byteLength > 20 * 1024 * 1024)
     throw new Error("PDF 超过 20MB，请拆分后导入");
@@ -40,7 +40,7 @@ export async function extractPdfText(
       page.cleanup();
     }
     const emptyPages = pages.filter((p) => !p.text).map((p) => p.page);
-    if (emptyPages.length === pages.length)
+    if (!allowEmpty && emptyPages.length === pages.length)
       throw new Error(
         "PDF 没有可提取文字，可能是扫描件。请先进行 OCR 并核对结果后再导入",
       );

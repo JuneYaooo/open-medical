@@ -90,6 +90,7 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
       "出院医嘱：低盐低脂饮食，一个月后门诊复查。",
     ].join("\n"),
   });
+  await page.goto(origin + "/?view=home");
   // 打开病例工作区
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', {

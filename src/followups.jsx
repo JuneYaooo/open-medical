@@ -24,6 +24,7 @@ const fmtDue = (value) => {
 // Follow-up management across all patients: apply plan templates, track the
 // schedule (due / upcoming), and acknowledge fired reminders.
 export function FollowupsView({ onOpenPatient }) {
+  const [section, setSection] = useState("queue");
   const [plans, setPlans] = useState([]);
   const [patients, setPatients] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -144,7 +145,9 @@ export function FollowupsView({ onOpenPatient }) {
         )}
         {notice && <p className="form-notice">{notice}</p>}
 
-        <FollowupRecords onChanged={refresh} onOpenPatient={onOpenPatient} />
+        <nav className="tab-row business-tabs" aria-label="随访工作内容"><button className={section === "queue" ? "active" : ""} onClick={() => setSection("queue")}>随访待办</button><button className={section === "plans" ? "active" : ""} onClick={() => setSection("plans")}>计划与模板</button></nav>
+        <div hidden={section !== "queue"}><FollowupRecords onChanged={refresh} onOpenPatient={onOpenPatient} /></div>
+        <div hidden={section !== "plans"}>
 
         <section className="followups-section">
           <h3>应用随访模板</h3>
@@ -420,6 +423,7 @@ export function FollowupsView({ onOpenPatient }) {
             )}
           </ul>
         </section>
+        </div>
       </section>
     </div>
   );

@@ -45,9 +45,9 @@ export function ComposerTools({
         throw new Error("每次最多添加 5 份材料");
       const result = [];
       for (const f of files) {
-        if (/^image\/(png|jpeg|webp)$/.test(f.type)) {
-          if (f.size > 600000)
-            throw new Error("上传图片限 600KB；更大的图片可放在项目目录中引用");
+        if (/\.(png|jpe?g|webp)$/i.test(f.name) || /^image\/(png|jpeg|webp)$/.test(f.type)) {
+          if (f.size > 4000000)
+            throw new Error("上传图片限 4MB；更大的图片可放在项目目录中引用");
           const bytes = new Uint8Array(await f.arrayBuffer());
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -63,12 +63,19 @@ export function ComposerTools({
           continue;
         }
         if (
-          !/\.(txt|md|csv|json|log|ya?ml|pdf|js|ts|jsx|tsx|py|html|css)$/i.test(
+          !/\.(txt|md|csv|json|log|ya?ml|pdf|docx|xlsx|tsv|markdown|js|ts|jsx|tsx|py|html|css)$/i.test(
             f.name,
           )
         )
-          throw new Error("支持 PNG、JPEG、WebP、文本、代码和有文字层的 PDF");
+          throw new Error("支持 PNG、JPEG、WebP、Word、Excel、文本、代码和有文字层的 PDF");
         const material = await importMaterial(f);
+        if (material.pageImages?.length) {
+          for (const page of material.pageImages) {
+            const image = await api(`/api/workspaces/${current.id}/images`, "POST", { name: `PDF-page-${page.page}.jpg`, data: page.data });
+            material.text += `\n[PDF 第 ${page.page} 页扫描图] artifactId: ${image.id}，请使用 inspect_image 读取。`;
+          }
+          delete material.pageImages;
+        }
         if (material.text.includes("\0"))
           throw new Error("不能将二进制文件作为文本导入");
         result.push(material);
@@ -115,7 +122,7 @@ export function ComposerTools({
         type="file"
         ref={file}
         multiple
-        accept=".png,.jpg,.jpeg,.webp,.txt,.md,.csv,.json,.pdf,.log,.yaml,.yml,.js,.ts,.jsx,.tsx,.py,.html,.css"
+        accept=".png,.jpg,.jpeg,.webp,.txt,.md,.csv,.json,.pdf,.docx,.xlsx,.tsv,.markdown,.log,.yaml,.yml,.js,.ts,.jsx,.tsx,.py,.html,.css"
         onChange={(e) => {
           attach([...e.target.files]);
           e.target.value = "";

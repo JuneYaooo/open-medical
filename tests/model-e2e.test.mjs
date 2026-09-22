@@ -32,7 +32,7 @@ async function openApp(t) {
   });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
-  await page.goto(f.origin);
+  await page.goto(f.origin + "/?view=home");
   await page.waitForSelector(".app-navigation", { timeout: 15000 });
   return { f, page };
 }

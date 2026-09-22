@@ -149,7 +149,7 @@ async function verify() {
       if (!(await response.text()).includes('"type":"message.complete"'))
         throw new Error("Packaged OS sandbox failed");
     }
-    await window.loadURL(origin);
+    await window.loadURL(origin + "/?view=home");
     // Wait for the real renderer to finish fetching its initial state.
     const deadline = Date.now() + 15000;
     let state;

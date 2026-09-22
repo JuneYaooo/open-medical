@@ -1,3 +1,4 @@
+import { PatientDashboard } from "./patient-dashboard";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { FollowupRecords } from "./followup-records";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import { RiskList, Timeline } from "./ui";
 import { PatientBriefPanel } from "./patient-brief";
 import { PatientIdentityModal } from "./patient-identity";
 import { PatientProposalModal } from "./patient-proposal";
+import { PatientIntakeModal } from "./patient-intake";
 import { PatientImportModal } from "./patient-import";
 import { CareTasksPanel } from "./care-tasks";
 import { ClinicalPanel } from "./patient-clinical";
@@ -121,12 +123,15 @@ export function PatientsView({
   initialCreate = false,
   initialImport = false,
 }) {
+  const panelRoot = useRef(null);
+  const listScroll = useRef(0);
   const [patients, setPatients] = useState([]);
   const patientGeneration = useRef(0);
   const [reminders, setReminders] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState("overview");
+  useEffect(() => { panelRoot.current?.scrollTo({ top: detail ? 0 : listScroll.current }); }, [detail?.id]);
   const [messages, setMessages] = useState([]);
   const [followups, setFollowups] = useState([]);
   const [risks, setRisks] = useState([]);
@@ -182,6 +187,7 @@ export function PatientsView({
     return list.patients;
   };
   const openPatient = async (id, nextTab = "overview") => {
+    if (!detail) listScroll.current = panelRoot.current?.scrollTop || 0;
     const version = ++patientGeneration.current;
     setError("");
     setTab(nextTab);
@@ -453,13 +459,13 @@ export function PatientsView({
       ))}
       {!filtered.length && (
         <p className="sidebar-empty">
-          {patients.length ? "没有匹配的患者，请尝试其他姓名、编号或分组。" : "还没有在管患者。点击「新建患者」并导入病例材料开始。"}
+          {patients.length ? "没有匹配的患者，请尝试其他姓名、编号或分组。" : "还没有在管患者。点击「上传资料建档」，自动解析病例并核对结果。"}
         </p>
       )}
     </div>
   );
   return (
-    <section id="main" className="patients-view" aria-label="患者档案">
+    <section ref={panelRoot} id="main" className="patients-view" aria-label="患者档案">
       <div className="patients-toolbar">
         <div>
           <h2>{detail ? detail.name : "患者管理"}</h2>
@@ -493,7 +499,7 @@ export function PatientsView({
           <div className="toolbar-actions">
             <button className="secondary" onClick={() => setModal("import-patients")}>导入已有患者</button>
             <button className="primary" onClick={() => setModal("new-patient")}>
-              <UserPlus size={15} /> 新建患者
+              <UserPlus size={15} /> 上传资料建档
             </button>
           </div>
         )}
@@ -667,6 +673,7 @@ export function PatientsView({
             </span>
             <div className="toolbar-actions">
               <button className="secondary" onClick={() => setModal("edit-patient")}>编辑信息</button>
+              {tab === "assistance" && <>
               <button
                 className="secondary"
                 onClick={() => runTask(ORGANIZE_PROMPT, { mode: "model" })}
@@ -691,6 +698,7 @@ export function PatientsView({
               >
                 <Stethoscope size={14} /> 评估治疗方案
               </button>
+              </>}
               <IconButton title={detail.archived ? "恢复患者" : "归档患者"} onClick={archive}>
                 <FolderOpen size={16} />
               </IconButton>
@@ -699,7 +707,7 @@ export function PatientsView({
               </IconButton>
             </div>
           </div>
-          {config?.modelConfigured && (
+          {config?.modelConfigured && tab !== "overview" && (
             <label className="consent">
               <input
                 type="checkbox"
@@ -710,29 +718,20 @@ export function PatientsView({
               总结均需勾选）。
             </label>
           )}
-          <div className="tab-row">
-            {[
-              ["overview", "概览"],
-              ["clinical", "临床资料"],
-              [
-                "messages",
-                `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`,
-              ],
-              ["followups", "随访计划"],
-              ["tracking", "检查与转诊"],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                className={tab === id ? "active" : ""}
-                onClick={() => setTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <nav className="tab-row patient-area-tabs" aria-label="患者工作内容">
+            <button className={["overview", "clinical"].includes(tab) ? "active" : ""} onClick={() => setTab("overview")}>患者档案</button>
+            <button className={["messages", "followups", "tracking"].includes(tab) ? "active" : ""} onClick={() => setTab("messages")}>沟通与随访</button>
+            <button className={tab === "assistance" ? "active" : ""} onClick={() => setTab("assistance")}>诊疗辅助</button>
+          </nav>
+          {tab !== "assistance" && <nav className="tab-row patient-section-tabs" aria-label="患者栏目">
+            {(["overview", "clinical"].includes(tab) ? [["overview", "概览"], ["clinical", "临床资料"]] : [["messages", `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`], ["followups", "随访计划"], ["tracking", "检查与转诊"]]).map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+          </nav>}
           {tab === "tracking" && <CareTasksPanel key={detail.id} patient={detail} onChanged={onChanged} />}
-          {tab === "overview" && (
+          {["overview", "assistance"].includes(tab) && (
             <div className="detail-panel">
+              {tab === "overview" && <PatientDashboard key={detail.id} patient={detail} session={session} onClinical={() => setTab("clinical")} onOpenWorkspace={onOpenWorkspace} />}
+              {tab === "assistance" && <>
+              <button className="secondary" onClick={() => onOpenWorkspace(detail.sessionId, { draft: "请结合当前患者档案和病例材料，检索本地相似患者与网上病例报告。先读取最新档案，核对主要疾病或综合征；联网仅发送脱敏医学关键词。分别展示来源、相似点、差异、证据缺口和可供医生考虑的鉴别线索。" })}>检索相似病例 · 本地与网上</button>
               <PatientBriefPanel patient={detail} onOpenTask={onOpenWorkspace} onNavigate={setTab} onEditIdentity={() => setModal("edit-patient")} />
               <section className="care-path" aria-label="患者工作流程">
                 <h3>继续处理这位患者</h3>
@@ -771,6 +770,7 @@ export function PatientsView({
                   </button>
                 </div>
               </section>
+              </>}
               <p className="muted">
                 风险提示仅覆盖内置规则；检验名称、单位不匹配时不套用阈值，未提示不代表无风险。
               </p>
@@ -843,6 +843,7 @@ export function PatientsView({
                   ))}
                 </div>
               )}
+              {tab === "assistance" && <>
               <div className="pt-sec">
                 <div className="s-t">
                   关键事件时间线
@@ -912,6 +913,7 @@ export function PatientsView({
               <p className="boundary">
                 评估与摘要只是待复核草稿：内置用药与检验规则覆盖有限，不构成诊疗决定。
               </p>
+              </>}
             </div>
           )}
           {tab === "clinical" && (
@@ -1108,7 +1110,8 @@ export function PatientsView({
           )}
         </>
       )}
-      {modal === "new-patient" && (
+      {modal === "new-patient" && <PatientIntakeModal configured={config?.modelConfigured} onClose={() => setModal(null)} onManual={() => setModal("manual-patient")} onOpenWorkspace={(id) => { setModal(null); onOpenWorkspace(id); }} onCreated={async (patient) => { setModal(null); await refresh(); await openPatient(patient.id); }} />}
+      {modal === "manual-patient" && (
         <NewPatientModal
           onClose={() => setModal(null)}
           onCreated={async (patient) => {

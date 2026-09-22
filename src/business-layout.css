@@ -1,0 +1,63 @@
+/* Business navigation and readable clinical pages, shared by standard/large text. */
+.medical-shell { --reading-size:18px; --body-size:16px; --meta-size:14px; --control-size:16px; }
+.medical-shell.large-text { --reading-size:22px; --body-size:20px; --meta-size:18px; --control-size:18px; }
+.business-nav-label { margin:20px 12px 14px; color:#65766d; font-size:14px; }
+.business-nav { display:grid; gap:8px; }
+.business-nav button { display:flex; align-items:center; gap:14px; background:transparent; border:0; border-radius:7px; padding:14px 16px; min-height:52px; text-align:left; color:var(--ink); font-size:18px; }
+.business-nav button.active { background:#e2ecdf; color:#215439; font-weight:600; }
+.business-nav button:hover,.business-agent-link:hover { background:#eaf0e6; }
+.business-agent-link { display:flex; align-items:center; gap:12px; padding:13px 16px; margin-top:22px; border:0; background:transparent; color:var(--accent); font-size:16px; text-align:left; min-height:44px; }
+.advanced-nav { margin-top:18px; min-height:0; overflow:auto; }
+.advanced-nav>summary { padding:12px; font-size:14px; color:#65766d; cursor:pointer; min-height:44px; }
+.advanced-nav[open] { flex:1; }
+.advanced-nav .new-session { margin-top:12px; }
+.business-preferences { margin-top:auto; padding-top:20px; display:grid; gap:8px; }
+.business-preferences button { padding:12px; font-size:14px; background:transparent; border:0; text-align:left; color:#52665a; min-height:44px; }
+.business-preferences button[aria-pressed=true] { background:var(--soft); color:var(--accent); }
+.agent-app:not(.medical-shell) .advanced-nav>summary { display:none; }
+.medical-shell :is(button,input,select,textarea):focus-visible { outline:3px solid #4f9679; outline-offset:3px; }
+.medical-shell :is(.patients-view,.module-view) { font-size:var(--body-size); }
+.medical-shell :is(.patients-view,.module-view) :is(button,input,select,textarea) { font-size:var(--control-size); min-height:44px; }
+.medical-shell :is(.patients-view,.module-view) :where(p,label,td,li,.job-main>b,.patient-line>b) { font-size:var(--body-size); line-height:1.8; }
+.medical-shell :is(.patients-view,.module-view) :is(small,.muted,.module-phase,.patient-tags em,th) { font-size:var(--meta-size); line-height:1.7; color:#607269; }
+.medical-shell .patients-view { padding:28px 32px; }
+.medical-shell .patients-toolbar { margin-bottom:24px; }
+.medical-shell .patient-grid { grid-template-columns:1fr; gap:0; background:white; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.medical-shell .patient-card { border-radius:0; border-width:0 0 1px; box-shadow:none; padding:18px 20px; }
+.medical-shell .patient-card:last-child { border-bottom:0; }
+.medical-shell .patient-area-tabs { gap:24px; margin-top:18px; }
+.medical-shell .patient-area-tabs button { padding:12px 0; }
+.medical-shell .patient-section-tabs { border:0; gap:10px; margin:14px 0 20px; }
+.medical-shell .patient-section-tabs button { font-size:var(--meta-size); padding:8px 12px; border:0; }
+.medical-shell .patient-section-tabs button.active { background:var(--soft); border-radius:5px; }
+.medical-shell .patient-dashboard { background:white; border:1px solid var(--border); border-radius:9px; padding:26px 28px; }
+.medical-shell .chart-heading { padding:0 0 20px; }
+.medical-shell .chart-heading h2 { font-size:26px; }
+.medical-shell .chart-heading p { font-size:var(--meta-size); }
+.medical-shell .chart-metrics { border-radius:0; background:transparent; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:18px 0; }
+.medical-shell .chart-metrics a { font-size:var(--meta-size); padding:0 16px; }
+.medical-shell .chart-metrics b { font-size:24px; }
+.medical-shell .chart-history { border:0; padding:4px 0 26px; border-bottom:1px solid var(--border); }
+.medical-shell .chart-history p { font-size:var(--reading-size); line-height:1.85; max-width:72ch; }
+.medical-shell .chart-section { padding:10px 0 26px; border-radius:0; background:transparent; margin-bottom:12px; }
+.medical-shell .chart-columns { gap:32px; }
+.medical-shell .chart-section h3 { font-size:20px; }
+.medical-shell .chart-section :is(p,b,h4) { font-size:var(--body-size); line-height:1.8; }
+.medical-shell .chart-section :is(small,summary,time,.chart-med-status,.chart-lab-summary span,.chart-source,.chart-section header p) { font-size:var(--meta-size); line-height:1.7; }
+.medical-shell .chart-meds li,.medical-shell .chart-problems li { padding:18px 0; }
+.medical-shell .chart-labs { border-top:1px solid var(--border); padding-top:24px; }
+.medical-shell .chart-labs svg text { font-size:14px; }
+.medical-shell .chart-table-wrap :is(td,th) { font-size:var(--meta-size); padding:14px; }
+.medical-shell .chart-files pre { font-size:var(--reading-size); line-height:1.85; }
+.medical-shell .chart-source-search { font-size:var(--meta-size); }
+.medical-shell .chart-bottom { border-top:1px solid var(--border); padding-top:24px; }
+.medical-shell .business-tabs { margin-bottom:26px; gap:24px; }
+.medical-shell .followups-section { border:0; box-shadow:none; margin-top:28px; padding-top:24px; border-top:1px solid var(--border); }
+.medical-shell .module-view>.module-card { box-shadow:none; max-width:1280px; margin:auto; padding:28px 32px; }
+.medical-shell .module-head h1 { font-size:28px; }
+.medical-shell .job-list>li { padding:18px 0; }
+.medical-shell.large-text .business-nav button { font-size:20px; }
+.medical-shell.large-text .business-preferences button { font-size:16px; }
+@media(max-width:1000px) { .medical-shell .chart-columns { grid-template-columns:1fr; gap:0; } .medical-shell .patients-view { padding:24px; } }
+@media(max-width:640px) { .medical-shell .patients-view,.medical-shell .module-view>.module-card { padding:18px; } .medical-shell .patient-dashboard { padding:20px 16px; } .medical-shell .patient-area-tabs { gap:18px; overflow:auto; } .medical-shell .patient-area-tabs button { white-space:nowrap; } .medical-shell .chart-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 0; } }
+@media(prefers-reduced-motion:reduce) { .medical-shell * { scroll-behavior:auto!important; } }

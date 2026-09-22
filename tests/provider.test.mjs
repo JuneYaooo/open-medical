@@ -672,3 +672,27 @@ test("anthropic max_tokens truncation delivers partial content instead of failin
   assert.equal(result.message.content, "报告已写一半");
   assert.equal(result.stopReason, "max_tokens");
 });
+
+test('anthropic continues after malformed JSON tool arguments instead of crashing while serializing history', async () => {
+  const { AnthropicProvider } = await import('../server/provider.mjs');
+  let request;
+  const provider = new AnthropicProvider({ apiKey: 'synthetic', baseUrl: 'https://model.example', model: 'synthetic', fetchImpl: async (_url, options) => {
+    request = JSON.parse(options.body);
+    const frames = [
+      { type: 'message_start', message: { usage: { input_tokens: 1 } } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '请修正 JSON' } },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 3 } },
+      { type: 'message_stop' },
+    ];
+    return new Response(frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
+  } });
+  const malformed = '{"note":"原文"未转义""}';
+  const result = await provider.complete([
+    { role: 'user', content: '整理合成患者' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'invalid', type: 'function', function: { name: 'patient_create_propose', arguments: malformed } }] },
+    { role: 'tool', tool_call_id: 'invalid', content: '{"error":"invalid JSON","code":"INVALID_TOOL_ARGS"}' },
+  ], []);
+  assert.equal(result.message.content, '请修正 JSON');
+  assert.equal(request.messages[1].content[0].input.invalid_json_arguments, malformed);
+  assert.equal(request.messages[2].content[0].tool_use_id, 'invalid');
+});

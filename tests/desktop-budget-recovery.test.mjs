@@ -28,7 +28,7 @@ test('consultation executes a zero-argument medical plugin and execution history
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(f.origin);
+  await page.goto(f.origin + "/?view=home");
   await page.getByRole('button', {name: /预算恢复验证/}).first().click();
   await page.getByRole('tab', {name: '执行记录', exact: true}).click();
   await page.getByText('执行过程', {exact:true}).waitFor();
@@ -44,7 +44,7 @@ test('model settings UI rejects full-window output for both save and probe, then
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(f.origin);
+  await page.goto(f.origin + "/?view=home");
   await page.getByRole('button', {name: /deepseek/, exact: false}).first().click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('服务商 / 接口协议').selectOption('local');

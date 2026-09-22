@@ -995,9 +995,9 @@ export class MedicalRuntime {
     );
     const name = string(body.name, "文件名", 180);
     check(
-      /\.(txt|md|csv|json|pdf)$/i.test(name),
+      /\.(txt|md|markdown|csv|tsv|json|pdf|docx|xlsx)$/i.test(name),
       "FILE_TYPE",
-      "当前支持 TXT、Markdown、CSV、JSON 和 PDF 抽取文本",
+      "支持 TXT、Markdown、CSV、TSV、JSON、PDF、Word 和 Excel 抽取文本；图片请在新会话上传",
     );
     const raw = string(body.text, "文件内容", 400000);
     check(Buffer.byteLength(raw) <= 2000000, "FILE_SIZE", "文件超过 2MB");

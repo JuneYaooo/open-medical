@@ -1,3 +1,4 @@
+import { IntakeJobs } from "./medical/intake-jobs.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
 import { homedir, tmpdir } from "node:os";
@@ -34,6 +35,7 @@ import { PatientImporter } from "./medical/patient-import.mjs";
 import { CareTasks } from "./medical/care-tasks.mjs";
 import { DoctorOverview } from "./medical/doctor-overview.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
+import { onlineCaseTools } from "./medical/online-cases.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 import {
   ResearchService,
@@ -213,6 +215,15 @@ export function createServer(options = {}) {
     patients: () => patients,
     followups: () => followups,
     cases: () => cases,
+    copySourceMaterials: (sourceId, targetId, fileIds, sourceInput) => {
+      const source = sessionBridge.get(sourceId);
+      if (sourceInput) sessionBridge.addMaterial(targetId, { name: "建档时的对话输入.txt", text: sourceInput });
+      for (const fileId of fileIds) {
+        const file = source.files.find((f) => f.id === fileId);
+        check(file, "SOURCE_NOT_FOUND", "建档来源材料已移除，请重新整理", 409);
+        sessionBridge.copyMaterial(sourceId, targetId, file);
+      }
+    },
   });
   // Each runtime instance owns an isolated vector index directory; tests
   // (:memory:) get a per-instance temp dir so tables never leak across.
@@ -302,6 +313,7 @@ export function createServer(options = {}) {
     ...literatureTools(literature),
     ...knowledgeTools(guidelines),
     ...caseTools(cases),
+    ...onlineCaseTools(literature),
     ...drgTools(drg),
     {
       definition: {
@@ -371,7 +383,7 @@ export function createServer(options = {}) {
   // semantic fallbacks; literature alone requires the public fetch backend.
   for (const plugin of knowledgeToolPlugins)
     plugin.capability = {
-      backend: ["literature_search", "literature_fetch"].includes(
+      backend: ["literature_search", "literature_fetch", "online_case_search"].includes(
         plugin.definition.function.name,
       )
         ? "network"
@@ -401,6 +413,7 @@ export function createServer(options = {}) {
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     domain: createMedicalWorkspaceDomain({
+      saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
       readPatientBrief: (patientId) => patientBrief.read(patientId),
       plugins: [
         ...knowledgeToolPlugins,
@@ -449,6 +462,7 @@ export function createServer(options = {}) {
       materials.ingest(file).catch(() => {});
     },
   });
+  const intakeJobs = new IntakeJobs(sessionBridge, pending);
   const agentRuntime = sessionBridge.dispatcher;
 
   // 能力分层快照（W6/B1）：三态判定与运行事实探测提取到
@@ -900,6 +914,7 @@ export function createServer(options = {}) {
               return send(res, 200, sessionBridge.get(id));
             }
             if (req.method === "DELETE") {
+              check(!intakeJobs.active.has(id), "RUN_ACTIVE", "建档任务正在后台处理，请先停止", 409);
               const projected = sessionBridge.get(id);
               check(
                 !projected.patientId,
@@ -922,12 +937,29 @@ export function createServer(options = {}) {
             if (parts[3] === "fork") forkBody.fork = true;
             return send(res, 201, sessionBridge.copyMaterials(id, forkBody));
           }
+          if (parts.length === 4 && parts[3] === "intake-job") {
+            if (req.method === "GET") return send(res, 200, { job: intakeJobs.get(id) });
+            if (req.method === "POST") return send(res, 202, { job: intakeJobs.start(id, await body(req)) });
+            if (req.method === "DELETE") return send(res, 200, { cancelled: intakeJobs.cancel(id) });
+          }
+          if (parts.length === 4 && parts[3] === "intake-issues" && req.method === "PUT") {
+            return send(res, 200, sessionBridge.saveIntakeIssues(id, (await body(req)).issues));
+          }
           if (parts[3] === "files") {
+            if (parts.length === 6 && parts[5] === "prepare" && req.method === "POST") {
+              const controller = new AbortController();
+              const abort = () => controller.abort();
+              res.once("close", abort);
+              try { return send(res, 200, await sessionBridge.prepareMaterial(id, identifier(parts[4]), controller.signal)); }
+              finally { res.off("close", abort); }
+            }
             if (parts.length === 4 && req.method === "POST") {
+              check(!intakeJobs.active.has(id), "RUN_ACTIVE", "建档任务正在后台处理，请先停止后补充资料", 409);
               const file = sessionBridge.addMaterial(id, await body(req));
               return send(res, 201, file);
             }
             if (parts.length === 5 && req.method === "DELETE") {
+              check(!intakeJobs.active.has(id), "RUN_ACTIVE", "建档任务正在后台处理，请先停止", 409);
               const projected = sessionBridge.get(id);
               check(
                 !projected.runs.some(
@@ -1888,6 +1920,7 @@ export function createServer(options = {}) {
     for (const id of runtime.active.keys()) runtime.cancel(id);
     for (const id of workspaces.active.keys())
       if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
+    await intakeJobs.stop();
     for (const ws of sockets.clients) ws.terminate();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
@@ -1897,7 +1930,7 @@ export function createServer(options = {}) {
     await workspaces.recovery.drain();
     await workspaces.extensions.close();
     if (databasePath === ":memory:")
-      rmSync(vectorDir, { recursive: true, force: true });
+      rmSync(vectorDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     await followups.drain();
     sockets.close();
     store.close();

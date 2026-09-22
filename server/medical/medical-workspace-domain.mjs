@@ -1,3 +1,4 @@
+import { configureIntakeTools } from "./intake-tools.mjs";
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 import { TOOL_DEFINITIONS, runTool, medicalToolAllowed } from "../medical-core.mjs";
 import { check } from "../errors.mjs";
@@ -15,6 +16,7 @@ import { check } from "../errors.mjs";
 export const MEDICAL_WORKSPACE_DISCIPLINE = `
 本工作台具备医疗领域能力，按任务自动调度，无需用户要求：
 - 用户上传或提及患者资料时：主动读取并整理为结构化患者信息（诊断、用药、过敏、检验，保留文件名与行号溯源）。资料属于已有患者时用 patient_record_propose 提交档案更新提案；能从材料中识别出姓名等基本信息且是一位新患者时，用 patient_create_propose 提交建档提案——两者都由医生确认后写入；整理结果同时以可溯源的时间线/清单呈现在回复中。上传文件、一句话指令即可完成建档或更新，不要让用户手动填表。
+- 辅助诊断或相似病例问题：先 read_patient_brief 与原始材料构建脱敏临床指纹，再 read_skill 读取 similar-case-search。用 similar_case_search 检索本地病例库及其他患者档案（自动排除当前患者），用 online_case_search 搜索网上病例报告。联网仅传医学关键词，不含姓名、电话、病历号、详细日期。分别展示本地/网上来源、匹配与差异、未核验信息；候选不能直接当作诊断依据。
 - 医生在对话中明确表达偏好或习惯时（随访方式、文书格式、常用组合等），用 doctor_memory_propose 存为待确认记忆，由医生在记忆面板确认后自动生效。
 - 有当前患者时，先用 read_patient_brief 读取最新档案与未完成事项；工具只读取当前关联患者。过敏未核对不等于无过敏，用药须区分正在使用、已停用和未知。档案更新默认追加；确需修改旧记录时先核对原档案，以 replace 模式提供该字段完整列表，供医生对照复核。
 - 用户上传指南/共识文件，或要求建立医学知识库时：先调用 knowledge_base_status 体检环境，按 knowledge-base 技能给出嵌入方案建议（云端免费 Key 或本机 Ollama 及其内存要求），入库前向用户复述标题与来源并确认，再调用 knowledge_ingest 入库（自动分块并向量化索引，指南/书籍/资料均可）。之后回答医学问题前先用 knowledge_search 检索知识库。
@@ -42,6 +44,7 @@ export function createMedicalWorkspaceDomain({
   skills = null,
   doctor = null,
   readPatientBrief = null,
+  saveIntakeNotes = () => {},
 } = {}) {
   // 会话叠层的插件经 runTool 统一分发：材料 sources、schema 校验与
   // readOnly 约定和医疗会话路径共用同一执行契约。
@@ -76,6 +79,7 @@ export function createMedicalWorkspaceDomain({
         name: s.name,
         lines: s.text.split("\n").length,
         hash: s.hash,
+        ...(s.extraction?.ocr?.status === "ready" ? { textReady: true, method: "local-ocr" } : {}),
         ...(sources.length <= 8 ? { preview: s.text.slice(0, 1000) } : {}),
       }));
       return [
@@ -113,6 +117,10 @@ export function createMedicalWorkspaceDomain({
             args = { ...args, patientId: workspace.patientId };
           }
           return runTool(name, args, {
+            sourceSessionId: workspace.id,
+            sourceFileIds: (context.sources || []).filter((source) => (workspace.materials || []).some((file) => file.id === source.id)).map((source) => source.id),
+            sourceInput: (context.sources || []).find((source) => !(workspace.materials || []).some((file) => file.id === source.id) && source.name === "本轮输入")?.text,
+            patientId: workspace.patientId,
             sources: context.sources || [],
             intent,
             skills,
@@ -138,6 +146,14 @@ export function createMedicalWorkspaceDomain({
             execute: (args, context) =>
               execute(plugin.definition.function.name, args, context),
           });
+        const intakeRun = workspace.runs?.find(run => run.id === runId);
+        if (intakeRun?.policy?.workflow === "patient-intake") {
+          const sameFiles = run => JSON.stringify([...(run.fileIds || [])].sort()) === JSON.stringify([...(intakeRun.fileIds || [])].sort());
+          const previous = [...workspace.runs].reverse().find(run => run.id !== runId && ["failed", "cancelled", "interrupted"].includes(run.status) && sameFiles(run) && run.policy?.workflow === "patient-intake" && run.intakeNotes?.length);
+          const initialNotes = intakeRun.intakeNotes || previous?.intakeNotes || [];
+          if (initialNotes.length) saveIntakeNotes(workspace.id, runId, initialNotes);
+          configureIntakeTools(registry, workspace, notes => saveIntakeNotes(workspace.id, runId, notes), initialNotes);
+        }
         return;
       }
       if (!medicalWorkspaceEnabled(workspace)) return;

@@ -110,7 +110,7 @@ export class CaseLibrary {
   }
   // Similar-case search: optional structured narrowing plus deterministic
   // term-overlap scoring with explicit match reasons.
-  similar({ caseText, diagnosis, age, gender, limit = 5 } = {}) {
+  similar({ caseText, diagnosis, age, gender, limit = 5, excludePatientId } = {}) {
     const text = string(caseText, "病例描述", 4000);
     check(
       Number.isInteger(limit) && limit >= 1 && limit <= 20,
@@ -124,10 +124,20 @@ export class CaseLibrary {
     const diagnosisNeedle = diagnosis
       ? String(diagnosis).toLowerCase().trim()
       : null;
-    const scored = this.store.db
-      .prepare("SELECT data FROM case_library")
-      .all()
-      .map((row) => JSON.parse(row.data))
+    const library = this.store.db.prepare("SELECT data FROM case_library").all().map((row) => ({ ...JSON.parse(row.data), sourceType: "local-case-library" }));
+    const charts = this.store.db.prepare("SELECT data FROM patients").all().map((row) => JSON.parse(row.data))
+      .filter((p) => !p.archived && p.id !== excludePatientId && p.diagnoses?.length)
+      .map((p) => {
+        const item = { id: `patient:${p.id}`, patientId: p.id, sourceType: "local-patient-chart",
+          diagnosis: p.diagnoses.map((d) => d.name).join("；"), icd10: p.diagnoses[0]?.code || "",
+          age: p.birthYear ? new Date().getFullYear() - p.birthYear : null, gender: p.gender,
+          keyLabs: (p.labs || []).slice(-10), treatments: (p.medications || []).map((m) => `${m.name}（${m.status || "unknown"}）`),
+          summary: "", outcome: "", createdAt: new Date(p.updatedAt).getTime() };
+        item.text = composeText(item);
+        return item;
+      });
+    const chartIds = new Set(charts.map((p) => p.patientId));
+    const scored = [...charts, ...library.filter((item) => (!excludePatientId || item.patientId !== excludePatientId) && !chartIds.has(item.patientId))]
       .map((item) => {
         const reasons = [];
         let score = 0;
@@ -172,6 +182,8 @@ export class CaseLibrary {
       count: scored.length,
       matches: scored.map(({ case: item, score, reasons }) => ({
         caseId: item.id,
+        sourceType: item.sourceType,
+        verification: "candidate-needs-clinical-review",
         diagnosis: item.diagnosis,
         icd10: item.icd10,
         age: item.age,
@@ -268,7 +280,7 @@ export function caseTools(cases) {
         },
         ["caseText"],
       ),
-      execute: (args) => cases.similar(args),
+      execute: (args, context = {}) => cases.similar({ ...args, excludePatientId: context.patientId }),
     },
   ];
 }

@@ -84,7 +84,7 @@ export async function compactContext({
     return record;
   });
   let summary = priorSummary ? priorSummary.content.slice(priorSummary.content.indexOf("\n") + 1) : "";
-  let truncatedSummaries = 0;
+  let truncatedSummaries = 0, fallbackSummaries = 0;
   const summaryLimit = Math.min(2000, Math.floor(maxChars * 0.18));
   const outputReserve = Math.max(256, summaryLimit * 3);
   let fragment = 0;
@@ -147,6 +147,21 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
     const response = await summarize(inputFor(selected));
     signal?.throwIfAborted();
     if (response.usage) onUsage(response.usage);
+    if (response.stopReason === "max_tokens" && !response.message?.content?.trim()) {
+      // Summarization is an auxiliary step. The original records were archived
+      // before this request; preserve pointers/receipts without inventing a summary.
+      fallbackSummaries++;
+      const receipts = records.filter(record => record.role === "tool").slice(-8).map(record => {
+        let result; try { result = JSON.parse(record.content); } catch { result = {}; }
+        const receipt = {};
+        for (const key of ["complete", "nextCursor", "intakeNotesSaved", "batchesSaved", "alreadySaved", "nextIndex", "code", "error"]) if (result[key] !== undefined) receipt[key] = result[key];
+        return { tool: record.call?.function?.name || "tool", receipt };
+      });
+      summary = `历史摘要请求达到输出上限，未生成事实摘要。完整历史已保存于归档 ${reference.id}，不能据此认为原任务失败或材料已整理完成。请从已保存的批次笔记、工具回执或原始归档恢复事实，不必重读全部资料。以下仅为最近工具回执：\n${JSON.stringify(receipts)}`;
+      if (summary.length > summaryLimit) summary = `历史摘要未生成。完整历史在归档 ${reference.id}。请读取已保存笔记或归档恢复事实，不能把缺失摘要当成任务完成。`;
+      // This bounded index covers the complete archived input, not just this fragment.
+      break;
+    }
     check(
       response.message?.role === "assistant" &&
         typeof response.message.content === "string" &&
@@ -195,5 +210,6 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
     beforeChars: size(messages),
     afterChars: size(result),
     truncatedSummaries,
+    fallbackSummaries,
   };
 }

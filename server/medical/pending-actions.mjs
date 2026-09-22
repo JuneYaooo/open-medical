@@ -200,6 +200,8 @@ export class PendingActions {
       if (action.type === "patient-create") {
         // The registry validates all supplied fields before creating any record.
         const patient = this.patients.create(action.payload);
+        if (action.payload.sourceSessionId && this.services.copySourceMaterials)
+          this.services.copySourceMaterials(action.payload.sourceSessionId, patient.sessionId, action.payload.sourceFileIds || [], action.payload.sourceInput);
         applied = this.patients.row(patient.id);
       } else if (action.type === "patient-update") {
         applied = this.patients.update(action.patientId, {
@@ -342,12 +344,45 @@ export function pendingActionTools(pending, doctor = null) {
           },
           allergies: { type: "array", items: textDef },
           allergyStatus: { type: "string", enum: ["unknown", "none_known", "recorded"], description: "仅来源明确核对无已知过敏时用 none_known；未提及不等于无过敏" },
+          labs: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                item: textDef,
+                value: { type: "number" },
+                unit: textDef,
+                date: textDef,
+                source: textDef,
+              },
+              required: ["item", "value", "date"],
+              additionalProperties: false,
+            },
+          },
+          visits: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                date: textDef,
+                reason: textDef,
+                note: textDef,
+              },
+              required: ["date", "reason"],
+              additionalProperties: false,
+            },
+          },
           summary: textDef,
         },
         ["name", "summary"],
       ),
-      execute: (args) => {
+      execute: (args, context = {}) => {
         const { summary, ...payload } = args;
+        if (context.sourceSessionId) {
+          payload.sourceSessionId = context.sourceSessionId;
+          payload.sourceFileIds = context.sourceFileIds || (context.sources || []).map((source) => source.id);
+          if (context.sourceInput) payload.sourceInput = context.sourceInput;
+        }
         return pending.propose({
           type: "patient-create",
           payload,

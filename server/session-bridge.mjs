@@ -2,6 +2,7 @@
 // 会话的 API 形状，并按会话类别双轨分派——新建会话走 WorkspaceService
 // （通用内核 + 医疗叠层），既有 sessions 表会话继续走 MedicalRuntime。
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
+import { recognizeImage } from "./core/image-ocr.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
@@ -165,14 +166,31 @@ export class SessionBridge {
       409,
     );
     const name = string(input.name, "文件名", 180);
+    if (/\.(png|jpe?g|webp)$/i.test(name)) {
+      const current = this.requireSessionWorkspace(id);
+      check((current.materials || []).length < 100, "FILE_LIMIT", "每个会话最多 100 份材料");
+      check(typeof input.image === "string", "IMAGE_REQUIRED", "请通过图片上传流程导入原图");
+      const digest = hashText(Buffer.from(input.image, "base64"));
+      check(!(current.materials || []).some((f) => f.hash === digest), "DUPLICATE_FILE", "相同内容已在本会话中", 409);
+      const artifact = this.service.uploadImage(id, { name, data: input.image });
+      const file = {
+        id: randomUUID(), name, hash: artifact.hash, size: artifact.size, createdAt: iso(),
+        text: `[图片材料：${name}]\n原图 artifactId: ${artifact.id}。使用 inspect_image 读取病历文字、日期、数值及单位，无法辨认的内容标记待核对，禁止猜测。Mac 文本模型可用本地 OCR；无可用读取工具时请切换视觉模型；本条索引不是 OCR 结果。`,
+        extraction: { type: "image", artifactId: artifact.id, originalRetained: true },
+      };
+      this.service.store.update(id, (w) => { w.materials ||= []; w.materials.push(file); });
+      this.store.audit(id, "file.added", { fileId: file.id, hash: file.hash });
+      return file;
+    }
     check(
-      /\.(txt|md|csv|json|pdf)$/i.test(name),
+      /\.(txt|md|markdown|csv|tsv|json|pdf|docx|xlsx)$/i.test(name),
       "FILE_TYPE",
-      "当前支持 TXT、Markdown、CSV、JSON 和 PDF 抽取文本",
+      "支持图片、PDF、Word、Excel、TXT、Markdown、CSV、TSV 和 JSON",
     );
-    const text = string(input.text, "文件内容", 400000);
+    let text = string(input.text, "文件内容", 400000);
     check(Buffer.byteLength(text) <= 2000000, "FILE_SIZE", "文件超过 2MB");
     let extraction;
+    if (/\.(docx|xlsx)$/i.test(name)) extraction = { type: /\.docx$/i.test(name) ? "docx_text" : "xlsx_text", originalRetained: false };
     if (/\.pdf$/i.test(name)) {
       const e = input.extraction;
       check(
@@ -181,7 +199,8 @@ export class SessionBridge {
           e.pageCount > 0 &&
           e.pageCount <= 300 &&
           Array.isArray(e.emptyPages) &&
-          e.emptyPages.length < e.pageCount &&
+          e.emptyPages.length <= e.pageCount &&
+          (e.emptyPages.length < e.pageCount || input.pageImages?.length === e.emptyPages.length) &&
           e.emptyPages.every(
             (p) => Number.isInteger(p) && p >= 1 && p <= e.pageCount,
           ),
@@ -194,6 +213,22 @@ export class SessionBridge {
         emptyPages: e.emptyPages,
         originalRetained: false,
       };
+    }
+    if (input.pageImages !== undefined) {
+      check(/\.pdf$/i.test(name) && Array.isArray(input.pageImages) && input.pageImages.length <= 30 && input.pageImages.length === extraction?.emptyPages.length,
+        "PDF_EXTRACTION", "扫描页面与 PDF 空白页索引不一致");
+      const pages = input.pageImages;
+      check(new Set(pages.map((p) => p.page)).size === pages.length && pages.every((p) => extraction.emptyPages.includes(p.page) && typeof p.data === "string" && p.data.length <= 5333336 && /^[A-Za-z0-9+/]+={0,2}$/.test(p.data)), "PDF_EXTRACTION", "扫描页面无效");
+      const digest = hashText(text + pages.map((p) => p.data).join(""));
+      const current = this.requireSessionWorkspace(id);
+      check((current.materials || []).length < 100, "FILE_LIMIT", "每个会话最多 100 份材料");
+      check(!(current.materials || []).some((f) => f.extraction?.imageHash === digest), "DUPLICATE_FILE", "相同内容已在本会话中", 409);
+      extraction.imageHash = digest;
+      extraction.pageImages = pages.map((p) => {
+        const artifact = this.service.uploadImage(id, { name: `PDF-page-${p.page}.jpg`, data: p.data });
+        text += `\n[PDF 第 ${p.page} 页扫描图] artifactId: ${artifact.id}，使用 inspect_image 读取原文，不能猜测不清晰内容。`;
+        return { page: p.page, artifactId: artifact.id };
+      });
     }
     const file = {
       id: randomUUID(),
@@ -225,6 +260,47 @@ export class SessionBridge {
         this.onMaterialIngest(file);
       } catch {}
     return file;
+  }
+  saveIntakeIssues(id, issues) {
+    this.requireSessionWorkspace(id);
+    check(Array.isArray(issues) && issues.length <= 200, "INVALID_INPUT", "资料问题清单无效");
+    const cleaned = issues.map(item => ({ name: string(item.name, "文件名", 180), error: string(item.error, "失败原因", 2000), stage: item.stage === "ocr" ? "ocr" : "upload" }));
+    this.service.store.update(id, current => { current.intakeIssues = cleaned; });
+    return { ok: true };
+  }
+  async prepareMaterial(id, fileId, signal) {
+    const workspace = this.requireSessionWorkspace(id);
+    check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
+    const file = (workspace.materials || []).find(file => file.id === fileId);
+    check(file, "NOT_FOUND", "材料不存在", 404);
+    const images = file.extraction?.type === "image"
+      ? [{ artifactId: file.extraction.artifactId }]
+      : file.extraction?.pageImages || [];
+    if (!images.length || file.extraction?.ocr?.status === "ready") return file;
+    const pages = [];
+    for (const image of images) {
+      signal?.throwIfAborted();
+      const original = this.service.artifacts.read(id, image.artifactId);
+      const result = await recognizeImage(original.data, signal);
+      check(result.lines?.some(line => line.text?.trim()), "OCR_EMPTY", "未识别出文字，请换清晰图片；医学影像需由医生或视觉模型另行核对", 422);
+      pages.push({ page: image.page, lines: result.lines });
+    }
+    signal?.throwIfAborted();
+    check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
+    const text = pages.map(page => `[${file.name}${page.page ? ` 第 ${page.page} 页` : ""} · 本地文字识别]
+` + page.lines.map(line => `${line.text}${line.confidence < 0.7 ? " [识别置信度低，请核对原图]" : ""}`).join("\n")).join("\n\n");
+    let prepared;
+    this.service.store.update(id, current => {
+      const target = current.materials.find(item => item.id === fileId);
+      check(target, "NOT_FOUND", "材料已移除", 404);
+      // Preserve original artifact ownership and hash; OCR is a derived, cached view.
+      target.extraction.ocr = { status: "ready", method: "local-ocr", pages: pages.length, lines: pages.reduce((n, page) => n + page.lines.length, 0), completedAt: iso() };
+      target.extraction.originalText = file.extraction.originalText || file.text;
+      target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text + "\n[文字识别结果需核对原图；不能据此解读 CT 或病理图像。]";
+      prepared = target;
+    });
+    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length });
+    return prepared;
   }
   removeMaterial(id, fileId) {
     this.requireSessionWorkspace(id);
@@ -297,6 +373,8 @@ export class SessionBridge {
       revision: w.revision,
       messages,
       files: (w.materials || []).map((f) => ({ ...f })),
+      intakeIssues: w.intakeIssues || [],
+      intakeJob: w.intakeJob || null,
       artifacts: runs.flatMap((run) => run.artifacts),
       runs,
     };
@@ -312,12 +390,19 @@ export class SessionBridge {
       title: projected.title,
       patientId: projected.patientId,
       kind: "session",
+      ...(projected.title === "上传资料建档" ? { intake: {
+        job: projected.intakeJob,
+        fileCount: projected.files.length,
+        firstFileName: projected.files[0]?.name || "",
+        issueCount: projected.intakeIssues?.length || 0,
+        firstIssueName: projected.intakeIssues?.[0]?.name || "",
+      } } : {}),
       updatedAt: projected.updatedAt,
       revision: projected.revision,
       messageCount: projected.messages.length,
       reviewCount: projected.artifacts.filter((a) => a.status === "draft")
         .length,
-      running: this.service.active.has(w.id),
+      running: this.service.active.has(w.id) || w.intakeJob?.status === "running",
       lastRunStatus: w.runs.at(-1)?.status || null,
       lastRunError: w.runs.at(-1)?.error || null,
     };
@@ -406,6 +491,7 @@ export class SessionBridge {
     const requestedMode = body.mode || "local";
     const mode = resolveMode(requestedMode);
     const policy = medicalPolicy(message);
+    if (body.workflow === "patient-intake") policy.workflow = "patient-intake";
     if (body.requestId !== undefined)
       check(
         !this.service.store.hasRequest(id, body.requestId),
@@ -541,7 +627,9 @@ export class SessionBridge {
           type: event.type,
           session_id: workspaceId,
           run_id: event.run_id,
-          payload: event.payload,
+          payload: event.type === "tool.complete" && event.payload?.tool === "save_intake_notes"
+            ? { ...event.payload, batchesSaved: this.workspace(workspaceId).runs.find(run => run.id === event.run_id)?.intakeNotes?.length || 0 }
+            : event.payload,
           time: event.time,
         });
       },
@@ -897,6 +985,33 @@ export class SessionBridge {
     return this.findArtifact(id, artifactId);
   }
 
+  copyMaterial(sourceId, targetId, file) {
+    let copied;
+    if (file.extraction?.type === "image") {
+      const original = this.service.artifacts.read(sourceId, file.extraction.artifactId);
+      copied = this.addMaterial(targetId, { name: file.name, image: original.data.toString("base64") });
+    } else if (file.extraction?.pageImages?.length) {
+      const pageImages = file.extraction.pageImages.map((p) => ({ page: p.page, data: this.service.artifacts.read(sourceId, p.artifactId).data.toString("base64") }));
+      const text = (file.extraction.originalText || file.text).replace(/\n\[PDF 第 \d+ 页扫描图\] artifactId:.*$/gm, "");
+      copied = this.addMaterial(targetId, { ...file, text, pageImages });
+    } else return this.addMaterial(targetId, file);
+    if (file.extraction.ocr?.status === "ready") {
+      this.service.store.update(targetId, workspace => {
+        const target = workspace.materials.find(item => item.id === copied.id);
+        const replaceIds = text => {
+          const from = file.extraction.type === "image" ? [file.extraction] : file.extraction.pageImages;
+          const to = copied.extraction.type === "image" ? [copied.extraction] : copied.extraction.pageImages;
+          return from.reduce((value, item, index) => value.replaceAll(item.artifactId, to[index].artifactId), text);
+        };
+        target.extraction.originalText = copied.text;
+        target.extraction.ocr = { ...file.extraction.ocr };
+        target.text = replaceIds(file.text);
+        copied = target;
+      });
+    }
+    return copied;
+  }
+
   // ---------- 材料副本 / 分支（契约与旧 copyMaterials 一致） ----------
   copyMaterials(id, body) {
     const w = this.requireSessionWorkspace(id);
@@ -917,7 +1032,7 @@ export class SessionBridge {
       copiedFrom: fork ? { sessionId: id } : undefined,
     });
     for (const file of w.materials || [])
-      if (fileIds.includes(file.id)) this.addMaterial(created.id, file);
+      if (fileIds.includes(file.id)) this.copyMaterial(id, created.id, file);
     return this.get(created.id);
   }
 
@@ -968,6 +1083,7 @@ export class SessionBridge {
         const message = string(body.message, "任务", 20000);
         const mode = resolveMode(body.mode);
         const policy = medicalPolicy(message);
+    if (body.workflow === "patient-intake") policy.workflow = "patient-intake";
         const fileIds = bridge.selectMaterials(w, body.fileIds || []);
         const sources = bridge.buildSources(w, message, fileIds);
         if (mode === "local")
