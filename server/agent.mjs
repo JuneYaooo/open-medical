@@ -29,6 +29,10 @@ import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 import { GuidelineLibrary, knowledgeTools } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
+import { PatientBrief } from "./medical/patient-brief.mjs";
+import { PatientImporter } from "./medical/patient-import.mjs";
+import { CareTasks } from "./medical/care-tasks.mjs";
+import { DoctorOverview } from "./medical/doctor-overview.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
 import {
@@ -220,8 +224,15 @@ export function createServer(options = {}) {
   // Materials get their own LanceDB namespace so knowledge-base stats and
   // model-tagged tables never mix with session material vectors.
   const materialVectors = LanceVectorStore.create(join(vectorDir, "materials"));
+  // Public knowledge can use the configured embedding provider. Patient
+  // materials always use a separate, local-only endpoint and no API key.
+  const patientEmbedder = options.patientEmbedder || new EmbeddingService({
+    apiKey: "", provider: "ollama",
+    url: process.env.MEDICAL_PATIENT_EMBEDDING_URL || "http://127.0.0.1:11434",
+    model: process.env.MEDICAL_PATIENT_EMBEDDING_MODEL || "bge-m3",
+  });
   const materials =
-    options.materials || new MaterialLibrary(embedder, materialVectors);
+    options.materials || new MaterialLibrary(patientEmbedder, materialVectors);
   const guidelines =
     options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
   const cases = options.cases || new CaseLibrary(store);
@@ -390,6 +401,7 @@ export function createServer(options = {}) {
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     domain: createMedicalWorkspaceDomain({
+      readPatientBrief: (patientId) => patientBrief.read(patientId),
       plugins: [
         ...knowledgeToolPlugins,
         ...localPlugins(pendingActionTools(pending, doctor)),
@@ -459,6 +471,15 @@ export function createServer(options = {}) {
     },
   });
   const patients = new PatientRegistry(store, agentRuntime, {
+    onIdentityChanged: (patient, previousName) => {
+      if (sessionBridge.isSessionWorkspace(patient.sessionId)) {
+        const session = sessionBridge.get(patient.sessionId);
+        if (session.title === `${previousName} · 病例`) sessionBridge.renameSession(patient.sessionId, `${patient.name} · 病例`);
+      } else {
+        const session = store.get(patient.sessionId);
+        if (session.title === `${previousName} · 病例`) store.mutate(patient.sessionId, (value) => { value.title = `${patient.name} · 病例`; });
+      }
+    },
     createSession: ({ title, patientId }) => {
       const projected = sessionBridge.createSession({ title, patientId });
       return { id: projected.id };
@@ -475,6 +496,10 @@ export function createServer(options = {}) {
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
+  const doctorOverview = new DoctorOverview(store, sessionBridge);
+  const patientBrief = new PatientBrief(store, patients);
+  const careTasks = new CareTasks(store, patients, followups);
+  const patientImporter = new PatientImporter(store, patients);
   runtime.registerPlugins(pendingActionTools(pending, doctor));
   const swapProvider = (next) => {
     provider = next;
@@ -1138,6 +1163,11 @@ export function createServer(options = {}) {
           await wechat.send(identifier(b.patientId), b.text),
         );
       }
+      if (path === "/api/doctor/overview" && req.method === "GET")
+        return send(res, 200, doctorOverview.read({
+          kind: url.searchParams.get("kind") || "all", query: url.searchParams.get("q") || "",
+          offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 12),
+        }));
       if (path === "/api/followup-plans" && req.method === "GET")
         return send(res, 200, { plans: followups.listPlans() });
       if (path === "/api/followup-plans" && req.method === "POST")
@@ -1353,16 +1383,22 @@ export function createServer(options = {}) {
               : undefined,
           }),
         });
+      if (path === "/api/patients/import/preview" && req.method === "POST") return send(res, 200, patientImporter.preview((await body(req)).text));
+      if (path === "/api/patients/import/commit" && req.method === "POST") return send(res, 201, patientImporter.commit(await body(req)));
       if (path === "/api/patients" && req.method === "GET")
         return send(res, 200, {
           patients: patients.list({
             query: url.searchParams.get("q") || undefined,
             group: url.searchParams.get("group") || undefined,
             includeArchived: url.searchParams.get("archived") === "1",
+            summary: url.searchParams.get("summary") === "1",
           }),
         });
-      if (path === "/api/patients" && req.method === "POST")
-        return send(res, 201, patients.create(await body(req)));
+      if (path === "/api/patients" && req.method === "POST") {
+        const patient = patients.create(await body(req));
+        risks.evaluatePatient(patient.id);
+        return send(res, 201, patient);
+      }
       if (path === "/api/inbox" && req.method === "GET")
         return send(res, 200, { messages: patients.unassigned() });
       if (
@@ -1379,11 +1415,28 @@ export function createServer(options = {}) {
         );
       }
       if (path === "/api/reminders" && req.method === "GET")
-        return send(res, 200, {
-          reminders: followups.reminders({
+        return send(res, 200, followups.reminderPage({
             status: url.searchParams.get("status") || "pending",
-          }),
-        });
+            patientId: url.searchParams.get("patientId") || undefined,
+            offset: Number(url.searchParams.get("offset") || 0),
+            limit: Number(url.searchParams.get("limit") || 100),
+          }));
+      if (parts[0] === "api" && parts[1] === "reminders" && parts.length === 4 && parts[3] === "addendum" && req.method === "POST")
+        return send(res, 200, followups.addContactAddendum(identifier(parts[2]), await body(req)));
+      if (
+        parts[0] === "api" &&
+        parts[1] === "reminders" &&
+        parts.length === 4 &&
+        parts[3] === "complete" &&
+        req.method === "POST"
+      ) {
+        const reminder = followups.completeReminder(
+          identifier(parts[2]),
+          await body(req),
+        );
+        risks.evaluatePatient(reminder.patientId);
+        return send(res, 200, reminder);
+      }
       if (
         parts[0] === "api" &&
         parts[1] === "reminders" &&
@@ -1393,6 +1446,20 @@ export function createServer(options = {}) {
         return send(res, 200, followups.ackReminder(identifier(parts[2])));
       if (parts[0] === "api" && parts[1] === "patients" && parts[2]) {
         const pid = identifier(parts[2]);
+        if (parts[3] === "care-tasks") {
+          if (parts.length === 4 && req.method === "GET") return send(res, 200, careTasks.list(pid, {
+            status: url.searchParams.get("status") || "active", offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 20),
+          }));
+          if (parts.length === 4 && req.method === "POST") return send(res, 201, careTasks.create(pid, await body(req)));
+          if (parts.length === 5 && req.method === "PATCH") return send(res, 200, careTasks.update(pid, identifier(parts[4]), await body(req)));
+        }
+        if (parts.length === 4 && parts[3] === "brief" && req.method === "GET")
+          return send(res, 200, patientBrief.read(pid));
+        if (parts.length === 4 && parts[3] === "followup-records" && req.method === "POST") {
+          const record = followups.recordContact(pid, await body(req));
+          risks.evaluatePatient(pid);
+          return send(res, 201, record);
+        }
         if (parts[3] === "export" && req.method === "GET")
           return send(res, 200, patients.exportDeidentified(pid));
         if (parts.length === 3) {
@@ -1514,7 +1581,12 @@ export function createServer(options = {}) {
       if (knowledgeRoutes) {
         const sub = parts.slice(2);
         if (sub.length === 0 && req.method === "GET")
-          return send(res, 200, { documents: guidelines.list() });
+          return send(res, 200, { documents: guidelines.list({
+            kind: url.searchParams.get("kind") || undefined,
+            collection: url.searchParams.get("collection") || undefined,
+            reviewStatus: url.searchParams.get("reviewStatus") || undefined,
+            query: url.searchParams.get("q") || "",
+          }) });
         if (sub.length === 0 && req.method === "POST")
           return send(res, 201, await guidelines.addDocument(await body(req)));
         if (sub[0] === "search" && req.method === "GET") {
@@ -1527,6 +1599,7 @@ export function createServer(options = {}) {
               kind: url.searchParams.get("kind") || undefined,
               collection: url.searchParams.get("collection") || undefined,
               org: url.searchParams.get("org") || undefined,
+              reviewStatus: url.searchParams.get("reviewStatus") || undefined,
               year: yearRaw ? Number(yearRaw) : undefined,
               limit: url.searchParams.get("limit")
                 ? Number(url.searchParams.get("limit"))
@@ -1539,6 +1612,8 @@ export function createServer(options = {}) {
         if (sub.length === 1 && sub[0] !== "search") {
           if (req.method === "GET")
             return send(res, 200, guidelines.get(sub[0]));
+          if (req.method === "PATCH")
+            return send(res, 200, guidelines.updateMetadata(sub[0], await body(req)));
           if (req.method === "DELETE")
             return send(res, 200, guidelines.removeDocument(sub[0]));
         }

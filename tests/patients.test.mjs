@@ -500,7 +500,7 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
       store.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version").value,
-      "7",
+      "8",
     );
     for (const table of [
       "patients",
@@ -510,6 +510,7 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
       "doctor_profile",
       "doctor_memories",
       "literature_cache",
+      "care_tasks",
     ])
       store.db.prepare(`SELECT COUNT(*) FROM ${table}`).get();
     const backup = backupDatabase(file, join(dir, "backup.sqlite"));
@@ -517,7 +518,7 @@ test("schema 2 databases upgrade in place and remain backup compatible", (t) => 
     assert.equal(
       check.prepare("SELECT value FROM meta WHERE key=?").get("schema_version")
         .value,
-      "7",
+      "8",
     );
     check.close();
   } finally {

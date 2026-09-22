@@ -1,6 +1,6 @@
+import { patientOptionLabel } from "./patient-labels";
 import { useEffect, useState } from "react";
 import {
-  Bell,
   CalendarClock,
   Loader2,
   Pause,
@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "./agent-runtime";
+import { FollowupRecords } from "./followup-records";
 
 const fmtDue = (value) => {
   const diff = value - Date.now();
@@ -26,25 +27,30 @@ export function FollowupsView({ onOpenPatient }) {
   const [plans, setPlans] = useState([]);
   const [patients, setPatients] = useState([]);
   const [jobs, setJobs] = useState([]);
-  const [reminders, setReminders] = useState([]);
-  const [apply, setApply] = useState({ planId: "", patientId: "", startDate: new Date().toISOString().slice(0, 10) });
+  const [apply, setApply] = useState({
+    planId: "",
+    patientId: "",
+    startDate: new Date().toISOString().slice(0, 10),
+  });
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", disease: "", nodes: [{ offsetDays: 30, title: "1 个月随访", items: "" }] });
+  const [form, setForm] = useState({
+    name: "",
+    disease: "",
+    nodes: [{ offsetDays: 30, title: "1 个月随访", items: "" }],
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const refresh = async () => {
-    const [planList, patientList, jobList, reminderList] = await Promise.all([
+    const [planList, patientList, jobList] = await Promise.all([
       api("/api/followup-plans"),
-      api("/api/patients"),
+      api("/api/patients?summary=1"),
       api("/api/followups/overview"),
-      api("/api/reminders"),
     ]);
     setPlans(planList.plans);
     setPatients(patientList.patients.filter((p) => !p.archived));
     setJobs(jobList.jobs);
-    setReminders(reminderList.reminders);
   };
   useEffect(() => {
     refresh().catch((err) => setError(err.message));
@@ -79,11 +85,18 @@ export function FollowupsView({ onOpenPatient }) {
         nodes: form.nodes.map((node) => ({
           offsetDays: Number(node.offsetDays),
           title: node.title,
-          items: node.items.split(/[\n,;；]/).map((s) => s.trim()).filter(Boolean),
+          items: node.items
+            .split(/[\n,;；]/)
+            .map((s) => s.trim())
+            .filter(Boolean),
         })),
       });
       setCreating(false);
-      setForm({ name: "", disease: "", nodes: [{ offsetDays: 30, title: "1 个月随访", items: "" }] });
+      setForm({
+        name: "",
+        disease: "",
+        nodes: [{ offsetDays: 30, title: "1 个月随访", items: "" }],
+      });
     }, "自定义模板已创建。");
   const toggleJob = (job) =>
     run(async () => {
@@ -94,22 +107,26 @@ export function FollowupsView({ onOpenPatient }) {
     });
   const deleteJob = (job) =>
     run(async () => {
-      await api(`/api/patients/${job.patientId}/followups/${job.id}`, "DELETE", {
-        revision: job.revision,
-      });
+      await api(
+        `/api/patients/${job.patientId}/followups/${job.id}`,
+        "DELETE",
+        {
+          revision: job.revision,
+        },
+      );
     }, "随访计划已删除。");
-  const ackReminder = (id) =>
-    run(async () => {
-      await api(`/api/reminders/${id}/ack`, "POST", {});
-    }, "提醒已确认。");
   const removePlan = (id) =>
     run(async () => {
       await api(`/api/followup-plans/${id}`, "DELETE");
     }, "模板已删除。");
 
   const now = Date.now();
-  const dueJobs = jobs.filter((job) => job.nextDue <= now && job.status === "active");
-  const upcoming = jobs.filter((job) => job.nextDue > now || job.status !== "active");
+  const dueJobs = jobs.filter(
+    (job) => job.nextDue <= now && job.status === "active",
+  );
+  const upcoming = jobs.filter(
+    (job) => job.nextDue > now || job.status !== "active",
+  );
 
   return (
     <div className="module-view">
@@ -117,7 +134,7 @@ export function FollowupsView({ onOpenPatient }) {
         <div className="module-head">
           <div>
             <h1>随访管理</h1>
-            <p className="module-phase">模板排程 · 全院患者视图 · 提醒确认</p>
+            <p className="module-phase">计划排程 · 患者随访 · 结果登记</p>
           </div>
         </div>
         {error && (
@@ -126,6 +143,8 @@ export function FollowupsView({ onOpenPatient }) {
           </p>
         )}
         {notice && <p className="form-notice">{notice}</p>}
+
+        <FollowupRecords onChanged={refresh} onOpenPatient={onOpenPatient} />
 
         <section className="followups-section">
           <h3>应用随访模板</h3>
@@ -137,31 +156,40 @@ export function FollowupsView({ onOpenPatient }) {
               <option value="">选择模板…</option>
               {plans.map((plan) => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name}（{plan.nodes.length} 个节点{plan.disease ? ` · ${plan.disease}` : ""}）
+                  {plan.name}（{plan.nodes.length} 个节点
+                  {plan.disease ? ` · ${plan.disease}` : ""}）
                 </option>
               ))}
             </select>
             <select
               value={apply.patientId}
-              onChange={(e) => setApply({ ...apply, patientId: e.target.value })}
+              onChange={(e) =>
+                setApply({ ...apply, patientId: e.target.value })
+              }
             >
               <option value="">选择患者…</option>
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {patientOptionLabel(p, patients)}
                 </option>
               ))}
             </select>
             <input
               type="date"
               value={apply.startDate}
-              onChange={(e) => setApply({ ...apply, startDate: e.target.value })}
+              onChange={(e) =>
+                setApply({ ...apply, startDate: e.target.value })
+              }
             />
             <button
               onClick={applyPlan}
               disabled={busy || !apply.planId || !apply.patientId}
             >
-              {busy ? <Loader2 className="spin" size={14} /> : <CalendarClock size={14} />}
+              {busy ? (
+                <Loader2 className="spin" size={14} />
+              ) : (
+                <CalendarClock size={14} />
+              )}
               应用
             </button>
           </div>
@@ -201,7 +229,9 @@ export function FollowupsView({ onOpenPatient }) {
                 <input
                   value={form.disease}
                   placeholder="适用病种（可选）"
-                  onChange={(e) => setForm({ ...form, disease: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, disease: e.target.value })
+                  }
                 />
               </div>
               {form.nodes.map((node, index) => (
@@ -215,7 +245,9 @@ export function FollowupsView({ onOpenPatient }) {
                       setForm({
                         ...form,
                         nodes: form.nodes.map((n, i) =>
-                          i === index ? { ...n, offsetDays: e.target.value } : n,
+                          i === index
+                            ? { ...n, offsetDays: e.target.value }
+                            : n,
                         ),
                       })
                     }
@@ -264,17 +296,26 @@ export function FollowupsView({ onOpenPatient }) {
                   onClick={() =>
                     setForm({
                       ...form,
-                      nodes: [...form.nodes, { offsetDays: 90, title: "", items: "" }],
+                      nodes: [
+                        ...form.nodes,
+                        { offsetDays: 90, title: "", items: "" },
+                      ],
                     })
                   }
                   disabled={form.nodes.length >= 12}
                 >
                   <Plus size={13} /> 添加节点
                 </button>
-                <button onClick={createPlan} disabled={busy || !form.name.trim()}>
+                <button
+                  onClick={createPlan}
+                  disabled={busy || !form.name.trim()}
+                >
                   保存模板
                 </button>
-                <button className="secondary" onClick={() => setCreating(false)}>
+                <button
+                  className="secondary"
+                  onClick={() => setCreating(false)}
+                >
                   取消
                 </button>
               </div>
@@ -296,24 +337,43 @@ export function FollowupsView({ onOpenPatient }) {
                 <div className="job-main">
                   <b>{job.patientName}</b> · {job.name}
                   <small>
-                    {fmtDue(job.nextDue)} · {job.once ? "单次" : `每 ${job.intervalDays} 天`}
-                    {job.checklist?.length ? ` · ${job.checklist.join("、")}` : ""}
+                    {fmtDue(job.nextDue)} ·{" "}
+                    {job.once ? "单次" : `每 ${job.intervalDays} 天`}
+                    {job.checklist?.length
+                      ? ` · ${job.checklist.join("、")}`
+                      : ""}
                   </small>
                 </div>
                 <div className="job-actions">
-                  <button className="icon-button" title="打开患者" onClick={() => onOpenPatient?.(job.patientId)}>
+                  <button
+                    className="icon-button"
+                    title="打开患者"
+                    onClick={() => onOpenPatient?.(job.patientId)}
+                  >
                     <Stethoscope size={14} />
                   </button>
-                  <button className="icon-button" title="暂停" onClick={() => toggleJob(job)} disabled={busy}>
+                  <button
+                    className="icon-button"
+                    title="暂停"
+                    onClick={() => toggleJob(job)}
+                    disabled={busy}
+                  >
                     <Pause size={14} />
                   </button>
-                  <button className="icon-button danger" title="删除" onClick={() => deleteJob(job)} disabled={busy}>
+                  <button
+                    className="icon-button danger"
+                    title="删除"
+                    onClick={() => deleteJob(job)}
+                    disabled={busy}
+                  >
                     <Trash2 size={13} />
                   </button>
                 </div>
               </li>
             ))}
-            {!dueJobs.length && <li className="memory-empty">没有到期随访。</li>}
+            {!dueJobs.length && (
+              <li className="memory-empty">没有到期随访。</li>
+            )}
           </ul>
         </section>
 
@@ -336,37 +396,28 @@ export function FollowupsView({ onOpenPatient }) {
                     className="icon-button"
                     title={job.status === "paused" ? "恢复" : "暂停"}
                     onClick={() => toggleJob(job)}
+                    disabled={busy || job.status === "running"}
+                  >
+                    {job.status === "paused" ? (
+                      <Play size={14} />
+                    ) : (
+                      <Pause size={14} />
+                    )}
+                  </button>
+                  <button
+                    className="icon-button danger"
+                    title="删除"
+                    onClick={() => deleteJob(job)}
                     disabled={busy}
                   >
-                    {job.status === "paused" ? <Play size={14} /> : <Pause size={14} />}
-                  </button>
-                  <button className="icon-button danger" title="删除" onClick={() => deleteJob(job)} disabled={busy}>
                     <Trash2 size={13} />
                   </button>
                 </div>
               </li>
             ))}
-            {!upcoming.length && <li className="memory-empty">没有未来计划。</li>}
-          </ul>
-        </section>
-
-        <section className="followups-section">
-          <h3>
-            <Bell size={14} /> 待处理提醒 <em className="count-chip">{reminders.length}</em>
-          </h3>
-          <ul className="job-list">
-            {reminders.map((reminder) => (
-              <li key={reminder.id}>
-                <div className="job-main">
-                  <b>{reminder.patientName}</b> · {reminder.title}
-                  <small>{reminder.detail}</small>
-                </div>
-                <button className="secondary" onClick={() => ackReminder(reminder.id)} disabled={busy}>
-                  确认
-                </button>
-              </li>
-            ))}
-            {!reminders.length && <li className="memory-empty">没有待处理提醒。</li>}
+            {!upcoming.length && (
+              <li className="memory-empty">没有未来计划。</li>
+            )}
           </ul>
         </section>
       </section>

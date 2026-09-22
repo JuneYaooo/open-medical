@@ -174,7 +174,7 @@ export async function runTool(
       "INVALID_TOOL_ARGS",
       `未声明的参数：${key}`,
     );
-  for (const key of schema.required)
+  for (const key of schema.required || [])
     check(
       Object.hasOwn(args, key),
       "INVALID_TOOL_ARGS",

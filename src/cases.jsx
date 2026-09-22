@@ -25,7 +25,7 @@ export function CasesView() {
   const refresh = async () => {
     const [list, people] = await Promise.all([
       api("/api/cases"),
-      api("/api/patients"),
+      api("/api/patients?summary=1"),
     ]);
     setCases(list.cases);
     setPatients(people.patients.filter((p) => !p.archived));

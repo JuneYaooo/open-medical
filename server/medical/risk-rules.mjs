@@ -13,7 +13,8 @@ const LAB_RULES = [
   {
     key: "lab_potassium_low",
     severity: "critical",
-    items: ["血钾", "钾", "血清钾"],
+    items: ["血钾", "钾", "血清钾", "k", "k+"],
+    units: ["mmol/l"],
     op: "lt",
     threshold: 2.8,
     title: "严重低钾血症",
@@ -22,7 +23,8 @@ const LAB_RULES = [
   {
     key: "lab_potassium_high",
     severity: "critical",
-    items: ["血钾", "钾", "血清钾"],
+    items: ["血钾", "钾", "血清钾", "k", "k+"],
+    units: ["mmol/l"],
     op: "gt",
     threshold: 6,
     title: "严重高钾血症",
@@ -31,7 +33,8 @@ const LAB_RULES = [
   {
     key: "lab_glucose_low",
     severity: "critical",
-    items: ["血糖", "葡萄糖"],
+    items: ["血糖", "葡萄糖", "空腹血糖"],
+    units: ["mmol/l"],
     op: "lt",
     threshold: 3,
     title: "低血糖",
@@ -40,7 +43,8 @@ const LAB_RULES = [
   {
     key: "lab_inr_high",
     severity: "critical",
-    items: ["inr", "国际标准化比值", "凝血酶原国际"],
+    items: ["inr", "国际标准化比值", "凝血酶原国际标准化比值"],
+    units: ["", "1", "比值"],
     op: "gt",
     threshold: 4,
     title: "INR 超上限",
@@ -50,6 +54,7 @@ const LAB_RULES = [
     key: "lab_hba1c_high",
     severity: "info",
     items: ["糖化血红蛋白", "hba1c"],
+    units: ["%"],
     op: "gt",
     threshold: 9,
     title: "糖化血红蛋白明显偏高",
@@ -60,11 +65,23 @@ const LAB_RULES = [
     severity: "warning",
     trend: "creatinine",
     title: "肌酐较前次明显升高",
-    message: "肌酐 {value}{unit}（前值 {previous}{unit}，{date}），升幅超过 50%，警惕急性肾损伤。",
+    message:
+      "肌酐 {value}{unit}（前值 {previous}{unit}，{date}），升幅超过 50%，请核对采样时间、单位及临床背景。",
   },
 ];
 
 const FOLLOWUP_OVERDUE_DAYS = 7 * 86400000;
+
+const normalizeUnit = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replaceAll("μ", "u")
+    .replaceAll("µ", "u");
+const normalizeItem = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
 
 const formatValue = (value) =>
   Number.isFinite(value) ? String(Number(value.toFixed(3))) : String(value);
@@ -82,10 +99,10 @@ export class RiskEngine {
   }
   // Evaluate every rule against one patient; returns created/updated alerts.
   // Existing active alerts with the same key are refreshed with new evidence;
-  // acknowledged/resolved ones get re-activated only when still triggering.
+  // acknowledged/resolved ones reopen only for changed triggering evidence.
   evaluatePatient(patientId) {
     const patient = this.patientRow(patientId);
-    if (!patient) return [];
+    if (!patient || patient.archived) return [];
     const now = Date.now();
     const fired = [];
     for (const alert of this.laboratoryAlerts(patient)) fired.push(alert);
@@ -97,7 +114,7 @@ export class RiskEngine {
     const firedKeys = new Set(fired.map((alert) => alert.ruleKey));
     for (const row of this.store.db
       .prepare(
-        "SELECT id,rule_key FROM risk_alerts WHERE patient_id=? AND status='active'",
+        "SELECT id,rule_key FROM risk_alerts WHERE patient_id=? AND status IN ('active','acknowledged')",
       )
       .all(patient.id))
       if (!firedKeys.has(row.rule_key)) {
@@ -120,19 +137,30 @@ export class RiskEngine {
   }
   laboratoryAlerts(patient) {
     const alerts = [];
-    const labs = patient.labs || [];
+    const labs = (patient.labs || []).filter(
+      (lab) =>
+        Number.isFinite(lab.value) && Number.isFinite(Date.parse(lab.date)),
+    );
     for (const rule of LAB_RULES) {
       if (rule.trend === "creatinine") {
         const series = labs
           .filter((lab) =>
-            ["肌酐", "cr", "血肌酐"].some((needle) =>
-              lab.item.toLowerCase().includes(needle),
+            ["肌酐", "cr", "血肌酐", "血清肌酐"].includes(
+              normalizeItem(lab.item),
             ),
           )
           .sort((a, b) => String(a.date).localeCompare(String(b.date)));
         const previous = series.at(-2);
         const latest = series.at(-1);
-        if (!previous || !latest) continue;
+        if (
+          !previous ||
+          !latest ||
+          previous.value <= 0 ||
+          previous.date === latest.date ||
+          !["umol/l", "mg/dl"].includes(normalizeUnit(latest.unit)) ||
+          normalizeUnit(previous.unit) !== normalizeUnit(latest.unit)
+        )
+          continue;
         if (latest.value > previous.value * 1.5)
           alerts.push({
             ruleKey: rule.key,
@@ -140,6 +168,7 @@ export class RiskEngine {
             title: rule.title,
             message: rule.message
               .replace("{value}", formatValue(latest.value))
+              .replaceAll("{unit}", latest.unit || "")
               .replace("{previous}", formatValue(previous.value))
               .replace("{date}", previous.date),
             evidence: [latest, previous],
@@ -148,15 +177,18 @@ export class RiskEngine {
       }
       const needles = rule.items.map((needle) => needle.toLowerCase());
       const matches = labs.filter((lab) =>
-        needles.some((needle) => lab.item.toLowerCase().includes(needle)),
+        needles.includes(normalizeItem(lab.item)),
       );
       if (!matches.length) continue;
       // Evaluate the most recent matching value only, to avoid stale alerts.
       const latest = matches
         .slice()
         .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+      if (!rule.units.includes(normalizeUnit(latest.unit))) continue;
       const triggered =
-        rule.op === "lt" ? latest.value < rule.threshold : latest.value > rule.threshold;
+        rule.op === "lt"
+          ? latest.value < rule.threshold
+          : latest.value > rule.threshold;
       if (!triggered) continue;
       alerts.push({
         ruleKey: rule.key,
@@ -173,7 +205,7 @@ export class RiskEngine {
   medicationAlerts(patient) {
     const alerts = [];
     const result = evaluateMedicationSafety({
-      medications: patient.medications || [],
+      medications: (patient.medications || []).filter((medication) => medication.status !== "stopped"),
       allergies: patient.allergies || [],
     });
     for (const match of result.allergyMatches)
@@ -198,7 +230,9 @@ export class RiskEngine {
         severity: "warning",
         title: "重复用药",
         message: duplicate.message,
-        evidence: [{ medication: duplicate.medication, count: duplicate.count }],
+        evidence: [
+          { medication: duplicate.medication, count: duplicate.count },
+        ],
       });
     return alerts;
   }
@@ -213,7 +247,25 @@ export class RiskEngine {
         severity: "warning",
         title: "随访逾期超过一周",
         message: `随访「${job.name}」已逾期 ${Math.floor((now - job.nextDue) / 86400000)} 天。`,
-        evidence: [{ followUpId: job.id, name: job.name, nextDue: job.nextDue }],
+        evidence: [
+          { followUpId: job.id, name: job.name, nextDue: job.nextDue },
+        ],
+      });
+    }
+    for (const row of this.store.db
+      .prepare(
+        "SELECT id,due_at,data FROM reminders WHERE patient_id=? AND status='pending' AND due_at<=?",
+      )
+      .all(patient.id, now - FOLLOWUP_OVERDUE_DAYS)) {
+      const reminder = JSON.parse(row.data);
+      alerts.push({
+        ruleKey: `followup_pending_${row.id}`,
+        severity: "warning",
+        title: "随访提醒超过一周未处理",
+        message: `「${reminder.title}」仍待登记，请核实联系情况。`,
+        evidence: [
+          { reminderId: row.id, name: reminder.title, nextDue: row.due_at },
+        ],
       });
     }
     return alerts;
@@ -235,7 +287,15 @@ export class RiskEngine {
         .prepare(
           "INSERT INTO risk_alerts(id,patient_id,rule_key,severity,status,data,updated_at) VALUES (?,?,?,?,?,?,?)",
         )
-        .run(randomUUID(), patient.id, alert.ruleKey, alert.severity, "active", payload, now);
+        .run(
+          randomUUID(),
+          patient.id,
+          alert.ruleKey,
+          alert.severity,
+          "active",
+          payload,
+          now,
+        );
       return "created";
     }
     if (existing.status === "active") {
@@ -244,9 +304,19 @@ export class RiskEngine {
         .run(payload, now, existing.id);
       return "refreshed";
     }
-    // Still triggering: re-activate acknowledged/resolved alerts.
+    const previous = JSON.parse(existing.data);
+    // Profile edits and rescans must not undo a doctor's disposition. A new
+    // measurement or a recurrence after auto-resolution requires fresh review.
+    if (
+      !previous.autoResolved &&
+      JSON.stringify(previous.evidence) === JSON.stringify(alert.evidence)
+    )
+      return "unchanged";
+    // Changed evidence or recurrence: request a new review.
     this.store.db
-      .prepare("UPDATE risk_alerts SET status='active',data=?,updated_at=? WHERE id=?")
+      .prepare(
+        "UPDATE risk_alerts SET status='active',data=?,updated_at=? WHERE id=?",
+      )
       .run(payload, now, existing.id);
     return "reopened";
   }
@@ -280,20 +350,24 @@ export class RiskEngine {
       }))
       .sort(
         (a, b) =>
-          (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9) ||
-          b.updatedAt - a.updatedAt,
+          (SEVERITY_ORDER[a.severity] ?? 9) -
+            (SEVERITY_ORDER[b.severity] ?? 9) || b.updatedAt - a.updatedAt,
       );
   }
   setStatus(id, status) {
     checkStatus(status);
     const row = this.store.db
-      .prepare("SELECT id FROM risk_alerts WHERE id=?")
+      .prepare("SELECT id,data FROM risk_alerts WHERE id=?")
       .get(id);
-    if (!row)
-      throw new AppError("NOT_FOUND", "风险提醒不存在", 404);
+    if (!row) throw new AppError("NOT_FOUND", "风险提醒不存在", 404);
     this.store.db
       .prepare("UPDATE risk_alerts SET status=?,updated_at=? WHERE id=?")
       .run(status, Date.now(), id);
+    const alert = JSON.parse(row.data);
+    this.store.audit(alert.sessionId, "risk.disposition", {
+      alertId: id,
+      status,
+    });
     return { ok: true };
   }
   counts() {

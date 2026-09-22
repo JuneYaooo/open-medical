@@ -1,6 +1,7 @@
 import { providerConfigured } from "./core/provider-status.mjs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
+import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import {
   composeDigest,
   selectDigestMessages,
@@ -79,9 +80,9 @@ export class FollowUpManager {
       "随访计划参数无效",
     );
     check(
-      this.list(patientId).length < 20,
+      this.list(patientId).filter((job) => ["active", "running", "paused"].includes(job.status)).length < 20,
       "SCHEDULE_LIMIT",
-      "每位患者最多保留 20 个随访计划",
+      "每位患者最多同时保留 20 个进行中随访计划，已结束记录不占名额",
       422,
     );
     const firstDueAt = Date.parse(input.firstDueAt);
@@ -515,26 +516,33 @@ export class FollowUpManager {
     });
     return result;
   }
-  reminders({ patientId, status = "pending", limit = 100 } = {}) {
+  reminderPage({ patientId, status = "pending", limit = 100, offset = 0 } = {}) {
+    const reminders = this.reminders({ patientId, status, limit, offset });
+    const counts = { pending: 0, done: 0 };
+    for (const row of this.store.db.prepare(`SELECT status,COUNT(*) n FROM reminders ${patientId ? "WHERE patient_id=?" : ""} GROUP BY status`).all(...(patientId ? [patientId] : []))) counts[row.status] = row.n;
+    return { reminders, counts, total: counts[status], offset, limit, hasMore: offset + reminders.length < counts[status] };
+  }
+  reminders({ patientId, status = "pending", limit = 100, offset = 0 } = {}) {
     check(
       ["pending", "done"].includes(status),
       "INVALID_INPUT",
       "提醒状态无效",
     );
     check(
-      Number.isInteger(limit) && limit > 0 && limit <= 500,
+      Number.isSafeInteger(limit) && limit > 0 && limit <= 500 && Number.isSafeInteger(offset) && offset >= 0,
       "INVALID_INPUT",
       "提醒分页参数无效",
     );
     const where = patientId
       ? "WHERE status=? AND patient_id=?"
       : "WHERE status=?";
-    const args = patientId ? [status, patientId, limit] : [status, limit];
+    const args = patientId ? [status, patientId, limit, offset] : [status, limit, offset];
+    const order = status === "done" ? "COALESCE(unixepoch(json_extract(r.data,'$.outcome.recordedAt')) * 1000,r.due_at) DESC, r.id DESC" : "r.due_at ASC, r.id ASC";
     return this.store.db
       .prepare(
         `SELECT r.id, r.patient_id, r.kind, r.due_at, r.status, r.data, p.data AS patient
          FROM reminders r LEFT JOIN patients p ON p.id=r.patient_id
-         ${where} ORDER BY r.due_at ASC LIMIT ?`,
+         ${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
       )
       .all(...args)
       .map((row) => {
@@ -560,6 +568,110 @@ export class FollowUpManager {
       .prepare("UPDATE reminders SET status='done' WHERE id=?")
       .run(id);
     return { ok: true };
+  }
+  recordContact(patientId, input = {}) {
+    identifier(patientId);
+    return sqliteTransaction(this.store.db, () => {
+      const patient = this.patientRow(patientId);
+      const id = input.requestId ? `contact_${identifier(input.requestId)}` : randomUUID();
+      const fingerprint = createHash("sha256").update(JSON.stringify({ title: input.title || "", status: input.status, note: input.note, contactedAt: input.contactedAt || "", nextDueAt: input.nextDueAt || "", nextName: input.nextName || "" })).digest("hex");
+      const existing = this.store.db.prepare("SELECT data FROM reminders WHERE id=?").get(id);
+      if (existing) {
+        const record = JSON.parse(existing.data);
+        check(record.patientId === patientId && record.requestFingerprint === fingerprint, "CONFLICT", "该次联系已保存且内容不同，请刷新记录后追加更正", 409);
+        return record;
+      }
+      const record = { id, requestFingerprint: fingerprint, patientId, sessionId: patient.sessionId, title: input.title ? string(input.title, "联系主题", 100) : "主动联系记录", checklist: [], detail: "医生主动登记的联系", followUpId: null };
+      this.store.db.prepare("INSERT INTO reminders VALUES (?,?,?,?,?,?)").run(record.id, patientId, "manual-contact", this.now(), "pending", JSON.stringify(record));
+      return this.completeReminder(record.id, input);
+    });
+  }
+  addContactAddendum(id, input = {}) {
+    identifier(id);
+    return sqliteTransaction(this.store.db, () => {
+      const row = this.store.db.prepare("SELECT data FROM reminders WHERE id=?").get(id);
+      check(row, "NOT_FOUND", "随访记录不存在", 404);
+      const record = JSON.parse(row.data);
+      check(record.outcome, "INVALID_INPUT", "请先登记联系结果");
+      check(!this.patientRow(record.patientId).archived, "PATIENT_ARCHIVED", "请先恢复患者档案", 409);
+      check(input.expectedRevision === (record.outcome.revision || 0), "REVISION_CONFLICT", "随访记录已变化，请刷新后重新追加", 409);
+      const note = string(input.note, "补充或更正内容", 5000);
+      const addenda = record.outcome.addenda || [];
+      check(addenda.length < 50, "LIMIT_REACHED", "单条联系记录最多追加 50 次，请另建联系记录");
+      record.outcome.addenda = [...addenda, { id: randomUUID(), note, recordedAt: new Date(this.now()).toISOString() }];
+      record.outcome.revision = (record.outcome.revision || 0) + 1;
+      this.store.db.prepare("UPDATE reminders SET data=? WHERE id=?").run(JSON.stringify(record), id);
+      this.store.audit(record.sessionId, "followup.addendum", { reminderId: id, revision: record.outcome.revision });
+      return record;
+    });
+  }
+  completeReminder(id, input = {}) {
+    identifier(id);
+    return sqliteTransaction(this.store.db, () => {
+      const row = this.store.db
+        .prepare("SELECT data FROM reminders WHERE id=?")
+        .get(id);
+      check(row, "NOT_FOUND", "提醒不存在", 404);
+      const reminder = JSON.parse(row.data);
+      check(
+        !reminder.outcome,
+        "ALREADY_RECORDED",
+        "这次随访已登记，请刷新查看结果",
+        409,
+      );
+      const patient = this.patientRow(reminder.patientId);
+      check(
+        !patient.archived,
+        "PATIENT_ARCHIVED",
+        "请先恢复患者档案再登记随访",
+        409,
+      );
+      check(
+        ["completed", "unreachable", "declined"].includes(input?.status),
+        "INVALID_INPUT",
+        "请选择随访结果",
+      );
+      const note = string(input.note, "随访记录", 5000);
+      const contactedAt = input.contactedAt ? Date.parse(input.contactedAt) : this.now();
+      check(Number.isFinite(contactedAt) && contactedAt <= this.now() + 60000 && contactedAt >= Date.parse("1900-01-01"), "INVALID_INPUT", "联系时间无效或晚于当前时间");
+      const checkedItems = input.checkedItems || [];
+      check(
+        Array.isArray(checkedItems) &&
+          new Set(checkedItems).size === checkedItems.length &&
+          checkedItems.every((item) => reminder.checklist?.includes(item)),
+        "INVALID_INPUT",
+        "核对条目须来自本次随访清单",
+      );
+      let nextJob = null;
+      if (input.nextDueAt) {
+        nextJob = this.create(patient.id, {
+          name: string(input.nextName || "后续随访", "下次随访名称", 100),
+          once: true,
+          firstDueAt: input.nextDueAt,
+          checklist: reminder.checklist || [],
+          externalConsent: false,
+        });
+      }
+      reminder.outcome = {
+        status: input.status,
+        note,
+        checkedItems,
+        recordedAt: new Date(this.now()).toISOString(),
+        contactedAt: new Date(contactedAt).toISOString(),
+        revision: 0,
+        nextFollowUpId: nextJob?.id || null,
+        nextDueAt: nextJob ? new Date(nextJob.nextDue).toISOString() : null,
+      };
+      this.store.db
+        .prepare("UPDATE reminders SET status='done',data=? WHERE id=?")
+        .run(JSON.stringify(reminder), id);
+      this.store.audit(patient.sessionId, "followup.recorded", {
+        reminderId: id,
+        status: input.status,
+        nextFollowUpId: nextJob?.id || null,
+      });
+      return reminder;
+    });
   }
 }
 

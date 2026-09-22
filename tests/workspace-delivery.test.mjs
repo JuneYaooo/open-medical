@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { WorkspaceDatabase, WorkspaceService } from '../server/core/index.mjs';
 import { WorkspaceFiles, hashText } from '../server/core/workspace-files.mjs';
 import { SessionBridge } from '../server/session-bridge.mjs';
+import { verifyEvaluationBoundary } from '../scripts/evaluation-boundary.mjs';
 
 async function fixture(t, steps = [], { review = false, initial, message = '创建并核对 report.md', answer = '已创建 report.md，任务完成。' } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'omw-delivery-')), root = join(base, 'project');
@@ -95,6 +96,25 @@ test('failed execution receipt cannot verify successful file delivery', async t 
   const run = f.service.get(f.id).runs.at(-1);
   assert.equal(run.delivery.delivered, false);
   assert.ok(run.delivery.gaps.some(g => g.reason === 'execution_not_passed' && g.exitCode === 7));
+});
+
+test('a reproduced failure becomes a warning only after the same command passes against current inputs', async t => {
+  const f = await fixture(t, [write()]);
+  const handle = f.prepare({ files: [{ path: 'report.md' }], requireExecution: true });
+  const input = { path: 'report.md', hash: hashText('synthetic verified content') };
+  const failed = { id: 'baseline-failed', runId: handle.run.id, command: 'npm test', environment: 'isolated-container', status: 'failed', exitCode: 1, outputComplete: true, completedAt: 1, inputs: [{ ...input, hash: hashText('old') }] };
+  const passed = { ...failed, id: 'after-repair', status: 'completed', exitCode: 0, completedAt: 2, inputs: [input] };
+  f.service.store.update(f.id, w => { w.verifications = [failed, passed]; });
+  await f.service.execute(handle);
+  let run = f.service.get(f.id).runs.at(-1);
+  assert.equal(run.delivery.delivered, true);
+  assert.ok(run.delivery.warnings.some(w => w.reason === 'execution_recovered' && w.recoveredBy === passed.id));
+  for (const changed of [{ command: 'true' }, { inputs: [] }, { inputs: [{ ...input, hash: hashText('stale') }] }, { outputComplete: false }, { completedAt: 0 }, { runId: 'another-run' }]) {
+    f.service.store.update(f.id, w => { w.verifications = [failed, { ...passed, ...changed }]; });
+    const checked = await f.service.verifyDelivery(f.id, handle.run.id);
+    assert.equal(checked.delivered, false, JSON.stringify(changed));
+    assert.ok(checked.gaps.some(g => g.reason === 'execution_not_passed'));
+  }
 });
 
 test('pure answer needs no tool call; protected explicit requirements rejected before run', async t => {
@@ -194,6 +214,9 @@ test('verified proposal submission stops as waiting approval, survives reload, a
   }, () => { throw new Error('Model must stop after verified submission'); }], { review: true });
   const run = await f.run({ files: [{ path: 'report.md', contains: 'verified content' }], requireExecution: true });
   assert.equal(run.status, 'waiting_approval', run.error); assert.equal(run.outcome, 'awaiting_approval');
+  const boundary = verifyEvaluationBoundary(f.service, f.id, f.service.store.get(f.id).runs.at(-1), { status: run.status });
+  assert.equal(boundary.approvalBoundaryVerified, true);
+  assert.throws(() => verifyEvaluationBoundary(f.service, f.id, run, { status: run.status }, { automatic: true }), /expected boundary/);
   assert.equal(run.delivery, null); assert.equal(run.runtimeState, undefined); // private projection
   assert.equal(f.service.store.get(f.id).runs.at(-1).runtimeState.phase, 'waiting_approval');
   assert.throws(() => readFileSync(join(f.root, 'report.md')), { code: 'ENOENT' });
@@ -224,6 +247,7 @@ for (const invalid of ['missing', 'wrong-run', 'failed', 'finalizing', 'incomple
     }], { review: true });
     const run = await f.run(invalid === 'wrong-requirement' ? { files: [{ path: 'report.md', contains: 'required absent' }] } : undefined);
     assert.notEqual(run.status, 'waiting_approval');
+    assert.throws(() => verifyEvaluationBoundary(f.service, f.id, f.service.store.get(f.id).runs.at(-1), { status: 'waiting_approval' }), /./);
     assert.notEqual(run.outcome, 'delivered');
     assert.equal(f.service.get(f.id).approvals[0].status, 'pending');
     assert.throws(() => readFileSync(join(f.root, 'report.md')), { code: 'ENOENT' });
@@ -308,4 +332,23 @@ test('run_end hook observes waiting approval rather than a false completed statu
   f.service.extensions.runHooks = (...args) => { if (args[1] === 'run_end') ends.push(args[2].status); return original(...args); };
   assert.equal((await f.run()).status, 'waiting_approval');
   assert.deepEqual(ends, ['waiting_approval']);
+});
+
+test('resolving child proposals settles the owning parent only after its whole team has no pending approvals', async (t) => {
+  const f = await fixture(t, [], { review: true });
+  const run = await f.run();
+  const first = new WorkspaceFiles(f.root).proposal('first.md', 'first', null);
+  const second = new WorkspaceFiles(f.root).proposal('second.md', 'second', null);
+  f.service.store.update(f.id, (w) => {
+    const parent = w.runs.find((item) => item.id === run.id);
+    parent.status = 'waiting_approval'; parent.children = [{ id: 'child-first' }, { id: 'child-second' }];
+    w.approvals.push({ ...first, runId: 'child-first' }, { ...second, runId: 'child-second' });
+  });
+  f.service.decide(f.id, first.id, { revision: f.service.get(f.id).revision, decision: 'approve' });
+  assert.equal(f.service.get(f.id).runs.at(-1).status, 'waiting_approval');
+  f.service.decide(f.id, second.id, { revision: f.service.get(f.id).revision, decision: 'reject' });
+  const settled = f.service.get(f.id).runs.at(-1);
+  assert.equal(settled.status, 'waiting_input'); assert.equal(settled.outcome, 'approval_resolved');
+  assert.notEqual(settled.outcome, 'delivered');
+  assert.equal(readFileSync(join(f.root, 'first.md'), 'utf8'), 'first');
 });

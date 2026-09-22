@@ -30,6 +30,7 @@ export function LiteratureView({ onOpenTask }) {
     if (!searchQuery.trim()) return;
     setBusy(true);
     setError("");
+    setResults(null);
     try {
       const params = new URLSearchParams({
         query: searchQuery,
@@ -166,7 +167,8 @@ export function LiteratureView({ onOpenTask }) {
         {results && (
           <p className="muted literature-meta">
             {results.cached ? "（本地缓存结果）" : ""}
-            共 {results.count} 条
+            共 {results.count} 条 · 来源：{results.source === "pubmed" ? "PubMed" : "Europe PMC"}
+            {results.fallback && <span role="status"> · {results.note}</span>}
           </p>
         )}
         <ul className="literature-results">

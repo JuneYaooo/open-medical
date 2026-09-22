@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { patientOptionLabel } from "./patient-labels";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -46,6 +47,7 @@ import { WorkspacesView } from "./workspaces";
 import { WorkbenchHome } from "./workbench-home";
 import { RichMessage } from "./workbench/message";
 import { RunStatusNotice, OutcomeCard } from "./workbench/run-status-view";
+import { consultationLookupIssue } from "./workbench/run-status";
 import { blockedText, runDerivedStatus } from "./workbench/run-status";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
@@ -574,6 +576,8 @@ function App() {
   const inputRef = useRef(),
     fileRef = useRef(),
     endRef = useRef(),
+    followOutput = useRef(true),
+    lastScrollTop = useRef(0),
     activeRef = useRef(""),
     generation = useRef(0),
     sendingRef = useRef(new Set()),
@@ -609,11 +613,12 @@ function App() {
           .filter((p) => p.name.toLowerCase().includes(mention.query.toLowerCase()))
           .slice(0, 4)
       : [];
-  const pickPatientMention = (p) => {
+  const pickPatientMention = async (p) => {
+    const fullPatient = await api(`/api/patients/${p.id}`);
     setDraft((d) => d.replace(/@[^\s@]{0,20}$/, ""));
     setMention(null);
     setReferencedPatients((prev) =>
-      prev.some((x) => x.id === p.id) ? prev : [...prev, p],
+      prev.some((x) => x.id === p.id) ? prev : [...prev, fullPatient],
     );
     inputRef.current?.focus();
   };
@@ -630,7 +635,7 @@ function App() {
     if (outcome === "answered") return "文字回答 · 无产物";
     if (outcome === "delivered") return "已交付成果";
     // N3:执行类未完成/未验证不冒充交付,也不降格为文字回答。
-    if (outcome === "delivery_failed") return "交付未完成";
+    if (outcome === "delivery_failed") return consultationLookupIssue(runOf(m.runId)) ? "回答依据不完整" : "交付未完成";
     if (outcome === "unverified") return "结果未验证";
     return m.intent === "consultation" ||
       (m.intent === undefined && !runOf(m.runId)?.artifacts?.length)
@@ -654,11 +659,11 @@ function App() {
         : Promise.resolve({ sessions: [] }),
       api("/api/workspaces").catch(() => ({ workspaces: [] })),
       medical
-        ? api("/api/patients").catch(() => ({ patients: [] }))
+        ? api("/api/patients?summary=1").catch(() => ({ patients: [] }))
         : Promise.resolve({ patients: [] }),
     ]);
     setSessions(value.sessions);
-    setWsList(ws.workspaces || []);
+    setWsList((ws.workspaces || []).filter((item) => item.kind !== "session"));
     setPatientsList(pt.patients || []);
     return value.sessions;
   };
@@ -757,13 +762,14 @@ function App() {
     setCurrentPatientId(id);
     localStorage.setItem("om.currentPatient", id || "");
   };
-  useEffect(() => {
-    if (endRef.current) {
-      const pane = endRef.current.parentElement;
-      if (pane.scrollHeight - pane.scrollTop - pane.clientHeight < 300)
-        endRef.current.scrollIntoView({ block: "end" });
+  useLayoutEffect(() => { followOutput.current = true; lastScrollTop.current = 0; }, [activeId]);
+  useLayoutEffect(() => {
+    const pane = endRef.current?.parentElement;
+    if (pane && followOutput.current) {
+      pane.scrollTop = pane.scrollHeight;
+      lastScrollTop.current = pane.scrollTop;
     }
-  }, [session?.messages.length, activeRun?.partial]);
+  }, [activeId, session?.messages.length, activeRun?.partial, activeRun?.busy]);
   useEffect(() => {
     if (!activeId) return;
     const timer = setInterval(() => {
@@ -849,6 +855,8 @@ function App() {
     if (!current || sendingRef.current.has(current.id)) return;
     const id = current.id;
     sendingRef.current.add(id);
+    followOutput.current = true;
+    lastScrollTop.current = 0;
     setError("");
     setNotice("");
     setDraft("");
@@ -1319,7 +1327,7 @@ function App() {
           {medical && (
             <>
               <p className="nav-label">
-                今日任务 <span>{sessions.length}</span>
+                最近任务 <span>{sessions.length}</span>
                 {pendingReviews > 0 && (
                   <button
                     className="nav-label-action warn"
@@ -1329,7 +1337,7 @@ function App() {
                   </button>
                 )}
               </p>
-              <nav className="sessions" aria-label="今日任务">
+              <nav className="sessions" aria-label="最近任务">
                 {sessions
                   .filter(
                     (item) =>
@@ -1385,7 +1393,7 @@ function App() {
                   >
                     <Stethoscope size={14} />
                     <span>
-                      <b>{p.name}</b>
+                      <b>{patientOptionLabel(p, patientsList)}</b>
                       <small>
                         {p.counts?.dueFollowups
                           ? `${p.counts.dueFollowups} 项随访到期`
@@ -1447,11 +1455,12 @@ function App() {
             />
           ) : view === "patients" ? (
             <PatientsView
-              key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}`}
+              key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}`}
               config={config}
               initialPatientId={patientRoute.id}
               initialTab={patientRoute.tab}
               initialCreate={patientRoute.create}
+              initialImport={patientRoute.import}
               onOpenWorkspace={openTask}
               onSwitchCurrent={switchCurrentPatient}
               onChanged={refreshList}
@@ -1459,11 +1468,11 @@ function App() {
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
           ) : view === "knowledge" ? (
-            <KnowledgeView />
+            <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
           ) : view === "followups" ? (
-            <FollowupsView onOpenPatient={(id) => openPatient({ id })} />
+            <FollowupsView onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
           ) : view === "cases" ? (
             <CasesView />
           ) : view === "research" ? (
@@ -1675,7 +1684,18 @@ function App() {
                     }}
                   />
                 ) : (
-                  <div className="message-list">
+                  <div className="message-list"
+                    onWheel={(e) => { if (e.deltaY < 0) followOutput.current = false; }}
+                    onTouchMove={() => { followOutput.current = false; }}
+                    onKeyDown={(e) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) followOutput.current = false; }}
+                    onScroll={(e) => {
+                      const pane = e.currentTarget;
+                      const movement = pane.scrollTop - lastScrollTop.current;
+                      const bottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight <= 24;
+                      if (movement < -1) followOutput.current = false;
+                      else if (movement > 1 && bottom) followOutput.current = true;
+                      lastScrollTop.current = pane.scrollTop;
+                    }}>
                     {session?.patientId && patientDetail && (
                       <PatientSummaryCard
                         detail={patientDetail}
@@ -1767,6 +1787,7 @@ function App() {
                               <OutcomeCard
                                 outcome={m.outcome || runOf(m.runId)?.outcome}
                                 delivery={runOf(m.runId)?.delivery}
+                                consultationRun={runOf(m.runId)}
                               />
                             )}
                           {m.role !== "user" && (
@@ -1919,7 +1940,7 @@ function App() {
                               className="patient-mention"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                pickPatientMention(p);
+                                pickPatientMention(p).catch((err) => setError(err.message));
                               }}
                             >
                               <Stethoscope size={12} />
@@ -2601,7 +2622,7 @@ function App() {
                               </small>
                             </div>
                             <p>
-                              {INTENTS[run.policy.intent]} ·{" "}
+                              {INTENTS[run.policy?.intent] || "医疗任务"} ·{" "}
                               {run.mode === "local" ? "本地整理" : "Agent 执行"}
                             </p>
                             {(run.children || []).map((child) => (
@@ -2613,13 +2634,13 @@ function App() {
                             ))}
                             <details>
                               <summary>查看过程与来源版本</summary>
-                              {run.events.map((event) => (
+                              {(run.events || []).map((event) => (
                                 <p className="event-line" key={event.seq}>
                                   <span>{event.seq}</span>
                                   {eventLabel(event)}
                                 </p>
                               ))}
-                              {run.sourceHashes.map((s) => (
+                              {(run.sourceHashes || []).map((s) => (
                                 <code className="hash" key={s.id}>
                                   SHA256 {s.hash.slice(0, 16)}…
                                 </code>
@@ -2716,7 +2737,7 @@ function App() {
                   )}
                   {toolPanel === "cases" && <CasesView />}
                   {toolPanel === "clinical-ref" && <ClinicalRefView />}
-                  {toolPanel === "knowledge" && <KnowledgeView />}
+                  {toolPanel === "knowledge" && <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />}
                   {toolPanel === "literature" && (
                     <LiteratureView
                       onOpenTask={(id) => {

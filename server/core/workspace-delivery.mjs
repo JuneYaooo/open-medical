@@ -96,6 +96,7 @@ export function collectWorkspaceDelivery(service, id, runId, signal) {
     }
   }
   for (const item of (run.artifacts || []).filter((a) => !priorArtifacts.has(a.id))) evidence.push(artifactEvidence({ ...item, runId }));
+  const receipts = new Map((w.verifications || []).map((entry) => [entry.id, entry]));
   const sessions = [...new Map([
     ...(w.verifications || []).filter((s) => owners.has(s.runId)),
     ...[...service.extensions.runner.sessions.values()].filter((s) => s.owner === id && owners.has(s.runId)),
@@ -103,8 +104,22 @@ export function collectWorkspaceDelivery(service, id, runId, signal) {
   let executed = false;
   for (const session of sessions) {
     if (session.status !== "completed" || session.exitCode !== 0) {
-      gaps.push({ reason: "execution_not_passed", sessionId: session.id, exitCode: session.exitCode,
-        status: session.status, detail: "本次执行没有成功退出，不能作为验证通过的证据。" });
+      const prior = receipts.get(session.id);
+      // A reproduced failure is not erased. A later run of the exact same
+      // command can supersede it only with complete, current snapshot coverage.
+      const recovery = prior && prior.status === "failed" && session.status !== "cancelled" && prior.environment === "isolated-container" && typeof prior.command === "string" && prior.command.length > 0 && Number.isInteger(prior.exitCode) && prior.exitCode !== 0 && prior.outputComplete === true &&
+        prior.inputs?.length && sessions.find((candidate) => {
+          const verified = receipts.get(candidate.id);
+          return candidate.status === "completed" && candidate.exitCode === 0 && verified?.status === "completed" &&
+            verified.environment === "isolated-container" && verified.outputComplete === true &&
+            verified.command === prior.command && verified.runId === prior.runId && verified.completedAt > prior.completedAt &&
+            prior.inputs.every((input) => verified.inputs?.some((current) => current.path === input.path)) &&
+            verified.inputs.every((input) => { try { return files.read(input.path).hash === input.hash; } catch { return false; } });
+        });
+      if (recovery) warnings.push({ reason: "execution_recovered", sessionId: session.id, exitCode: session.exitCode,
+        recoveredBy: recovery.id, detail: "先前命令失败；相同命令已在覆盖当前文件的完整快照中重跑通过，失败历史仍保留。" });
+      else gaps.push({ reason: "execution_not_passed", sessionId: session.id, exitCode: session.exitCode,
+        status: session.status, detail: "本次执行没有成功退出，且没有相同命令覆盖当前文件的重跑通过证据。" });
     } else {
       executed = true;
       evidence.push(receiptEvidence("process_runner", { sessionId: session.id, runId,

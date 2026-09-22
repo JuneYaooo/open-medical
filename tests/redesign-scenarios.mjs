@@ -6,7 +6,7 @@ export const SCENARIOS = [
   {
     name: '重设计外壳：分组左栏替代平级页签，顶栏患者切换器就位',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  for (const label of ["项目", "今日任务", "患者", "工具箱"]) {
+  for (const label of ["项目", "最近任务", "患者", "工具箱"]) {
     assert.ok(
       await page
         .locator(".app-navigation .nav-label", { hasText: label })
@@ -451,8 +451,9 @@ export const SCENARIOS = [
     await page.locator('.tool-slide button:has-text("应用")').click();
     await page.waitForFunction(
       () => {
-        const lists = document.querySelectorAll(".tool-slide .job-list");
-        return lists.length >= 2 && lists[1].textContent.includes("随访模板患者");
+        const sections = [...document.querySelectorAll(".tool-slide .followups-section")];
+        const upcoming = sections.find((section) => section.querySelector("h3")?.textContent.includes("未来与暂停"));
+        return upcoming?.querySelector(".job-list")?.textContent.includes("随访模板患者");
       },
       { timeout: 8000 },
     );

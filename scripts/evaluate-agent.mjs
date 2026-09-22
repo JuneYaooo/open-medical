@@ -7,6 +7,8 @@ import { GitWorkspace } from "../server/core/git-workspace.mjs";
 import { sourceFingerprint } from "./source-fingerprint.mjs";
 import { claudeCodeProvider } from "./claude-code-provider.mjs";
 import { startAcceptanceMcp } from "./acceptance-mcp.mjs";
+import { verifyEvaluationBoundary } from "./evaluation-boundary.mjs";
+import { continuityFixture, verifyContinuity } from "./continuity-fixture.mjs";
 
 const { values } = parseArgs({ options: {
   case: { type: "string", default: "all" }, repeat: { type: "string", default: "3" },
@@ -52,7 +54,7 @@ if (!providerConfigured(provider)) {
   async function runCase(name, attempt) {
     const repair = name.startsWith("repair"), automatic = name === "repair-auto";
     const root = join(directory, `${name}-${attempt}`); mkdirSync(root);
-    let prompt, originalTests, mcp;
+    let prompt, originalTests, mcp, continuity;
     if (repair) {
       mkdirSync(join(root, "src")); mkdirSync(join(root, "tests"));
       writeFileSync(join(root, "package.json"), '{"type":"module","scripts":{"test":"node --test"}}');
@@ -75,9 +77,9 @@ if (!providerConfigured(provider)) {
       mcp = await startAcceptanceMcp(); cleanups.push(mcp.close);
       prompt = "查询已授权 MCP 服务器 inventory 中 demo 仓库的库存，先发现其工具与参数。遇到临时查询失败时分析错误并重试。将返回的 batch、rows 原样保存为 inventory.json，并增加 total 为 quantity 合计。数据必须来自实际工具结果，不能编造。生成文件提案并说明来源和重试情况。";
     } else if (name === "continuity") {
-      for (let i = 1; i <= 16; i++) writeFileSync(join(root, `record-${i}.txt`),
-        `Record ${i}. Units=${i}.\n` + "Background: synthetic warehouse record for continuity acceptance. ".repeat(28));
-      prompt = "读取 record-1.txt 到 record-16.txt 的全部内容，逐份读取并记住 Units 数值。生成 summary.md 列出16份文件各自的 Units 和合计136。请不要使用终端或脚本代替 read_file 阅读，不要仅根据文件名猜数值。按文件名引用来源，并核对总数。运行可能中断并续接；以工具真实结果和后续追加要求为准。";
+      continuity = continuityFixture();
+      for (const record of continuity.records) writeFileSync(join(root, record.path), record.text);
+      prompt = continuity.prompt;
     } else {
       writeFileSync(join(root, "README.md"), "Team acceptance fixture. Deliver NOTES.md containing TEAM_ACCEPTED and explain that approval is required for host writes.\n");
       prompt = "使用协作工具并行创建两个 reader，分别分析 README 的交付要求和权限约束。再创建依赖两个 reader 的 writer，只允许写 NOTES.md，完成 README 中的文档提案。最后创建依赖 writer 的 verifier，使用隔离终端和该提案验证 NOTES.md 包含 TEAM_ACCEPTED。收齐所有结果后交付，不要由父任务代替子代理写文件。";
@@ -117,7 +119,7 @@ if (!providerConfigured(provider)) {
       durationMs: run.activeMs, rounds: run.roundsUsed, toolFailures: service.store.events(w.id, 0, 1000).filter((e) => e.type === "tool.failed").length };
     Object.assign(report.results.at(-1), metrics);
     save();
-    require(execution.status === "completed", `Agent did not complete: ${execution.error}`);
+    Object.assign(metrics, verifyEvaluationBoundary(service, w.id, run, execution, { automatic }));
     if (repair) {
       const checks = service.store.get(w.id).verifications || [];
       require(checks.some((v) => v.exitCode !== 0), "Agent never reproduced failing tests");
@@ -159,11 +161,12 @@ if (!providerConfigured(provider)) {
     } else if (name === "continuity") {
       apply(w.id, ["summary.md"]);
       const summary = readFileSync(join(root, "summary.md"), "utf8");
-      require(summary.includes("CONTINUITY_ACCEPTED") && summary.includes("136"), "Recovered output lost steering or total");
-      for (let i = 1; i <= 16; i++) require(summary.includes(`record-${i}.txt`), "Recovered output lost source " + i);
+      const observations = db.db.prepare("SELECT data FROM agent_context_archives WHERE workspace_id=? AND run_id=?")
+        .all(w.id, run.id).map((row) => JSON.parse(row.data));
+      verifyContinuity(continuity, summary, observations);
       require(db.db.prepare("SELECT count(*) AS n FROM agent_events WHERE workspace_id=? AND run_id=? AND type=?")
         .get(w.id, run.id, "context.compacted").n > 0, "No automatic compaction occurred");
-      metrics.checks = ["real tool interruption", "SQLite reopen", "same-run recovery", "queued steering", "automatic compaction", "16 source references", "verified total"];
+      metrics.checks = ["real tool interruption", "SQLite reopen", "same-run recovery", "queued steering", "automatic compaction", "16 full source observations", "randomized exact Units", "verified total"];
     } else {
       require(run.children?.length >= 4 && run.children.every((c) => c.status === "completed"), "Team did not complete all tasks");
       require(run.children.filter((c) => c.role === "reader").length >= 2 && run.children.some((c) => c.role === "writer" && c.dependsOn.length >= 2), "Task dependencies missing");
@@ -172,6 +175,10 @@ if (!providerConfigured(provider)) {
       require(readFileSync(join(root, "NOTES.md"), "utf8").includes("TEAM_ACCEPTED"), "Child artifact missing acceptance marker");
       metrics.checks = ["reader team", "writer dependencies", "verifier test pass", "approved child output"];
     }
+    metrics.finalRunStatus = service.get(w.id).runs.at(-1).status;
+    metrics.pendingApprovals = service.get(w.id).approvals.filter((a) => a.status === "pending").length;
+    require(metrics.pendingApprovals === 0, "Acceptance left an unapplied proposal");
+    require(metrics.finalRunStatus !== "waiting_approval", "Run still claims approval is pending after all proposals were resolved");
     await service.extensions.close(w.id);
     return metrics;
   }

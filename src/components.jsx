@@ -29,18 +29,21 @@ export function Badge({ status }) {
 }
 export function Modal({ title, onClose, children, wide = false }) {
   const ref = useRef();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement;
     ref.current?.focus();
     const key = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab") {
-        const nodes = ref.current.querySelectorAll(
+        const nodes = [...ref.current.querySelectorAll(
           "button,input,textarea,select,a[href]",
-        );
+        )].filter((node) => !node.matches(":disabled") && node.tabIndex !== -1 && node.getClientRects().length);
         const first = nodes[0],
           last = nodes[nodes.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
+        if (!nodes.length) { e.preventDefault(); ref.current?.focus(); }
+        else if (e.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
           e.preventDefault();
           last?.focus();
         } else if (!e.shiftKey && document.activeElement === last) {

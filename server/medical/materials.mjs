@@ -17,10 +17,16 @@ export class MaterialLibrary {
     this.vectorStore = vectorStore; // LanceVectorStore over a materials-only dir
   }
 
+  // Patient material indexing is local-only. An ordinary model-generation
+  // consent does not authorize background embeddings or search queries.
+  canEmbedLocally() {
+    return this.embedder?.available() && this.embedder.status?.().mode === "local";
+  }
+
   // Fire-and-forget from addFile; failures degrade to keyword search only.
   async ingest(file) {
     const chunks = chunkify(file.text);
-    if (!this.embedder?.available() || !this.vectorStore || !chunks.length)
+    if (!this.canEmbedLocally() || !this.vectorStore || !chunks.length)
       return { fileId: file.id, chunks: chunks.length, embedded: 0 };
     const embeddable = chunks.slice(0, MAX_EMBEDDED_CHUNKS);
     try {
@@ -81,7 +87,7 @@ export class MaterialLibrary {
     // Vector pass over the run's file ids only.
     const vectorScores = new Map();
     let semantic = false;
-    if (this.embedder?.available() && this.vectorStore && terms.length) {
+    if (this.canEmbedLocally() && this.vectorStore && terms.length) {
       try {
         const [queryVector] = await this.embedder.embed([text]);
         const hits = await this.vectorStore.search(

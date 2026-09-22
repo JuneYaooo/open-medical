@@ -1,3 +1,4 @@
+import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -21,12 +22,14 @@ const TOOL_NAMES = {
   guideline_search: "检索指南知识库",
   guideline_read: "精读指南段落",
   read_patient_profile: "读取患者档案",
+  read_patient_brief: "读取当前患者近况",
   list_skills: "发现可用技能",
   read_skill: "读取技能说明",
   read_source: "通读原始材料",
   web_search: "检索网页",
   document_create: "生成文档",
   sandbox_run: "本地沙箱计算",
+  terminal_check: "运行检查并核对退出码",
 };
 const toolName = (tool) => TOOL_NAMES[tool] || tool || "工具";
 
@@ -313,7 +316,7 @@ export function PatientSummaryCard({ patient, detail, session, onOpenDetail, onO
   return (
     <div className={`patient-summary ${compact ? "compact" : ""}`}>
       <div className="ps-head">
-        <span className="p-ava">{(p.name || "?").slice(0, 1)}</span>
+        <span className="p-ava" title={patientIdentityLabel(p)}>{(p.name || "?").slice(0, 1)}</span>
         <div className="p-id">
           <b>{p.name}{p.gender || p.birthYear ? ` · ${p.gender === "female" ? "女" : p.gender === "male" ? "男" : ""}${p.birthYear ? ` ${p.birthYear}年生` : ""}` : ""}</b>
           <span>
@@ -324,12 +327,13 @@ export function PatientSummaryCard({ patient, detail, session, onOpenDetail, onO
         </div>
         <div className="ps-badges">
           {allergies.length > 0 && <span className="badge no">过敏：{allergies.join("、")}</span>}
+          {!allergies.length && <span className="badge">{p.allergyStatus === "none_known" ? "已核对：无已知过敏" : "过敏史待核对"}</span>}
           <span className="pill local">◈ 本地</span>
         </div>
       </div>
       <div className="ps-grid">
         <div className="ps-col">
-          <h5>当前用药（{meds.length}）</h5>
+          <h5>用药记录（{meds.length}）</h5>
           {meds.length ? (
             meds.slice(0, 4).map((m, i) => {
               const name = typeof m === "string" ? m : `${m.name || ""}${m.dose ? ` ${m.dose}` : ""}${m.frequency ? ` ${m.frequency}` : ""}`;
@@ -390,10 +394,16 @@ export function PatientSwitcher({ patients, currentId, onSwitch, onManage }) {
   }, []);
   const current = patients.find((p) => p.id === currentId);
   const list = patients
-    .filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()))
+    .filter((p) => !q || `${p.name} ${p.patientNumber || ""} ${p.phone || ""} ${p.id}`.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 8);
   return (
-    <div className="pt-switcher" ref={ref}>
+    <div className="pt-switcher" ref={ref} onKeyDown={(event) => {
+      if (event.key === "Escape" && open) {
+        event.stopPropagation();
+        setOpen(false);
+        ref.current?.querySelector(".patient-pill")?.focus();
+      }
+    }}>
       <button className={`pill patient-pill ${current ? "" : "empty"}`} onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="dot" />
         {current ? `患者：${current.name}` : "未选择患者"}
@@ -403,7 +413,7 @@ export function PatientSwitcher({ patients, currentId, onSwitch, onManage }) {
         <div className="pt-switch-menu">
           <label className="ps-search">
             <Search size={13} />
-            <input autoFocus placeholder="搜索患者（姓名 / 拼音）" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input autoFocus aria-label="搜索并切换患者" placeholder="搜索姓名、编号或电话" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
           <p className="ps-group">最近</p>
           {list.map((p) => (
@@ -415,7 +425,7 @@ export function PatientSwitcher({ patients, currentId, onSwitch, onManage }) {
                 setOpen(false);
               }}
             >
-              {p.id === currentId ? "✓" : ""} {p.name}
+              {p.id === currentId ? "✓" : ""} {patientOptionLabel(p, patients)}
               <span className="sub">
                 {p.counts?.dueFollowups ? `${p.counts.dueFollowups} 项随访到期` : p.counts?.unprocessedMessages ? `${p.counts.unprocessedMessages} 条新消息` : ""}
               </span>
@@ -442,40 +452,53 @@ export function modeToRequest(modelEnabled, base) {
 
 /* ---------- 风险卡列表 ---------- */
 export function RiskList({ alerts, onAck, onResolve, onDraft, busy }) {
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const actionPending = useRef(false);
+  const act = async (operation) => {
+    if (actionPending.current) return;
+    actionPending.current = true;
+    setActionBusy(true);
+    setActionError("");
+    try { await operation(); }
+    catch (error) { setActionError(error.message); }
+    finally { actionPending.current = false; setActionBusy(false); }
+  };
   if (!alerts?.length) return null;
   const order = { critical: 0, warning: 1, info: 2 };
   const sorted = [...alerts].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
   return (
     <div className="risk-list">
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
       {sorted.map((r) => (
         <div className={`risk-card ${r.severity === "critical" ? "red" : ""}`} key={r.id}>
           <div className="r-head">
             {r.severity === "critical" ? "用药/检验风险 · 高" : r.severity === "warning" ? "风险提示" : "提示"}
             {r.status === "acknowledged" && <span className="badge ok">已确认</span>}
-            {r.status === "resolved" && <span className="badge ok">已处理</span>}
+            {r.status === "resolved" && <span className="badge ok">{r.autoResolved ? "当前资料未触发" : "已处理"}</span>}
           </div>
           <div className="r-body">
             <b>{r.title}</b> · {r.message}
             {r.evidence?.length > 0 && (
               <small className="r-evidence">
-                依据：{r.evidence.map((e) => `${e.item || ""}${e.value != null ? ` ${e.value}${e.unit || ""}` : ""}${e.date ? `（${e.date}）` : ""}`).join("；")}
+                依据：{r.evidence.map((e) => `${e.item || e.medication || e.name || ""}${e.allergy ? `（过敏史：${e.allergy}）` : ""}${e.value != null ? ` ${e.value}${e.unit || ""}` : ""}${e.date ? `（${e.date}）` : ""}`).join("；")}
               </small>
             )}
           </div>
           <div className="r-acts">
             {onDraft && r.status === "active" && (
-              <button className="mini-btn" disabled={busy} onClick={() => onDraft(r)}>
+              <button className="mini-btn" disabled={busy || actionBusy} onClick={() => act(() => onDraft(r))}>
                 生成处理建议草稿
               </button>
             )}
             {r.status === "active" && onAck && (
-              <button className="mini-btn plain" disabled={busy} onClick={() => onAck(r)}>知道了</button>
+              <button className="mini-btn plain" disabled={busy || actionBusy} onClick={() => act(() => onAck(r))}>知道了</button>
             )}
             {r.status !== "resolved" && onResolve && (
-              <button className="mini-btn plain" disabled={busy} onClick={() => onResolve(r)}>标记已处理</button>
+              <button className="mini-btn plain" disabled={busy || actionBusy} onClick={() => act(() => onResolve(r))}>标记已处理</button>
             )}
             {r.status === "resolved" && onResolve && (
-              <button className="mini-btn plain" disabled={busy} onClick={() => onResolve(r, true)}>重新打开</button>
+              <button className="mini-btn plain" disabled={busy || actionBusy} onClick={() => act(() => onResolve(r, true))}>重新打开</button>
             )}
           </div>
         </div>

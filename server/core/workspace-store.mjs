@@ -186,7 +186,7 @@ export class WorkspaceStore {
   }
   // Newest window for UI loads: after=0 pagination on a busy workspace would
   // otherwise always return the OLDEST `limit` events, hiding new activity.
-  eventsLatest(id, limit = 500) {
+  eventsLatest(id, limit = 500, { excludeDeltas = false } = {}) {
     this.get(id);
     check(
       Number.isInteger(limit) && limit > 0 && limit <= 1000,
@@ -195,7 +195,9 @@ export class WorkspaceStore {
     );
     return this.db
       .prepare(
-        "SELECT * FROM agent_events WHERE workspace_id=? ORDER BY id DESC LIMIT ?",
+        excludeDeltas
+          ? "SELECT * FROM agent_events WHERE workspace_id=? AND type != 'message.delta' ORDER BY id DESC LIMIT ?"
+          : "SELECT * FROM agent_events WHERE workspace_id=? ORDER BY id DESC LIMIT ?",
       )
       .all(id, limit)
       .reverse()

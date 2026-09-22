@@ -1,10 +1,11 @@
+import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
 
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
 export class PatientRegistry {
-  constructor(store, runtime, { createSession, removeSession } = {}) {
+  constructor(store, runtime, { createSession, removeSession, onIdentityChanged } = {}) {
     this.store = store;
     this.runtime = runtime;
     // 统一内核：新患者病例会话由 SessionBridge 创建（kind:"session" 工作区）。
@@ -14,12 +15,26 @@ export class PatientRegistry {
         id: store.create({ title, patientId }).id,
       }));
     this.removeSession = removeSession;
+    this.onIdentityChanged = onIdentityChanged;
   }
   all() {
     return this.store.db
       .prepare("SELECT id, data FROM patients")
       .all()
       .map((row) => JSON.parse(row.data));
+  }
+  summaries() {
+    // Clinical histories can grow indefinitely. List and picker requests only
+    // need identity fields, so SQLite projects those without transferring charts.
+    return this.store.db.prepare(`SELECT json_object(
+      'id',id,'name',json_extract(data,'$.name'),
+      'patientNumber',json_extract(data,'$.patientNumber'),
+      'gender',json_extract(data,'$.gender'),'birthYear',json_extract(data,'$.birthYear'),
+      'phone',json_extract(data,'$.phone'),'sessionId',json_extract(data,'$.sessionId'),
+      'revision',json_extract(data,'$.revision'),'updatedAt',json_extract(data,'$.updatedAt'),
+      'createdAt',json_extract(data,'$.createdAt'),'archived',json_extract(data,'$.archived'),
+      'groups',json_extract(data,'$.groups'),'tags',json_extract(data,'$.tags')) AS data FROM patients`)
+      .all().map((row) => JSON.parse(row.data));
   }
   row(id) {
     identifier(id);
@@ -52,21 +67,38 @@ export class PatientRegistry {
       ),
     };
   }
-  list({ query, group, includeArchived = false } = {}) {
-    const patients = this.all()
+  allCounts(now = Date.now()) {
+    const counts = new Map();
+    const entry = (id) => {
+      if (!counts.has(id)) counts.set(id, { unprocessedMessages: 0, activeFollowups: 0, dueFollowups: 0, pendingReminders: 0 });
+      return counts.get(id);
+    };
+    for (const row of this.store.db.prepare("SELECT patient_id,COUNT(*) n FROM patient_messages WHERE processed=0 AND patient_id IS NOT NULL GROUP BY patient_id").all()) entry(row.patient_id).unprocessedMessages = row.n;
+    for (const row of this.store.db.prepare("SELECT patient_id,COUNT(*) n,SUM(CASE WHEN status='active' AND next_due<=? THEN 1 ELSE 0 END) due FROM follow_ups WHERE status IN ('active','running','paused') GROUP BY patient_id").all(now)) {
+      entry(row.patient_id).activeFollowups = row.n;
+      entry(row.patient_id).dueFollowups = row.due;
+    }
+    for (const row of this.store.db.prepare("SELECT patient_id,COUNT(*) n FROM reminders WHERE status='pending' GROUP BY patient_id").all()) entry(row.patient_id).pendingReminders = row.n;
+    return counts;
+  }
+  list({ query, group, includeArchived = false, summary = false } = {}) {
+    const counts = this.allCounts();
+    const patients = (summary ? this.summaries() : this.all())
       .filter((p) => includeArchived || !p.archived)
       .filter((p) => !group || p.groups?.includes(group))
       .filter(
         (p) =>
           !query ||
           p.name.includes(query) ||
+          (p.patientNumber || "").includes(query) ||
+          p.id.includes(query) ||
           (p.phone || "").includes(query) ||
           (p.tags || []).some((t) => t.includes(query)),
       )
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+      .sort((a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt) || a.id.localeCompare(b.id));
     return patients.map((p) => ({
       ...p,
-      counts: this.counts(p.id),
+      counts: counts.get(p.id) || { unprocessedMessages: 0, activeFollowups: 0, dueFollowups: 0, pendingReminders: 0 },
     }));
   }
   get(id) {
@@ -74,116 +106,146 @@ export class PatientRegistry {
     return { ...patient, counts: this.counts(id) };
   }
   create(input) {
-    check(
-      input && typeof input === "object" && !Array.isArray(input),
-      "INVALID_INPUT",
-      "患者资料无效",
-    );
-    const name = string(input.name, "患者姓名", 80);
-    check(name.trim().length >= 1, "INVALID_INPUT", "患者姓名不能为空");
-    const nowIso = new Date().toISOString();
-    const patient = {
-      id: randomUUID(),
-      name: name.trim(),
-      gender: optionalChoice(input.gender, ["male", "female", "unknown"]),
-      birthYear: optionalInt(input.birthYear, 1900, new Date().getFullYear()),
-      phone:
-        input.phone === undefined ? "" : string(input.phone, "联系电话", 20),
-      groups: optionalStrings(input.groups, "分组", 10, 40),
-      tags: optionalStrings(input.tags, "标签", 20, 40),
-      note: input.note === undefined ? "" : string(input.note, "备注", 2000),
-      diagnoses: optionalDiagnoses(input.diagnoses),
-      medications: optionalMedications(input.medications),
-      allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
-      labs: optionalLabs(input.labs),
-      visits: optionalVisits(input.visits),
-      archived: false,
-      sessionId: null,
-      revision: 0,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    check(
-      !this.all().some((p) => !p.archived && p.name === patient.name),
-      "CONFLICT",
-      "已有同名在管患者，请改用其他标识",
-      409,
-    );
-    const session = this.createSession({
-      title: `${patient.name} · 病例`,
-      patientId: patient.id,
+    return sqliteTransaction(this.store.db, () => {
+      check(
+        input && typeof input === "object" && !Array.isArray(input),
+        "INVALID_INPUT",
+        "患者资料无效",
+      );
+      const name = string(input.name, "患者姓名", 80);
+      check(name.trim().length >= 1, "INVALID_INPUT", "患者姓名不能为空");
+      const nowIso = new Date().toISOString();
+      const patient = {
+        id: randomUUID(),
+        name: name.trim(),
+        patientNumber: input.patientNumber ? string(input.patientNumber, "患者编号", 40) : "",
+        gender: optionalChoice(input.gender, ["male", "female", "unknown"]),
+        birthYear: optionalInt(input.birthYear, 1900, new Date().getFullYear()),
+        phone:
+          input.phone === undefined ? "" : string(input.phone, "联系电话", 20),
+        groups: optionalStrings(input.groups, "分组", 10, 40),
+        tags: optionalStrings(input.tags, "标签", 20, 40),
+        note: input.note === undefined ? "" : string(input.note, "备注", 2000),
+        diagnoses: optionalDiagnoses(input.diagnoses),
+        medications: optionalMedications(input.medications),
+        allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
+        labs: optionalLabs(input.labs),
+        visits: optionalVisits(input.visits),
+        archived: false,
+        sessionId: null,
+        revision: 0,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      patient.allergyStatus = allergyState(patient, input);
+      if (input.requestId) {
+        patient.creationRequestId = identifier(input.requestId);
+        const stable = { ...patient };
+        for (const key of ["id", "sessionId", "createdAt", "updatedAt"]) delete stable[key];
+        patient.creationFingerprint = createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+        const existing = this.store.db.prepare("SELECT data FROM patients WHERE json_extract(data,'$.creationRequestId')=?").get(patient.creationRequestId);
+        if (existing) {
+          const created = JSON.parse(existing.data);
+          check(created.creationFingerprint === patient.creationFingerprint, "CONFLICT", "此建档请求已经保存过其他内容，请先查看已创建的患者", 409);
+          return this.get(created.id);
+        }
+      }
+      check(
+        input.confirmDistinctPatient === true || !this.all().some((p) => !p.archived && p.name === patient.name),
+        "CONFLICT",
+        "存在同名患者，请核对后选择已有档案，或确认是另一位患者",
+        409,
+      );
+      this.checkPatientNumber(patient.patientNumber);
+      const session = this.createSession({
+        title: `${patient.name} · 病例`,
+        patientId: patient.id,
+      });
+      patient.sessionId = session.id;
+      this.store.db
+        .prepare("INSERT INTO patients VALUES (?,?)")
+        .run(patient.id, JSON.stringify(patient));
+      this.store.audit(session.id, "patient.created", {
+        patientId: patient.id,
+      });
+      return { ...patient, counts: this.counts(patient.id) };
     });
-    patient.sessionId = session.id;
-    this.store.db
-      .prepare("INSERT INTO patients VALUES (?,?)")
-      .run(patient.id, JSON.stringify(patient));
-    this.store.audit(session.id, "patient.created", {
-      patientId: patient.id,
-    });
-    return { ...patient, counts: this.counts(patient.id) };
+  }
+  checkPatientNumber(value, excludingId) {
+    check(!value || !this.all().some((patient) => patient.id !== excludingId && patient.patientNumber === value),
+      "CONFLICT", "患者编号已被使用，请核对已有档案", 409);
   }
   update(id, input) {
-    const patient = this.row(id);
-    check(
-      input && typeof input === "object" && !Array.isArray(input),
-      "INVALID_INPUT",
-      "更新内容无效",
-    );
-    check(
-      input.expectedRevision === patient.revision,
-      "REVISION_CONFLICT",
-      "患者档案已变化，请刷新后重试",
-      409,
-    );
-    if (input.name !== undefined) {
-      const name = string(input.name, "患者姓名", 80);
-      check(name.trim(), "INVALID_INPUT", "患者姓名不能为空");
-      patient.name = name.trim();
-    }
-    if (input.gender !== undefined)
-      patient.gender = optionalChoice(input.gender, [
-        "male",
-        "female",
-        "unknown",
-      ]);
-    if (input.birthYear !== undefined)
-      patient.birthYear = optionalInt(
-        input.birthYear,
-        1900,
-        new Date().getFullYear(),
-      );
-    if (input.phone !== undefined)
-      patient.phone = string(input.phone, "联系电话", 20);
-    if (input.groups !== undefined)
-      patient.groups = optionalStrings(input.groups, "分组", 10, 40);
-    if (input.tags !== undefined)
-      patient.tags = optionalStrings(input.tags, "标签", 20, 40);
-    if (input.note !== undefined)
-      patient.note = string(input.note, "备注", 2000);
-    if (input.diagnoses !== undefined)
-      patient.diagnoses = optionalDiagnoses(input.diagnoses);
-    if (input.medications !== undefined)
-      patient.medications = optionalMedications(input.medications);
-    if (input.allergies !== undefined)
-      patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
-    if (input.labs !== undefined) patient.labs = optionalLabs(input.labs);
-    if (input.visits !== undefined)
-      patient.visits = optionalVisits(input.visits);
-    if (input.archived !== undefined) {
+    return sqliteTransaction(this.store.db, () => {
+      const patient = this.row(id);
+      const previousName = patient.name;
       check(
-        typeof input.archived === "boolean",
+        input && typeof input === "object" && !Array.isArray(input),
         "INVALID_INPUT",
-        "归档状态无效",
+        "更新内容无效",
       );
-      patient.archived = input.archived;
-    }
-    patient.revision++;
-    patient.updatedAt = new Date().toISOString();
-    this.save(patient);
-    this.store.audit(patient.sessionId, "patient.updated", {
-      patientId: id,
+      check(
+        input.expectedRevision === patient.revision,
+        "REVISION_CONFLICT",
+        "患者档案已变化，请刷新后重试",
+        409,
+      );
+      if (input.name !== undefined) {
+        const name = string(input.name, "患者姓名", 80);
+        check(name.trim(), "INVALID_INPUT", "患者姓名不能为空");
+        patient.name = name.trim();
+      }
+      if (input.patientNumber !== undefined) {
+        patient.patientNumber = input.patientNumber === "" ? "" : string(input.patientNumber, "患者编号", 40);
+        this.checkPatientNumber(patient.patientNumber, id);
+      }
+      if (input.gender !== undefined)
+        patient.gender = optionalChoice(input.gender, [
+          "male",
+          "female",
+          "unknown",
+        ]);
+      if (input.birthYear !== undefined)
+        patient.birthYear = optionalInt(
+          input.birthYear,
+          1900,
+          new Date().getFullYear(),
+        );
+      if (input.phone !== undefined)
+        patient.phone = input.phone === "" ? "" : string(input.phone, "联系电话", 20);
+      if (input.groups !== undefined)
+        patient.groups = optionalStrings(input.groups, "分组", 10, 40);
+      if (input.tags !== undefined)
+        patient.tags = optionalStrings(input.tags, "标签", 20, 40);
+      if (input.note !== undefined)
+        patient.note = input.note === "" ? "" : string(input.note, "备注", 2000);
+      if (input.diagnoses !== undefined)
+        patient.diagnoses = optionalDiagnoses(input.diagnoses);
+      if (input.medications !== undefined)
+        patient.medications = optionalMedications(input.medications);
+      if (input.allergies !== undefined)
+        patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
+      patient.allergyStatus = allergyState(patient, input);
+      if (input.labs !== undefined) patient.labs = optionalLabs(input.labs);
+      if (input.visits !== undefined)
+        patient.visits = optionalVisits(input.visits);
+      if (input.archived !== undefined) {
+        check(
+          typeof input.archived === "boolean",
+          "INVALID_INPUT",
+          "归档状态无效",
+        );
+        patient.archived = input.archived;
+      }
+      patient.revision++;
+      patient.updatedAt = new Date().toISOString();
+      this.save(patient);
+      if (previousName !== patient.name) this.onIdentityChanged?.(patient, previousName);
+      this.store.audit(patient.sessionId, "patient.updated", {
+        patientId: id,
+      });
+      return { ...patient, counts: this.counts(id) };
     });
-    return { ...patient, counts: this.counts(id) };
   }
   save(patient) {
     this.store.db
@@ -198,28 +260,38 @@ export class PatientRegistry {
     const age = patient.birthYear
       ? new Date().getFullYear() - patient.birthYear
       : null;
-    return {
+    const result = {
       pseudoId,
       gender: patient.gender || "unknown",
       ageBand:
         age !== null
           ? `${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9}`
           : null,
-      diagnoses: patient.diagnoses || [],
+      diagnoses: (patient.diagnoses || []).map(({ name, code, date }) => ({ name, code, date })),
       medications: (patient.medications || []).map((m) => ({
         name: m.name,
         ...(m.dose ? { dose: m.dose } : {}),
         ...(m.frequency ? { frequency: m.frequency } : {}),
+        status: m.status || "unknown",
       })),
       allergies: patient.allergies || [],
-      labs: patient.labs || [],
+      allergyStatus: patient.allergyStatus || ((patient.allergies || []).length ? "recorded" : "unknown"),
+      labs: (patient.labs || []).map(({ item, value, unit, date }) => ({ item, value, unit, date })),
       visits: (patient.visits || []).map((v) => ({
         date: v.date,
         reason: v.reason,
       })),
       exportedAt: new Date().toISOString(),
-      note: "已脱敏：姓名、电话与确切出生年份已移除，仅保留年龄段；导出文件请按机构科研规范管理。",
+      note: "基础脱敏：已移除直接身份字段与来源文本，出生年份改为年龄段。临床自由文本可能仍含间接识别信息，导出前需复核。",
     };
+    const identities = [patient.id, patient.name, patient.phone, patient.patientNumber].filter(Boolean).sort((a, b) => b.length - a.length);
+    const redact = (value) => {
+      if (typeof value === "string") return identities.reduce((text, identity) => text.split(identity).join("[身份信息已移除]"), value);
+      if (Array.isArray(value)) return value.map(redact);
+      if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redact(item)]));
+      return value;
+    };
+    return redact(result);
   }
   remove(id) {
     const patient = this.row(id);
@@ -230,6 +302,7 @@ export class PatientRegistry {
       "请先停止该患者的执行再删除档案",
       409,
     );
+    this.store.db.prepare("DELETE FROM care_tasks WHERE patient_id=?").run(id);
     this.store.db.prepare("DELETE FROM follow_ups WHERE patient_id=?").run(id);
     this.store.db.prepare("DELETE FROM reminders WHERE patient_id=?").run(id);
     this.store.db
@@ -251,15 +324,16 @@ export class PatientRegistry {
     if (!hint) return null;
     const text = String(hint).trim();
     if (!text) return null;
-    const digits = text.replace(/\D/g, "");
     const patients = this.all().filter((p) => !p.archived);
-    if (digits.length >= 5) {
-      const byPhone = patients.find(
-        (p) => (p.phone || "").replace(/\D/g, "") === digits,
-      );
-      if (byPhone) return byPhone;
-    }
-    return patients.find((p) => p.name === text) || null;
+    const byId = patients.find((p) => p.id === text);
+    if (byId) return byId;
+    // Any overlap (name/number/shared phone) is ambiguous. Never select the
+    // first patient merely because it was inserted first.
+    const digits = /^[+\d\s()-]+$/.test(text) ? text.replace(/\D/g, "") : "";
+    const candidates = patients.filter((patient) =>
+      patient.name === text || patient.patientNumber === text ||
+      (digits.length >= 5 && (patient.phone || "").replace(/\D/g, "") === digits));
+    return candidates.length === 1 ? candidates[0] : null;
   }
   parseMessage(raw, fallbackChannel = "ingest") {
     check(
@@ -543,11 +617,24 @@ export function validateClinicalInput(input = {}) {
     ...(input.allergies !== undefined
       ? { allergies: optionalStrings(input.allergies, "过敏史", 20, 120) }
       : {}),
+    ...(input.allergyStatus !== undefined
+      ? { allergyStatus: optionalChoice(input.allergyStatus, ["unknown", "none_known", "recorded"]) || "unknown" }
+      : {}),
     ...(input.labs !== undefined ? { labs: optionalLabs(input.labs) } : {}),
     ...(input.visits !== undefined
       ? { visits: optionalVisits(input.visits) }
       : {}),
   };
+}
+function allergyState(patient, input) {
+  const status = input.allergyStatus;
+  check(status === undefined || ["unknown", "none_known", "recorded"].includes(status), "INVALID_INPUT", "过敏史核对状态无效");
+  if ((patient.allergies || []).length) {
+    check(status === undefined || status === "recorded", "INVALID_INPUT", "已有过敏原记录，不能标记为无已知过敏或未核对");
+    return "recorded";
+  }
+  check(status !== "recorded", "INVALID_INPUT", "请先填写已知过敏原");
+  return status || (input.allergies !== undefined ? "unknown" : patient.allergyStatus || "unknown");
 }
 function optionalDiagnoses(value) {
   return structuredList(value, "诊断", 40, (item) => ({
@@ -560,6 +647,7 @@ function optionalDiagnoses(value) {
 function optionalMedications(value) {
   return structuredList(value, "用药", 60, (item) => ({
     name: string(item.name, "药名", 120),
+    ...(item.status !== undefined ? { status: optionalChoice(item.status, ["active", "stopped", "unknown"]) || "unknown" } : {}),
     ...(item.dose ? { dose: string(item.dose, "剂量", 60) } : {}),
     ...(item.frequency
       ? { frequency: string(item.frequency, "频次", 60) }
@@ -592,3 +680,5 @@ function optionalVisits(value) {
     ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
   }));
 }
+
+function timestamp(value) { return typeof value === "number" ? value : Date.parse(value) || 0; }

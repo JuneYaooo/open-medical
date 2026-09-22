@@ -1,6 +1,13 @@
 import { CredentialVault } from './oauth.mjs';
 import { createProvider } from './providers.mjs';
 import { check, AppError } from '../errors.mjs';
+import { contextBudget, assertContextBudget } from './context-budget.mjs';
+
+function validateBudget(config) {
+  const provider = createProvider(config);
+  // Validate the saved budget before the connection probe replaces maxTokens.
+  assertContextBudget(contextBudget({ provider, thinking: provider.provider === 'anthropic' ? 'enabled' : undefined }));
+}
 
 const kinds = ['deepseek', 'openai', 'openai-compatible', 'openai-responses', 'anthropic', 'local'];
 const key = 'platform:model-settings:v1';
@@ -29,12 +36,13 @@ export class ModelSettings {
     check(body.provider === 'local' || Boolean(apiKey), 'MODEL_SETTINGS', '请填写 API Key；更换协议或接口地址时须重新输入密钥');
     const config = { provider: body.provider, baseUrl, model: body.model.trim(), apiKey: apiKey || '', timeoutMs: Number(body.timeoutMs ?? 90000), maxTokens: Number(body.maxTokens ?? 8192) };
     if (body.contextWindow != null) config.contextWindow = Number(body.contextWindow);
-    else if (body.model.trim() === previous.model && existing.contextWindow) config.contextWindow = existing.contextWindow;
-    createProvider(config);
+    else if (body.contextWindow === undefined && body.provider === previous.provider && baseUrl === previous.baseUrl.replace(/\/$/, '') && body.model.trim() === previous.model && existing.contextWindow) config.contextWindow = existing.contextWindow;
+    validateBudget(config);
     return config;
   }
   save(config) { this.vault.set(key, config); this.saved = config; return this.provider(); }
   async test(config) {
+    validateBudget(config);
     const start = Date.now();
     try {
       const p = createProvider({ ...config, timeoutMs: Math.min(config.timeoutMs, 30000), maxTokens: 256 });

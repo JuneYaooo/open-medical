@@ -50,3 +50,31 @@ test('model settings authenticate, encrypt, test, activate and survive restart w
   assert.equal((await call('/api/model-settings')).data.model,'next');
   assert.equal(server.service.provider.apiKey,config.apiKey);
 });
+
+test('save and connection test reject an output budget occupying the context window before contacting upstream', async (t) => {
+  const { fixture } = await import('./helpers.mjs');
+  const f = await fixture(t);
+  let requests = 0;
+  const upstream = http.createServer((_req, res) => { requests++; res.end('{}'); });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  const before = (await f.json('/api/model-settings')).data;
+  for (const provider of ['anthropic', 'openai-compatible', 'openai-responses', 'local']) {
+    const config = { provider, model: 'budget-fixture', apiKey: 'synthetic', baseUrl: `http://127.0.0.1:${upstream.address().port}`, maxTokens: 131072 };
+    for (const [path, method] of [['/api/model-settings', 'PUT'], ['/api/model-settings/test', 'POST']]) {
+      const result = await f.json(path, method, config);
+      assert.equal(result.status, 400);
+      assert.equal(result.data.code, 'CONTEXT_CONFIG');
+      assert.match(result.data.error, /131072/);
+    }
+  }
+  assert.equal(requests, 0);
+  assert.deepEqual((await f.json('/api/model-settings')).data, before);
+  const config = { provider: 'anthropic', model: 'budget-fixture', apiKey: 'synthetic', baseUrl: `http://127.0.0.1:${upstream.address().port}`, maxTokens: 4096, contextWindow: 8192 };
+  assert.equal((await f.json('/api/model-settings', 'PUT', config)).status, 400, 'include thinking reserve in configuration validation');
+  config.contextWindow = 32768;
+  assert.equal((await f.json('/api/model-settings', 'PUT', config)).status, 200);
+  assert.equal((await f.json('/api/model-settings')).data.contextWindow, 32768);
+  assert.equal((await f.json('/api/model-settings', 'PUT', {...config, contextWindow: null})).status, 200);
+  assert.equal((await f.json('/api/model-settings')).data.contextWindow, null, 'explicit clearing must not revive the previous window');
+});

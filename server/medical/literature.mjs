@@ -28,9 +28,11 @@ const evidenceHints = (pubTypes = []) => {
 };
 
 export class LiteratureService {
-  constructor(store, { fetchImpl = fetch } = {}) {
+  constructor(store, { fetchImpl = fetch, timeoutMs = 8000, retryDelayMs = 400 } = {}) {
     this.store = store;
     this.fetchImpl = fetchImpl;
+    this.timeoutMs = timeoutMs;
+    this.retryDelayMs = retryDelayMs;
     this.lastPubMedCall = 0;
   }
   cacheGet(key) {
@@ -52,32 +54,42 @@ export class LiteratureService {
       .run(key, JSON.stringify(payload), Date.now());
   }
   async request(url, { throttle = false } = {}) {
-    if (throttle) {
-      const wait = this.lastPubMedCall + PUBMED_MIN_GAP_MS - Date.now();
-      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-      this.lastPubMedCall = Date.now();
+    const source = url.startsWith(PUBMED) ? "PubMed" : "Europe PMC";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, this.retryDelayMs));
+      if (throttle) {
+        const wait = this.lastPubMedCall + PUBMED_MIN_GAP_MS - Date.now();
+        if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+        this.lastPubMedCall = Date.now();
+      }
+      let retryable = true;
+      try {
+        const response = await this.fetchImpl(url, {
+          headers: { "User-Agent": "open-medical-workbench/0.9 (local)" },
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+        if (!response.ok) {
+          retryable = [408, 429, 500, 502, 503, 504].includes(response.status);
+          await response.body?.cancel();
+          throw new AppError("LITERATURE_SOURCE", `${source} 返回 HTTP ${response.status}`, 502);
+        }
+        // Consume the body within the same timeout and retry boundary.
+        return await response.json();
+      } catch (cause) {
+        const error = cause instanceof AppError ? cause : new AppError(
+          "LITERATURE_NETWORK",
+          `${source} ${cause.name === "TimeoutError" || cause.name === "AbortError" ? "请求超时" : cause instanceof SyntaxError ? "返回数据无法解析" : "网络连接失败"}`,
+          502,
+        );
+        error.retryable = retryable;
+        if (!retryable || attempt === 1) {
+          error.message += retryable ? "（已重试 1 次）" : "";
+          throw error;
+        }
+      }
     }
-    let response;
-    try {
-      response = await this.fetchImpl(url, {
-        headers: { "User-Agent": "open-medical-workbench/0.8 (local)" },
-        signal: AbortSignal.timeout(20000),
-      });
-    } catch (error) {
-      throw new AppError(
-        "LITERATURE_NETWORK",
-        `文献源连接失败：${error.name === "TimeoutError" ? "请求超时" : "网络不可达"}`,
-        502,
-      );
-    }
-    if (!response.ok)
-      throw new AppError(
-        "LITERATURE_SOURCE",
-        `文献源返回 ${response.status}，请稍后重试`,
-        502,
-      );
-    return response.json();
   }
+
   normalizeQuery(query) {
     const text = string(query, "检索词", 400);
     check(text.trim().length >= 2, "INVALID_INPUT", "检索词至少 2 个字符");
@@ -122,18 +134,34 @@ export class LiteratureService {
     const cacheKey = JSON.stringify(["search", source, text, from, to, limit, sort]);
     const cached = this.cacheGet(cacheKey);
     if (cached) return { ...cached, cached: true };
-    const articles =
-      source === "pubmed"
-        ? await this.searchPubMed(text, from, to, limit, sort)
-        : await this.searchEurope(text, from, to, limit, sort);
+    let actualSource = source, fallbackReason;
+    const searchSource = (selected) => selected === "pubmed"
+      ? this.searchPubMed(text, from, to, limit, sort)
+      : this.searchEurope(text, from, to, limit, sort);
+    let articles;
+    try {
+      articles = await searchSource(source);
+    } catch (error) {
+      if (!error.retryable) throw error;
+      actualSource = source === "pubmed" ? "europepmc" : "pubmed";
+      fallbackReason = error.message;
+      try { articles = await searchSource(actualSource); }
+      catch (fallbackError) {
+        throw new AppError("LITERATURE_UNAVAILABLE",
+          `文献检索暂不可用：${fallbackReason}；${fallbackError.message}。请稍后重试。`, 502);
+      }
+    }
     const result = {
-      source,
+      source: actualSource,
+      requestedSource: source,
+      ...(fallbackReason ? { fallback: true, fallbackReason } : {}),
       query: text,
       count: articles.length,
       articles,
-      note: "检索只发送了检索词；证据类型标签仅为提示，不构成质量结论。",
+      note: `${fallbackReason ? `首选来源暂不可用，已切换至 ${actualSource === "pubmed" ? "PubMed" : "Europe PMC"}；检索范围可能不同。` : ""}检索只发送了检索词；证据类型标签仅为提示，不构成质量结论。`,
     };
-    this.cacheSet(cacheKey, result);
+    // Do not cache a fallback under the requested source: allow primary recovery.
+    if (!fallbackReason) this.cacheSet(cacheKey, result);
     return result;
   }
   async searchPubMed(text, from, to, limit, sort = "relevance") {
@@ -144,7 +172,8 @@ export class LiteratureService {
       );
     const searchUrl = `${PUBMED}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(terms.join(" AND "))}&retmax=${limit}&retmode=json&sort=${sort === "date" ? "pub_date" : "relevance"}`;
     const searchResult = await this.request(searchUrl, { throttle: true });
-    const ids = searchResult?.esearchresult?.idlist || [];
+    check(Array.isArray(searchResult?.esearchresult?.idlist), "LITERATURE_SOURCE", "PubMed 返回数据格式异常", 502);
+    const ids = searchResult.esearchresult.idlist;
     if (!ids.length) return [];
     const summaryUrl = `${PUBMED}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
     const summary = await this.request(summaryUrl, { throttle: true });

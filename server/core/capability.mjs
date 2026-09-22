@@ -31,7 +31,7 @@ const declare = (backend, names) =>
     .forEach((name) => BUILTIN_BACKENDS.set(name, backend));
 declare(
   "container",
-  `terminal_start terminal_run document_read document_create document_render archive_list archive_extract archive_create code_execute plugin_command`,
+  `terminal_start terminal_run terminal_check document_read document_create document_render archive_list archive_extract archive_create code_execute plugin_command`,
 );
 declare(
   "local",

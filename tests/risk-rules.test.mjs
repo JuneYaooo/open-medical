@@ -21,8 +21,14 @@ const clinicalPayload = (overrides = {}) => ({
 
 test("risk engine fires lab threshold, trend, allergy and interaction alerts", async (t) => {
   const f = await fixture(t);
-  const patient = (await f.json("/api/patients", "POST", { name: "风险测试患者" })).data;
-  const updated = await f.json(`/api/patients/${patient.id}`, "PATCH", clinicalPayload());
+  const patient = (
+    await f.json("/api/patients", "POST", { name: "风险测试患者" })
+  ).data;
+  const updated = await f.json(
+    `/api/patients/${patient.id}`,
+    "PATCH",
+    clinicalPayload(),
+  );
   assert.equal(updated.status, 200);
 
   const { alerts, counts } = (await f.json("/api/risk-alerts")).data;
@@ -33,7 +39,10 @@ test("risk engine fires lab threshold, trend, allergy and interaction alerts", a
   assert.ok(keys.includes("med_allergy_阿司匹林"), "过敏匹配规则");
   assert.ok(keys.includes("int_aspirin_warfarin"), "相互作用规则");
   assert.ok(alerts.every((alert) => alert.patientName === "风险测试患者"));
-  assert.ok(alerts.find((a) => a.ruleKey === "lab_potassium_low").severity === "critical");
+  assert.ok(
+    alerts.find((a) => a.ruleKey === "lab_potassium_low").severity ===
+      "critical",
+  );
   assert.match(
     alerts.find((a) => a.ruleKey === "lab_creatinine_rise").message,
     /80/,
@@ -46,14 +55,17 @@ test("risk engine fires lab threshold, trend, allergy and interaction alerts", a
   assert.equal(again.alerts.length, alerts.length);
 });
 
-test("risk engine: resolving clears alerts; re-evaluation reopens still-triggering ones", async (t) => {
+test("risk engine: dispositions survive unchanged evidence; changed evidence reopens", async (t) => {
   const f = await fixture(t);
-  const patient = (await f.json("/api/patients", "POST", { name: "解决流程患者" })).data;
+  const patient = (
+    await f.json("/api/patients", "POST", { name: "解决流程患者" })
+  ).data;
   await f.json(`/api/patients/${patient.id}`, "PATCH", clinicalPayload());
   const first = (await f.json("/api/risk-alerts")).data.alerts;
   for (const alert of first)
     await f.json(`/api/risk-alerts/${alert.id}/ack`, "POST");
-  const acked = (await f.json("/api/risk-alerts?status=acknowledged")).data.alerts;
+  const acked = (await f.json("/api/risk-alerts?status=acknowledged")).data
+    .alerts;
   assert.equal(acked.length, first.length);
   // Acknowledged alerts do not appear in the active list
   // （交互规范 v2.1：默认列表返回全部状态，闭环可见；active 需显式过滤）。
@@ -62,11 +74,24 @@ test("risk engine: resolving clears alerts; re-evaluation reopens still-triggeri
   assert.ok(all.every((a) => a.status === "acknowledged"));
   const active = (await f.json("/api/risk-alerts?status=active")).data.alerts;
   assert.equal(active.length, 0);
-  // Still-triggering rules reopen on re-evaluation.
+  // An unchanged rescan preserves the doctor disposition.
   await f.json("/api/risk-alerts/evaluate", "POST");
   const reopened = (await f.json("/api/risk-alerts")).data.alerts;
   assert.equal(reopened.length, first.length);
-  assert.ok(reopened.every((a) => a.status === "active"));
+  assert.ok(reopened.every((a) => a.status === "acknowledged"));
+  const before = (await f.json(`/api/patients/${patient.id}`)).data;
+  await f.json(`/api/patients/${patient.id}`, "PATCH", {
+    expectedRevision: before.revision,
+    labs: [
+      ...before.labs,
+      { item: "血钾", value: 2.4, unit: "mmol/L", date: "2025-09-02" },
+    ],
+  });
+  const changed = (await f.json("/api/risk-alerts?status=active")).data.alerts;
+  assert.deepEqual(
+    changed.map((a) => a.ruleKey),
+    ["lab_potassium_low"],
+  );
   // Fix the data: resolved alerts stay resolved after evaluation.
   const current = (await f.json(`/api/patients/${patient.id}`)).data;
   await f.json(`/api/patients/${patient.id}`, "PATCH", {
@@ -89,7 +114,9 @@ test("risk engine: resolving clears alerts; re-evaluation reopens still-triggeri
 
 test("risk engine: duplicate medication and non-triggering labs stay silent", async (t) => {
   const f = await fixture(t);
-  const patient = (await f.json("/api/patients", "POST", { name: "重复用药患者" })).data;
+  const patient = (
+    await f.json("/api/patients", "POST", { name: "重复用药患者" })
+  ).data;
   await f.json(`/api/patients/${patient.id}`, "PATCH", {
     expectedRevision: 0,
     medications: [
@@ -109,7 +136,9 @@ test("risk engine: duplicate medication and non-triggering labs stay silent", as
 
 test("risk engine: overdue follow-up raises alert once job is far past due", async (t) => {
   const f = await fixture(t);
-  const patient = (await f.json("/api/patients", "POST", { name: "逾期随访患者" })).data;
+  const patient = (
+    await f.json("/api/patients", "POST", { name: "逾期随访患者" })
+  ).data;
   // No overdue job yet (due in future) -> no alert.
   await f.json(`/api/patients/${patient.id}/followups`, "POST", {
     name: "未来随访",
@@ -117,10 +146,48 @@ test("risk engine: overdue follow-up raises alert once job is far past due", asy
     firstDueAt: new Date(Date.now() + 86400000).toISOString(),
   });
   await f.json("/api/risk-alerts/evaluate", "POST");
-  let keys = (await f.json("/api/risk-alerts")).data.alerts.map((a) => a.ruleKey);
+  let keys = (await f.json("/api/risk-alerts")).data.alerts.map(
+    (a) => a.ruleKey,
+  );
   assert.ok(!keys.some((key) => key.startsWith("followup_overdue")));
   // A 9-day-overdue paused job would not alert; active ones do. Directly
   // evaluate through the exposed engine with a backdated job.
-  const created = (await f.json(`/api/patients/${patient.id}/followups`)).data.jobs[0];
+  const created = (await f.json(`/api/patients/${patient.id}/followups`)).data
+    .jobs[0];
   assert.ok(created.id);
+});
+
+test("risk rules require exact analytes and compatible units", async (t) => {
+  const f = await fixture(t);
+  const engine = f.server.risks;
+  const evaluate = (labs) => engine.laboratoryAlerts({ labs });
+  assert.equal(
+    evaluate([{ item: "尿钾", value: 9, unit: "mmol/L", date: "2026-09-01" }])
+      .length,
+    0,
+  );
+  assert.equal(
+    evaluate([{ item: "血糖", value: 2, unit: "mg/dL", date: "2026-09-01" }])
+      .length,
+    0,
+  );
+  assert.equal(
+    evaluate([{ item: "血钾", value: 2, unit: "", date: "2026-09-01" }]).length,
+    0,
+  );
+  assert.equal(
+    evaluate([
+      { item: "肌酐", value: 1, unit: "mg/dL", date: "2026-09-01" },
+      { item: "肌酐", value: 90, unit: "μmol/L", date: "2026-09-02" },
+    ]).length,
+    0,
+  );
+  assert.equal(
+    evaluate([
+      { item: "血钾", value: 2, unit: "mmol/L", date: "2026-09-01" },
+      { item: "血钾", value: 2, unit: "unknown", date: "2026-09-02" },
+    ]).length,
+    0,
+    "do not substitute older compatible evidence for newest incompatible result",
+  );
 });

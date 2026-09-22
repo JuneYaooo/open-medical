@@ -132,7 +132,7 @@ test(
     // 无医疗能力:侧栏无患者导航/医生记忆,品牌为通用工作台,默认进入工作区视图
     await page.waitForSelector(".workspace-hub-empty, .workspace-shell");
     assert.equal(await page.locator('nav[aria-label="患者"]').count(), 0);
-    assert.equal(await page.locator('nav[aria-label="今日任务"]').count(), 0);
+    assert.equal(await page.locator('nav[aria-label="最近任务"]').count(), 0);
     assert.equal(await page.locator(".workspace-account").count(), 0);
     assert.match(await page.locator(".brand-caption").innerText(), /通用工作台/);
 
@@ -220,7 +220,7 @@ test(
     await page.waitForSelector('nav[aria-label="患者"]', { timeout: 15000 });
     assert.match(await page.locator(".brand-caption").innerText(), /医疗工作台/);
     assert.equal(
-      await page.locator('nav[aria-label="今日任务"]').count(),
+      await page.locator('nav[aria-label="最近任务"]').count(),
       1,
     );
     await page.waitForSelector(".hub-scenarios", { timeout: 15000 });

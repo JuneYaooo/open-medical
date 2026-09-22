@@ -87,6 +87,19 @@ test("patient de-identified export removes identity and buckets age", async (t) 
   assert.match(exported.note, /脱敏/);
 });
 
+test("research export strips source identity and known identifiers embedded in clinical text", async (t) => {
+  const f = await fixture(t);
+  const p = (await f.json("/api/patients", "POST", { name: "合成患者姓名", phone: "13899990000", patientNumber: "DEMO-IDENTITY",
+    diagnoses: [{ name: "合成患者姓名的既往记录", source: "报告单编号 DEMO-IDENTITY" }],
+    labs: [{ item: "合成指标", value: 1, date: "2026-09-20", source: "13899990000 患者上传" }],
+  })).data;
+  const result = (await f.json(`/api/patients/${p.id}/export`)).data;
+  assert.equal(result.diagnoses[0].source, undefined);
+  assert.equal(result.labs[0].source, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /合成患者姓名|13899990000|DEMO-IDENTITY/);
+  assert.match(result.note, /需复核/);
+});
+
 test("icd10 endpoint search", async (t) => {
   const f = await fixture(t);
   const result = (await f.json("/api/icd10?q=%E8%82%BA%E7%82%8E")).data;

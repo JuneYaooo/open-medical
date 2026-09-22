@@ -6,6 +6,7 @@ import {
   gapLine,
   runDerivedStatus,
   waitingNotice,
+  consultationLookupIssue,
 } from "./run-status";
 
 // 等待/受阻提示（W7）：明确告诉用户「在等什么、能做什么」。
@@ -55,7 +56,7 @@ export function RunStatusNotice({ run, pendingCount = 0, onApprove }) {
 // - delivery_failed：执行类任务缺口未解决，不宣称完成，展示缺口；
 // - unverified：验证器异常/超时，结果未核实，不当作成功；
 // - answered：如实说明没有可核对产物与缺口原因，不宣称完成交付。
-export function OutcomeCard({ outcome, delivery }) {
+export function OutcomeCard({ outcome, delivery, consultationRun }) {
   if (!outcome && !delivery) return null;
   const delivered = outcome
     ? outcome === "delivered"
@@ -63,6 +64,16 @@ export function OutcomeCard({ outcome, delivery }) {
   const evidence = delivery?.evidence || [];
   const gaps = delivery?.gaps || [];
   const warnings = delivery?.warnings || [];
+  if (outcome === 'delivery_failed' && consultationLookupIssue(consultationRun))
+    return <div className="wb-outcome answered" aria-label="回答依据提示"><TriangleAlert size={15} /><div>
+      <b>回答依据不完整</b>
+      <p>部分检索没有成功，相关结论尚缺检索依据，请核对后再采用。本次是咨询问答，无需生成文件。</p>
+      <ul>{gaps.filter((g) => g.reason === 'tool_failed').map((g, i) => {
+        const failure = (consultationRun.events || []).findLast((e) => e.type === 'tool.failed' && e.payload?.tool === g.tool);
+        const label = g.tool.startsWith('literature_') ? '文献检索' : '知识检索';
+        return <li key={i}>{label}：{failure?.payload?.error || '查询失败，未取得这部分依据'}。可稍后重试。</li>;
+      })}</ul>
+    </div></div>;
   if (delivered)
     return (
       <div className="wb-outcome delivered" aria-label="交付结果">

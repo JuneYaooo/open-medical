@@ -154,6 +154,7 @@ const bagVector = (value) => {  const vector = new Array(16).fill(0);
   return vector.map((x) => x / total);
 };
 const stubEmbedder = {
+  status: () => ({ mode: "local" }),
   available: () => true,
   model: "test-embedder",
   embed: async (inputs) => inputs.map(bagVector),

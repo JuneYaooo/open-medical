@@ -1,0 +1,66 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+import { fixture } from './helpers.mjs';
+
+test('consultation executes a zero-argument medical plugin and execution history renders projected events', async (t) => {
+  const provider = { provider: 'fixture', model: 'fixture', apiKey: 'synthetic', async complete(messages) {
+    const result = messages.findLast((m) => m.role === 'tool');
+    if (!result) return { message: { role: 'assistant', content: null, tool_calls: [{ id: 'status-check', function: { name: 'knowledge_base_status', arguments: '{}' } }] } };
+    const status = JSON.parse(result.content);
+    assert.equal(status.docs, 0);
+    assert.equal(status.embeddedChunks, 0);
+    return { message: { role: 'assistant', content: '本地知识库没有文档。请补充具体数值与测量时间。' } };
+  } };
+  const f = await fixture(t, { provider });
+  const session = await f.session('预算恢复验证');
+  const response = await f.chat(session.id, '血糖有点高，24岁男生，怎么办', { mode: 'model', externalConsent: true, fileIds: [] });
+  assert.equal(response.status, 200);
+  assert.ok(!response.events.some((e) => e.type === 'tool.failed'));
+  const detail = (await f.json(`/api/sessions/${session.id}`)).data;
+  const run = detail.runs.at(-1);
+  assert.equal(run.status, 'completed');
+  assert.notEqual(run.outcome, 'delivery_failed');
+  assert.ok(run.events.some((e) => e.type === 'tool.complete'));
+  assert.ok(run.sourceHashes.every((source) => /^[a-f0-9]{64}$/.test(source.hash)));
+  const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(f.origin);
+  await page.getByRole('button', {name: /预算恢复验证/}).first().click();
+  await page.getByRole('tab', {name: '执行记录', exact: true}).click();
+  await page.getByText('执行过程', {exact:true}).waitFor();
+  await page.getByText('查看过程与来源版本', {exact:true}).click();
+  await page.locator('.event-line').filter({hasText:'工具完成：knowledge_base_status'}).waitFor();
+  assert.deepEqual(errors, []);
+});
+
+test('model settings UI rejects full-window output for both save and probe, then accepts a corrected budget', async (t) => {
+  const f = await fixture(t);
+  const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(f.origin);
+  await page.getByRole('button', {name: /deepseek/, exact: false}).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('服务商 / 接口协议').selectOption('local');
+  await dialog.getByLabel('模型名称', {exact:true}).fill('budget-fixture');
+  await dialog.getByText('高级选项', {exact:true}).click();
+  await dialog.getByLabel('最大输出 Token', {exact:true}).fill('131072');
+  await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
+  await dialog.getByRole('alert').filter({hasText:'模型预算配置无效'}).waitFor();
+  await dialog.getByRole('button', {name:'测试连接',exact:true}).click();
+  await dialog.getByRole('alert').filter({hasText:'模型预算配置无效'}).waitFor();
+  await dialog.getByLabel('上下文窗口 Token（留空使用默认预算）').fill('32768');
+  await dialog.getByLabel('最大输出 Token', {exact:true}).fill('16384');
+  await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
+  await dialog.getByRole('status').filter({hasText:'已保存并启用'}).waitFor();
+  const saved=(await f.json('/api/model-settings')).data;
+  assert.equal(saved.contextWindow,32768);
+  assert.equal(saved.maxTokens,16384);
+  assert.deepEqual(errors, []);
+});

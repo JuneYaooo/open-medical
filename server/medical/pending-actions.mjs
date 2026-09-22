@@ -107,6 +107,7 @@ export class PendingActions {
           "非患者关联的病例提案需要 diagnosis",
         );
     }
+    if (resolvedPatientId) check(!this.patients.row(resolvedPatientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案再创建提案。", 409);
     const time = new Date().toISOString();
     const id = randomUUID();
     this.store.db
@@ -181,6 +182,7 @@ export class PendingActions {
         409,
       );
       if (action.patientId) {
+        check(!this.patients.row(action.patientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案并重新核对提案。", 409);
         check(
           Number.isSafeInteger(action.baseRevision) && action.baseRevision >= 0,
           "ACTION_CONFLICT",
@@ -317,7 +319,7 @@ export function pendingActionTools(pending, doctor = null) {
             type: "array",
             items: {
               type: "object",
-              properties: { code: textDef, name: textDef, date: textDef },
+              properties: { code: textDef, name: textDef, date: textDef, source: textDef },
               required: ["name"],
               additionalProperties: false,
             },
@@ -328,6 +330,8 @@ export function pendingActionTools(pending, doctor = null) {
               type: "object",
               properties: {
                 name: textDef,
+                status: { type: "string", enum: ["active", "stopped", "unknown"], description: "仅依来源判断正在使用或停用，未明确则 unknown" },
+                source: textDef,
                 dose: textDef,
                 frequency: textDef,
                 note: textDef,
@@ -337,6 +341,7 @@ export function pendingActionTools(pending, doctor = null) {
             },
           },
           allergies: { type: "array", items: textDef },
+          allergyStatus: { type: "string", enum: ["unknown", "none_known", "recorded"], description: "仅来源明确核对无已知过敏时用 none_known；未提及不等于无过敏" },
           summary: textDef,
         },
         ["name", "summary"],
@@ -353,9 +358,10 @@ export function pendingActionTools(pending, doctor = null) {
     {
       definition: definition(
         "patient_record_propose",
-        "提议把整理好的临床信息写入患者档案（诊断/用药/过敏/检验/就诊）。只创建待确认提案，医生确认后才落库。",
+        "提议更新患者临床档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。只创建待确认提案，医生对照复核后才落库。",
         {
           patientId: textDef,
+          updateMode: { type: "string", enum: ["append", "replace"], description: "append 保留旧记录；replace 须提供所更改字段完整列表，遗漏的字段不变" },
           diagnoses: {
             type: "array",
             items: {
@@ -364,6 +370,7 @@ export function pendingActionTools(pending, doctor = null) {
                 code: textDef,
                 name: textDef,
                 date: textDef,
+                source: textDef,
               },
               required: ["name"],
               additionalProperties: false,
@@ -375,6 +382,8 @@ export function pendingActionTools(pending, doctor = null) {
               type: "object",
               properties: {
                 name: textDef,
+                status: { type: "string", enum: ["active", "stopped", "unknown"], description: "仅依来源判断正在使用或停用，未明确则 unknown" },
+                source: textDef,
                 dose: textDef,
                 frequency: textDef,
                 note: textDef,
@@ -384,6 +393,7 @@ export function pendingActionTools(pending, doctor = null) {
             },
           },
           allergies: { type: "array", items: textDef },
+          allergyStatus: { type: "string", enum: ["unknown", "none_known", "recorded"], description: "仅来源明确核对无已知过敏时用 none_known；未提及不等于无过敏" },
           labs: {
             type: "array",
             items: {
@@ -393,6 +403,7 @@ export function pendingActionTools(pending, doctor = null) {
                 value: { type: "number" },
                 unit: textDef,
                 date: textDef,
+                source: textDef,
               },
               required: ["item", "value", "date"],
               additionalProperties: false,
@@ -416,12 +427,25 @@ export function pendingActionTools(pending, doctor = null) {
         ["patientId", "summary"],
       ),
       execute: (args) => {
-        const { patientId, summary, ...updates } = args;
+        const { patientId, summary, updateMode = "append", ...input } = args;
+        check(["append", "replace"].includes(updateMode), "INVALID_INPUT", "档案更新模式无效");
+        const current = pending.patients.row(patientId);
+        const updates = validateClinicalInput(input);
+        if (updateMode === "append") for (const key of ["diagnoses", "medications", "allergies", "labs", "visits"]) {
+          if (!Array.isArray(updates[key])) continue;
+          const previous = validateClinicalInput({ [key]: current[key] || [] })[key];
+          if (key === "medications") check(updates[key].every((value) => !previous.some((old) => old.name === value.name && JSON.stringify(old) !== JSON.stringify(value))),
+            "MEDICATION_CONFLICT", "已有同名用药且信息不同。先核对原档案；如需修改状态或剂量，用 replace 提交完整用药列表供医生复核", 409);
+          const values = new Map([...previous, ...updates[key]].map((value) => [JSON.stringify(value), value]));
+          updates[key] = [...values.values()];
+        }
+        if ((updates.allergies || current.allergies || []).length && updates.allergyStatus !== undefined)
+          check(updates.allergyStatus === "recorded", "INVALID_INPUT", "存在已记录过敏原，不能改为无已知过敏");
         return pending.propose({
           type: "patient-update",
           patientId,
           payload: updates,
-          summary,
+          summary: `${updateMode === "append" ? "追加资料" : "替换所选字段"} · ${summary}`.slice(0, 300),
         });
       },
     },

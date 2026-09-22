@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { Download, Plus, X, Loader2, Search } from "lucide-react";
 
@@ -10,94 +10,112 @@ const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
 export function ClinicalPanel({ detail, onChanged, onError }) {
   const [draft, setDraft] = useState(() => normalize(detail));
   const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  const searchVersion = useRef(0);
+  useEffect(() => {
+    setDraft(normalize(detail));
+  }, [detail.id, detail.revision]);
   const [icdQuery, setIcdQuery] = useState("");
   const [icdResults, setIcdResults] = useState([]);
   const [newDiagnosis, setNewDiagnosis] = useState("");
-  const [newMed, setNewMed] = useState({ name: "", dose: "", frequency: "" });
+  const [newMed, setNewMed] = useState({ name: "", dose: "", frequency: "", status: "unknown" });
   const [newAllergy, setNewAllergy] = useState("");
-  const [newLab, setNewLab] = useState({ item: "", value: "", unit: "", date: "" });
+  const [newLab, setNewLab] = useState({
+    item: "",
+    value: "",
+    unit: "",
+    date: "",
+  });
   const [newVisit, setNewVisit] = useState({ date: "", reason: "" });
 
   const patch = async (fields) => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setSaving(true);
     try {
-      await api(`/api/patients/${detail.id}`, "PATCH", {
+      const saved = await api(`/api/patients/${detail.id}`, "PATCH", {
         expectedRevision: detail.revision,
         ...fields,
       });
+      setDraft(normalize(saved));
       await onChanged();
+      return true;
     } catch (err) {
       onError?.(err.message);
+      return false;
     } finally {
+      inFlight.current = false;
       setSaving(false);
     }
   };
-  const saveDiagnoses = (next) => {
-    setDraft((prev) => ({ ...prev, diagnoses: next }));
-    patch({ diagnoses: next });
-  };
-  const saveMedications = (next) => {
-    setDraft((prev) => ({ ...prev, medications: next }));
-    patch({ medications: next });
-  };
-  const saveAllergies = (next) => {
-    setDraft((prev) => ({ ...prev, allergies: next }));
-    patch({ allergies: next });
-  };
-  const saveLabs = (next) => {
-    setDraft((prev) => ({ ...prev, labs: next }));
-    patch({ labs: next });
-  };
-  const saveVisits = (next) => {
-    setDraft((prev) => ({ ...prev, visits: next }));
-    patch({ visits: next });
-  };
+  const saveDiagnoses = (diagnoses) => patch({ diagnoses });
+  const saveMedications = (medications) => patch({ medications });
+  const saveAllergies = (allergies) => patch({ allergies });
+  const saveLabs = (labs) => patch({ labs });
+  const saveVisits = (visits) => patch({ visits });
 
   const searchIcd = async (text) => {
+    const version = ++searchVersion.current;
     setIcdQuery(text);
     if (!text.trim()) return setIcdResults([]);
-    const value = await api(`/api/icd10?q=${encodeURIComponent(text)}`);
-    setIcdResults(value.codes);
+    try {
+      const value = await api(`/api/icd10?q=${encodeURIComponent(text)}`);
+      if (version === searchVersion.current) setIcdResults(value.codes);
+    } catch (err) {
+      if (version === searchVersion.current) onError?.(err.message);
+    }
   };
-  const addDiagnosis = (code, name) => {
+  const addDiagnosis = async (code, name) => {
     if (!name.trim()) return;
-    saveDiagnoses([
-      ...draft.diagnoses,
-      { code, name, date: new Date().toISOString().slice(0, 10) },
-    ]);
+    if (
+      !(await saveDiagnoses([
+        ...draft.diagnoses,
+        { code, name, date: new Date().toISOString().slice(0, 10) },
+      ]))
+    )
+      return;
+    searchVersion.current++;
     setNewDiagnosis("");
     setIcdQuery("");
     setIcdResults([]);
   };
-  const addMedication = () => {
+  const addMedication = async () => {
     if (!newMed.name.trim()) return;
-    saveMedications([...draft.medications, { ...newMed }]);
-    setNewMed({ name: "", dose: "", frequency: "" });
+    if (!(await saveMedications([...draft.medications, { ...newMed }]))) return;
+    setNewMed({ name: "", dose: "", frequency: "", status: "unknown" });
   };
-  const addAllergy = () => {
+  const addAllergy = async () => {
     const text = newAllergy.trim();
     if (!text || draft.allergies.includes(text)) return;
-    saveAllergies([...draft.allergies, text]);
+    if (!(await saveAllergies([...draft.allergies, text]))) return;
     setNewAllergy("");
   };
-  const addLab = () => {
+  const addLab = async () => {
     const value = Number(newLab.value);
-    if (!newLab.item.trim() || !newLab.date || !Number.isFinite(value))
+    if (
+      !newLab.item.trim() ||
+      !newLab.date ||
+      !newLab.value.trim() ||
+      !Number.isFinite(value)
+    )
       return;
-    saveLabs([
-      ...draft.labs,
-      {
-        item: newLab.item.trim(),
-        value,
-        ...(newLab.unit ? { unit: newLab.unit } : {}),
-        date: newLab.date,
-      },
-    ]);
+    if (
+      !(await saveLabs([
+        ...draft.labs,
+        {
+          item: newLab.item.trim(),
+          value,
+          ...(newLab.unit ? { unit: newLab.unit } : {}),
+          date: newLab.date,
+        },
+      ]))
+    )
+      return;
     setNewLab({ item: "", value: "", unit: "", date: "" });
   };
-  const addVisit = () => {
+  const addVisit = async () => {
     if (!newVisit.date || !newVisit.reason.trim()) return;
-    saveVisits([...draft.visits, { ...newVisit }]);
+    if (!(await saveVisits([...draft.visits, { ...newVisit }]))) return;
     setNewVisit({ date: "", reason: "" });
   };
   const exportDeidentified = async () => {
@@ -114,7 +132,11 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
   };
 
   return (
-    <div className="detail-panel clinical-panel">
+    <fieldset
+      disabled={saving || detail.archived}
+      className="detail-panel clinical-panel"
+      aria-busy={saving}
+    >
       <section>
         <h3>诊断 {saving && <Loader2 className="spin" size={13} />}</h3>
         <ul className="clinical-rows">
@@ -136,9 +158,7 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
               </button>
             </li>
           ))}
-          {!draft.diagnoses.length && (
-            <li className="muted">未记录诊断。</li>
-          )}
+          {!draft.diagnoses.length && <li className="muted">未记录诊断。</li>}
         </ul>
         <div className="clinical-add">
           <input
@@ -175,6 +195,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
 
       <section>
         <h3>过敏史</h3>
+        {!draft.allergies.length && <label className="clinical-status-field">核对状态<select aria-label="过敏史核对状态" value={draft.allergyStatus} onChange={(e) => patch({ allergyStatus: e.target.value })}>
+          <option value="unknown">尚未核对</option><option value="none_known">已核对：无已知过敏</option>
+        </select></label>}
         <div className="allergy-chips">
           {draft.allergies.map((item) => (
             <span className="hint-tag allergy" key={item}>
@@ -197,7 +220,11 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             onChange={(e) => setNewAllergy(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addAllergy()}
           />
-          <button className="secondary" onClick={addAllergy} disabled={!newAllergy.trim()}>
+          <button
+            className="secondary"
+            onClick={addAllergy}
+            disabled={!newAllergy.trim()}
+          >
             <Plus size={13} /> 添加
           </button>
         </div>
@@ -213,11 +240,16 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
                 {m.dose ? ` · ${m.dose}` : ""}
                 {m.frequency ? ` · ${m.frequency}` : ""}
               </span>
+              <select aria-label={`${m.name}用药状态`} value={m.status || "unknown"} onChange={(e) => saveMedications(draft.medications.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}>
+                <option value="unknown">状态待核对</option><option value="active">目前在用</option><option value="stopped">已停用</option>
+              </select>
               <button
                 className="icon-button"
                 title="移除"
                 onClick={() =>
-                  saveMedications(draft.medications.filter((_, i) => i !== index))
+                  saveMedications(
+                    draft.medications.filter((_, i) => i !== index),
+                  )
                 }
               >
                 <X size={13} />
@@ -240,9 +272,16 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
           <input
             value={newMed.frequency}
             placeholder="频次"
-            onChange={(e) => setNewMed({ ...newMed, frequency: e.target.value })}
+            onChange={(e) =>
+              setNewMed({ ...newMed, frequency: e.target.value })
+            }
           />
-          <button className="secondary" onClick={addMedication} disabled={!newMed.name.trim()}>
+          <select aria-label="新增用药状态" value={newMed.status} onChange={(e) => setNewMed({ ...newMed, status: e.target.value })}><option value="unknown">状态待核对</option><option value="active">目前在用</option><option value="stopped">已停用</option></select>
+          <button
+            className="secondary"
+            onClick={addMedication}
+            disabled={!newMed.name.trim()}
+          >
             <Plus size={13} /> 添加
           </button>
         </div>
@@ -262,7 +301,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
                 <button
                   className="icon-button"
                   title="移除"
-                  onClick={() => saveLabs(draft.labs.filter((_, i) => i !== realIndex))}
+                  onClick={() =>
+                    saveLabs(draft.labs.filter((_, i) => i !== realIndex))
+                  }
                 >
                   <X size={13} />
                 </button>
@@ -296,7 +337,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
           <button
             className="secondary"
             onClick={addLab}
-            disabled={!newLab.item.trim() || !newLab.date || newLab.value === ""}
+            disabled={
+              !newLab.item.trim() || !newLab.date || newLab.value === ""
+            }
           >
             <Plus size={13} /> 添加
           </button>
@@ -317,7 +360,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
                 <button
                   className="icon-button"
                   title="移除"
-                  onClick={() => saveVisits(draft.visits.filter((_, i) => i !== realIndex))}
+                  onClick={() =>
+                    saveVisits(draft.visits.filter((_, i) => i !== realIndex))
+                  }
                 >
                   <X size={13} />
                 </button>
@@ -335,7 +380,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
           <input
             value={newVisit.reason}
             placeholder="就诊事由"
-            onChange={(e) => setNewVisit({ ...newVisit, reason: e.target.value })}
+            onChange={(e) =>
+              setNewVisit({ ...newVisit, reason: e.target.value })
+            }
           />
           <button
             className="secondary"
@@ -348,12 +395,19 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
       </section>
 
       <div className="clinical-actions">
-        <button className="secondary" onClick={exportDeidentified}>
+        <button
+          className="secondary"
+          onClick={() =>
+            exportDeidentified().catch((err) => onError?.(err.message))
+          }
+        >
           <Download size={14} /> 脱敏导出（科研用 JSON）
         </button>
-        <span className="muted">每处修改立即保存；导出文件不含姓名、电话与确切年龄。</span>
+        <span className="muted">
+          每处修改立即保存；导出文件不含姓名、电话与确切年龄。
+        </span>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -362,6 +416,7 @@ function normalize(detail) {
     diagnoses: detail.diagnoses || [],
     medications: detail.medications || [],
     allergies: detail.allergies || [],
+    allergyStatus: detail.allergyStatus || ((detail.allergies || []).length ? "recorded" : "unknown"),
     labs: detail.labs || [],
     visits: detail.visits || [],
   };

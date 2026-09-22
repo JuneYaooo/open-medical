@@ -38,16 +38,17 @@ test(
       })
       .first()
       .click();
-    await page.getByRole("button", { name: "采纳写入", exact: true }).waitFor();
+    await page.getByRole("button", { name: "核对变更", exact: true }).waitFor();
     const edited = await f.json(`/api/patients/${patient.id}`, "PATCH", {
       expectedRevision: patient.revision,
       medications: [{ name: "医生最新合成条目" }],
     });
     assert.equal(edited.status, 200);
-    await page.getByRole("button", { name: "采纳写入", exact: true }).click();
+    await page.getByRole("button", { name: "核对变更", exact: true }).click();
+    await page.getByRole("button", { name: "确认这些变更并写入", exact: true }).click();
     await page
       .locator('[role="alert"]')
-      .filter({ hasText: /变化|版本|冲突|重新/ })
+      .filter({ hasText: /变化|版本|冲突|重新/ }).first()
       .waitFor();
     assert.equal(
       (await f.json(`/api/pending-actions?patientId=${patient.id}`)).data.actions.find(a => a.id === proposal.id)?.status,
@@ -59,14 +60,15 @@ test(
     );
     assert.equal(
       await page
-        .getByRole("button", { name: "采纳写入", exact: true })
+        .getByRole("button", { name: "核对变更", exact: true })
         .isEnabled(),
       true,
     );
     assert.deepEqual(errors, []);
+    await page.getByRole("button", { name: "返回核对", exact: true }).click();
     await page.getByRole("button", { name: "忽略", exact: true }).click();
     await page
-      .getByRole("button", { name: "采纳写入", exact: true })
+      .getByRole("button", { name: "核对变更", exact: true })
       .waitFor({ state: "detached" });
     assert.equal(
       (await f.json(`/api/pending-actions?patientId=${patient.id}&status=rejected`)).data.actions.find(a => a.id === proposal.id)?.status,

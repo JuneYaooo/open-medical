@@ -1,3 +1,5 @@
+import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
+import { FollowupRecords } from "./followup-records";
 import { useEffect, useRef, useState } from "react";
 import {
   Bell,
@@ -12,8 +14,13 @@ import {
   UserPlus,
 } from "lucide-react";
 import { api, streamTurn } from "./agent-runtime";
-import { Badge, IconButton, Modal } from "./components";
+import { IconButton, Modal } from "./components";
 import { RiskList, Timeline } from "./ui";
+import { PatientBriefPanel } from "./patient-brief";
+import { PatientIdentityModal } from "./patient-identity";
+import { PatientProposalModal } from "./patient-proposal";
+import { PatientImportModal } from "./patient-import";
+import { CareTasksPanel } from "./care-tasks";
 import { ClinicalPanel } from "./patient-clinical";
 
 const ORGANIZE_PROMPT =
@@ -112,6 +119,7 @@ export function PatientsView({
   initialPatientId,
   initialTab = "overview",
   initialCreate = false,
+  initialImport = false,
 }) {
   const [patients, setPatients] = useState([]);
   const patientGeneration = useRef(0);
@@ -125,32 +133,41 @@ export function PatientsView({
   const [proposals, setProposals] = useState([]);
   const [createProposals, setCreateProposals] = useState([]);
   const [proposalBusy, setProposalBusy] = useState(false);
+  const [reviewProposal, setReviewProposal] = useState(null);
   const proposalInFlight = useRef(false);
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
+  const [patientPage, setPatientPage] = useState(0);
+  const [showAllReminders, setShowAllReminders] = useState(false);
   const [group, setGroup] = useState("");
+  const [archiveFilter, setArchiveFilter] = useState("active");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [modal, setModal] = useState(initialCreate ? "new-patient" : null);
+  const [modal, setModal] = useState(initialCreate ? "new-patient" : initialImport ? "import-patients" : null);
   const [consent, setConsent] = useState(false);
   const [paste, setPaste] = useState("");
   const [bridge, setBridge] = useState(null);
   const [reply, setReply] = useState("");
   const groups = [...new Set(patients.flatMap((p) => p.groups || []))].sort();
   const filtered = patients
+    .filter((p) => archiveFilter === "archived" ? p.archived : !p.archived)
     .filter((p) => !group || p.groups?.includes(group))
     .filter(
       (p) =>
         !query ||
         p.name.includes(query) ||
+        (p.patientNumber || "").includes(query) ||
+        p.id.includes(query) ||
         (p.phone || "").includes(query) ||
         (p.tags || []).some((t) => t.includes(query)),
     );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 24));
+  const visiblePage = Math.min(patientPage, pageCount - 1);
   const refresh = async () => {
     const [list, todo, box, pending] = await Promise.all([
-      api("/api/patients"),
+      api("/api/patients?summary=1&archived=1"),
       api("/api/reminders"),
       api("/api/inbox"),
       api("/api/pending-actions?status=pending").catch(() => ({ actions: [] })),
@@ -168,6 +185,7 @@ export function PatientsView({
     const version = ++patientGeneration.current;
     setError("");
     setTab(nextTab);
+    setReviewProposal(null);
     setConsent(false);
     setPaste("");
     onSwitchCurrent?.(id);
@@ -200,6 +218,7 @@ export function PatientsView({
     setNotice("");
     try {
       await api(`/api/pending-actions/${proposal.id}/${decision}`, "POST", {});
+      setReviewProposal(null);
       if (detail) await refreshPatient();
       else await refresh();
       setNotice(
@@ -348,15 +367,6 @@ export function PatientsView({
       setError(err.message);
     }
   };
-  const ack = async (id) => {
-    try {
-      await api(`/api/reminders/${id}/ack`, "POST", {});
-      await refresh();
-      if (detail) await openPatient(detail.id);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
   const assign = async (messageId, patientId) => {
     if (!patientId) return;
     try {
@@ -372,10 +382,10 @@ export function PatientsView({
         expectedRevision: detail.revision,
         archived: !detail.archived,
       });
-      const list = await refresh();
+      await refresh();
       setDetail(null);
       setSession(null);
-      setNotice(list.some((p) => p.id === detail.id) ? "" : "患者已归档。");
+      setNotice(detail.archived ? "患者已恢复到在管列表。" : "患者已归档，可在已归档列表中恢复。");
     } catch (err) {
       setError(err.message);
     }
@@ -398,7 +408,7 @@ export function PatientsView({
   };
   const patientCards = (
     <div className="patient-grid">
-      {filtered.map((p) => (
+      {filtered.slice(visiblePage * 24, (visiblePage + 1) * 24).map((p) => (
         <button
           className="patient-card"
           key={p.id}
@@ -413,7 +423,7 @@ export function PatientsView({
           <span className="patient-line">
             <b>{p.name}</b>
             <small>
-              {[GENDER[p.gender], p.birthYear, p.phone]
+              {[GENDER[p.gender], patientIdentityLabel(p)]
                 .filter(Boolean)
                 .join(" · ") || "未补充基础信息"}
             </small>
@@ -443,7 +453,7 @@ export function PatientsView({
       ))}
       {!filtered.length && (
         <p className="sidebar-empty">
-          还没有在管患者。点击「新建患者」并导入病例材料开始。
+          {patients.length ? "没有匹配的患者，请尝试其他姓名、编号或分组。" : "还没有在管患者。点击「新建患者」并导入病例材料开始。"}
         </p>
       )}
     </div>
@@ -456,7 +466,7 @@ export function PatientsView({
           <span className="muted">
             {detail
               ? "病例工作区、消息与随访都在本机保存"
-              : `本地单机 · ${patients.length} 位在管患者`}
+              : `本地单机 · ${patients.filter((p) => !p.archived).length} 位在管患者`}
           </span>
         </div>
         {detail ? (
@@ -481,6 +491,7 @@ export function PatientsView({
           </div>
         ) : (
           <div className="toolbar-actions">
+            <button className="secondary" onClick={() => setModal("import-patients")}>导入已有患者</button>
             <button className="primary" onClick={() => setModal("new-patient")}>
               <UserPlus size={15} /> 新建患者
             </button>
@@ -539,7 +550,7 @@ export function PatientsView({
               <b>
                 <Bell size={15} /> 待办提醒
               </b>
-              {reminders.map((r) => (
+              {(showAllReminders ? reminders : reminders.slice(0, 3)).map((r) => (
                 <div className="todo-row" key={r.id}>
                   <MessageSquare size={14} />
                   <span>
@@ -548,11 +559,12 @@ export function PatientsView({
                       {r.detail} · {fmtDate(r.dueAt)}
                     </small>
                   </span>
-                  <button className="secondary" onClick={() => ack(r.id)}>
-                    标记完成
+                  <button className="secondary" onClick={() => openPatient(r.patientId, "followups").catch((err) => setError(err.message))}>
+                    登记随访
                   </button>
                 </div>
               ))}
+              {reminders.length > 3 && <button className="text-button" onClick={() => setShowAllReminders(!showAllReminders)}>{showAllReminders ? "收起提醒" : `展开已加载的 ${reminders.length} 条提醒`}</button>}
             </div>
           )}
           {inbox.length > 0 && (
@@ -575,9 +587,9 @@ export function PatientsView({
                     aria-label="认领到患者"
                   >
                     <option value="">认领到…</option>
-                    {patients.map((p) => (
+                    {patients.filter((p) => !p.archived).map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {patientOptionLabel(p, patients)}
                       </option>
                     ))}
                   </select>
@@ -586,18 +598,19 @@ export function PatientsView({
             </div>
           )}
           <div className="patients-filter">
+            <select aria-label="患者档案状态" value={archiveFilter} onChange={(e) => { setArchiveFilter(e.target.value); setPatientPage(0); }}><option value="active">在管患者</option><option value="archived">已归档患者</option></select>
             <label className="search">
               <Search size={14} />
               <input
                 aria-label="搜索患者"
-                placeholder="搜索姓名、电话或标签"
+                placeholder="搜索姓名、编号、电话或标签"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => { setQuery(e.target.value); setPatientPage(0); }}
               />
             </label>
             <button
               className={`chip ${group === "" ? "active" : ""}`}
-              onClick={() => setGroup("")}
+              onClick={() => { setGroup(""); setPatientPage(0); }}
             >
               全部
             </button>
@@ -605,13 +618,18 @@ export function PatientsView({
               <button
                 key={g}
                 className={`chip ${group === g ? "active" : ""}`}
-                onClick={() => setGroup(g)}
+                onClick={() => { setGroup(g); setPatientPage(0); }}
               >
                 {g}
               </button>
             ))}
           </div>
           {patientCards}
+          {filtered.length > 0 && <nav className="patient-pagination" aria-label="患者分页">
+            <small>共 {filtered.length} 位 · 第 {visiblePage + 1} / {pageCount} 页</small>
+            <button className="secondary" disabled={visiblePage === 0} onClick={() => setPatientPage(visiblePage - 1)}>上一页</button>
+            <button className="secondary" disabled={visiblePage + 1 >= pageCount} onClick={() => setPatientPage(visiblePage + 1)}>下一页</button>
+          </nav>}
         </>
       )}
       {detail && session && (
@@ -624,6 +642,7 @@ export function PatientsView({
               </b>
               <small>
                 {[
+                  detail.patientNumber || detail.id.slice(0, 8),
                   GENDER[detail.gender],
                   detail.birthYear && `${detail.birthYear} 年生`,
                   detail.phone,
@@ -647,6 +666,7 @@ export function PatientsView({
               )}
             </span>
             <div className="toolbar-actions">
+              <button className="secondary" onClick={() => setModal("edit-patient")}>编辑信息</button>
               <button
                 className="secondary"
                 onClick={() => runTask(ORGANIZE_PROMPT, { mode: "model" })}
@@ -671,7 +691,7 @@ export function PatientsView({
               >
                 <Stethoscope size={14} /> 评估治疗方案
               </button>
-              <IconButton title="归档或恢复" onClick={archive}>
+              <IconButton title={detail.archived ? "恢复患者" : "归档患者"} onClick={archive}>
                 <FolderOpen size={16} />
               </IconButton>
               <IconButton title="删除患者档案" onClick={remove}>
@@ -699,6 +719,7 @@ export function PatientsView({
                 `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`,
               ],
               ["followups", "随访计划"],
+              ["tracking", "检查与转诊"],
             ].map(([id, label]) => (
               <button
                 key={id}
@@ -709,8 +730,50 @@ export function PatientsView({
               </button>
             ))}
           </div>
+          {tab === "tracking" && <CareTasksPanel key={detail.id} patient={detail} onChanged={onChanged} />}
           {tab === "overview" && (
             <div className="detail-panel">
+              <PatientBriefPanel patient={detail} onOpenTask={onOpenWorkspace} onNavigate={setTab} onEditIdentity={() => setModal("edit-patient")} />
+              <section className="care-path" aria-label="患者工作流程">
+                <h3>继续处理这位患者</h3>
+                <div className="care-path-steps">
+                  <button onClick={() => setTab("clinical")}>
+                    <b>1 · 完善档案</b>
+                    <small>诊断、用药、过敏史与检验</small>
+                  </button>
+                  <button
+                    onClick={() =>
+                      onOpenWorkspace(session.id, { tab: "materials" })
+                    }
+                  >
+                    <b>2 · 导入与整理</b>
+                    <small>{session.files.length} 份材料 · 保留原文</small>
+                  </button>
+                  <button
+                    onClick={() =>
+                      onOpenWorkspace(session.id, { tab: "results" })
+                    }
+                  >
+                    <b>3 · 复核成果</b>
+                    <small>
+                      {
+                        session.artifacts.filter((a) => a.status === "draft")
+                          .length
+                      }{" "}
+                      份草稿待复核
+                    </small>
+                  </button>
+                  <button onClick={() => setTab("followups")}>
+                    <b>4 · 随访与反馈</b>
+                    <small>
+                      {detail.counts.pendingReminders} 条提醒待处理 · 登记结果
+                    </small>
+                  </button>
+                </div>
+              </section>
+              <p className="muted">
+                风险提示仅覆盖内置规则；检验名称、单位不匹配时不套用阈值，未提示不代表无风险。
+              </p>
               <RiskList
                 alerts={[...risks].sort(
                   (a, b) =>
@@ -764,9 +827,9 @@ export function PatientsView({
                         <button
                           className="text-button"
                           disabled={proposalBusy}
-                          onClick={() => resolveProposal(proposal, "confirm")}
+                          onClick={() => proposal.type === "patient-update" ? setReviewProposal(proposal) : resolveProposal(proposal, "confirm")}
                         >
-                          采纳写入
+                          {proposal.type === "patient-update" ? "核对变更" : "采纳写入"}
                         </button>
                         <button
                           className="text-button"
@@ -847,12 +910,13 @@ export function PatientsView({
                 </div>
               </div>
               <p className="boundary">
-                评估与摘要只是待复核草稿：没有药物知识库、剂量或相互作用判断，不构成诊疗决定。
+                评估与摘要只是待复核草稿：内置用药与检验规则覆盖有限，不构成诊疗决定。
               </p>
             </div>
           )}
           {tab === "clinical" && (
             <ClinicalPanel
+              key={detail.id}
               detail={detail}
               onChanged={refreshPatient}
               onError={setError}
@@ -977,14 +1041,22 @@ export function PatientsView({
                   随访到期时在本机生成提醒；未配置模型或未授权外发时只提醒不自动总结。
                 </small>
               </div>
+              <FollowupRecords
+                key={detail.id}
+                patientId={detail.id}
+                onChanged={refreshPatient}
+                onOpenTask={onOpenWorkspace}
+              />
               {followups.map((job) => (
                 <div className="followup-card" key={job.id}>
                   <div className="followup-head">
                     <b>{job.name}</b>
-                    <Badge status={job.status} />
+                    <span className="badge">{{ active: "计划中", running: "提醒生成中", paused: "已暂停", completed: "提醒已生成" }[job.status] || job.status}</span>
                   </div>
                   <small className="muted">
-                    每 {job.intervalDays} 天 · 下次 {fmtDate(job.nextDue)}
+                    {job.once ? "单次提醒" : `每 ${job.intervalDays} 天`} ·{" "}
+                    {job.status === "completed" ? "提醒已触发" : "下次"}{" "}
+                    {fmtDate(job.nextDue)}
                     {job.externalConsent ? " · 已授权自动总结" : " · 仅提醒"}
                     {job.lastError ? ` · 上次错误：${job.lastError}` : ""}
                   </small>
@@ -1046,6 +1118,9 @@ export function PatientsView({
           }}
         />
       )}
+      {reviewProposal && detail && <PatientProposalModal patient={detail} proposal={reviewProposal} busy={proposalBusy} error={error} onClose={() => setReviewProposal(null)} onConfirm={() => resolveProposal(reviewProposal, "confirm")} />}
+      {modal === "import-patients" && <PatientImportModal onClose={() => setModal(null)} onImported={async (result) => { await refresh(); setModal(null); setNotice(`已导入 ${result.count} 位患者，打开档案即可继续补充病例材料。`); }} onOpenPatient={(id) => { setModal(null); openPatient(id).catch((err) => setError(err.message)); }} />}
+      {modal === "edit-patient" && detail && <PatientIdentityModal patient={detail} onClose={() => setModal(null)} onSaved={async () => { await refreshPatient(); setModal(null); setNotice("基本信息已保存"); }} />}
       {modal === "followup" && detail && (
         <FollowupModal
           patientId={detail.id}
@@ -1062,22 +1137,42 @@ export function PatientsView({
 function NewPatientModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     name: "",
+    patientNumber: "",
+    confirmDistinctPatient: false,
     gender: "",
     birthYear: "",
     phone: "",
     groups: "",
     tags: "",
   });
+  const inFlight = useRef(false);
+  const requestId = useRef(crypto.randomUUID());
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const [matches, setMatches] = useState([]);
+  useEffect(() => {
+    let live = true;
+    setMatches([]);
+    const timer = setTimeout(() => {
+      if (form.name.trim()) api(`/api/patients?summary=1&q=${encodeURIComponent(form.name.trim())}`)
+        .then((value) => { if (live) setMatches(value.patients.filter((p) => p.name === form.name.trim())); })
+        .catch((err) => { if (live) setError(err.message); });
+    }, 250);
+    return () => { live = false; clearTimeout(timer); };
+  }, [form.name]);
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value, ...(key === "name" ? { confirmDistinctPatient: false } : {}) });
   const submit = async (e) => {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setError("");
     try {
       const patient = await api("/api/patients", "POST", {
+        requestId: requestId.current,
         name: form.name,
+        patientNumber: form.patientNumber.trim() || undefined,
+        confirmDistinctPatient: form.confirmDistinctPatient,
         gender: form.gender || undefined,
         birthYear: form.birthYear ? Number(form.birthYear) : undefined,
         phone: form.phone.trim() || undefined,
@@ -1098,16 +1193,27 @@ function NewPatientModal({ onClose, onCreated }) {
     } catch (err) {
       setError(err.message);
     } finally {
+      inFlight.current = false;
       setSaving(false);
     }
   };
   return (
-    <Modal title="新建患者" onClose={onClose}>
+    <Modal title="新建患者" onClose={() => { if (!saving) onClose(); }}>
       <form className="modal-form" onSubmit={submit}>
+        <fieldset disabled={saving} className="patient-create-fields">
         <label>
           姓名 *
           <input value={form.name} onChange={set("name")} required autoFocus />
         </label>
+        {matches.length > 0 && <section className="identity-matches" aria-label="同名患者核对">
+          <b>找到 {matches.length} 位同名患者</b>
+          <p>先核对已有档案，避免重复建档。</p>
+          {matches.map((patient) => <button key={patient.id} className="secondary" type="button" onClick={() => onCreated(patient)} disabled={saving}>
+            {patient.name} · {patient.patientNumber || patient.id.slice(0, 8)} · {patient.birthYear ? `${patient.birthYear} 年生` : "出生年未填"} · {patient.phone ? `尾号 ${patient.phone.slice(-4)}` : "电话未填"} · 打开已有档案
+          </button>)}
+          <label><input type="checkbox" checked={form.confirmDistinctPatient} onChange={(e) => setForm({ ...form, confirmDistinctPatient: e.target.checked })} />已核对，这是另一位同名患者</label>
+        </section>}
+        <label>患者编号（可选）<input maxLength={40} value={form.patientNumber} onChange={set("patientNumber")} placeholder="院内编号或自己的患者编号" /></label>
         <div className="form-grid">
           <label>
             性别
@@ -1140,9 +1246,10 @@ function NewPatientModal({ onClose, onCreated }) {
           标签（逗号分隔，如：2型糖尿病, 胰岛素）
           <input value={form.tags} onChange={set("tags")} />
         </label>
+        </fieldset>
         {error && <p className="error-text">{error}</p>}
         <div className="toolbar-actions">
-          <button className="primary" disabled={!form.name.trim() || saving}>
+          <button className="primary" disabled={!form.name.trim() || saving || (matches.length > 0 && !form.confirmDistinctPatient)}>
             创建患者档案
           </button>
         </div>

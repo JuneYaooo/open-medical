@@ -35,6 +35,8 @@ export function runDerivedStatus(run, pendingCount = 0) {
 // 顶栏/任务条状态芯片文案；非等待的运行态返回 null（调用方用默认文案）。
 export function runChipLabel(run, pendingCount = 0) {
   const status = runDerivedStatus(run, pendingCount);
+  if (status === "waiting_input" && run?.outcome === "approval_resolved")
+    return "修改已处理";
   return (
     {
       waiting_approval: "等待你批准",
@@ -110,4 +112,12 @@ export function gapLine(g) {
   if (!g) return "";
   if (typeof g === "string") return g;
   return g.detail || g.reason || "未说明的缺口";
+}
+// Consultation lookup failures limit evidence; they do not imply a missing file.
+export function consultationLookupIssue(run) {
+  const gaps = run?.delivery?.gaps || [];
+  const reads = new Set(['literature_search', 'literature_fetch', 'knowledge_search', 'knowledge_base_status', 'lab_knowledge_search']);
+  return run?.policy?.intent === 'consultation' && !run.delivery?.evidence?.length &&
+    gaps.some((g) => g.reason === 'tool_failed' && reads.has(g.tool)) &&
+    gaps.every((g) => g.reason === 'no_current_run_evidence' || (g.reason === 'tool_failed' && reads.has(g.tool)));
 }

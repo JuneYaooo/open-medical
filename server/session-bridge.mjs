@@ -2,6 +2,7 @@
 // 会话的 API 形状，并按会话类别双轨分派——新建会话走 WorkspaceService
 // （通用内核 + 医疗叠层），既有 sessions 表会话继续走 MedicalRuntime。
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
+import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -145,9 +146,12 @@ export class SessionBridge {
   }
   renameSession(id, title) {
     const w = this.requireSessionWorkspace(id);
-    this.service.update(id, {
-      revision: w.revision,
-      title: string(title, "会话名称", 100),
+    const name = string(title, "会话名称", 100);
+    // WorkspaceService.update configures permissions, not metadata. Renaming
+    // must preserve approval policy, grants and pending file proposals.
+    sqliteTransaction(this.store.db, () => {
+      this.service.store.update(id, (current) => { current.title = name; }, w.revision);
+      this.store.audit(id, "session.renamed", { title: name });
     });
   }
 
@@ -239,6 +243,7 @@ export class SessionBridge {
   // 持久事实（该 run 的 pending 审批数、是否为当前活跃运行），不自行
   // 推导；status 原值保持不变，derivedStatus/waitingReason 为新增字段。
   project(w) {
+    const recentEvents = w.kind === "session" ? this.service.store.eventsLatest(w.id, 500, { excludeDeltas: true }) : [];
     const activeRunId = this.service.active.get(w.id)?.run?.id || null;
     const runFacts = (run) => ({
       pendingApprovals: (w.approvals || []).filter(
@@ -269,6 +274,8 @@ export class SessionBridge {
         fileIds: run.fileIds || [],
         artifacts: run.artifacts || [],
         children: run.children || [],
+        events: run.events || recentEvents.filter((event) => event.run_id === run.id).map((event) => ({ ...event, seq: event.id })),
+        sourceHashes: (run.sourceHashes || []).map((source, index) => typeof source === "string" ? { id: String(index), hash: source } : source),
         ...(run.delivery ? { delivery: run.delivery } : {}),
         ...(run.outcome ? { outcome: run.outcome } : {}),
       };
@@ -311,6 +318,8 @@ export class SessionBridge {
       reviewCount: projected.artifacts.filter((a) => a.status === "draft")
         .length,
       running: this.service.active.has(w.id),
+      lastRunStatus: w.runs.at(-1)?.status || null,
+      lastRunError: w.runs.at(-1)?.error || null,
     };
   }
   list() {
@@ -327,6 +336,8 @@ export class SessionBridge {
       messageCount: s.messages.length,
       reviewCount: s.artifacts.filter((a) => a.status === "draft").length,
       running: this.runtime.active.has(s.id),
+      lastRunStatus: s.runs.at(-1)?.status || null,
+      lastRunError: s.runs.at(-1)?.error || null,
     }));
     return [...sessionWorkspaces, ...legacy].sort(
       (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),

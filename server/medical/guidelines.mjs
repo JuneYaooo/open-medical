@@ -1,5 +1,7 @@
+import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { createHash } from "node:crypto";
 import { check, string } from "../errors.mjs";
+import { KNOWLEDGE_STATES, knowledgeMetadata, optionalSourceUrl, optionalReviewDate } from "./knowledge-metadata.mjs";
 
 // Local clinical guideline library. Documents (usually PDFs extracted to
 // text by the UI) are stored with line numbers and split into chunks;
@@ -41,18 +43,44 @@ export class GuidelineLibrary {
     check(row, "NOT_FOUND", "指南文档不存在", 404);
     return JSON.parse(row.data);
   }
-  list() {
-    return this.store.db
-      .prepare("SELECT data FROM guideline_docs")
-      .all()
-      .map((row) => {
-        const doc = JSON.parse(row.data);
-        const chunks = this.store.db
-          .prepare("SELECT COUNT(*) n FROM guideline_chunks WHERE doc_id=?")
-          .get(doc.id)?.n || 0;
-        return { ...doc, chunkCount: chunks, text: undefined };
-      })
+  list({ kind, collection, reviewStatus, query = "" } = {}) {
+    check(!reviewStatus || reviewStatus === "all" || KNOWLEDGE_STATES.includes(reviewStatus), "INVALID_INPUT", "来源复核状态无效");
+    const counts = new Map(this.store.db.prepare("SELECT doc_id,COUNT(*) n FROM guideline_chunks GROUP BY doc_id").all().map((r) => [r.doc_id, r.n]));
+    return this.store.db.prepare("SELECT data FROM guideline_docs").all()
+      .map((row) => { const doc = JSON.parse(row.data); return { ...doc, ...knowledgeMetadata(doc), chunkCount: counts.get(doc.id) || 0, text: undefined, metadataHistory: undefined }; })
+      .filter((doc) => !kind || doc.kind === kind)
+      .filter((doc) => !collection || doc.collection === collection)
+      .filter((doc) => !reviewStatus || reviewStatus === "all" || doc.reviewStatus === reviewStatus)
+      .filter((doc) => !query || `${doc.title} ${doc.org} ${doc.edition} ${doc.collection}`.toLowerCase().includes(query.toLowerCase()))
       .sort((a, b) => b.createdAt - a.createdAt);
+  }
+  updateMetadata(id, input = {}) {
+    return sqliteTransaction(this.store.db, () => {
+      const doc = this.docRow(id);
+      check(input.expectedRevision === (doc.revision || 0), "REVISION_CONFLICT", "资料已被修改，请重新打开文档后再编辑", 409);
+      const previous = { ...knowledgeMetadata(doc), title: doc.title, org: doc.org, year: doc.year, kind: doc.kind, collection: doc.collection, revision: doc.revision || 0 };
+      for (const [key, max] of [["title", 150], ["org", 80], ["kind", 20], ["collection", 60], ["edition", 100]]) {
+        if (input[key] !== undefined) doc[key] = ["org", "edition"].includes(key) && input[key] === "" ? "" : string(input[key], key, max);
+      }
+      if (input.year !== undefined) doc.year = optionalYear(input.year);
+      if (input.sourceUrl !== undefined) doc.sourceUrl = optionalSourceUrl(input.sourceUrl);
+      if (input.reviewDueDate !== undefined) doc.reviewDueDate = optionalReviewDate(input.reviewDueDate);
+      const changedSource = ["title", "org", "year", "kind", "collection", "edition", "sourceUrl"].some((key) => (doc[key] || "") !== (previous[key] || ""));
+      const status = input.reviewStatus || (changedSource && previous.reviewStatus === "reviewed" ? "unreviewed" : previous.reviewStatus);
+      check(KNOWLEDGE_STATES.includes(status), "INVALID_INPUT", "来源复核状态无效");
+      if (input.reviewNote !== undefined) doc.reviewNote = input.reviewNote === "" ? "" : string(input.reviewNote, "来源核对记录", 1000);
+      if (["reviewed", "retired"].includes(status)) {
+        check(doc.reviewNote?.trim(), "INVALID_INPUT", "请记录核对依据或停用原因");
+      }
+      if (status === "reviewed" && (changedSource || input.reviewStatus === "reviewed")) doc.reviewedAt = new Date().toISOString();
+      doc.reviewStatus = status;
+      doc.revision = (doc.revision || 0) + 1;
+      doc.updatedAt = Date.now();
+      doc.metadataHistory = [...(doc.metadataHistory || []), { ...previous, replacedAt: doc.updatedAt }].slice(-50);
+      this.store.db.prepare("UPDATE guideline_docs SET data=? WHERE id=?").run(JSON.stringify(doc), id);
+      this.store.audit(null, "knowledge.metadata.updated", { docId: id, revision: doc.revision, reviewStatus: status });
+      return this.get(id);
+    });
   }
   async addDocument({
     title,
@@ -63,6 +91,9 @@ export class GuidelineLibrary {
     fileName = "",
     kind = "指南",
     collection = "默认知识库",
+    sourceUrl = "",
+    edition = "",
+    reviewDueDate = "",
   } = {}) {
     const name = string(title, "文档标题", 150);
     const body = string(text, "指南全文", 500000);
@@ -81,6 +112,10 @@ export class GuidelineLibrary {
         ? string(collection, "所属知识库", 60)
         : "默认知识库",
       source: string(source, "来源", 40),
+      sourceUrl: optionalSourceUrl(sourceUrl),
+      edition: edition ? string(edition, "版本", 100) : "",
+      reviewStatus: "unreviewed",
+      reviewDueDate: optionalReviewDate(reviewDueDate),
       fileName: fileName ? string(fileName, "文件名", 180) : "",
       sha256: sha256(body),
       createdAt: Date.now(),
@@ -142,7 +177,7 @@ export class GuidelineLibrary {
       }
     }
     const { text: _text, ...rest } = doc;
-    return { ...rest, chunkCount: chunks.length, embedded };
+    return { ...rest, ...knowledgeMetadata(doc), chunkCount: chunks.length, embedded };
   }
   removeDocument(id) {
     this.docRow(id);
@@ -153,12 +188,13 @@ export class GuidelineLibrary {
   get(id) {
     const doc = this.docRow(id);
     const lines = doc.text.split("\n").length;
-    return { ...doc, lineCount: lines };
+    return { ...doc, ...knowledgeMetadata(doc), lineCount: lines };
   }
   // Deterministic local search: every term must appear inside the chunk;
   // score is the total occurrence count. Works for Chinese without a
   // tokenizer (substring matching over a small local corpus).
-  async search({ query, org, year, kind, collection, limit = 8 } = {}) {
+  async search({ query, org, year, kind, collection, reviewStatus, limit = 8 } = {}) {
+    check(!reviewStatus || reviewStatus === "all" || KNOWLEDGE_STATES.includes(reviewStatus), "INVALID_INPUT", "来源复核状态无效");
     const text = string(query, "检索词", 200);
     const cjk = /[\u4e00-\u9fff]/;
     const terms = text
@@ -184,7 +220,8 @@ export class GuidelineLibrary {
       .prepare("SELECT data FROM guideline_docs")
       .all()
       .map((row) => JSON.parse(row.data))
-      .filter((doc) => !org || !doc.org || doc.org.toLowerCase().includes(String(org).toLowerCase()))
+      .filter((doc) => !org || (doc.org || "").toLowerCase().includes(String(org).toLowerCase()))
+      .filter((doc) => reviewStatus === "all" || (reviewStatus ? (doc.reviewStatus || "unreviewed") === reviewStatus : doc.reviewStatus !== "retired"))
       .filter((doc) => !year || doc.year === year)
       .filter((doc) => !kind || (doc.kind || "指南") === kind)
       .filter(
@@ -247,7 +284,9 @@ export class GuidelineLibrary {
         }
         const vectorKey = `${doc.id}:${chunk.ord}`;
         const vectorScore = vectorScores.get(vectorKey);
-        if (missing || (!score && vectorScore === undefined)) continue;
+        const lexicalMatch = !missing && score > 0;
+        if (!lexicalMatch && !(vectorScore >= 0.9)) continue;
+        if (!lexicalMatch) score = 0;
         const lines = chunk.text.split("\n");
         const matched = lines
           .map((line, i) => ({ line, i }))
@@ -262,6 +301,11 @@ export class GuidelineLibrary {
           docTitle: doc.title,
           org: doc.org,
           year: doc.year,
+          ...knowledgeMetadata(doc),
+          revision: doc.revision || 0,
+          sha256: doc.sha256,
+          kind: doc.kind || "指南",
+          collection: doc.collection || "默认知识库",
           ord: chunk.ord,
           startLine: chunk.start_line,
           endLine: chunk.end_line,
@@ -352,6 +396,9 @@ export class GuidelineLibrary {
     return {
       docId: doc.id,
       docTitle: doc.title,
+      ...knowledgeMetadata(doc),
+      revision: doc.revision || 0,
+      sha256: doc.sha256,
       startLine,
       endLine,
       lines: lines.slice(startLine - 1, endLine),
@@ -384,6 +431,7 @@ export function knowledgeTools(library) {
           query: textDef,
           kind: textDef,
           collection: textDef,
+          reviewStatus: { type: "string", enum: [...KNOWLEDGE_STATES, "all"], description: "默认排除已停用资料；仅明确追溯历史时包含 retired/all" },
           org: textDef,
           year: intDef,
           limit: intDef,
@@ -454,6 +502,8 @@ export function knowledgeTools(library) {
           org: textDef,
           year: intDef,
           fileName: textDef,
+          sourceUrl: textDef,
+          edition: textDef,
         },
         ["title", "text"],
       ),

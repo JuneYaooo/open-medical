@@ -1,5 +1,6 @@
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 import { TOOL_DEFINITIONS, runTool, medicalToolAllowed } from "../medical-core.mjs";
+import { check } from "../errors.mjs";
 
 // Medical capability layered on the generic workspace kernel — on demand,
 // never by default for ordinary projects:
@@ -15,6 +16,7 @@ export const MEDICAL_WORKSPACE_DISCIPLINE = `
 本工作台具备医疗领域能力，按任务自动调度，无需用户要求：
 - 用户上传或提及患者资料时：主动读取并整理为结构化患者信息（诊断、用药、过敏、检验，保留文件名与行号溯源）。资料属于已有患者时用 patient_record_propose 提交档案更新提案；能从材料中识别出姓名等基本信息且是一位新患者时，用 patient_create_propose 提交建档提案——两者都由医生确认后写入；整理结果同时以可溯源的时间线/清单呈现在回复中。上传文件、一句话指令即可完成建档或更新，不要让用户手动填表。
 - 医生在对话中明确表达偏好或习惯时（随访方式、文书格式、常用组合等），用 doctor_memory_propose 存为待确认记忆，由医生在记忆面板确认后自动生效。
+- 有当前患者时，先用 read_patient_brief 读取最新档案与未完成事项；工具只读取当前关联患者。过敏未核对不等于无过敏，用药须区分正在使用、已停用和未知。档案更新默认追加；确需修改旧记录时先核对原档案，以 replace 模式提供该字段完整列表，供医生对照复核。
 - 用户上传指南/共识文件，或要求建立医学知识库时：先调用 knowledge_base_status 体检环境，按 knowledge-base 技能给出嵌入方案建议（云端免费 Key 或本机 Ollama 及其内存要求），入库前向用户复述标题与来源并确认，再调用 knowledge_ingest 入库（自动分块并向量化索引，指南/书籍/资料均可）。之后回答医学问题前先用 knowledge_search 检索知识库。
 - 用户要求联网补充指南/文献时：用 web_search/web_fetch 获取候选，向用户展示标题与来源并确认，再调用 knowledge_ingest 存入知识库。
 - 医学问题先查知识库与文献工具取事实；所有医学结论性输出为待专业医生复核的草稿，引用必须带来源（文档名、页码或行号），不编造。
@@ -38,6 +40,7 @@ export function createMedicalWorkspaceDomain({
   sessionPlugins = [],
   skills = null,
   doctor = null,
+  readPatientBrief = null,
 } = {}) {
   // 会话叠层的插件经 runTool 统一分发：材料 sources、schema 校验与
   // readOnly 约定和医疗会话路径共用同一执行契约。
@@ -75,6 +78,7 @@ export function createMedicalWorkspaceDomain({
         ...(sources.length <= 8 ? { preview: s.text.slice(0, 1000) } : {}),
       }));
       return [
+        workspace.patientId ? `当前已关联患者编号：${workspace.patientId}。可调用 read_patient_brief 读取最新档案；不必让医生重新输入已有病史。` : "",
         doctor?.digest(),
         `可用技能：${JSON.stringify(skills?.list() || [])}`,
         run.pinnedSkills?.length
@@ -91,20 +95,30 @@ export function createMedicalWorkspaceDomain({
       // 工作区在显式启用医疗后直注插件（知识库/提案工具），普通项目
       // 保持纯通用工具面。
       if (workspace.kind === "session") {
+        if (workspace.patientId && readPatientBrief) registry.register({
+          permission: "tools.execute", capability: { backend: "local" },
+          definition: { type: "function", function: { name: "read_patient_brief", description: "只读当前关联患者的最新档案速览：用药/过敏核对状态、近期检验与联系、待跟进检查转诊、信息缺口及来源。有限摘要，counts 表示完整记录总量。无需填写患者编号，不能跨患者读取。", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+          execute: () => ({ ...readPatientBrief(workspace.patientId), readOnly: true, sourceType: "current-patient-chart" }),
+        });
         // runTool 按 definitions 校验参数并分发插件：必须同时包含核心与插件。
         const sessionDefinitions = [
           ...TOOL_DEFINITIONS,
           ...sessionPlugins.map((plugin) => plugin.definition),
         ];
         const intent = workspace.runs?.find((run) => run.id === runId)?.policy?.intent;
-        const execute = (name, args, context) =>
-          runTool(name, args, {
+        const execute = (name, args, context) => {
+          if (workspace.patientId && ["patient_record_propose", "followup_create_propose", "case_save_propose"].includes(name)) {
+            check(!args.patientId || args.patientId === workspace.patientId, "PATIENT_CONTEXT_MISMATCH", "提案患者与当前病例不一致，请切换到目标患者后重新整理。", 409);
+            args = { ...args, patientId: workspace.patientId };
+          }
+          return runTool(name, args, {
             sources: context.sources || [],
             intent,
             skills,
             definitions: sessionDefinitions,
             plugins: sessionPluginMap,
           });
+        };
         for (const definition of TOOL_DEFINITIONS.filter((definition) => medicalToolAllowed(definition.function.name, intent)))
           registry.register({
             permission: "tools.execute",

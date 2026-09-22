@@ -300,3 +300,23 @@ test("replan control messages do not become Anthropic assistant prefill or repla
   assert.ok(result.messages.some((message) => message.name === "runtime_control"));
   assert.equal(result.messages.findLast((message) => message.role === "user" && message.name !== "runtime_control").content, "Genuine task.");
 });
+
+test("source ledger separates complete reads from shortened previews and deduplicates equivalent whole-file observations", async () => {
+  const progress = new RunProgress(), data = archives();
+  const content = "First line\nSecond line\n" + "Body ".repeat(200);
+  const full = { path: "record.txt", text: content, hash: hashText(content) };
+  await progress.record(call("record.txt", { endLine: 3 }), { ...full, startLine: 1, endLine: 3, totalLines: 3 }, tool, data.save);
+  await progress.record(call("record.txt"), full, tool, data.save);
+  await progress.record(call("record.txt", { startLine: 2, endLine: 2 }), { ...full, text: "Second line", startLine: 2, endLine: 2, totalLines: 3 }, tool, data.save);
+  const message = progress.message(3400);
+  const ledger = JSON.parse(message.content.slice(message.content.indexOf("\n") + 1));
+  assert.equal(ledger.observations.length, 1, "whole-file evidence leaves room for other sources; original archives remain independent");
+  assert.equal(ledger.observations[0][ledger.columns.indexOf("readComplete")], true);
+  assert.equal(ledger.observations[0][ledger.columns.indexOf("incomplete")], true, "a shortened preview is still not the whole text");
+  assert.equal(data.values.size, 3);
+  const partial = new RunProgress();
+  await partial.record(call("record.txt", { startLine: 2 }), { ...full, text: "Second line", startLine: 2, endLine: 2, totalLines: 3 }, tool, data.save);
+  const partialMessage = partial.message(3400);
+  const partialLedger = JSON.parse(partialMessage.content.slice(partialMessage.content.indexOf("\n") + 1));
+  assert.equal(partialLedger.observations[0].at(-1), false, "a partial file read never certifies complete source access");
+});

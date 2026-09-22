@@ -424,7 +424,7 @@ export function WorkspacesView({
     api("/api/workspaces")
       .then((r) => {
         if (alive) {
-          setItems(r.workspaces);
+          setItems(r.workspaces.filter((item) => item.kind !== "session"));
           try {
             // 上次选中的优先；全新环境没有记录时自动进入第一个项目
             const last = localStorage.getItem("workbench.selectedTask");
@@ -469,7 +469,7 @@ export function WorkspacesView({
       try {
         const list = await api("/api/workspaces");
         if (!alive) return;
-        setItems(list.workspaces);
+        setItems(list.workspaces.filter((item) => item.kind !== "session"));
         // Pick up activity started outside this tab (background runs,
         // applied edits) so the selected workspace and its events stay live.
         const meta = list.workspaces.find((w) => w.id === selectedId.current);
@@ -494,7 +494,7 @@ export function WorkspacesView({
   }, [partial, current?.messages.length]);
   async function refresh(id = current?.id) {
     const list = await api("/api/workspaces");
-    setItems(list.workspaces);
+    setItems(list.workspaces.filter((item) => item.kind !== "session"));
     if (id && selectedId.current === id) {
       const w = await api(`/api/workspaces/${id}`);
       if (selectedId.current !== id) return w;

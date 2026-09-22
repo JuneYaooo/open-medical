@@ -1,3 +1,4 @@
+import { checkCommand } from "./check-command.mjs";
 import { importMcpConfig } from "./plugin-compatibility.mjs";
 import { rm } from "node:fs/promises";
 import { sourceSnapshot } from "./source-snapshot.mjs";
@@ -804,7 +805,7 @@ export class WorkspaceExtensions {
         });
     tool(
       "terminal_run",
-      "在隔离容器中执行并等待最多30秒。每次调用都是全新容器：/work 由输入快照重建，跨调用不保留任何状态；请把完整工作流写进一条命令执行，验证类命令只做只读检查，不要重复产生副作用的命令。snapshot=true快照项目文本；approvalIds覆盖待审批修改；artifactIds把已生成成果按原文件名作为输入。快照不含 .git 等受保护路径，不要在终端运行 git——仓库信息用 git_status/git_diff/git_log。返回running后用terminal_wait，exitCode非零表示失败。",
+      "在隔离容器中执行并等待最多30秒。每次调用都是全新容器：/work 由输入快照重建，跨调用不保留状态；验证命令只做只读检查。测试必须保留真实退出码，不用 || true 或末尾 echo 吞掉失败；修复后用完全相同的命令重跑。snapshot=true快照项目文本；approvalIds覆盖待审批修改；artifactIds把已生成成果按原文件名作为输入。快照不含 .git 等受保护路径，仓库信息用 git_status/git_diff/git_log。返回running后用terminal_wait，exitCode非零表示失败。",
       "process.spawn",
       {
         command: { type: "string", minLength: 1, maxLength: 12000 },
@@ -821,6 +822,20 @@ export class WorkspaceExtensions {
         return this.runner.wait(id, result.id, 30000, c.signal);
       },
       ["command"],
+    );
+    tool(
+      "terminal_check",
+      "在隔离容器中直接运行测试或检查程序，保留程序真实退出码。argv 为程序及参数数组，如 npm test 或 node --test 的参数数组；不要放 shell 操作符。默认读取完整项目快照，approvalIds 可验证未批准提案。修复前后使用相同 argv，失败记录不会被隐藏；容器生成文件不回写。",
+      "process.spawn",
+      { argv: { type: "array", minItems: 1, maxItems: 40, items: { type: "string", maxLength: 2000 } },
+        approvalIds: { type: "array", items: str, maxItems: 20 },
+        timeoutMs: { type: "integer", minimum: 1000, maximum: 300000 } },
+      async (a, c) => {
+        this.require(id, "filesystem.read");
+        const result = await this.terminal.start(id, { command: checkCommand(a.argv), snapshot: true, approvalIds: a.approvalIds, timeoutMs: a.timeoutMs }, { ...c, discardOutputs: true });
+        return this.runner.wait(id, result.id, 30000, c.signal);
+      },
+      ["argv"],
     );
     tool(
       "terminal_wait",

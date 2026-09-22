@@ -198,19 +198,18 @@ test("literature agent tools registered and executable through runTool contract"
 
 test("literature API: search errors surface as 502, import creates session material", async (t) => {
   const { fixture } = await import("./helpers.mjs");
-  let calls = 0;
   const f = await fixture(t, {
     literature: new LiteratureService(new Store(":memory:"), {
-      fetchImpl: async () => {
-        calls++;
-        if (calls === 1) return { ok: false, status: 500, json: async () => ({}) };
+      retryDelayMs: 0,
+      fetchImpl: async (url) => {
+        if (!url.includes("EXT_ID")) return { ok: false, status: 500, json: async () => ({}) };
         return await coreArticleResponse();
       },
     }),
   });
   const failed = await f.json("/api/literature/search?query=heart+failure");
   assert.equal(failed.status, 502);
-  assert.equal(failed.data.code, "LITERATURE_SOURCE");
+  assert.equal(failed.data.code, "LITERATURE_UNAVAILABLE");
 
   const session = await f.session();
   const imported = await f.json("/api/literature/import", "POST", {
@@ -223,4 +222,58 @@ test("literature API: search errors surface as 502, import creates session mater
   assert.equal(updated.files.length, 1);
   assert.match(updated.files[0].text, /SGLT2 inhibitors/);
   assert.ok(updated.files[0].hash);
+});
+
+
+test("transient response retries once; 400 is never retried or switched", async (t) => {
+  const store = new Store(":memory:"); t.after(() => store.close());
+  let calls = 0;
+  const service = new LiteratureService(store, {retryDelayMs:0, fetchImpl:async()=>{
+    calls++; return calls === 1 ? {ok:false,status:503} : europeResponse();
+  }});
+  assert.equal((await service.search({query:"diabetes",source:"europepmc"})).count,1);
+  assert.equal(calls,2);
+  calls=0;service.fetchImpl=async()=>{calls++;return {ok:false,status:400};};
+  await assert.rejects(service.search({query:"other query"}), /HTTP 400/);
+  assert.equal(calls,1);
+});
+
+test("timeout switches source, preserves filters and provenance, and retries primary next search", async(t)=>{
+  const store=new Store(":memory:");t.after(()=>store.close());
+  const urls=[];
+  const service=new LiteratureService(store,{retryDelayMs:0,fetchImpl:async(url)=>{
+    urls.push(url);
+    if(url.includes("ncbi"))throw new DOMException("timeout","TimeoutError");
+    return europeResponse();
+  }});
+  const result=await service.search({query:"diabetes",yearFrom:2020,yearTo:2025,sort:"date",limit:3});
+  assert.equal(result.source,"europepmc");assert.equal(result.requestedSource,"pubmed");
+  assert.equal(result.fallback,true);assert.match(result.fallbackReason,/PubMed 请求超时/);
+  assert.equal(urls.length,3);assert.match(decodeURIComponent(urls[2]),/FIRST_PDATE:\[2020 TO 2025\]/);
+  assert.match(urls[2],/pageSize=3/);assert.match(urls[2],/sort=/);
+  service.fetchImpl=pubmedResponses([]);
+  const recovered=await service.search({query:"diabetes",yearFrom:2020,yearTo:2025,sort:"date",limit:3});
+  assert.equal(recovered.source,"pubmed");assert.equal(recovered.fallback,undefined);
+});
+
+test("both sources failing yields actionable failure, never an empty success",async(t)=>{
+  const store=new Store(":memory:");t.after(()=>store.close());let calls=0;
+  const service=new LiteratureService(store,{retryDelayMs:0,fetchImpl:async()=>{calls++;throw new TypeError("network");}});
+  await assert.rejects(service.search({query:"diabetes"}),e=>e.code==="LITERATURE_UNAVAILABLE" && /PubMed/.test(e.message) && /Europe PMC/.test(e.message));
+  assert.equal(calls,4);
+  assert.equal(store.db.prepare("SELECT count(*) AS n FROM literature_cache").get().n,0);
+});
+
+test("body timeout is caught and retried, and valid zero results do not switch sources",async(t)=>{
+  const store=new Store(":memory:");t.after(()=>store.close());let calls=0;
+  const service=new LiteratureService(store,{timeoutMs:20,retryDelayMs:0,fetchImpl:async(_url,{signal})=>{
+    calls++;
+    if(calls>1)return {ok:true,json:async()=>({resultList:{result:[]}})};
+    return {ok:true,json:()=>new Promise((_resolve,reject)=>{
+      const keepAlive=setTimeout(()=>reject(new Error("timeout not enforced")),200);
+      signal.addEventListener("abort",()=>{clearTimeout(keepAlive);reject(signal.reason);},{once:true});
+    })};
+  }});
+  const result=await service.search({query:"diabetes",source:"europepmc"});
+  assert.equal(calls,2);assert.equal(result.count,0);assert.equal(result.fallback,undefined);
 });

@@ -9,7 +9,7 @@ export function contextBudget({ provider = {}, model = provider.model, messages 
   const contextWindow = provider.contextWindows?.[model] ?? (model === provider.model ? provider.contextWindow : undefined) ?? 131072;
   const reserve = outputReserve ?? ((provider.maxTokens ?? 8192) + (provider.provider === 'anthropic' && thinking === 'enabled' ? 4096 : 0));
   check(Number.isInteger(contextWindow) && contextWindow >= 512 && Number.isInteger(reserve) && reserve > 0 && reserve < contextWindow,
-    'CONTEXT_CONFIG', '模型窗口必须大于输出预留预算', 400);
+    'CONTEXT_CONFIG', `模型预算配置无效：上下文窗口 ${contextWindow} token，输出预留 ${reserve} token（含已启用的思考预算）。请在模型设置中降低最大输出，并为输入保留空间；仅在服务商确认后填写更大的上下文窗口。`, 400);
   const factor = Math.max(1, Number.isFinite(calibration) ? calibration : 1);
   const schemaTokens = Math.ceil(estimateTokens(tools) * factor);
   const messageTokens = Math.ceil(estimateTokens(messages) * factor);

@@ -1,3 +1,5 @@
+import { patientOptionLabel } from "./patient-labels";
+import { DoctorAgenda } from "./doctor-agenda";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -15,7 +17,6 @@ import {
   ShieldCheck,
   FlaskConical,
   FolderOpen,
-  AlertTriangle,
   History,
   Loader2,
   MessageSquare,
@@ -101,7 +102,7 @@ export const MEDICAL_WORKFLOWS = [
     desc: "把诊疗方案或说明书转成患者能懂的语言",
     output: "患教材料草稿 · 通俗解释",
     prompt:
-      "请把材料中的诊疗方案/用药说明改写为患者能看懂的患教材料：避免专业术语、用类比解释、列出用药时间表和需要立即就医的警示信号。结尾注明「本材料为医生生成的参考，具体遵医嘱」。",
+      "请把材料中的诊疗方案/用药说明改写为患者能看懂的患教材料：避免专业术语、用类比解释、仅复述来源已有的用药时间与就医提示，缺失项列为待医生补充，不自行生成剂量、时间表或诊療计划。结尾注明「本材料为医生生成的参考，具体遵医嘱」。",
   },
   {
     id: "lab-read",
@@ -141,7 +142,7 @@ export const MEDICAL_WORKFLOWS = [
     desc: "从指南库提炼决策路径，生成可追溯出处的流程图",
     output: "mermaid 决策流程图 · 节点出处对照",
     prompt:
-      "请针对指定病种生成诊疗决策流程图：先用 guideline_search 检索诊断标准、分级与治疗决策条件并用 guideline_read 核对原文，然后按 clinical-decision-flow 技能输出 mermaid 流程图与节点出处对照表。指南库未覆盖的分支标注「需补充来源」，不得凭记忆编造路径。",
+      "请针对指定病种生成诊疗决策流程图：先用 knowledge_search 检索诊断标准、分级与治疗决策条件并用 knowledge_read 核对原文，然后按 clinical-decision-flow 技能输出 mermaid 流程图与节点出处对照表。指南库未覆盖的分支标注「需补充来源」，不得凭记忆编造路径。",
   },
   {
     id: "adr-screen",
@@ -206,12 +207,13 @@ export function WorkbenchHome({
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("clinical");
+  const [showAllFlows, setShowAllFlows] = useState(false);
+  const [runtimeOptions, setRuntimeOptions] = useState(false);
   const [taskType, setTaskType] = useState("medical");
   const [flowId, setFlowId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [patientId, setPatientId] = useState("");
   const [starting, setStarting] = useState(false);
-  const [risksOpen, setRisksOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [skillMention, setSkillMention] = useState(null);
@@ -235,7 +237,8 @@ export function WorkbenchHome({
     : [];
   // 材料已附加后，本次任务的目标会话已定，锁定类型与患者切换
   const attached = attachedCount > 0;
-  const consentRequired = Boolean(config?.modelConfigured) && accessMode === "each";
+  const consentRequired =
+    Boolean(config?.modelConfigured) && accessMode === "each";
   useEffect(() => {
     let live = true;
     // 双保险:无医疗能力时不请求患者/提醒/收件/风险接口(通用服务上这些
@@ -243,19 +246,9 @@ export function WorkbenchHome({
     if (!config || !medicalEnabled(config)) return () => {};
     const refresh = async () => {
       try {
-        const [people, todo, inbox, risks] = await Promise.all([
-          api("/api/patients"),
-          api("/api/reminders"),
-          api("/api/inbox"),
-          api("/api/risk-alerts"),
-        ]);
+        const people = await api("/api/patients?summary=1");
         if (live) {
-          setData({
-            patients: people.patients,
-            reminders: todo.reminders,
-            inbox: inbox.messages,
-            risks,
-          });
+          setData({ patients: people.patients });
           setError("");
         }
       } catch (err) {
@@ -277,16 +270,13 @@ export function WorkbenchHome({
   const patients = data?.patients || [];
   const selectedPatient = patients.find((patient) => patient.id === patientId);
   const reviewCount = sessions.reduce((sum, task) => sum + task.reviewCount, 0);
-  const followupCount = patients.reduce(
-    (sum, patient) => sum + (patient.counts?.dueFollowups || 0),
-    0,
-  );
   const tasks = sessions.filter(
     (task) =>
       (view !== "review" || task.reviewCount > 0) &&
       task.title.toLowerCase().includes(query.toLowerCase()),
   );
   const chooseFlow = (flow) => {
+    setTaskType("medical");
     setFlowId(flow.id);
     setPrompt(flow.prompt);
     inputRef.current?.focus();
@@ -439,13 +429,34 @@ export function WorkbenchHome({
       )}
       {isHome ? (
         <>
-          <section className="hub-intro">
+          <DoctorAgenda onPatient={onPatient} onOpenTask={onOpenTask} onView={onView} />
+          <section className="care-entry" aria-label="医生工作入口">
+            <div>
+              <b>接诊 → 整理 → 复核 → 随访</b>
+              <p>围绕患者持续工作，也可随时开始通用 Agent 任务。</p>
+            </div>
+            <div className="toolbar-actions">
+              <button
+                className="secondary"
+                onClick={() => onPatient({ create: true })}
+              >
+                患者建档
+              </button>
+              <button className="secondary" onClick={() => onView("knowledge")}>
+                构建知识库
+              </button>
+              <button className="secondary" onClick={() => onOpenProjects({})}>
+                通用 Agent
+              </button>
+            </div>
+          </section>
+          <section className={`hub-intro ${patients.length || sessions.length ? "hub-intro-compact" : ""}`}>
             <div className="hub-intro-mark">
               <Stethoscope size={25} />
             </div>
             <span className="hub-kicker">你的医疗工作伙伴</span>
-            <h1>今天，想完成什么工作？</h1>
-            <p>从病历到随访，让每一份材料都有去处。</p>
+            <h1>整理材料、写文书、找依据</h1>
+            <p>选择患者或附上资料，告诉我这次要完成什么。</p>
           </section>
           <form className="hub-composer" onSubmit={submit}>
             <div className="hub-composer-caption">
@@ -474,7 +485,7 @@ export function WorkbenchHome({
               <textarea
                 ref={inputRef}
                 aria-label="医疗任务内容"
-                placeholder="输入问题或任务，如「血糖有点高，27 岁男生，怎么办」；输入 @ 可固定技能…"
+                placeholder={taskType === "project" ? "例如：整理文件夹中的资料，制作一份带来源的报告…" : "例如：整理这位患者的复诊材料，列出近期变化和待核对问题…"}
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
@@ -491,16 +502,15 @@ export function WorkbenchHome({
                   if (skillMention && mentionMatches.length) {
                     if (e.key === "ArrowDown") {
                       e.preventDefault();
-                      setMentionIndex(
-                        (i) => (i + 1) % mentionMatches.length,
-                      );
+                      setMentionIndex((i) => (i + 1) % mentionMatches.length);
                       return;
                     }
                     if (e.key === "ArrowUp") {
                       e.preventDefault();
                       setMentionIndex(
                         (i) =>
-                          (i - 1 + mentionMatches.length) % mentionMatches.length,
+                          (i - 1 + mentionMatches.length) %
+                          mentionMatches.length,
                       );
                       return;
                     }
@@ -533,7 +543,11 @@ export function WorkbenchHome({
               />
             )}
             {skillMention && (
-              <div className="mention-menu" role="listbox" aria-label="技能选择">
+              <div
+                className="mention-menu"
+                role="listbox"
+                aria-label="技能选择"
+              >
                 {mentionMatches.length ? (
                   mentionMatches.map((skill, i) => (
                     <button
@@ -580,7 +594,11 @@ export function WorkbenchHome({
               </div>
             )}
             <div className="hub-composer-controls">
-              <div className="hub-task-type" role="tablist" aria-label="任务类型">
+              <div
+                className="hub-task-type"
+                role="tablist"
+                aria-label="任务类型"
+              >
                 <button
                   type="button"
                   aria-pressed={taskType === "medical"}
@@ -596,7 +614,7 @@ export function WorkbenchHome({
                   aria-pressed={taskType === "project"}
                   className={taskType === "project" ? "active" : ""}
                   title="通用 Agent 工作区：本地文件夹、终端、Git 等，适合写代码、整理文档等非患者任务"
-                  onClick={() => setTaskType("project")}
+                  onClick={() => { setTaskType("project"); setFlowId(""); setSkillMention(null); setPickedSkills([]); }}
                   disabled={attached}
                 >
                   通用任务
@@ -616,7 +634,7 @@ export function WorkbenchHome({
                     </option>
                     {patients.map((patient) => (
                       <option key={patient.id} value={patient.id}>
-                        {patient.name}
+                        {patientOptionLabel(patient, patients)}
                         {patient.archived ? "（已归档）" : ""}
                       </option>
                     ))}
@@ -668,7 +686,8 @@ export function WorkbenchHome({
               )}
               {taskType !== "project" && !isFollowup && (
                 <>
-                  <span className="tb-divider" />
+                  <button type="button" className="attach-button" aria-expanded={runtimeOptions} onClick={() => setRuntimeOptions(!runtimeOptions)}>运行选项</button>
+                  {runtimeOptions && <><span className="tb-divider" />
                   <label
                     className="tb-item"
                     title="访问权限：逐次确认=每轮发送前勾选外发；会话自动=本会话内外发免勾选"
@@ -706,7 +725,7 @@ export function WorkbenchHome({
                         <option value="enabled">深入</option>
                       </select>
                     </label>
-                  )}
+                  )}</>}
                 </>
               )}
               {taskType === "medical" && !isFollowup && attached && (
@@ -732,9 +751,7 @@ export function WorkbenchHome({
                   disabled={
                     !config ||
                     starting ||
-                    (taskType === "project"
-                      ? false
-                      : !selectedPatient)
+                    (taskType === "project" ? false : !selectedPatient)
                   }
                 >
                   {starting ? (
@@ -769,7 +786,7 @@ export function WorkbenchHome({
           </form>
           <p className="hub-composer-hint">
             {taskType === "project"
-              ? "项目任务在授权的本地文件夹内工作：文件读写、变更审批、浏览器，医疗工具同样可用；与患者数据相互隔离。"
+              ? "通用任务可处理文件、表格、代码与浏览器工作。进入工作区后选择目录与工具权限。"
               : attached
                 ? `已附加 ${attachedCount} 份材料，将随本次任务一起发送。Enter 发送 · Shift + Enter 换行`
                 : selectedPatient
@@ -783,14 +800,14 @@ export function WorkbenchHome({
                 <button
                   aria-pressed={category === "clinical"}
                   className={category === "clinical" ? "active" : ""}
-                  onClick={() => setCategory("clinical")}
+                  onClick={() => { setCategory("clinical"); setShowAllFlows(false); }}
                 >
                   临床与患者
                 </button>
                 <button
                   aria-pressed={category === "research"}
                   className={category === "research" ? "active" : ""}
-                  onClick={() => setCategory("research")}
+                  onClick={() => { setCategory("research"); setShowAllFlows(false); }}
                 >
                   循证准备
                 </button>
@@ -798,7 +815,7 @@ export function WorkbenchHome({
             </div>
             <div className="hub-scene-grid">
               {MEDICAL_WORKFLOWS.filter(
-                (flow) => flow.category === category,
+                (flow) => flow.category === category && (showAllFlows || category !== "clinical" || ["timeline", "record-draft", "med-safety", "lab-read", "patient-edu", "followup"].includes(flow.id)),
               ).map((flow) => (
                 <button
                   key={flow.id}
@@ -818,66 +835,8 @@ export function WorkbenchHome({
                 </button>
               ))}
             </div>
+            {category === "clinical" && <button className="text-button hub-more-flows" onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起更多场景" : "更多场景：住院、交班、不良反应与流程图"}</button>}
           </section>
-          <section className="hub-attention" aria-label="需要关注">
-            <button onClick={() => onView("review")}>
-              <CheckCheck size={18} />
-              <span>待复核成果</span>
-              <b>{reviewCount}</b>
-              <ArrowRight size={14} />
-            </button>
-            <button onClick={() => onPatient({})}>
-              <CalendarClock size={18} />
-              <span>到期随访</span>
-              <b>{data ? followupCount : "—"}</b>
-              <ArrowRight size={14} />
-            </button>
-            <button onClick={() => onPatient({})}>
-              <FileText size={18} />
-              <span>待办提醒</span>
-              <b>{data ? data.reminders.length : "—"}</b>
-              <ArrowRight size={14} />
-            </button>
-            <button onClick={() => setRisksOpen((value) => !value)}>
-              <AlertTriangle size={18} />
-              <span>风险提醒</span>
-              <b className={data?.risks?.counts?.critical ? "risk-critical" : ""}>
-                {data ? data.risks.counts.active : "—"}
-              </b>
-              <ArrowRight size={14} />
-            </button>
-          </section>
-          {risksOpen && data?.risks?.alerts?.length > 0 && (
-            <section className="hub-risk-list" aria-label="活跃风险提醒">
-              {data.risks.alerts.slice(0, 6).map((alert) => (
-                <div className={`hub-risk risk-${alert.severity}`} key={alert.id}>
-                  <div className="hub-risk-main">
-                    <b>{alert.patientName}</b> · {alert.title}
-                    <small>{alert.message}</small>
-                  </div>
-                  <div className="hub-risk-actions">
-                    {alert.patientId && (
-                      <button
-                        className="text-button"
-                        onClick={() => onPatient({ id: alert.patientId })}
-                      >
-                        打开患者
-                      </button>
-                    )}
-                    <button
-                      className="text-button"
-                      onClick={async () => {
-                        await api(`/api/risk-alerts/${alert.id}/ack`, "POST", {});
-                        onRefresh().catch(() => {});
-                      }}
-                    >
-                      确认
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </section>
-          )}
           <section className="hub-recent">
             <div className="hub-section-head">
               <h2>继续最近的工作</h2>
