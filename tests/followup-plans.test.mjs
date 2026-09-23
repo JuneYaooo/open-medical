@@ -9,6 +9,20 @@ const createPatient = async (f, name = "随访测试患者") => {
   return created.data;
 };
 
+test('personalized follow-up template is atomic, retry-safe and does not modify the reusable plan',async t=>{
+ const f=await fixture(t,{followupOptions:{autoStart:false}}),p=await createPatient(f);
+ const payload={planId:'builtin_postop',startDate:today(),requestId:'synthetic-template-request',nodes:[{offsetDays:5,title:'按医嘱联系',items:['核对已有安排']} ]};
+ const path=`/api/patients/${p.id}/followups/apply`;
+ const a=await f.json(path,'POST',payload);assert.equal(a.status,201);assert.equal(a.data.length,1);assert.match(a.data[0].name,/按医嘱联系/);assert.equal(a.data[0].templateCustomized,true);
+ assert.equal(new Date(a.data[0].nextDue).getHours(),9);
+ const b=await f.json(path,'POST',payload);assert.equal(b.data[0].id,a.data[0].id);assert.equal(f.server.followups.list(p.id).length,1);
+ assert.equal((await f.json(path,'POST',{...payload,nodes:[{offsetDays:7,title:'改过的节点',items:[]}]})).status,409);
+ assert.equal(f.server.followups.planRow('builtin_postop').nodes[0].offsetDays,7);
+ const audit=f.server.store.audit;f.server.store.audit=()=>{throw Error('synthetic audit failure');};
+ assert.equal((await f.json(path,'POST',{...payload,requestId:'another-request'})).status,500);f.server.store.audit=audit;assert.equal(f.server.followups.list(p.id).length,1);
+ assert.equal((await f.json(path,'POST',{...payload,requestId:'invalid-date',startDate:'2026-02-30'})).status,400);
+});
+
 test("followup plans: builtin seeds, custom template CRUD", async (t) => {
   const f = await fixture(t);
   const list = (await f.json("/api/followup-plans")).data.plans;

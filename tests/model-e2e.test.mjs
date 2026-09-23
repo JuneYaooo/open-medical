@@ -48,18 +48,23 @@ async function openPatientWorkspace(page, name) {
   await page.waitForSelector(".composer");
 }
 
-async function sendAndWaitDone(page, text) {
+async function sendAndWaitDone(page, text, f, sessionId) {
+  const before=(await f.json(`/api/sessions/${sessionId}`)).data.runs.length;
   // 逐次确认档下才出现"本轮允许外发"；默认会话自动无需勾选。
   const consent = page.locator(".tb-check input");
   if (await consent.isVisible().catch(() => false)) await consent.check();
   await page.locator(".composer textarea").fill(text);
   await page.locator(".composer textarea").press("Enter");
-  // 等待本轮执行结束：发送键从“停止”恢复为可用的发送态
-  await page.waitForFunction(
-    () => !document.querySelector(".send-button.stop"),
-    undefined,
-    { timeout: 240000 },
-  );
+  const deadline=Date.now()+240000;
+  let latest;
+  while(Date.now()<deadline){
+    const session=(await f.json(`/api/sessions/${sessionId}`)).data;
+    latest=session.runs.at(-1);
+    if(session.runs.length>before && latest && !['running','queued'].includes(latest.status))break;
+    await new Promise(r=>setTimeout(r,500));
+  }
+  assert.equal(latest?.status,'completed',JSON.stringify({status:latest?.status,outcome:latest?.outcome,error:latest?.error}));
+
 }
 
 test("真实模型 · 咨询直接答：不产文书、回答引用材料", { skip: !canRun }, async (t) => {
@@ -77,7 +82,7 @@ test("真实模型 · 咨询直接答：不产文书、回答引用材料", { sk
   // 无档位可选：意图由服务端 policy 判定，模型应自行选择直接回答
   await sendAndWaitDone(
     page,
-    "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。",
+    "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。", f, p.data.sessionId,
   );
   const session = await f.json(`/api/sessions/${p.data.sessionId}`);
   assert.equal(session.status, 200);
@@ -114,19 +119,19 @@ test("真实模型 · 文书整理：工具调用 + 产物 + 验收通过", { sk
   await openPatientWorkspace(page, "模型文书患者");
   await sendAndWaitDone(
     page,
-    "请调用文书工具，把本患者的病例材料整理为待复核产物：病历时间线、检验数值摘录，保留来源与行号。",
+    "请调用文书工具，把本患者的病例材料整理为待复核产物：病历时间线、检验数值摘录，保留来源与行号。", f, p.data.sessionId,
   );
   // 真实模型走完工具链后应产出待复核产物；偶发的纯文本回答允许自然重试一次
   if ((await page.locator(".artifact-inline").count()) === 0) {
     await sendAndWaitDone(
       page,
-      "上一条没有生成产物。请改用工具生成本患者的待复核整理产物（时间线+检验摘录）。",
+      "上一条没有生成产物。请改用工具生成本患者的待复核整理产物（时间线+检验摘录）。", f, p.data.sessionId,
     );
   }
   await page.waitForSelector(".artifact-inline", { timeout: 30000 });
   assert.match(await page.locator(".artifact-inline").first().innerText(), /待复核/);
   // 步骤流可见（真实工具调用被记录）
-  await page.locator('button:has-text("打开验收视图")').first().click();
+  await page.locator('button:has-text("查看结果")').first().click();
   await page.waitForSelector(".acceptance", { timeout: 15000 });
   await page.locator('.seg button:has-text("出处对照")').click();
   // 轻量复核通过（真实模型产物进入闭环）

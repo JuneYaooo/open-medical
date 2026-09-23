@@ -232,7 +232,7 @@ test(
   async (t) => {
     const { chromium } = await import("playwright-core");
     // 脚本模型按「最后一条用户消息 + 是否已有工具结果」分派：
-    // 摘录检验数值（旧内核会话）→ 工具产物后收尾；核对表（旧内核会话）
+    // 摘录检验数值（统一内核会话）→ 工具产物后收尾；核对表（统一内核会话）
     // → 纯文字空口完成；整理成清单（统一内核会话）→ 慢响应，期间接受追加。
     const reply = (content) => ({
       message: { role: "assistant", content },
@@ -279,8 +279,8 @@ test(
         },
       },
     });
-    // 旧医疗内核会话（delivery/outcome 由运行时事实计算并随会话下发）
-    server.store.create({ title: "交付呈现演示" });
+    // 医疗任务会话（delivery/outcome 由运行时事实计算并随会话下发）
+    const deliveredSession=server.sessionBridge.createSession({ title: "交付呈现演示" });
     // 统一内核会话工作区（与项目工作区同一内核，支持执行中 steer）
     server.sessionBridge.createSession({ title: "追加要求演示" });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -300,7 +300,7 @@ test(
   await page.locator(".advanced-nav>summary").click();
     await page.waitForSelector('nav[aria-label="最近任务"]', { timeout: 15000 });
 
-    // 打开注入的旧内核会话，进入工作台对话
+    // 打开注入的统一内核会话，进入工作台对话
     await page
       .locator('nav[aria-label="最近任务"] button:has-text("交付呈现演示")')
       .click();
@@ -311,13 +311,10 @@ test(
       .locator(".composer textarea")
       .fill("请摘录检验数值：血糖 8.9 mmol/L，血红蛋白 105 g/L");
     await page.locator(".composer textarea").press("Enter");
-    await page.waitForSelector(".wb-outcome.delivered", { timeout: 60000 });
-    const deliveredText = await page
-      .locator(".wb-outcome.delivered")
-      .innerText();
-    assert.match(deliveredText, /已交付/);
-    assert.match(deliveredText, /SHA-256 [0-9a-f]{8}/);
-    assert.match(deliveredText, /可核对证据/);
+    await page.waitForSelector('.artifact-inline',{timeout:60000});
+    assert.equal(await page.locator('.wb-outcome.delivered').count(),0,'成功交付不再重复展示技术回执');
+    const delivered=server.sessionBridge.get(deliveredSession.id).runs.at(-1);
+    assert.equal(delivered.outcome,'delivered');assert.ok(delivered.artifacts.length>0);
 
     // 第二轮：执行类任务空口完成 → 交付未完成 + 缺口说明，不得显示成已交付
     // (N3 语义,0.9.9 起:执行类未完成不再降格为“已回答”)
@@ -325,10 +322,11 @@ test(
       .locator(".composer textarea")
       .fill("请整理本次材料的检验数值，生成一份核对表");
     await page.locator(".composer textarea").press("Enter");
+    await page.waitForFunction(()=>document.querySelectorAll(".message-list .message").length>=4,undefined,{timeout:60000});
     await page.waitForSelector(".wb-outcome.answered", { timeout: 60000 });
     const answeredText = await page.locator(".wb-outcome.answered").innerText();
     assert.match(answeredText, /交付未完成/);
-    assert.match(answeredText, /没有任何产物类工具结果/);
+    assert.match(answeredText, /尚无本次运行可核对的产物/);
     // 消息署名如实区分，最后一轮不冒充交付
     assert.match(
       await page

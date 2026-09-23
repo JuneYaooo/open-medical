@@ -46,7 +46,8 @@ test(
         hasText: patient.name,
       })
       .click();
-    await f.page.getByRole("button", { name: "临床资料", exact: true }).click();
+    await f.page.getByRole("button", { name: "用药与过敏", exact: true }).click();
+    await f.page.getByRole("button", {name:"核对与编辑",exact:true}).click();
     await f.page.getByPlaceholder("药名", { exact: true }).fill("测试药品");
     await f.page.route(`**/api/patients/${patient.id}`, async (route) => {
       if (route.request().method() !== "PATCH") return route.continue();
@@ -123,8 +124,10 @@ test(
     await f.page.goto(f.origin + "/?view=home");
   await f.page.locator(".advanced-nav>summary").click();
     await f.page.getByRole("button", { name: "打开", exact: true }).click();
-    await f.page.getByRole("button", { name: /知识库/ }).click();
+    await f.page.getByRole("button", { name: "知识库 指南导入与检索", exact:true }).click();
     await f.page.getByRole("button", { name: /^整页打开/ }).click();
+    await f.page.getByRole('button',{name:'新建知识库',exact:true}).click();
+    await f.page.getByLabel('知识库名称',{exact:true}).fill('随访规范库');await f.page.getByLabel('收录什么',{exact:true}).fill('合成随访资料');await f.page.getByLabel('什么时候用',{exact:true}).fill('核对随访记录');await f.page.getByRole('button',{name:'保存知识库',exact:true}).click();await f.page.getByRole('button',{name:'打开知识库',exact:true}).click();
     await f.page.locator('.guidelines-view input[type="file"]').setInputFiles({
       name: "随访记录规范.txt",
       mimeType: "text/plain",
@@ -137,7 +140,7 @@ test(
       .getByRole("button", { name: "导入并建索引", exact: true })
       .click();
     await f.page
-      .getByText("资料已导入并建立索引；可打开文档核对来源与版本。", { exact: true })
+      .getByText(/资料已保存.*关键词检索/)
       .waitFor();
     const doc = (await f.json("/api/knowledge")).data.documents[0];
     assert.equal(doc.kind, "资料");

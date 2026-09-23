@@ -13,7 +13,7 @@ export function briefDraft(brief, purpose = "previsit") {
     diagnoses: brief.diagnoses.slice(0, 6).map(bounded), medications: brief.medications.slice(0, 8).map(bounded),
     allergyStatus: brief.allergyStatus, allergies: brief.allergies,
     latestLabs: brief.labs.slice(0, 6).map((lab) => ({ ...bounded(lab), observations: lab.observations.slice(0, 3).map(bounded), previous: lab.previous ? bounded(lab.previous) : null })),
-    recentVisits: brief.visits.slice(0, 3).map(bounded), recentFollowups: brief.outcomes.slice(0, 3).map((o) => ({ id: o.id, title: excerpt(o.title), status: o.status, note: excerpt(o.note, 500), contactedAt: o.contactedAt, recordedAt: o.recordedAt, source: o.source, addendumCount: o.addendumCount || 0, addenda: (o.addenda || []).slice(-3).map((a) => ({ id: a.id, recordedAt: a.recordedAt, note: excerpt(a.note, 400) })) })),
+    recentVisits: brief.visits.slice(0, 3).map(bounded), recentFollowups: brief.outcomes.slice(0, 3).map((o) => ({ id: o.id, title: excerpt(o.title), status: o.status, contactMethod: o.contactMethod, clinical: Object.fromEntries(Object.entries(o.clinical || {}).map(([key, value]) => [key, excerpt(value, 500)])), note: excerpt(o.note, 500), contactedAt: o.contactedAt, recordedAt: o.recordedAt, source: o.source, addendumCount: o.addendumCount || 0, addenda: (o.addenda || []).slice(-3).map((a) => ({ id: a.id, recordedAt: a.recordedAt, note: excerpt(a.note, 400) })) })),
     careTasks: (brief.careTasks || []).slice(0, 3).map(bounded),
     unprocessedMessages: brief.messages.slice(0, 3).map((m) => ({ ...bounded(m), text: excerpt(m.text, 500) })), informationGaps: brief.gaps.map((g) => g.label), totals: brief.counts,
   };

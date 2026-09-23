@@ -171,7 +171,10 @@ export class AgentRuntime {
       await checkpoint(structuredClone(messages));
       if (pausedTools.length) emit("run.replanning", { pausedTools, rounds: 1 });
       await onRound(round + 1);
-      emit("status.update", { status: "model_running", round: round + 1 });
+      // A trusted domain can render an already persisted terminal result. It
+      // still passes beforeComplete, late-input handling and delivery checks.
+      const preparedResponse = await domain?.preparedResponse?.({signal,context});
+      emit("status.update", { status: preparedResponse ? "finalizing" : "model_running", round: round + 1 });
       let streamed = "";
       const delta = (chunk) => {
         signal.throwIfAborted();
@@ -180,7 +183,7 @@ export class AgentRuntime {
         emit("message.delta", { text: chunk });
       };
       await onTrace({
-        type: "model.request",
+        type: preparedResponse ? "domain.response.prepared" : "model.request",
         round: round + 1,
         messages: structuredClone(messages),
         tools,
@@ -188,7 +191,7 @@ export class AgentRuntime {
       });
       const modelStarted = Date.now();
       let result;
-      try { result = await this.provider.complete(
+      try { result = preparedResponse || await this.provider.complete(
         messages,
         tools,
         {
@@ -221,7 +224,7 @@ export class AgentRuntime {
       const emptyTruncation = result.stopReason === "max_tokens" && !message.content?.trim() && !message.tool_calls?.length;
       if (!emptyTruncation) messages.push(message);
       await onTrace({
-        type: "model.response",
+        type: preparedResponse ? "domain.response" : "model.response",
         round: round + 1,
         message,
         usage: result.usage,

@@ -31,7 +31,9 @@ test('consultation executes a zero-argument medical plugin and execution history
   await page.goto(f.origin + "/?view=home");
   await page.locator(".advanced-nav>summary").click();
   await page.getByRole('button', {name: /预算恢复验证/}).first().click();
-  await page.getByRole('tab', {name: '执行记录', exact: true}).click();
+  await page.getByRole('button',{name:'查看资料',exact:true}).click();
+  await page.locator('.inspector-more summary').click();
+  await page.getByRole('button', {name: '运行记录与历史任务', exact: true}).click();
   await page.getByText('执行过程', {exact:true}).waitFor();
   await page.getByText('查看过程与来源版本', {exact:true}).click();
   await page.locator('.event-line').filter({hasText:'工具完成：knowledge_base_status'}).waitFor();

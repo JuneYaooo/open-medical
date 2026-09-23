@@ -18,6 +18,7 @@ export class FollowUpManager {
     { now = () => Date.now(), pollMs = 1000, autoStart = true } = {},
   ) {
     Object.assign(this, { store, runtime, now, pollMs, autoStart });
+    store.db.exec('CREATE TABLE IF NOT EXISTS followup_applications(request_id TEXT PRIMARY KEY,patient_id TEXT NOT NULL,fingerprint TEXT NOT NULL,jobs TEXT NOT NULL)');
     this.inFlight = new Set();
     this.stopped = false;
     for (const row of store.db
@@ -211,8 +212,18 @@ export class FollowUpManager {
   // Enroll a patient into a plan template: each node becomes a one-shot
   // follow-up job at start + offsetDays. Overdue nodes are clamped to now
   // so they surface as due instead of silently firing in the past.
-  applyTemplate(patientId, { planId, startDate, externalConsent } = {}) {
+  applyTemplate(patientId, { planId, startDate, externalConsent, nodes: overrides, requestId } = {}) {
+    return sqliteTransaction(this.store.db,()=>{
+    const fingerprint=createHash('sha256').update(JSON.stringify({patientId,planId,startDate,externalConsent:externalConsent===true,nodes:overrides||null})).digest('hex');
+    if(requestId){identifier(requestId);const previous=this.store.db.prepare('SELECT * FROM followup_applications WHERE request_id=?').get(requestId);if(previous){check(previous.patient_id===patientId&&previous.fingerprint===fingerprint,'REQUEST_CONFLICT','本次计划已保存，修改后请重新应用',409);return JSON.parse(previous.jobs);}}
     const plan = this.planRow(planId);
+    const nodes=overrides===undefined?plan.nodes:overrides;
+    check(Array.isArray(nodes)&&nodes.length>=1&&nodes.length<=12,'INVALID_INPUT','请保留 1–12 个随访节点');
+    const validated=nodes.map(node=>{
+      check(node&&Number.isInteger(node.offsetDays)&&node.offsetDays>=0&&node.offsetDays<=3650,'INVALID_INPUT','节点天数须为 0–3650 的整数');
+      check(Array.isArray(node.items)&&node.items.length<=10,'INVALID_INPUT','每节点最多 10 条随访内容');
+      return {offsetDays:node.offsetDays,title:string(node.title,'节点标题',100),items:node.items.map(item=>string(item,'随访内容',500))};
+    });
     const patient = this.patientRow(patientId);
     check(
       !patient.archived,
@@ -222,19 +233,22 @@ export class FollowUpManager {
     );
     const text = string(startDate, "开始日期", 10);
     check(
-      /^\d{4}-\d{2}-\d{2}$/.test(text) && Number.isFinite(Date.parse(text)),
+      /^\d{4}-\d{2}-\d{2}$/.test(text) && Number.isFinite(Date.parse(text)) && new Date(text).toISOString().slice(0,10)===text,
       "INVALID_INPUT",
       "开始日期须为 YYYY-MM-DD",
     );
-    let start = Date.parse(text);
+    let start = new Date(`${text}T09:00:00`).getTime();
     check(
       start >= this.now() - 86400000 && start <= this.now() + 366 * 86400000,
       "INVALID_INPUT",
       "开始日期须在昨天到未来一年之间",
     );
+    const active=this.list(patientId).filter(job=>job.status!=='completed').length;
+    check(active+validated.length<=20,'SCHEDULE_LIMIT','该患者未完成计划最多 20 项，请先整理已有计划',409);
     const jobs = [];
-    for (const node of plan.nodes) {
-      let nextDue = start + node.offsetDays * 86400000;
+    for (const node of validated) {
+      const localDue=new Date(start);localDue.setDate(localDue.getDate()+node.offsetDays);
+      let nextDue = localDue.getTime();
       if (nextDue <= this.now()) nextDue = this.now() + 60000;
       const job = {
         id: randomUUID(),
@@ -252,6 +266,9 @@ export class FollowUpManager {
         history: [],
         lastError: null,
         activeRunId: null,
+        templateId:planId,
+        templateCustomized:overrides!==undefined,
+        timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
       this.store.db
         .prepare("INSERT INTO follow_ups VALUES (?,?,?,?,?)")
@@ -262,7 +279,9 @@ export class FollowUpManager {
       planId,
       jobs: jobs.length,
     });
+    if(requestId)this.store.db.prepare('INSERT INTO followup_applications VALUES(?,?,?,?)').run(requestId,patientId,fingerprint,JSON.stringify(jobs));
     return jobs;
+    });
   }
   // Cross-patient schedule overview for the follow-up management view.
   overview({ limit = 200 } = {}) {
@@ -516,13 +535,25 @@ export class FollowUpManager {
     });
     return result;
   }
-  reminderPage({ patientId, status = "pending", limit = 100, offset = 0 } = {}) {
-    const reminders = this.reminders({ patientId, status, limit, offset });
+  reminderFilter({patientId,status="pending",query="",outcome=""}) {
+    check(["pending","done"].includes(status),"INVALID_INPUT","提醒状态无效");
+    check(typeof query === "string" && query.length<=100,"INVALID_INPUT","搜索词过长");
+    check(!outcome || ["completed","unreachable","declined"].includes(outcome),"INVALID_INPUT","联系结果筛选无效");
+    const clauses=["r.status=?"],args=[status];
+    if(patientId){clauses.push("r.patient_id=?");args.push(patientId);}
+    if(query.trim()){clauses.push("instr(lower(COALESCE(json_extract(p.data,'$.name'),'') || ' ' || COALESCE(json_extract(r.data,'$.title'),'')),lower(?))>0");args.push(query.trim());}
+    if(outcome){clauses.push("json_extract(r.data,'$.outcome.status')=?");args.push(outcome);}
+    return {where:'WHERE '+clauses.join(' AND '),args};
+  }
+  reminderPage({ patientId, status = "pending", limit = 100, offset = 0, query="", outcome="" } = {}) {
+    const reminders = this.reminders({ patientId, status, limit, offset, query, outcome });
     const counts = { pending: 0, done: 0 };
     for (const row of this.store.db.prepare(`SELECT status,COUNT(*) n FROM reminders ${patientId ? "WHERE patient_id=?" : ""} GROUP BY status`).all(...(patientId ? [patientId] : []))) counts[row.status] = row.n;
-    return { reminders, counts, total: counts[status], offset, limit, hasMore: offset + reminders.length < counts[status] };
+    const {where,args}=this.reminderFilter({patientId,status,query,outcome});
+    const total=this.store.db.prepare(`SELECT COUNT(*) n FROM reminders r LEFT JOIN patients p ON p.id=r.patient_id ${where}`).get(...args).n;
+    return { reminders, counts, total, offset, limit, hasMore: offset + reminders.length < total };
   }
-  reminders({ patientId, status = "pending", limit = 100, offset = 0 } = {}) {
+  reminders({ patientId, status = "pending", limit = 100, offset = 0, query="", outcome="" } = {}) {
     check(
       ["pending", "done"].includes(status),
       "INVALID_INPUT",
@@ -533,10 +564,8 @@ export class FollowUpManager {
       "INVALID_INPUT",
       "提醒分页参数无效",
     );
-    const where = patientId
-      ? "WHERE status=? AND patient_id=?"
-      : "WHERE status=?";
-    const args = patientId ? [status, patientId, limit, offset] : [status, limit, offset];
+    const filter=this.reminderFilter({patientId,status,query,outcome});
+    const where=filter.where,args=[...filter.args,limit,offset];
     const order = status === "done" ? "COALESCE(unixepoch(json_extract(r.data,'$.outcome.recordedAt')) * 1000,r.due_at) DESC, r.id DESC" : "r.due_at ASC, r.id ASC";
     return this.store.db
       .prepare(
@@ -574,7 +603,7 @@ export class FollowUpManager {
     return sqliteTransaction(this.store.db, () => {
       const patient = this.patientRow(patientId);
       const id = input.requestId ? `contact_${identifier(input.requestId)}` : randomUUID();
-      const fingerprint = createHash("sha256").update(JSON.stringify({ title: input.title || "", status: input.status, note: input.note, contactedAt: input.contactedAt || "", nextDueAt: input.nextDueAt || "", nextName: input.nextName || "" })).digest("hex");
+      const fingerprint = createHash("sha256").update(JSON.stringify({ title: input.title || "", status: input.status, note: input.note, contactedAt: input.contactedAt || "", nextDueAt: input.nextDueAt || "", nextName: input.nextName || "", contactMethod:input.contactMethod || "", clinical:input.clinical || {} })).digest("hex");
       const existing = this.store.db.prepare("SELECT data FROM reminders WHERE id=?").get(id);
       if (existing) {
         const record = JSON.parse(existing.data);
@@ -652,7 +681,15 @@ export class FollowUpManager {
           externalConsent: false,
         });
       }
+      const contactMethod=input.contactMethod || "unspecified";
+      check(["unspecified","phone","in_person","wechat","other"].includes(contactMethod),"INVALID_INPUT","联系方式无效");
+      const clinical={};
+      for(const key of ["symptoms","medications","results","plan"]) {
+        if(input.clinical?.[key]) clinical[key]=string(input.clinical[key],"随访要点",1200);
+      }
+      check(input.status === "completed" || (!checkedItems.length && !Object.keys(clinical).length),"INVALID_INPUT","未联系上或拒绝随访时，不能勾选已核实项目或填写本次临床反馈；请在联系记录中说明。");
       reminder.outcome = {
+        contactMethod, clinical,
         status: input.status,
         note,
         checkedItems,

@@ -41,7 +41,8 @@ test('upload-first intake automatically runs, allows natural-language correction
   await dialog.getByText('纠正后样本',{exact:true}).waitFor({timeout:30000});
   await dialog.getByRole('button',{name:'确认建档',exact:true}).click();
   await dialog.waitFor({state:'hidden'});
-  await page.getByRole('region',{name:'患者资料面板'}).getByRole('heading',{name:'患者资料总览'}).waitFor();
+  await page.getByRole('region',{name:'患者资料面板'}).getByRole('heading',{name:'患者概览'}).waitFor();
+  await page.getByRole('button',{name:'诊断与病史',exact:true}).click();
   const history=page.getByRole('article',{name:'病程概览'});
   assert.match(await history.innerText(),/2026-09-20就诊记录/);
   assert.doesNotMatch(await history.innerText(),/合成核对备注/);

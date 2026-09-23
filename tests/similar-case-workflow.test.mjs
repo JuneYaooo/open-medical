@@ -48,7 +48,8 @@ test('search requests are memoized, bounded and citations must be retrieved',asy
  await execute('online_case_search',{query:'disease'});await execute('online_case_search',{query:'disease'});assert.equal(searches,1);
  await assert.rejects(execute('literature_fetch',{pmid:'999'}),/已返回/);
  await execute('literature_fetch',{pmid:'12345'});
- const draft={summary:'合成结果',items:[{reference:'12345',reason:'疾病关键词相关',differences:'治疗状态未知',quote:'Fabricated text'}],limitations:[]};
+ const comparison=['disease','stage','treatment','medications','demographics'].map(dimension=>({dimension,current:'未知',candidate:'未知',currentQuote:'',candidateQuote:'',relation:'unknown',reason:'资料未提供'}));
+ const draft={summary:'合成结果',items:[{reference:'12345',reason:'疾病关键词相关',differences:'治疗状态未知',comparison,quote:'Fabricated text'}],limitations:[]};
  await assert.rejects(execute('finish_similar_case_search',draft),/连续原文/);
  for(let i=4;i<16;i++)await execute('online_case_search',{query:'disease'});
  assert.deepEqual(registry.definitions(permissions).map(t=>t.function.name),['finish_similar_case_search']);
@@ -65,4 +66,16 @@ test('network failures remain explicit and unsearched online requests cannot fin
  assert.equal((await execute('online_case_search',{query:'synthetic'})).failed,true);
  await execute('online_case_search',{query:'synthetic'});assert.equal(attempts,1);
  const result=await execute('finish_similar_case_search',draft);assert.equal(result.searches[0].status,'failed');assert.equal(result.cases.length,0);
+});
+test('one comparison correction is bounded; unresolved quotations deliver explicit unscored gaps',async()=>{
+ const registry=new ToolRegistry();
+ for(const name of ['online_case_search','literature_fetch'])registry.register({permission:'tools.execute',capability:{backend:'local'},definition:{type:'function',function:{name,parameters:{type:'object',additionalProperties:true}}},execute:async()=>name==='online_case_search'?{searches:[{status:'ok'}],candidates:[{pmid:'1',title:'Synthetic case'}]}:{abstract:'Actual retrieved source.'}});
+ configureSimilarCaseTools(registry,{materials:[]},{policy:{searchScope:'online'}});
+ const permissions=new PermissionEngine({profile:'standard',grants:{}}),execute=(n,a)=>registry.execute(n,a,{},permissions);
+ await execute('online_case_search',{query:'synthetic'});await execute('literature_fetch',{pmid:'1'});
+ const comparison=['disease','stage','treatment','medications','demographics'].map(dimension=>({dimension,current:'合成当前',candidate:'合成候选',currentQuote:'invented current',candidateQuote:'invented candidate',relation:'match',reason:'unsupported'}));
+ const args={summary:'合成结果',items:[{reference:'1',reason:'unsupported narrative',differences:'unsupported difference',comparison}],limitations:[]};
+ await assert.rejects(execute('finish_similar_case_search',args),{code:'CASE_COMPARISON_EVIDENCE'});
+ const result=await execute('finish_similar_case_search',args);assert.ok(result.cases[0].comparisonWarnings.length);assert.ok(result.cases[0].comparison.every(row=>row.relation==='unknown'&&!row.currentQuote&&!row.candidateQuote));assert.doesNotMatch(result.cases[0].reason,/unsupported narrative/);
+ assert.equal(registry.definitions(permissions).length,0);
 });

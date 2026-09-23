@@ -89,7 +89,7 @@ export const MEDICAL_WORKFLOWS = [
     title: "用药安全核查",
     icon: ShieldCheck,
     category: "clinical",
-    desc: "配伍禁忌、相互作用、过敏与重复用药提示",
+    desc: "整理已记录用药、过敏史和需要进一步核对的事项",
     output: "用药安全提示清单 · 内置规则（非穷尽）",
     prompt:
       "请从材料中提取当前用药清单和过敏史，调用 medication_safety_check 工具做确定性核查（过敏匹配、相互作用、重复用药），把工具结果整理成安全提示清单。内置规则集非穷尽，结果为提示性草稿，需药师或医生复核。",
@@ -640,7 +640,7 @@ export function WorkbenchHome({
                   <button
                     type="button"
                     className="attach-button"
-                    title="添加材料：TXT / Markdown / CSV / JSON / PDF，随本次任务一起发送"
+                    title="添加图片、PDF、Word、Excel、TXT、Markdown、CSV 或 JSON，随本次任务一起发送"
                     onClick={() => onAttach(selectedPatient?.sessionId)}
                     disabled={uploading || !config}
                   >

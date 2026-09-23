@@ -11,14 +11,15 @@ function caseTitle(item,index) {
   return disease?.candidateQuote?disease.candidate:/[\u4e00-\u9fff]/.test(item.title)?item.title:`${sourceOf(item)==='local'?'本地':'网上'}病例${index===undefined?'':` ${index+1}`}`;
 }
 function Score({result}) {
-  return <div className="case-score"><strong>{result.score===null?'—':result.score}<small>{result.score===null?'': '/ 100'}</small></strong><span>{result.score===null?'尚未完成对照，暂不评分':'相似度（参考）'}</span><small>已有 {result.known} 项资料可比较</small></div>;
+  if(result.clueOnly)return <div className="case-score"><strong>—</strong><span>疾病不同 · 文献线索</span><small>不作为相似患者评分</small></div>;
+  return <div className="case-score"><strong>{result.score===null?'—':result.score}<small>{result.score===null?'': '/ 100'}</small></strong><span>{result.score===null?'尚未完成对照，暂不评分':'相似度（参考）'}</span><small>对照覆盖 {result.coverage}% · {result.known}/5 项</small></div>;
 }
 export function SimilarCases({artifact,onRefresh,onOpen}) {
   const [source,setSource]=useState('all'),[query,setQuery]=useState(''),[sort,setSort]=useState('similarity'),[selected,setSelected]=useState(null);
   const panelRef=useRef(null), initial=useRef(true);
   useLayoutEffect(()=>{if(initial.current){initial.current=false;return;}panelRef.current?.scrollIntoView({block:'start'});},[selected]);
   const cases=(artifact.cases || []).map(caseForDisplay);
-  const filtered=cases.filter(c=>(source==='all'||sourceOf(c)===source) && `${c.title} ${c.reason} ${(c.comparison||[]).map(d=>d.candidate).join(' ')}`.toLowerCase().includes(query.toLowerCase())).map(item=>({item,result:comparisonScore(item.comparison)})).sort((a,b)=>sort==='coverage'?b.result.coverage-a.result.coverage:(b.result.score??-1)-(a.result.score??-1));
+  const filtered=cases.filter(c=>(source==='all'||sourceOf(c)===source) && `${c.title} ${c.reason} ${(c.comparison||[]).map(d=>d.candidate).join(' ')}`.toLowerCase().includes(query.toLowerCase())).map(item=>({item,result:comparisonScore(item.comparison)})).sort((a,b)=>a.result.clueOnly!==b.result.clueOnly?Number(a.result.clueOnly)-Number(b.result.clueOnly):sort==='coverage'?b.result.coverage-a.result.coverage:(b.result.score??-1)-(a.result.score??-1));
   const item=cases.find(c=>c.reference===selected), result=item?comparisonScore(item.comparison):null;
   return <section ref={panelRef} className="similar-cases" aria-label="相似患者对照">
     {item ? <>
@@ -26,6 +27,7 @@ export function SimilarCases({artifact,onRefresh,onOpen}) {
       <header className="case-detail-head"><div><span className="case-eyebrow">{sourceOf(item)==='local'?'本地患者记录':'网上病例报告'} · 供医生参考</span><h3>{caseTitle(item)}</h3><p>{item.scope}</p></div><Score result={result}/></header>
       <section className="case-profile" aria-label="病例概况">{CASE_DIMENSIONS.filter(d=>item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>{const row=item.comparison?.find(c=>c.dimension===d.key);return <div key={d.key}><span>{d.label}</span><strong>{row?.candidateQuote?row.candidate:'尚未整理'}</strong></div>;})}{item.outcome?.quote && <div><span>治疗结果与随访</span><strong>{item.outcome.text}</strong></div>}</section>
       <p className="case-pending-fields">{[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].length>0 && `尚待整理：${[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].join("、")}。`}</p>
+      {item.comparisonWarnings?.length>0 && <p className="case-pending-fields">部分对照未能核实原文，已保留可读取资料；未核实的项目不计入分数。</p>}
       <div className="case-findings"><section><h4>相同的地方</h4><p>{item.reason}</p></section><section><h4>需要注意的不同</h4><p>{item.differences}</p></section></div>
       {result.known>0 ? <details className="case-comparison-disclosure"><summary>逐项比较与原文依据</summary>
       <div className="case-comparison" role="table" aria-label="患者逐项对照">

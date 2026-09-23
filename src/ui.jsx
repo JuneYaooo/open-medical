@@ -256,7 +256,7 @@ export function AcceptanceView({ artifact, previous, onSource, onClose, onReview
                 </div>
               ))}
               {!artifact.events?.length && !artifact.matches?.length && (
-                <p className="muted">这份产物没有记录原文出处。</p>
+                <p className="muted">这份已保存结果没有记录原文出处。</p>
               )}
             </div>
           )}
@@ -387,7 +387,7 @@ export function PatientSummaryCard({ patient, detail, session, onOpenDetail, onO
           <ul className="tl">
             {counts.unprocessedMessages > 0 && <li><i />{counts.unprocessedMessages} 条未处理消息</li>}
             {counts.dueFollowups > 0 && <li><i />{counts.dueFollowups} 项随访到期</li>}
-            <li><i />{session ? `${session.files.length} 份材料 · ${session.artifacts.length} 份产物` : `${p.counts?.artifacts ?? "—"} 份产物`}</li>
+            <li><i />{session ? `${session.files.length} 份材料 · ${session.artifacts.length} 份已保存结果` : `${p.counts?.artifacts ?? "—"} 份已保存结果`}</li>
             {session?.artifacts.filter((a) => a.status === "draft").length > 0 && (
               <li><i />{session.artifacts.filter((a) => a.status === "draft").length} 份待复核</li>
             )}

@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {existsSync,mkdirSync} from 'node:fs';
+import {chromium} from 'playwright-core';
+import {fixture} from './helpers.mjs';
+const chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+test('doctor journey: create a purposeful library, import/search/read, then screen two patients without mixed drafts',{skip:!existsSync(chrome)},async t=>{
+ const f=await fixture(t,{followupOptions:{autoStart:false}});
+ const a=(await f.json('/api/patients','POST',{name:'合成初筛甲'})).data;
+ const b=(await f.json('/api/patients','POST',{name:'合成初筛乙'})).data;
+ const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(f.origin+'/?view=knowledge');await page.getByRole('button',{name:'新建知识库',exact:true}).click();
+ await page.getByLabel('知识库名称',{exact:true}).fill('合成科室规范');await page.getByLabel('收录什么',{exact:true}).fill('仅用于软件验收的合成资料');await page.getByLabel('什么时候用',{exact:true}).fill('准备合成随访问题时');await page.getByRole('button',{name:'保存知识库',exact:true}).click();
+ const card=page.locator('.library-card',{hasText:'合成科室规范'});await card.waitFor();await card.getByRole('button',{name:'打开知识库'}).click();
+ await page.locator('.guidelines-view input[type=file]').setInputFiles({name:'合成复诊规范.txt',mimeType:'text/plain',buffer:Buffer.from('合成复诊规范。记录患者反馈，核对资料日期与来源。此内容仅供软件测试，不用于真实诊疗。\n'.repeat(8))});
+ await page.getByRole('button',{name:'导入并建索引',exact:true}).click();await page.getByText(/资料已保存.*关键词检索/).waitFor();
+ await page.locator('.literature-query').fill('复诊');await page.getByRole('button',{name:'检索',exact:true}).click();await page.getByText('全文关键词检索可用',{exact:false}).waitFor();
+ assert.equal((await f.json('/api/knowledge?collection='+encodeURIComponent('合成科室规范'))).data.documents.length,1);
+ mkdirSync('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/iteration38-knowledge.png',fullPage:true});
+ await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'临床试验',exact:true}).click();await page.getByRole('button',{name:'添加试验方案'}).click();
+ await page.locator('.trial-hub input[type=file]').setInputFiles({name:'合成方案.txt',mimeType:'text/plain',buffer:Buffer.from('入选标准：\n1、成年人\n2、诊断已记录\n排除标准：\n1、另一项干预试验')});await page.getByText(/已读取方案原文/).waitFor();assert.match(await page.getByLabel('入选标准（每行一项）',{exact:true}).inputValue(),/1、成年人/);
+ await page.getByLabel('试验名称',{exact:true}).fill('合成筛选方案');await page.getByLabel('方案版本与日期',{exact:true}).fill('测试版 2026-09-24');await page.getByLabel('入选标准（每行一项）',{exact:true}).fill('成年人\n诊断已记录');await page.getByLabel('排除标准（每行一项）',{exact:true}).fill('另一项干预试验');await page.getByRole('button',{name:'保存试验方案',exact:true}).click();
+ await page.getByLabel('选择初筛患者',{exact:true}).selectOption(a.id);await page.getByLabel('判断：成年人',{exact:true}).selectOption('yes');await page.getByLabel('依据、资料日期或缺少什么').first().fill('合成出生记录 2026-01-01');
+ await page.getByLabel('选择初筛患者',{exact:true}).selectOption(b.id);await page.waitForFunction(()=>document.querySelector('.trial-review-row select')?.value==='unknown');
+ await page.getByLabel('选择初筛患者',{exact:true}).selectOption(a.id);await page.getByText('已恢复这位患者尚未保存的初筛草稿。').waitFor();assert.equal(await page.getByLabel('判断：成年人',{exact:true}).inputValue(),'yes');
+ await page.getByRole('button',{name:'保存初筛记录',exact:true}).click();await page.getByRole('status').filter({hasText:'资料不足'}).waitFor();
+ const trial=(await f.json('/api/trials')).data.trials[0];assert.equal((await f.json(`/api/trials/${trial.id}/screenings/${a.id}`)).data.missing,2);assert.equal((await f.json(`/api/trials/${trial.id}/screenings/${b.id}`)).data.revision,0);
+ await page.screenshot({path:'output/playwright/iteration38-trial.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.ok(await page.locator('.module-view').last().evaluate(e=>e.scrollWidth<=e.clientWidth+2));
+ assert.deepEqual(errors,[]);
+});
+
+test('doctor journey: record an unscheduled follow-up and personalize a template without duplicate reminders',{skip:!existsSync(chrome)},async t=>{
+ const f=await fixture(t,{followupOptions:{autoStart:false}}),p=(await f.json('/api/patients','POST',{name:'合成随访对象'})).data;
+ const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ await page.goto(f.origin+'/?view=followups');await page.getByRole('button',{name:'记录一次联系',exact:true}).click();await page.getByLabel('联系的患者',{exact:true}).selectOption(p.id);await page.getByLabel('联系方式',{exact:true}).selectOption('phone');await page.getByText('补充临床要点（可选）',{exact:true}).click();await page.getByLabel('实际用药与不适',{exact:true}).fill('仅为合成反馈，药盒尚待核对');await page.getByLabel('随访记录',{exact:true}).fill('合成电话记录');await page.getByRole('button',{name:'保存随访结果',exact:true}).click();await page.getByRole('status').filter({hasText:'随访结果已保存'}).waitFor();
+ await page.getByRole('button',{name:/随访记录 1/}).click();await page.getByText('仅为合成反馈，药盒尚待核对',{exact:false}).waitFor();
+ await page.getByRole('button',{name:'计划与模板',exact:true}).click();await page.getByLabel('选择随访模板',{exact:true}).selectOption('builtin_postop');await page.locator('.followup-apply select').nth(1).selectOption(p.id);await page.getByLabel('节点 1 天数',{exact:true}).fill('5');await page.getByRole('button',{name:'应用',exact:true}).click();await page.getByText('随访模板已应用到患者，节点已排入计划。',{exact:true}).waitFor();
+ assert.equal(f.server.followups.list(p.id).length,3);assert.equal(f.server.followups.planRow('builtin_postop').nodes[0].offsetDays,7);assert.equal(await page.getByRole('button',{name:'应用',exact:true}).isDisabled(),true);
+ await page.screenshot({path:'output/playwright/iteration38-followup.png',fullPage:true});await page.reload();await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'随访',exact:true}).click();await page.getByRole('button',{name:/随访记录 1/}).click();await page.getByText('仅为合成反馈，药盒尚待核对',{exact:false}).waitFor();
+});

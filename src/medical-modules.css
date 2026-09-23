@@ -1,0 +1,265 @@
+.library-grid,
+.trial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+.library-card,
+.trial-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.library-card h2,
+.trial-card h2 {
+  font-size: 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.library-card p,
+.trial-card p {
+  margin: 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.library-card .toolbar-actions {
+  margin-top: auto;
+}
+.library-form {
+  max-width: 760px;
+  margin: 24px 0;
+}
+.library-form fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+}
+.library-form label,
+.trial-form label {
+  display: grid;
+  gap: 8px;
+  font-size: 15px;
+}
+.library-form textarea,
+.trial-form textarea {
+  min-height: 80px;
+  resize: vertical;
+  font: inherit;
+  padding: 12px;
+}
+.library-description {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--soft);
+  border-radius: 8px;
+}
+.library-description header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.library-description h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.library-hub > .module-view {
+  padding: 0;
+  margin-top: 24px;
+}
+.trial-form {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+.trial-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.trial-review-row {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 12px;
+}
+.trial-review-row p {
+  margin: 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.trial-review-row label {
+  grid-column: 1/-1;
+  display: grid;
+  gap: 8px;
+}
+.trial-review-row textarea {
+  font: inherit;
+  padding: 10px;
+  min-height: 60px;
+  resize: vertical;
+}
+.trial-links {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+@media (max-width: 700px) {
+  .trial-meta,
+  .trial-review-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .library-description header {
+    flex-wrap: wrap;
+  }
+}
+.followup-record-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+.followup-record-filters label {
+  display: grid;
+  gap: 8px;
+  max-width: 100%;
+  font-size: 14px;
+}
+.followup-record-filters input {
+  max-width: 100%;
+}
+
+.trial-registry-search {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.trial-registry-search label {
+  display: grid;
+  gap: 8px;
+}
+.trial-registry-search small {
+  align-self: center;
+  color: var(--muted);
+}
+
+.medical-shell .module-view:is(.library-hub, .trial-hub) {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  place-items: stretch;
+  padding: 32px;
+  align-content: start;
+}
+.medical-shell :is(.library-hub, .trial-hub) > .module-card {
+  width: 100%;
+  margin: 0;
+}
+.medical-shell .library-hub > .module-view {
+  width: 100%;
+  padding: 0;
+  place-items: stretch;
+}
+.medical-shell .library-hub .guidelines-view {
+  width: 100%;
+}
+.medical-shell .library-hub > .text-button {
+  justify-self: start;
+}
+.library-description {
+  margin: 16px 0;
+}
+.trial-form fieldset,
+fieldset.trial-form {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.trial-review-row {
+  grid-template-columns: minmax(200px, 1.2fr) 190px minmax(200px, 1fr);
+  align-items: start;
+}
+.trial-review-row label {
+  grid-column: auto;
+}
+.trial-review-row textarea {
+  min-height: 64px;
+  width: 100%;
+}
+.trial-form > button {
+  justify-self: start;
+  min-width: 180px;
+}
+@media (max-width: 1000px) {
+  .trial-review-row {
+    grid-template-columns: minmax(0, 1fr) 190px;
+  }
+  .trial-review-row label {
+    grid-column: 1/-1;
+  }
+}
+@media (max-width: 640px) {
+  .medical-shell .module-view:is(.library-hub, .trial-hub) {
+    padding: 20px 16px;
+  }
+  .trial-review-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .trial-registry-search input {
+    max-width: 100%;
+  }
+}
+
+.followup-customize {
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.followup-node-editor {
+  display: grid;
+  grid-template-columns: 140px minmax(140px, 1fr) minmax(220px, 1.5fr);
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.followup-node-editor label {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.followup-node-editor :is(input, textarea) {
+  width: 100%;
+  min-width: 0;
+}
+.followup-node-editor textarea {
+  min-height: 90px;
+  font: inherit;
+  padding: 10px;
+}
+@media (max-width: 850px) {
+  .followup-node-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.trial-patient-context {
+  background: var(--soft);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-top: 20px;
+}
+.trial-patient-context p {
+  margin: 8px 0 0;
+}
+.trial-patient-context button {
+  margin-left: 16px;
+}
+
+:is(.library-hub,.trial-hub) > .module-head {justify-content:space-between;}

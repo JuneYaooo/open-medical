@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { KnowledgeMetadataModal, knowledgeStateLabels } from "./knowledge-metadata";
-import { importMaterial } from "./import-material";
+import { importKnowledge } from "./import-knowledge";
 import {
   Search,
   Loader2,
@@ -13,14 +13,14 @@ import {
 
 // Local guideline library: import PDFs/Markdown (text extracted in the
 // browser), full-text search with line provenance, and an inline reader.
-export function KnowledgeView({ onOpenTask }) {
+export function KnowledgeView({ onOpenTask, collection = "" }) {
   const [docs, setDocs] = useState([]);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState(null);
   const [rag, setRag] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [editingMetadata, setEditingMetadata] = useState(false);
-  const [filters, setFilters] = useState({ kind: "", collection: "", reviewStatus: "" });
+  const [filters, setFilters] = useState({ kind: "", collection, reviewStatus: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -30,7 +30,7 @@ export function KnowledgeView({ onOpenTask }) {
     org: "",
     year: "",
     kind: "指南",
-    collection: "",
+    collection,
     sourceUrl: "",
     edition: "",
   });
@@ -54,15 +54,16 @@ export function KnowledgeView({ onOpenTask }) {
     setBusy(true);
     setError("");
     try {
-      const material = await importMaterial(file);
+      const material = await importKnowledge(file,setNotice);
       const text = material.text;
       if (!text) throw new Error("无法从该文件提取文本");
       setPending({ name: material.name || file.name, text });
+      setNotice(material.ocr ? "已完成本地文字识别，请核对下方文字再入库。" : "");
       setMeta({
         title: file.name.replace(/\.[^.]+$/, "").slice(0, 120),
         org: "",
         kind: "指南",
-        collection: "",
+        collection,
         year: "",
         sourceUrl: "",
         edition: "",
@@ -78,7 +79,7 @@ export function KnowledgeView({ onOpenTask }) {
     setBusy(true);
     setError("");
     try {
-      await api("/api/knowledge", "POST", {
+      const imported=await api("/api/knowledge", "POST", {
         title: meta.title || pending.name,
         kind: meta.kind || "指南",
         collection: meta.collection || undefined,
@@ -90,7 +91,7 @@ export function KnowledgeView({ onOpenTask }) {
         edition: meta.edition,
       });
       setPending(null);
-      setNotice("资料已导入并建立索引；可打开文档核对来源与版本。");
+      setNotice(imported.indexing?.status === "failed" ? "资料已保存，关键词检索可用。语义索引暂未完成，请检查嵌入服务后重建。" : "资料已保存，可通过关键词检索；语义索引状态请查看下方说明。");
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -228,8 +229,8 @@ export function KnowledgeView({ onOpenTask }) {
       <section className="module-card guidelines-view">
         <div className="module-head">
           <div>
-            <h1>知识库</h1>
-            <p className="module-phase">指南 · 书籍 · 资料 · 全类别文档</p>
+            <h2>知识库资料</h2>
+            <p className="module-phase">支持图片、PDF、Word、Excel、TXT、Markdown、CSV、JSON</p>
           </div>
         </div>
         {error && (
@@ -242,7 +243,7 @@ export function KnowledgeView({ onOpenTask }) {
         {pending ? (
           <div className="guideline-import">
             <h3>确认导入：{pending.name}</h3>
-            <p className="muted">已提取 {pending.text.length} 字符文本。</p>
+            <p className="muted">已提取 {pending.text.length} 字符文本。</p><details><summary>核对导入文字</summary><pre className="source-text">{pending.text}</pre></details>
             <div className="guideline-meta-row">
               <input
                 value={meta.title}
@@ -262,7 +263,7 @@ export function KnowledgeView({ onOpenTask }) {
               </select>
               <input
                 value={meta.collection}
-                placeholder="所属知识库（可留空）"
+                aria-label="所属知识库" disabled={Boolean(collection)} placeholder="所属知识库（可留空）"
                 onChange={(e) =>
                   setMeta({ ...meta, collection: e.target.value })
                 }
@@ -303,19 +304,19 @@ export function KnowledgeView({ onOpenTask }) {
             onClick={() => fileRef.current?.click()}
             disabled={busy}
           >
-            <Upload size={14} /> 导入资料（PDF / Markdown / TXT）
+            <Upload size={14} /> 上传资料
           </button>
         )}
         <input
           ref={fileRef}
           type="file"
-          accept=".pdf,.md,.txt,.markdown"
+          accept=".pdf,.md,.txt,.markdown,.docx,.xlsx,.csv,.json,.png,.jpg,.jpeg,.webp"
           hidden
           onChange={onPickFile}
         />
 
         <div className="knowledge-filters" aria-label="知识库筛选">
-          <label>知识库<select aria-label="筛选知识库" value={filters.collection} onChange={(e) => { setFilters({ ...filters, collection: e.target.value }); setHits(null); }}><option value="">全部知识库</option>{[...new Set(docs.map((d) => d.collection || "默认知识库"))].map((name) => <option key={name}>{name}</option>)}</select></label>
+          <label>知识库<select disabled={Boolean(collection)} aria-label="筛选知识库" value={filters.collection} onChange={(e) => { setFilters({ ...filters, collection: e.target.value }); setHits(null); }}><option value="">全部知识库</option>{[...new Set([...(collection ? [collection] : []), ...docs.map((d) => d.collection || "默认知识库")])].map((name) => <option key={name}>{name}</option>)}</select></label>
           <label>类别<select aria-label="筛选类别" value={filters.kind} onChange={(e) => { setFilters({ ...filters, kind: e.target.value }); setHits(null); }}><option value="">全部类别</option>{["指南", "书籍", "资料", "文献", "其他"].map((kind) => <option key={kind}>{kind}</option>)}</select></label>
           <label>来源状态<select aria-label="来源状态" value={filters.reviewStatus} onChange={(e) => { setFilters({ ...filters, reviewStatus: e.target.value }); setHits(null); }}><option value="">使用中的资料</option>{Object.entries(knowledgeStateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="all">全部（含停用）</option></select></label>
         </div>
@@ -323,7 +324,7 @@ export function KnowledgeView({ onOpenTask }) {
           <input
             className="literature-query"
             value={query}
-            placeholder="在指南库中检索，如：血压达标 随访"
+            placeholder="在当前知识库检索，如：复诊 随访"
             onChange={(e) => setQuery(e.target.value)}
           />
           <button type="submit" disabled={busy || !query.trim()}>
@@ -336,14 +337,14 @@ export function KnowledgeView({ onOpenTask }) {
           </button>
         </form>
 
-        {rag && (rag.stale || rag.embeddedChunks > 0) && (
+        {rag && (
           <p className="muted" style={{ fontSize: 12, margin: "4px 0" }}>
-            知识库索引：{rag.embeddedChunks} 块向量 · 模型{" "}
+            全文关键词检索可用 · 语义索引：{rag.embeddedChunks} 块 · 模型{" "}
             {rag.currentModel || "未索引"}
             {rag.stale ? " · 检测到旧模型向量，建议重建" : ""}
           </p>
         )}
-        {rag && rag.stale && (
+        {rag && (rag.stale || rag.embeddedChunks === 0) && (
           <button
             className="secondary"
             style={{ marginBottom: 10 }}
@@ -355,6 +356,7 @@ export function KnowledgeView({ onOpenTask }) {
                 setNotice(
                   `已重建向量索引：${value.docs} 份指南 / ${value.chunks} 块 / 模型 ${value.model}`,
                 );
+                setRag(value);
                 await refresh();
               } catch (err) {
                 setError(err.message);
@@ -403,12 +405,13 @@ export function KnowledgeView({ onOpenTask }) {
               </li>
             ))}
             {!hits.length && (
-              <li className="memory-empty">指南库中没有匹配的条文。</li>
+              <li className="memory-empty">当前知识库中没有匹配内容，可换一个关键词。</li>
             )}
           </ul>
         )}
 
-        <h3 className="guidelines-list-title">
+        {hits !== null && <button className="text-button" onClick={()=>{setHits(null);setQuery("");}}>返回资料列表</button>}
+        {hits === null && <><h3 className="guidelines-list-title">
           已收录文档 <span className="muted">{visibleDocs.length} / {docs.length} 份</span>
         </h3>
         <ul className="guideline-docs">
@@ -422,7 +425,7 @@ export function KnowledgeView({ onOpenTask }) {
                 <small>
                   {doc.kind || "资料"}
                   {doc.org ? ` · ${doc.org}` : ""}
-                  {doc.year ? ` · ${doc.year}` : ""} · {doc.edition || "版本未注明"} · {doc.statusLabel || "来源待核对"}
+                  {doc.year ? ` · ${doc.year}` : ""} · {doc.edition || "版本未注明"} · {doc.statusLabel || "来源待核对"} · {doc.indexing?.status === "ready" ? "语义与关键词可检索" : doc.indexing?.status === "failed" ? "关键词可用 · 语义索引待重试" : "关键词可检索"}
                 </small>
               </button>
               <button
@@ -454,11 +457,10 @@ export function KnowledgeView({ onOpenTask }) {
           {docs.length > 0 && !visibleDocs.length && <li className="memory-empty">当前筛选下没有资料。切换来源状态可查看停用文档。</li>}
           {!docs.length && (
             <li className="memory-empty">
-              还没有指南。导入本地指南 PDF
-              后，检索结果可带行号出处进入循证草稿。
+              这个知识库还没有资料。上传后即可检索并阅读带行号的内容。
             </li>
           )}
-        </ul>
+        </ul></>}
         <p className="module-note">
           指南内容仅作为参考资料，检索引用时请核对原文行号；不构成处方或剂量建议。
         </p>

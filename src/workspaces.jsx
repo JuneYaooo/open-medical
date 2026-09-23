@@ -705,7 +705,7 @@ export function WorkspacesView({
   // 文案按能力渲染:纯通用模式不宣称医疗工具可用。
   const medical = medicalEnabled(config);
   return (
-    <div className="shell workspace-shell">
+    <div className={`shell workspace-shell ${inspectorOpen ? "with-inspector" : ""}`}>
       {showCreate && (
         <Modal
           title="连接项目工作区"

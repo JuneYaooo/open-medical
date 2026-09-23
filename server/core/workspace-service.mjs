@@ -2190,6 +2190,7 @@ export class WorkspaceService {
           }),
         domain: {
           ...this.domain,
+          preparedResponse: () => this.domain.preparedResponse?.(this.store.get(id), run.id),
           beforeTool: async (args) => {
             await this.domain.beforeTool?.(args);
             await this.extensions.runHooks(

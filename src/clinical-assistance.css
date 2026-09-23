@@ -1,0 +1,46 @@
+.clinical-assistance {color:var(--ink);width:100%;box-sizing:border-box;max-width:1120px;margin:26px auto;}
+.clinical-assistance p,.clinical-assistance li {font-size:16px;line-height:1.8;overflow-wrap:anywhere;}
+.assistance-context {padding:0 0 24px;margin-bottom:28px;border-bottom:1px solid var(--border);}
+.assistance-caption {font-size:14px;color:#68796f;}
+.assistance-context>p {margin:8px 0;font-weight:500;}
+.clinical-assistance summary {cursor:pointer;}
+.assistance-diagnoses {font-size:14px;margin:10px 0;color:#52675b;}
+.assistance-diagnoses ul {padding-left:22px;}
+.assistance-status {display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;align-items:center;font-size:14px;color:#766143;}
+.assistance-status button {background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:4px;}
+.assistance-layout {display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:36px;align-items:start;}
+.assistance-main {min-width:0;}
+.assistance-question h2 {font-size:23px;margin:0 0 20px;}
+.assistance-question textarea {box-sizing:border-box;display:block;width:100%;min-height:130px;padding:16px;font:inherit;font-size:17px;line-height:1.8;border:1px solid var(--border);border-radius:10px;resize:vertical;background:#fff;}
+.assistance-question textarea:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.assistance-question-footer {display:flex;justify-content:space-between;gap:16px;align-items:center;margin:14px 0 28px;}
+.assistance-question-footer>span {font-size:14px;color:#68796f;}
+.assistance-disclosure {border-top:1px solid var(--border);}
+.assistance-disclosure>summary {padding:18px 0;font-size:16px;}
+.assistance-disclosure>summary>span {margin-left:12px;font-size:14px;color:#68796f;}
+.assistance-detail-body {padding:0 0 22px;}
+.assistance-detail-body label {display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.assistance-detail-body p,.assistance-detail-body li {font-size:15px;}
+.assistance-detail-body>a {font-size:14px;}
+.assistance-links {display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+.assistance-more-actions {display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.assistance-more-actions h3 {font-size:17px;margin:4px 0;}
+.assistance-evidence {padding-left:24px;border-left:1px solid var(--border);min-width:0;}
+.assistance-evidence h3 {font-size:15px;font-weight:500;color:#68796f;margin:0 0 16px;}
+.assistance-reference {display:block;width:100%;padding:18px 16px;margin-bottom:12px;text-align:left;background:var(--soft);border:1px solid transparent;border-radius:8px;cursor:pointer;color:var(--ink);}
+.assistance-reference:hover {border-color:var(--accent);}
+.assistance-reference b {font-size:16px;font-weight:600;display:flex;justify-content:space-between;gap:8px;}
+.assistance-reference small {display:block;font-size:14px;color:#68796f;margin-top:8px;}
+.assistance-saved {margin-top:22px;font-size:14px;}
+.assistance-saved button {display:block;margin:12px 0;text-align:left;line-height:1.7;}
+.clinical-assistance .assistance-footnote {font-size:13px;color:#68796f;margin-top:28px;}
+.overview-brief {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;}
+.overview-brief>section {padding:18px;background:var(--soft);border-radius:8px;min-width:0;}
+.overview-brief h3 {font-size:17px;margin:0 0 10px;}
+.overview-brief p {font-size:15px;line-height:1.75;overflow-wrap:anywhere;}
+@media(max-width:1000px){.assistance-layout {grid-template-columns:minmax(0,1fr);gap:24px;}.assistance-evidence {border-left:0;border-top:1px solid var(--border);padding:20px 0 0;}.overview-brief {grid-template-columns:minmax(0,1fr);}}
+@media(max-width:520px){.assistance-more-actions {grid-template-columns:1fr;}.assistance-question-footer {flex-wrap:wrap;}.assistance-question h2 {font-size:21px;}}
+
+.clinical-assistance .assistance-disclosure>summary {font-size:16px;color:var(--ink);}
+.clinical-assistance .assistance-diagnoses>summary {font-size:14px;}
+.clinical-assistance .sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}

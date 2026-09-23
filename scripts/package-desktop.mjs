@@ -85,9 +85,8 @@ try {
     await mkdir(output, { recursive: true });
     await rm(bundle, { recursive: true, force: true });
     execFileSync("/bin/cp", ["-cR", cachedApp, bundle]);
-    await cp(stage, join(bundle, "Contents/Resources/app"), {
-      recursive: true,
-    });
+    // Clone staged dependencies too: copying them twice can exhaust a low-space disk.
+    execFileSync("/bin/cp", ["-cR", stage, join(bundle, "Contents/Resources/app")]);
     await rm(join(bundle, "Contents/Resources/default_app.asar"), {
       force: true,
     });

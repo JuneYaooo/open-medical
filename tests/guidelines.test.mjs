@@ -118,13 +118,13 @@ test("guideline agent tools: search/list/read execute and skip validation upfron
   const tools = knowledgeTools(library);
   assert.deepEqual(
     tools.map((tool) => tool.definition.function.name),
-    ["knowledge_search", "knowledge_list", "knowledge_read", "knowledge_ingest"],
+    ["knowledge_collections", "knowledge_search", "knowledge_list", "knowledge_read", "knowledge_ingest"],
   );
-  const hits = await tools[0].execute({ query: "糖尿病 血压" });
+  const hits = await tools.find(t=>t.definition.function.name==="knowledge_search").execute({ query: "糖尿病 血压" });
   assert.equal(hits.count, 1);
-  const listed = await tools[1].execute({});
+  const listed = await tools.find(t=>t.definition.function.name==="knowledge_list").execute({});
   assert.equal(listed.documents.length, 1);
-  const read = await tools[2].execute({ docId: hits.hits[0].docId, startLine: 4, endLine: 4 });
+  const read = await tools.find(t=>t.definition.function.name==="knowledge_read").execute({ docId: hits.hits[0].docId, startLine: 4, endLine: 4 });
   assert.match(read.lines[0], /生活方式干预/);
 });
 
@@ -155,4 +155,12 @@ test("guideline API: import via REST, search endpoint, delete, bootstrap count",
   assert.ok(full.data.lineCount >= 10);
   assert.equal((await f.json(`/api/knowledge/${doc.id}`, "DELETE")).data.ok, true);
   assert.equal((await f.json("/api/knowledge")).data.documents.length, 0);
+});
+
+test('documents with an implicit default collection remain countable and selectable without rewriting stored sources',async t=>{
+ const library=newLibrary(t),doc=await library.addDocument({title:'合成短资料',text:'这是一份用于软件验证的简短科室流程。'});
+ const raw=library.docRow(doc.id);delete raw.collection;const saved=JSON.stringify(raw);library.store.db.prepare('UPDATE guideline_docs SET data=? WHERE id=?').run(saved,doc.id);
+ assert.equal(library.collections().find(c=>c.name==='默认知识库').documentCount,1);
+ assert.equal(library.list({collection:'默认知识库'}).length,1);
+ assert.equal(library.store.db.prepare('SELECT data FROM guideline_docs WHERE id=?').get(doc.id).data,saved);
 });

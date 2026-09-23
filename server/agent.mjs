@@ -1,3 +1,6 @@
+import { recognizeImage } from "./core/image-ocr.mjs";
+import { TrialRegistry } from "./medical/trial-registry.mjs";
+import { TrialScreening } from "./medical/trial-screening.mjs";
 import { IntakeJobs } from "./medical/intake-jobs.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
@@ -415,6 +418,7 @@ export function createServer(options = {}) {
   const workspaces = new WorkspaceService(store.db, provider, {
     domain: createMedicalWorkspaceDomain({
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
+      saveDisplayResult: (id, runId, value) => workspaces.store.update(id, w => { const run=w.runs.find(r=>r.id===runId);run.displayResults=[...(run.displayResults||[]).filter(r=>r.key!==value.key),value].slice(-12); }),
       readPatientBrief: (patientId) => patientBrief.read(patientId),
       plugins: [
         ...knowledgeToolPlugins,
@@ -512,6 +516,8 @@ export function createServer(options = {}) {
   );
   const risks = new RiskEngine(store, followups);
   const doctorOverview = new DoctorOverview(store, sessionBridge);
+  const trialScreening = new TrialScreening(store, patients);
+  const trialRegistry = new TrialRegistry(options.trialRegistryOptions);
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
   const patientImporter = new PatientImporter(store, patients);
@@ -1481,6 +1487,8 @@ export function createServer(options = {}) {
       }
       if (path === "/api/reminders" && req.method === "GET")
         return send(res, 200, followups.reminderPage({
+            query: url.searchParams.get("q") || "",
+            outcome: url.searchParams.get("outcome") || "",
             status: url.searchParams.get("status") || "pending",
             patientId: url.searchParams.get("patientId") || undefined,
             offset: Number(url.searchParams.get("offset") || 0),
@@ -1640,11 +1648,33 @@ export function createServer(options = {}) {
           return send(res, 201, { file, article });
         }
       }
+      if (parts[0] === "api" && parts[1] === "trials") {
+        if (parts.length === 4 && parts[2] === "registry" && req.method === "GET") return send(res,200,await trialRegistry.lookup(parts[3]));
+        if (parts.length === 2 && req.method === "GET") return send(res,200,{trials:trialScreening.list()});
+        if (parts.length === 2 && req.method === "POST") return send(res,201,trialScreening.create(await body(req)));
+        if (parts.length === 3 && req.method === "GET") return send(res,200,trialScreening.get(identifier(parts[2])));
+        if (parts.length === 5 && parts[3] === "screenings") {
+          const trialId=identifier(parts[2]),patientId=identifier(parts[4]);
+          if(req.method === "GET") return send(res,200,trialScreening.screening(trialId,patientId));
+          if(req.method === "PUT") return send(res,200,trialScreening.save(trialId,patientId,await body(req)));
+        }
+      }
       const knowledgeRoutes =
         parts[0] === "api" &&
         (parts[1] === "knowledge" || parts[1] === "guidelines");
       if (knowledgeRoutes) {
         const sub = parts.slice(2);
+        if (sub.length === 1 && sub[0] === "ocr" && req.method === "POST") {
+          const input=await body(req);
+          check(typeof input?.image === "string" && input.image.length>0 && input.image.length<=5400000 && /^[A-Za-z0-9+/=]+$/.test(input.image),"INVALID_INPUT","图片数据无效或超过容量");
+          const result=await recognizeImage(Buffer.from(input.image,"base64"));
+          check(result.lines?.some(line=>line.text?.trim()),"OCR_EMPTY","未识别到文字，请使用更清晰的资料",422);
+          return send(res,200,{text:result.lines.map(line=>line.text+(line.confidence<0.7?" [识别置信度低，请核对原图]":"")).join("\n"),method:"local-ocr"});
+        }
+        if (sub[0] === "collections") {
+          if (sub.length === 1 && req.method === "GET") return send(res,200,{collections:guidelines.collections()});
+          if (sub.length === 2 && req.method === "PUT") return send(res,200,guidelines.saveCollection(decodeURIComponent(sub[1]),await body(req)));
+        }
         if (sub.length === 0 && req.method === "GET")
           return send(res, 200, { documents: guidelines.list({
             kind: url.searchParams.get("kind") || undefined,

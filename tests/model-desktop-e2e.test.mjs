@@ -2,7 +2,7 @@
 // 验证桌面端在真实模型下咨询直接答。前置同 tests/model-e2e.test.mjs。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -56,9 +56,10 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
     } catch {
       app.process().kill("SIGKILL");
     }
+    rmSync(directory,{recursive:true,force:true});
   });
   const page = await app.firstWindow();
-  await page.waitForSelector(".app-navigation", { timeout: 30000 });
+  await page.waitForSelector(".advanced-nav>summary", { timeout: 30000 });
   const origin = new URL(page.url()).origin;
   const bootstrap = await (await fetch(`${origin}/api/bootstrap`)).json();
   const token = bootstrap.token;
@@ -111,11 +112,9 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
     "这位患者出院后饮食能吃辛辣的吗？请结合出院记录直接回答。",
   );
   await page.locator(".composer textarea").press("Enter");
-  await page.waitForFunction(
-    () => !document.querySelector(".send-button.stop"),
-    undefined,
-    { timeout: 240000 },
-  );
+  const deadline=Date.now()+240000;let run;
+  while(Date.now()<deadline){run=(await seed.json(`/api/sessions/${p.data.sessionId}`)).data.runs.at(-1);if(run && !['running','queued'].includes(run.status))break;await new Promise(r=>setTimeout(r,500));}
+  assert.equal(run?.status,'completed',JSON.stringify({status:run?.status,error:run?.error}));
   const last = await page.locator(".message-list .message").last().innerText();
   assert.ok(last.length > 30, "模型应给出实质回答");
   assert.equal(await page.locator(".artifact-inline").count(), 0, "咨询不应产生文书产物");

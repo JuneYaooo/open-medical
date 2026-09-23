@@ -75,3 +75,9 @@
 .chart-history .chart-record-notes p { font-size:var(--body-size,16px); }
 .chart-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
 .chart-tags span { display:inline-block; padding:5px 10px; background:var(--soft); border-radius:4px; font-size:14px; line-height:1.5; }
+.medical-shell .patient-section-tabs { display:flex; flex-wrap:wrap; gap:6px; }
+.medical-shell .patient-section-tabs button { font-size:15px; min-height:42px; white-space:nowrap; }
+.patient-dashboard .chart-heading p, .patient-dashboard .chart-section header p, .patient-dashboard .chart-source { font-size:14px; }
+.patient-dashboard .chart-problems b, .patient-dashboard .chart-meds b { font-size:16px; }
+
+.medical-shell .overview-brief section > p {font-size:var(--reading-size);}

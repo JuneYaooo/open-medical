@@ -27,7 +27,7 @@ test('V6 uses real navigation, project identity, task history and display modes 
  await page.locator('.composer textarea').fill('保留在项目乙的输入草稿');
  const modes=page.getByRole('group',{name:'工作区显示方式'});
  await modes.getByRole('button',{name:'AI 全屏',exact:true}).click();assert.equal(await page.locator('.inspector').isVisible(),false);
- await modes.getByRole('button',{name:'AI 半屏',exact:true}).click();assert.equal(await page.locator('.inspector').isVisible(),true);
+ await modes.getByRole('button',{name:'AI 半屏',exact:true}).click();await page.locator('.inspector').waitFor();assert.equal(await page.locator('.inspector').isVisible(),true);
  assert.equal(await page.locator('.composer textarea').inputValue(),'保留在项目乙的输入草稿');
  await page.screenshot({path:'output/playwright/v6-project.png'});
  await nav.getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('main',{name:'工具目录'}).waitFor();
@@ -45,7 +45,7 @@ test('V6 uses real navigation, project identity, task history and display modes 
  await history.getByRole('button',{name:/持续任务验收/}).click();await page.locator('.conversation-head h1').filter({hasText:'持续任务验收'}).waitFor();
  await page.locator('.composer textarea').fill('保留独立任务草稿');
  await modes.getByRole('button',{name:'AI 全屏',exact:true}).click();assert.equal(await page.locator('.inspector').isVisible(),false);
- await modes.getByRole('button',{name:'AI 半屏',exact:true}).click();assert.equal(await page.locator('.inspector').isVisible(),true);
+ await modes.getByRole('button',{name:'AI 半屏',exact:true}).click();await page.locator('.inspector').waitFor();assert.equal(await page.locator('.inspector').isVisible(),true);
  assert.equal(await page.locator('.composer textarea').inputValue(),'保留独立任务草稿');
  await page.getByRole('button',{name:'Aa · 大字模式',exact:true}).click();
  await page.setViewportSize({width:600,height:900});

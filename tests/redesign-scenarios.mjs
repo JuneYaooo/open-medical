@@ -42,8 +42,8 @@ export const SCENARIOS = [
     "左栏患者列表未出现新患者",
   );
   assert.match(await page.locator(".patient-pill").innerText(), /测试患者甲/);
-  await page.getByRole("button", { name: "诊疗辅助", exact: true }).click();
-  assert.ok(await page.locator(".pt-sec", { hasText: "关键事件时间线" }).isVisible());
+  await page.getByRole("button", { name: "就诊经过", exact: true }).click();
+  assert.ok(await page.getByRole("region",{name:"就诊时间轴"}).isVisible());
   // 写入检验 → 评估风险 → 概览出现风险卡
   const patient = (await seed.json("/api/patients")).data.patients[0];
   await seed.json(`/api/patients/${patient.id}`, "PATCH", {
@@ -91,6 +91,7 @@ export const SCENARIOS = [
       "utf8",
     ),
   });
+  await page.getByRole("button",{name:"查看资料",exact:true}).click();
   await page.waitForSelector(".file-card", { timeout: 10000 });
   // 本地整理（未配置模型 → 默认本地档位）
   await page.locator(".composer textarea").fill(
@@ -100,7 +101,7 @@ export const SCENARIOS = [
   await page.waitForSelector(".artifact-inline", { timeout: 30000 });
   assert.match(await page.locator(".artifact-inline").first().innerText(), /v1/);
   // 验收视图
-  await page.locator('button:has-text("打开验收视图")').first().click();
+  await page.locator('button:has-text("查看结果")').first().click();
   await page.waitForSelector(".acceptance");
   assert.ok(await page.locator(".accept-bar .seg").isVisible());
   await page.locator('.seg button:has-text("预览")').click();
@@ -198,7 +199,7 @@ export const SCENARIOS = [
   );
   await page.locator(".composer textarea").press("Enter");
   await page.waitForSelector(".artifact-inline", { timeout: 30000 });
-  await page.locator('button:has-text("打开验收视图")').first().click();
+  await page.locator('button:has-text("查看结果")').first().click();
   await page.waitForSelector(".acceptance");
   // 退回
   await page.locator('.review-acts button:has-text("退回修订")').click();
@@ -206,23 +207,14 @@ export const SCENARIOS = [
   await page.locator(".review-form input").nth(1).fill("需补充出院诊断依据");
   await page.locator(".review-form .attest input").check();
   await page.locator('.review-form button:has-text("退回并生成修订指令")').click();
-  // 退回后自动发起修订 → 新的草稿产物出现（服务端语义：修订=新草稿，旧产物保持已退回）
-  await page.waitForFunction(
-    () => document.querySelectorAll(".artifact-inline").length >= 2,
-    { timeout: 30000 },
-  );
-  assert.match(
-    await page.locator(".artifact-inline").first().innerText(),
-    /待复核/,
-    "最新产物应为待复核草稿",
-  );
-  // 旧产物应显示已退回
-  assert.match(
-    await page.locator(".artifact-inline").nth(1).innerText(),
-    /需修订/,
-  );
+  // 新任务只展示新的草稿；旧版仍保存在后端历史，不混入本轮消息。
+  await page.waitForFunction(()=>document.querySelector('.message.user-message')?.textContent.includes('请根据复核意见') && document.querySelector('.artifact-inline')?.textContent.includes('待复核'),undefined,{timeout:30000});
+  assert.match(await page.locator('.artifact-inline').first().innerText(),/待复核/);
+  const afterRevision=(await seed.json(`/api/sessions/${patient.data.sessionId}`)).data;
+  assert.ok(afterRevision.artifacts.some(a=>a.status==='rejected'));
+  assert.equal(await page.locator('.artifact-inline').count(),1);
   // 打开最新草稿的验收
-  await page.locator('.artifact-inline button:has-text("打开验收视图")').first().click();
+  await page.locator('.artifact-inline button:has-text("查看结果")').first().click();
   await page.waitForSelector(".acceptance");
   // 通过
   await page.locator('.review-acts button:has-text("确认通过")').click();
@@ -269,7 +261,9 @@ export const SCENARIOS = [
   await page.waitForSelector(".composer");
   await page.locator(".send-button.stop").waitFor({ state: "hidden", timeout: 30000 }).catch(() => {});
   // 打开知识 tab 并检索
-  await page.locator('.panel-tabs button:has-text("知识")').click();
+  await page.getByRole('button',{name:'查看资料',exact:true}).click();
+  await page.locator('.inspector-more summary').click();
+  await page.getByRole('button',{name:'查询知识库',exact:true}).click();
   await page.locator('.panel-knowledge input').fill("双联抗血小板");
   await page.locator('.panel-knowledge button[aria-label="检索知识库"]').click();
   await page.waitForSelector(".kb-hit", { timeout: 8000 });
@@ -302,7 +296,7 @@ export const SCENARIOS = [
     },
   },
   {
-    name: 'Goal 卡：文书模式执行时出现，完成后保留完成态',
+    name: '文书完成后只展示结果，不重复显示目标卡',
     fn: async ({ page, seed, origin }) => {
   const p = await seed.json("/api/patients", "POST", { name: "目标卡患者" });
   await seed.request(`/api/sessions/${p.data.sessionId}/files`, "POST", {
@@ -324,11 +318,8 @@ export const SCENARIOS = [
   );
   await page.locator(".composer textarea").press("Enter");
   await page.waitForSelector(".artifact-inline", { timeout: 30000 });
-  // 完成态 Goal 卡保留，行项打勾
-  await page.waitForSelector(".goal-card.done", { timeout: 8000 });
-  const goal = await page.locator(".goal-card").innerText();
-  assert.match(goal, /时间线/);
-  assert.match(goal, /已完成/);
+  assert.equal(await page.locator(".goal-card").count(),0);
+  assert.match(await page.locator(".artifact-inline").first().innerText(),/时间线/);
     },
   },
   {
@@ -417,7 +408,7 @@ export const SCENARIOS = [
     await page.waitForSelector(".hub-task-row", { timeout: 8000 });
     await page.locator(".hub-task-row").first().click();
     await page.waitForSelector(".artifact-inline", { timeout: 10000 });
-    await page.locator('button:has-text("打开验收视图")').first().click();
+    await page.locator('button:has-text("查看结果")').first().click();
     await page.waitForSelector(".acceptance");
     await page.locator('.review-acts button:has-text("确认通过")').click();
     await page.locator(".review-form input").nth(0).fill("医生 A");
@@ -540,7 +531,8 @@ export const SCENARIOS = [
     await seed.json("/api/patients", "POST", { name: "临床编辑患者" });
     await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "临床编辑患者" }).click();
     await page.waitForSelector(".detail-head");
-    await page.locator('.tab-row button:has-text("临床资料")').click();
+    await page.getByRole("button",{name:"诊断与病史",exact:true}).click();
+    await page.getByRole("button",{name:"核对与编辑",exact:true}).click();
     await page.waitForSelector(".clinical-panel");
     await page.locator('.clinical-panel input[placeholder*="直接填写"]').first().fill("高血压");
     await page.locator('.clinical-panel button:has-text("添加")').first().click();

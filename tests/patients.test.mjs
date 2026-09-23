@@ -389,12 +389,14 @@ test("manual digest requires consent, marks messages processed and produces a re
 
 test("draft_treatment_review produces a bounded draft artifact through the model tool loop", async (t) => {
   let round = 0;
+  let sourceId;
   const provider = {
     apiKey: "synthetic",
     model: "mock",
     async complete(messages, tools) {
       round++;
-      if (round === 1) {
+      if (round === 1) return {message:{role:"assistant",content:null,tool_calls:[{id:"read",function:{name:"read_source",arguments:JSON.stringify({sourceId,startLine:1,endLine:2})}}]},usage:{total_tokens:10}};
+      if (round === 2) {
         assert.ok(
           tools.some((tool) => tool.function.name === "draft_treatment_review"),
         );
@@ -408,6 +410,7 @@ test("draft_treatment_review produces a bounded draft artifact through the model
                 function: {
                   name: "draft_treatment_review",
                   arguments: JSON.stringify({
+                    citations:[{sourceId,startLine:1,endLine:2}],
                     summary:
                       "患者目前使用二甲双胍控制血糖，最近记录提示依从性下降。",
                     concerns: ["两周内两次空腹血糖高于目标值"],
@@ -439,12 +442,13 @@ test("draft_treatment_review produces a bounded draft artifact through the model
     },
   );
   assert.equal(file.status, 201);
+  sourceId=file.data.id;
   const run = await f.chat(patient.sessionId, "请评估治疗方案", {
     mode: "model",
     externalConsent: true,
     fileIds: [file.data.id],
   });
-  assert.equal(run.events.at(-1).type, "message.complete");
+  assert.equal(run.events.at(-1).type, "message.complete", JSON.stringify(run.events.at(-1)));
   const session = (await f.json(`/api/sessions/${patient.sessionId}`)).data;
   const artifact = session.artifacts.find((a) => a.type === "treatment_review");
   assert.ok(artifact);

@@ -276,11 +276,13 @@ export async function runTool(
     const matches = lines
       .filter((l) => terms.some((term) => l.quote.toLowerCase().includes(term)))
       .slice(0, 30);
-    return artifact("source_search", "材料检索结果", {
+    return {
+      type: "source_search",
+      readOnly: true,
       query: args.query,
       matches,
       scope: "当前会话材料；未检索外部文献",
-    });
+    };
   }
   if (name === "extract_observations") {
     const observations = [];

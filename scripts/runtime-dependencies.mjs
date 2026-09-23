@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, constants } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 export const runtimeDependencies = [
@@ -40,6 +40,8 @@ export async function bundleRuntimeDependencies(root, target) {
     await mkdir(dirname(destination), { recursive: true });
     await cp(source, destination, {
       recursive: true,
+      // Copy-on-write on supporting filesystems; normal-copy fallback elsewhere.
+      mode: constants.COPYFILE_FICLONE,
       filter: (path) => path !== join(source, "node_modules"),
     });
     const pkg = JSON.parse(

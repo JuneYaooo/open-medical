@@ -15,7 +15,7 @@ test('case delivery deduplicates DOI and saves the actual retrieved evidence',as
  configureSimilarCaseTools(registry,{materials:[]},{policy:{searchScope:'online'}});
  const perms=new PermissionEngine({profile:'standard',grants:{}}),run=(name,args)=>registry.execute(name,args,{},perms);
  await run('online_case_search',{query:'synthetic'});await run('literature_fetch',{pmid:'11'});
- const report=await run('finish_similar_case_search',{summary:'合成结果',items:['11','22','33'].map(reference=>({reference,reason:'主题相关',differences:'临床差异待核对',outcome:{text:'合成结果',quote:reference==='11'?'Original source abstract.':'invented outcome'}})),limitations:[]});
+ const report=await run('finish_similar_case_search',{summary:'合成结果',items:['11','22','33'].map(reference=>({reference,comparison:['disease','stage','treatment','medications','demographics'].map(dimension=>({dimension,current:'未取得',candidate:'未取得',currentQuote:'',candidateQuote:'',relation:'unknown',reason:'待核对'})),reason:'主题相关',differences:'临床差异待核对',outcome:{text:'合成结果',quote:reference==='11'?'Original source abstract.':'invented outcome'}})),limitations:[]});
  assert.equal(report.cases.length,2);assert.equal(report.cases[0].outcome.text,'合成结果');assert.equal(report.cases[1].outcome,undefined);assert.deepEqual(report.evidenceSummary,{candidates:2,abstracts:1,metadataOnly:1,failedSources:1});
  assert.equal(report.matches[0].evidence.text,'Original source abstract.');assert.equal(report.matches[1].evidence.text,'');
  assert.ok(artifactLines(report).includes('Candidate A'));assert.ok(artifactLines(report).some(l=>l.includes('仅题录')));

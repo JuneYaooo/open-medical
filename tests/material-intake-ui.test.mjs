@@ -40,7 +40,8 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
   assert.equal(session.files.find(f=>f.name==='scan.pdf').extraction.pageImages.length,1);
   await page.locator('nav[aria-label="最近任务"] button').first().click();
   await page.getByRole('button',{name:/材料/}).first().click();
-  await page.getByText('图片 · 已保存原图 · 可本地 OCR / 视觉读取').waitFor();
+  await page.getByRole('button',{name:'查看资料',exact:true}).click();
+ await page.getByText('图片 · 已保存原图 · 可本地 OCR / 视觉读取').waitFor();
   await page.getByText('查看原图',{exact:true}).click();
   await page.locator('img[alt="sample.png"]').waitFor();
   assert.ok(await page.locator('img[alt="sample.png"]').evaluate(img=>img.complete && img.naturalWidth>0));
@@ -48,6 +49,7 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
  await page.locator(".advanced-nav>summary").click();
   await page.locator('nav[aria-label="最近任务"] button').first().click();
   await page.getByRole('button',{name:/材料/}).first().click();
+  await page.getByRole('button',{name:'查看资料',exact:true}).click();
   await page.getByText('Word 抽取文本 · 未保存原件').waitFor();
   assert.deepEqual(errors,[]);
   mkdirSync('output/playwright',{recursive:true});

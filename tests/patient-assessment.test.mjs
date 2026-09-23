@@ -15,7 +15,7 @@ test('assessment uses focused tools, validates read citations, delivers one draf
  const provider=new DeepSeekProvider({apiKey:'synthetic',model:'test'});let n=0,sourceId;
  provider.complete=async(messages,tools)=>{
   n++;assert.ok(n<=4,'must terminate, not repeat drafting');
-  if(n===1){assert.ok(tools.length<=10);assert.ok(!tools.some(t=>t.function.name==='code_execute'));return {message:{role:'assistant',content:'正在核对',tool_calls:[tc('read_patient_brief'),tc('read_source',{sourceId,startLine:1,endLine:2})]}};}
+  if(n===1){assert.ok(tools.length<=11);assert.ok(tools.some(t=>t.function.name==='knowledge_collections'));assert.ok(!tools.some(t=>t.function.name==='code_execute'));return {message:{role:'assistant',content:'正在核对',tool_calls:[tc('read_patient_brief'),tc('read_source',{sourceId,startLine:1,endLine:2})]}};}
   if(n===2){assert.ok(messages.some(m=>m.name==='runtime_observations'));return {message:{role:'assistant',content:'',tool_calls:[tc('draft_treatment_review',{summary:'仅能核对历史方案，当前状态待确认。',concerns:['需核实目前是否仍使用'],infoGaps:['缺少近期检查'],questions:['是否已有新医嘱？'],citations:[{sourceId,startLine:1,endLine:2}]})]}};}
   assert.equal(tools.length,0);return {message:{role:'assistant',content:'## 结论\n资料不足以判断当前方案，以上为待医生复核草稿。\n\n## 依据\n方案.txt 第1–2行。'}};
  };
@@ -23,7 +23,7 @@ test('assessment uses focused tools, validates read citations, delivers one draf
  const result=await f.chat(f.session.id,'这个患者的治疗方案是否合理',{mode:'standard',externalConsent:true,fileIds:[sourceId]});
  assert.equal(result.status,200);assert.doesNotMatch(result.text,/"type":"error"/);
  const s=(await f.json(`/api/sessions/${f.session.id}`)).data;
- assert.equal(s.runs.at(-1).status,'completed');assert.equal(s.runs.at(-1).outcome,'delivered');assert.equal(s.runs.at(-1).delivery.delivered,true);assert.equal(s.runs.at(-1).policy.workflow,'patient-assessment');assert.equal(s.artifacts.length,1);assert.equal(s.artifacts[0].matches.length,1);assert.equal(n,3);
+ assert.equal(s.runs.at(-1).status,'completed');assert.equal(s.runs.at(-1).outcome,'delivered');assert.equal(s.runs.at(-1).delivery.delivered,true);assert.equal(s.runs.at(-1).policy.workflow,'patient-assessment');assert.equal(s.artifacts.length,1);assert.equal(s.artifacts[0].matches.length,1);assert.equal(n,2,'persisted terminal draft needs no extra model request');
  assert.match(s.messages.at(-1).content,/需要核对的事项/);assert.doesNotMatch(s.messages.at(-1).content,/正在核对/);
 });
 test('verified evidence survives loss of conversation; invalid or unread citations cannot deliver',async t=>{

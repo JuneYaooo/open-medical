@@ -7,7 +7,7 @@ const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
 // Structured clinical data panel for one patient: diagnoses (with ICD-10
 // helper), medications, allergies, labs and visits. Edits are local until
 // saved; export produces a de-identified JSON for research.
-export function ClinicalPanel({ detail, onChanged, onError }) {
+export function ClinicalPanel({ detail, onChanged, onError, section }) {
   const [draft, setDraft] = useState(() => normalize(detail));
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
@@ -137,7 +137,7 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
       className="detail-panel clinical-panel"
       aria-busy={saving}
     >
-      <section>
+      {(!section || section === 'diagnoses') && <section>
         <h3>诊断 {saving && <Loader2 className="spin" size={13} />}</h3>
         <ul className="clinical-rows">
           {draft.diagnoses.map((d, index) => (
@@ -191,9 +191,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             </div>
           )}
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {(!section || section === 'medications') && <section>
         <h3>过敏史</h3>
         {!draft.allergies.length && <label className="clinical-status-field">核对状态<select aria-label="过敏史核对状态" value={draft.allergyStatus} onChange={(e) => patch({ allergyStatus: e.target.value })}>
           <option value="unknown">尚未核对</option><option value="none_known">已核对：无已知过敏</option>
@@ -228,9 +228,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             <Plus size={13} /> 添加
           </button>
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {(!section || section === 'medications') && <section>
         <h3>用药列表</h3>
         <ul className="clinical-rows">
           {draft.medications.map((m, index) => (
@@ -285,9 +285,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             <Plus size={13} /> 添加
           </button>
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {(!section || section === 'labs') && <section>
         <h3>检验记录</h3>
         <ul className="clinical-rows">
           {draft.labs.slice(-12).map((l, index, visible) => {
@@ -344,9 +344,9 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             <Plus size={13} /> 添加
           </button>
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {(!section || section === 'visits') && <section>
         <h3>就诊记录</h3>
         <ul className="clinical-rows">
           {draft.visits.slice(-8).map((v, index, visible) => {
@@ -392,7 +392,7 @@ export function ClinicalPanel({ detail, onChanged, onError }) {
             <Plus size={13} /> 添加
           </button>
         </div>
-      </section>
+      </section>}
 
       <div className="clinical-actions">
         <button

@@ -1,3 +1,4 @@
+import { TaskResult, hasTaskResult } from "./task-result";
 import { SimilarCases } from "./similar-cases";
 import { ProjectDirectory, ToolDirectory, TaskDirectory } from "./work-directory";
 import { IntakeBackground } from "./intake-background";
@@ -57,17 +58,17 @@ import { consultationLookupIssue } from "./workbench/run-status";
 import { blockedText, runDerivedStatus } from "./workbench/run-status";
 import { DoctorProfilePanel } from "./doctor-profile";
 import { LiteratureView } from "./literature";
-import { KnowledgeView } from "./knowledge";
+import { KnowledgeLibraries } from "./knowledge-libraries";
 import { FollowupsView } from "./followups";
 import { CasesView } from "./cases";
 import { ResearchView } from "./research";
+import { TrialScreeningView } from "./trial-screening";
 import { DrgView } from "./drg";
 import { ClinicalRefView } from "./clinical-ref";
 import { IconButton, Badge, Modal, STATUS } from "./components";
 import { ModelSettings } from "./model-settings";
 import {
   AcceptanceView,
-  GoalCard,
   MemoryNote,
   PatientSummaryCard,
   PatientSwitcher,
@@ -199,7 +200,7 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           <PencilLine size={14} />
         </IconButton>
       </div>
-      <h3>{artifactTitle(artifact) || "未命名产物"}</h3>
+      <h3>{artifactTitle(artifact) || "未命名结果"}</h3>
       <p className="muted">
         {artifact.provenance === "local_rule" ? "本地规则整理" : "待核查草稿"} ·{" "}
         {artifact.createdAt
@@ -543,7 +544,7 @@ function App() {
     [mentionIndex, setMentionIndex] = useState(0);
   const [view, setView] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
-    return ["home", "patients", "followups", "research", "projects", "tools", "tasks"].includes(requested) ? requested : "home";
+    return ["home", "patients", "followups", "research", "projects", "tools", "tasks", "knowledge"].includes(requested) ? requested : "home";
   });
   const [displayMode, setDisplayMode] = useState("work");
   const [workspaceDisplay, setWorkspaceDisplay] = useState("work");
@@ -651,8 +652,8 @@ function App() {
     if (m.role === "user") return "本轮输入";
     const outcome = m.outcome || runOf(m.runId)?.outcome;
     if (completedCaseRun(runOf(m.runId))) return "检索结果";
-    if (outcome === "answered") return "文字回答 · 无产物";
-    if (outcome === "delivered") return "已交付成果";
+    if (outcome === "answered") return "";
+    if (outcome === "delivered") return "";
     // N3:执行类未完成/未验证不冒充交付,也不降格为文字回答。
     if (outcome === "delivery_failed") return consultationLookupIssue(runOf(m.runId)) ? "回答依据不完整" : "交付未完成";
     if (outcome === "unverified") return "结果未验证";
@@ -1219,6 +1220,12 @@ function App() {
         : "Open Agent · 通用工作台";
   }, [config, medical]);
   useEffect(() => { if(inspector) setDisplayMode(mode => mode === "chat" ? "work" : mode); }, [inspector]);
+  useEffect(() => {
+    if (!inspector) return;
+    const close = (event) => { if (event.key === "Escape") setInspector(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [inspector]);
   const effectiveConsentRequired = modelEnabled && accessMode === "each";
   const fileContent = citation
     ? session?.files.find((f) => f.id === citation.sourceId)?.text ||
@@ -1335,7 +1342,7 @@ function App() {
           {medical && <>
             <p className="business-nav-label">医疗业务</p>
             <nav className="business-nav" aria-label="主要业务">
-              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "科研", BookOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={20} />{label}</button>)}
+              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "临床试验", BookOpen], ["knowledge", "知识库", FolderOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={20} />{label}</button>)}
             </nav>
           </>}
           <p className="business-nav-label">通用工作</p>
@@ -1550,15 +1557,15 @@ function App() {
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
           ) : view === "knowledge" ? (
-            <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />
+            <KnowledgeLibraries onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
           ) : view === "followups" && medical ? (
-            <FollowupsView onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
+            <FollowupsView onOpenTask={openTask} onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
           ) : view === "cases" ? (
             <CasesView />
           ) : view === "research" && medical ? (
-            <ResearchView />
+            <TrialScreeningView onOpenTask={openTask} onOpenPatient={id=>openPatient({id})} />
           ) : view === "drg" ? (
             <DrgView />
           ) : view !== "workbench" ? (
@@ -1602,7 +1609,7 @@ function App() {
             />
             )
           ) : (
-            <div className="shell">
+            <div className={`shell ${inspector ? "with-inspector" : ""}`}>
               <main id="main" className="conversation">
                 <div className="conversation-head">
                   <IconButton
@@ -1667,12 +1674,15 @@ function App() {
                       </IconButton>
                     </div>
                   )}
-                  <IconButton
-                    title="显示材料与产物"
-                    onClick={() => {setInspector(!inspector);setDisplayMode(inspector?"chat":"work");}}
+                  <button
+                    className="secondary inspector-toggle"
+                    aria-expanded={inspector}
+                    aria-controls="task-reference-panel"
+                    onClick={() => setInspector(!inspector)}
                   >
-                    <FolderOpen size={18} />
-                  </IconButton>
+                    <FolderOpen size={16} />
+                    {inspector ? "收起资料" : "查看资料"}
+                  </button>
                 </div>
                 {session && (
                   <div className="task-context-bar">
@@ -1844,11 +1854,6 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {session?.patientId && session.runs.length > 1 && (
-                      <button className="text-btn" onClick={() => setTab("events")}>
-                        查看历史任务（{session.runs.length - 1}）
-                      </button>
-                    )}
                     {session?.messages.filter((m) => !session.patientId || !session.runs.length || m.runId === session.runs.at(-1)?.id).map((m) => (
                       <article
                         key={m.id}
@@ -1866,10 +1871,10 @@ function App() {
                             {m.role === "user" ? (
                               m.content
                             ) : (
-                              runOf(m.runId)?.artifacts?.some(a => a.type === "similar_cases") ? <SimilarCases key={m.runId} onOpen={() => setAcceptId(runOf(m.runId).artifacts.find(a => a.type === "similar_cases").id)} artifact={runOf(m.runId).artifacts.find(a => a.type === "similar_cases")} onRefresh={busy ? undefined : () => send(null, {message:"请重新检索这个患者的相似病例，并逐项对照疾病、阶段、治疗、用药和年龄性别，保存有原文依据的相似度结果。"})} /> : <RichMessage text={m.content} />
+                              runOf(m.runId)?.artifacts?.some(a => a.type === "similar_cases") ? <SimilarCases key={m.runId} onOpen={() => setAcceptId(runOf(m.runId).artifacts.find(a => a.type === "similar_cases").id)} artifact={runOf(m.runId).artifacts.find(a => a.type === "similar_cases")} onRefresh={busy ? undefined : () => send(null, {message:"请重新检索这个患者的相似病例，并逐项对照疾病、阶段、治疗、用药和年龄性别，保存有原文依据的相似度结果。"})} /> : hasTaskResult(runOf(m.runId)) ? <><TaskResult key={m.runId} run={runOf(m.runId)}/><details className="task-result"><summary>查看文字说明</summary><RichMessage text={m.content}/></details></> : <RichMessage text={m.content} />
                             )}
                           </div>
-                          {m.role !== "user" && !completedCaseRun(runOf(m.runId)) &&
+                          {m.role !== "user" && ["delivery_failed","unverified"].includes(m.outcome || runOf(m.runId)?.outcome) &&
                             (m.outcome || runOf(m.runId)?.outcome) && (
                               <OutcomeCard
                                 outcome={m.outcome || runOf(m.runId)?.outcome}
@@ -1888,21 +1893,6 @@ function App() {
                         </div>
                       </article>
                     ))}
-                    {(busy || !completedCaseRun(session?.runs.at(-1))) && (busy || session?.artifacts.length > 0) &&
-                      (/时间线|检验|用药|病历|文书|整理|总结/.test(
-                        session?.messages.findLast((m) => m.role === "user")?.content || "",
-                      ) ||
-                        busy ||
-                        session?.artifacts.length > 0) && (
-                        <GoalCard
-                          message={session?.messages.findLast((m) => m.role === "user")?.content || ""}
-                          running={busy}
-                          runStatus={session?.runs.at(-1)?.status}
-                          artifacts={session?.runs.at(-1)?.artifacts || []}
-                          round={session?.runs.at(-1)?.roundsUsed || 1}
-                          onStop={stop}
-                        />
-                      )}
                     {busy && (
                       <article className="message">
                         <div className="message-avatar">
@@ -1937,7 +1927,7 @@ function App() {
                     {!busy &&
                       (session?.artifacts.length || 0) > 0 &&
                       session.artifacts
-                        .filter(a => session.runs.at(-1)?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun(session.runs.at(-1)) && session.messages.some(m => m.role === "assistant" && m.runId === session.runs.at(-1).id)))
+                        .filter(a => !(a.type === "treatment_review" && session.messages.some(m=>m.role==="assistant" && m.runId===session.runs.at(-1)?.id)) && session.runs.at(-1)?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun(session.runs.at(-1)) && session.messages.some(m => m.role === "assistant" && m.runId === session.runs.at(-1).id)))
                         .slice(-3)
                         .reverse()
                         .map((a) => (
@@ -1958,7 +1948,7 @@ function App() {
                                   setAcceptId(a.id);
                                 }}
                               >
-                                {a.type === "similar_cases" ? "查看病例详情" : "打开验收视图"}
+                                {a.type === "similar_cases" ? "查看病例详情" : "查看结果"}
                               </button>
                             </div>
                           </div>
@@ -2282,10 +2272,9 @@ function App() {
                 </div>
                 )}
               </main>
-              <aside className={`inspector ${inspector ? "open" : ""}`}>
+              <aside id="task-reference-panel" aria-label="资料与文件" className={`inspector ${inspector ? "open" : ""}`}>
                 <div className="inspector-head">
-                  <b>材料与成果</b>
-                  <span>{session?.files.length || 0} 份材料</span>
+                  <b>资料与文件</b>
                   <IconButton
                     title="关闭材料面板"
                     onClick={() => setInspector(false)}
@@ -2295,10 +2284,8 @@ function App() {
                 </div>
                 <div className="panel-tabs" role="tablist">
                   {[
-                    ["materials", "材料"],
-                    ["knowledge", "知识"],
-                    ["results", "产物"],
-                    ["events", "执行记录"],
+                    ["materials", "患者资料"],
+                    ["results", "已保存结果"],
                   ].map(([key, label]) => (
                     <button
                       key={key}
@@ -2309,10 +2296,7 @@ function App() {
                         key === "events" ? session && openAudit() : setTab(key)
                       }
                     >
-                      {label}
-                      {key === "results" && session?.artifacts.length > 0 && (
-                        <span>{session.artifacts.length}</span>
-                      )}
+                      {key === "materials" && !session?.patientId ? "任务资料" : label}
                     </button>
                   ))}
                 </div>
@@ -2607,16 +2591,17 @@ function App() {
                   )}
                   {tab === "results" && (
                     <>
+                      <p className="muted">{session?.patientId ? "这位患者历次任务保存的结果。本次回答已在左侧展示。" : "这个任务保存的结果文件。"}</p>
                       {session?.artifacts.length > 1 && (
                         <select
                           className="artifact-select"
-                          aria-label="选择产物"
+                          aria-label="选择已保存结果"
                           value={selectedArtifact?.id}
                           onChange={(e) => setArtifactId(e.target.value)}
                         >
                           {session.artifacts.map((a) => (
                             <option key={a.id} value={a.id}>
-                              {artifactTitle(a) || "未命名产物"} · {STATUS[a.status]}
+                              {artifactTitle(a) || "未命名结果"} · {STATUS[a.status]}
                             </option>
                           ))}
                         </select>
@@ -2707,11 +2692,11 @@ function App() {
                     </>
                   )}
                 </div>
-                <div className="inspector-footer">
-                  <Activity size={13} />
-                  <span>材料与复核记录保存在本机</span>
-                  <span className="version">0.3</span>
-                </div>
+                <details className="inspector-more">
+                  <summary>更多工具</summary>
+                  <button className="text-button" aria-pressed={tab === "knowledge"} onClick={() => setTab("knowledge")}>查询知识库</button>
+                  <button className="text-button" aria-pressed={tab === "events"} onClick={() => session && openAudit()}>运行记录与历史任务</button>
+                </details>
               </aside>
             </div>
           )}
@@ -2776,6 +2761,7 @@ function App() {
                   </div>
                   {toolPanel === "followups" && (
                     <FollowupsView
+                      onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }}
                       onOpenPatient={(id) => {
                         setToolPanel(null);
                         openPatient({ id });
@@ -2784,7 +2770,7 @@ function App() {
                   )}
                   {toolPanel === "cases" && <CasesView />}
                   {toolPanel === "clinical-ref" && <ClinicalRefView />}
-                  {toolPanel === "knowledge" && <KnowledgeView onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />}
+                  {toolPanel === "knowledge" && <KnowledgeLibraries onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />}
                   {toolPanel === "literature" && (
                     <LiteratureView
                       onOpenTask={async (id, options) => {

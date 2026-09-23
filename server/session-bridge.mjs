@@ -1,3 +1,5 @@
+import {taskPresentation} from '../shared/task-presentation.mjs';
+import {requestsMedicalDeliverable} from '../shared/medical-delivery.mjs';
 import { collectWorkspaceDelivery } from "./core/workspace-delivery.mjs";
 import {similarCaseQuestion} from './medical/similar-case-workflow.mjs';
 import { assessmentQuestion } from "./medical/assessment-tools.mjs";
@@ -363,7 +365,8 @@ export class SessionBridge {
           rounds: run.roundsUsed || run.usage?.rounds || 0,
         },
         fileIds: run.fileIds || [],
-        artifacts: run.artifacts || [],
+        artifacts: (run.artifacts || []).filter(a => a.type !== "source_search"),
+        displayResults: run.displayResults || [],
         draftsArchived: run.draftsArchived === true,
         children: run.children || [],
         events: run.events || recentEvents.filter((event) => event.run_id === run.id).map((event) => ({ ...event, seq: event.id })),
@@ -572,14 +575,15 @@ export class SessionBridge {
     const similarCases = Boolean(w.patientId && policy.workflow !== "patient-intake" && similarCaseQuestion(message));
     if (assessment) policy.workflow = "patient-assessment";
     if (similarCases) { policy.workflow = "similar-case-search"; policy.intent = "similar_cases"; policy.searchScope = /(?:只|仅).{0,6}本地|不要.{0,3}(?:联网|网上)/.test(message) ? "local" : "online"; }
-    const focused = assessment || similarCases;
+    policy.presentation = taskPresentation(message);
+    const focused = assessment || similarCases || ["diagnostic", "literature", "calculator"].includes(policy.presentation);
     const fileIds = this.selectMaterials(w, body.fileIds);
     const sources = this.buildSources(w, message, fileIds);
     const handle = this.service.prepare(id, {
       revision: body.sessionRevision ?? body.revision ?? w.revision,
       message,
       externalConsent: true,
-      completion: focused ? {kind:"answer"} : body.completion,
+      completion: body.completion ?? (focused ? {kind:"answer"} : requestsMedicalDeliverable(message) ? {kind:"execution"} : undefined),
       requestId: body.requestId,
       thinking: body.thinking,
       skills: body.skills,
