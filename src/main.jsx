@@ -1,3 +1,5 @@
+import { SimilarCases } from "./similar-cases";
+import { ProjectDirectory, ToolDirectory, TaskDirectory } from "./work-directory";
 import { IntakeBackground } from "./intake-background";
 import { MaterialDetails } from "./material-details";
 import { patientOptionLabel } from "./patient-labels";
@@ -43,6 +45,7 @@ import {
 import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import "./style.css";
 import "./business-layout.css";
+import "./v6-layout.css";
 import { importMaterial } from "./import-material";
 import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
@@ -270,13 +273,16 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           <p className="muted">尚未检索或评估外部文献。</p>
         </>
       )}
-      {artifact.matches?.map((match, i) => (
+      {artifact.type !== "similar_cases" && artifact.matches?.map((match, i) => (
         <blockquote key={i}>
           <p>{match.quote}</p>
-          <button className="source-link" onClick={() => onSource(match)}>
-            {match.sourceName}
-            {match.page ? ` · P${match.page}` : ""} · L{match.line}
-          </button>
+          {/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(match.url || "") ?
+            <a className="source-link" href={match.url} target="_blank" rel="noreferrer">{match.sourceName} · PubMed</a> :
+            artifact.type === "similar_cases" ? <span>{match.sourceName} · 本地记录</span> :
+            <button className="source-link" onClick={() => onSource(match)}>{match.sourceName}{match.line ? ` · L${match.line}` : ""}</button>}
+          {match.scope && <small>{match.scope}</small>}
+          {match.evidence?.text && <details><summary>查看检索时保存的{match.evidence.type === "abstract" ? "摘要" : "记录"}</summary><p>{match.evidence.text}</p></details>}
+
         </blockquote>
       ))}
       {artifact.observations?.map((observation, i) => (
@@ -296,10 +302,11 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           <span>未进行临床解释</span>
         </div>
       ))}
-      {!artifact.events &&
+      {artifact.type === "similar_cases" && <SimilarCases key={artifact.id} artifact={artifact} />}
+      {(artifact.concerns || (!artifact.events &&
         !artifact.pico &&
         !artifact.matches &&
-        !artifact.observations && (
+        !artifact.observations)) && (
           <ul className="checklist">
             {artifactLines(artifact).map((line, i) => (
               <li key={i}>
@@ -326,12 +333,12 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           ))}
         </ul>
       )}
-      {artifact.limitations?.map((x) => (
+      {artifact.type !== "similar_cases" && artifact.limitations?.map((x) => (
         <p className="boundary" key={x}>
           {x}
         </p>
       ))}
-      {artifact.review && (
+      {artifact.type !== "similar_cases" && artifact.review && (
         <div className="review-note">
           <b>复核记录 · {artifact.review.reviewer}</b>
           <p>{artifact.review.note}</p>
@@ -536,10 +543,13 @@ function App() {
     [mentionIndex, setMentionIndex] = useState(0);
   const [view, setView] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
-    return ["home", "patients", "followups", "research"].includes(requested) ? requested : "patients";
+    return ["home", "patients", "followups", "research", "projects", "tools", "tasks"].includes(requested) ? requested : "home";
   });
+  const [displayMode, setDisplayMode] = useState("work");
+  const [workspaceDisplay, setWorkspaceDisplay] = useState("work");
   const [largeText, setLargeText] = useState(() => localStorage.getItem("om.largeText") === "true");
   const [workspaceTarget, setWorkspaceTarget] = useState(null);
+  const [projectTool, setProjectTool] = useState("");
   const [activeWsId, setActiveWsId] = useState("");
   const [wsList, setWsList] = useState([]);
   const [patientRoute, setPatientRoute] = useState({});
@@ -604,7 +614,7 @@ function App() {
               .toLowerCase()
               .includes(mention.query.toLowerCase()),
         )
-        .slice(0, 8)
+        .slice(0, 3)
     : [];
   const pickSkill = (skill) => {
     setDraft((d) => d.replace(/@[^\s@]{0,20}$/, ""));
@@ -636,9 +646,11 @@ function App() {
   const canSteer =
     busy && session?.kind === "session" && Boolean(persistedRunning?.id);
   const runOf = (runId) => session?.runs?.find((r) => r.id === runId);
+  const completedCaseRun = (r) => r?.status === "completed" && (!r.outcome || r.outcome === "delivered") && r.artifacts?.some(a => a.type === "similar_cases");
   const messageMeta = (m) => {
     if (m.role === "user") return "本轮输入";
     const outcome = m.outcome || runOf(m.runId)?.outcome;
+    if (completedCaseRun(runOf(m.runId))) return "检索结果";
     if (outcome === "answered") return "文字回答 · 无产物";
     if (outcome === "delivered") return "已交付成果";
     // N3:执行类未完成/未验证不冒充交付,也不降格为文字回答。
@@ -831,6 +843,55 @@ function App() {
     await refreshList();
     return data;
   };
+  const renderIncompleteRun = (r, inHistory = false) => (
+                        <details className="incomplete-run" key={r.id} open={!inHistory}>
+                          <summary><Badge status={r.status} /> {inHistory ? "历史任务" : "本次任务未完成"}：{session.messages.find(m => m.role === "user" && m.runId === r.id)?.content?.slice(0, 60) || "之前的执行"}</summary>
+                          {r.derivedStatus === "blocked" && (
+                            <span className="error-text">
+                              受阻：{blockedText(r.waitingReason)}
+                            </span>
+                          )}
+                          <p>{r.error}</p>
+                          <button
+                            className="secondary"
+                            disabled={busy || loading}
+                            onClick={() => {
+                              const original = session.messages.find(
+                                (m) => m.runId === r.id && m.role === "user",
+                              );
+                              if (original) {
+                                setDraft(original.content);
+                                setConsent(false);
+                                setFileSelection((prev) => ({
+                                  ...prev,
+                                  [activeId]: r.fileIds.filter((id) =>
+                                    session.files.some((f) => f.id === id),
+                                  ),
+                                }));
+                                inputRef.current?.focus();
+                              }
+                            }}
+                          >
+                            载入原任务重试
+                          </button>
+                          {r.artifacts?.some(a => a.status === "draft") && (
+                            <button className="secondary" disabled={busy || loading} onClick={async () => {
+                              try {
+                                await api(`/api/sessions/${activeId}/runs/${r.id}/archive-drafts`, {method:"POST",body:JSON.stringify({archived:!r.draftsArchived})});
+                                await updateSession();
+                              } catch (err) { setError(err.message); }
+                            }}>
+                              {r.draftsArchived ? "恢复这次执行的草稿" : "收起这次未完成执行的草稿"}
+                            </button>
+                          )}
+                          {r.partial && (
+                            <details>
+                              <summary>查看保留的部分内容</summary>
+                              <RichMessage text={r.partial} />
+                            </details>
+                          )}
+                        </details>
+  );
   async function send(e, override = {}, refreshedSession, retryOnConflict = false) {
     e?.preventDefault();
     const text = override.message || draft.trim();
@@ -1082,8 +1143,10 @@ function App() {
   };
   const openWorkspaces = (target = {}) => {
     resetHomePending();
-    setWorkspaceTarget(target);
+    setWorkspaceTarget({...target, panel: target.panel || (projectTool === "browser" ? "browser" : projectTool ? "settings" : "files")});
+    setProjectTool("");
     setActiveWsId(target.id || "");
+    setSidebar(false);
     setView("workspaces");
   };
   const openPatient = (route = {}) => {
@@ -1155,13 +1218,14 @@ function App() {
         ? "Open Medical · 医疗工作台"
         : "Open Agent · 通用工作台";
   }, [config, medical]);
+  useEffect(() => { if(inspector) setDisplayMode(mode => mode === "chat" ? "work" : mode); }, [inspector]);
   const effectiveConsentRequired = modelEnabled && accessMode === "each";
   const fileContent = citation
     ? session?.files.find((f) => f.id === citation.sourceId)?.text ||
       session?.messages.find((m) => m.id === citation.sourceId)?.content
     : null;
   return (
-    <div className={`agent-app ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
+    <div className={`agent-app v6-shell mode-${view === "workspaces" ? workspaceDisplay : displayMode} ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
       {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
       <a href="#main" className="skip-link">
         跳到工作区
@@ -1186,6 +1250,10 @@ function App() {
           </span>
         </div>
         <div className="top-actions">
+          <div className="display-modes" role="group" aria-label="工作区显示方式">
+            {[["work", "工作区"], ["split", "AI 半屏"], ["chat", "AI 全屏"]].map(([id,label]) => <button key={id} disabled={!["workbench","workspaces"].includes(view)} title={["workbench","workspaces"].includes(view)?label:"打开任务或项目后切换显示方式"} aria-pressed={(view==="workspaces"?workspaceDisplay:displayMode)===id} onClick={()=>{if(view==="workspaces")setWorkspaceDisplay(id);else {setDisplayMode(id);setInspector(id!=="chat");}}}>{label}</button>)}
+          </div>
+          <button className="text-size-control" aria-label={largeText ? "Aa · 恢复标准字号" : "Aa · 大字模式"} aria-pressed={largeText} onClick={()=>{setLargeText(!largeText);localStorage.setItem("om.largeText",String(!largeText));}}>Aa <span>{largeText?"标准字号":"大字模式"}</span></button>
           {session && (
             <div className="top-meters" role="status" aria-label="会话用量指标">
               <span
@@ -1263,28 +1331,20 @@ function App() {
           />
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
+          <button className="new-session" onClick={()=>{if(medical){setHomeKey(v=>v+1);navigate("home");}else openWorkspaces({create:true});}}><Plus size={17}/>新建任务</button>
           {medical && <>
-            <p className="business-nav-label">医生工作空间</p>
+            <p className="business-nav-label">医疗业务</p>
             <nav className="business-nav" aria-label="主要业务">
-              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "科研", BookOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={21} />{label}</button>)}
+              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "科研", BookOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={20} />{label}</button>)}
             </nav>
-            <button className="business-agent-link" onClick={() => { setHomeKey(v => v + 1); navigate("home"); }}><MessageSquare size={18} />AI 工作台</button>
           </>}
-          <details className="advanced-nav" open={!medical || ["home", "workbench", "workspaces", "review"].includes(view)}>
-            <summary>任务、项目与工具</summary>
-          <button
-            className="new-session"
-            onClick={() => {
-              // 通用模式的新建入口直达项目工作区;医疗模式回医疗首页。
-              if (medical) {
-                setHomeKey((value) => value + 1);
-                navigate("home");
-              } else openWorkspaces({ create: true });
-            }}
-          >
-            <Plus size={17} />
-            新建任务
-          </button>
+          <p className="business-nav-label">通用工作</p>
+          <nav className="business-nav" aria-label="通用工作">
+            {[["home","任务",MessageSquare],["projects","项目",FolderOpen],["tools","工具",Settings2]].map(([id,label,Icon])=>{const active=id==="home"?["home","tasks","workbench","review"].includes(view):id==="projects"?["projects","workspaces"].includes(view):view==="tools";return <button key={id} className={active?"active":""} aria-current={active?"page":undefined} onClick={()=>{setProjectTool("");navigate(!medical&&id==="home"?"projects":id);}}><Icon size={20}/>{label}</button>;})}
+          </nav>
+          {wsList.some(w=>w.pinned&&!w.archived)&&<nav className="pinned-projects" aria-label="固定项目"><p className="business-nav-label">固定项目</p>{wsList.filter(w=>w.pinned&&!w.archived).slice(0,3).map(w=><button key={w.id} onClick={()=>openWorkspaces({id:w.id})}><FolderOpen size={16}/><span>{w.title}</span></button>)}</nav>}
+          <details className="advanced-nav">
+            <summary>最近使用与快捷入口</summary>
           {medical && (
             <label className="search">
               <Search size={14} />
@@ -1309,7 +1369,7 @@ function App() {
             {wsList
               .filter((item) => !item.archived)
               .sort((a, b) => Number(b.pinned) - Number(a.pinned))
-              .slice(0, 8)
+              .slice(0, 3)
               .map((item) => (
                 <button
                   className={`session ${
@@ -1361,7 +1421,7 @@ function App() {
                       !query ||
                       item.title.toLowerCase().includes(query.toLowerCase()),
                   )
-                  .slice(0, 12)
+                  .slice(0, 3)
                   .map((item) => (
                     <button
                       className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
@@ -1399,7 +1459,7 @@ function App() {
                 </button>
               </p>
               <nav className="sessions" aria-label="患者">
-                {patientsList.slice(0, 8).map((p) => (
+                {patientsList.slice(0, 3).map((p) => (
                   <button
                     key={p.id}
                     className={`session ${currentPatientId === p.id ? "active" : ""}`}
@@ -1455,13 +1515,16 @@ function App() {
             </>
           )}
           </details>
-          {medical && <div className="business-preferences"><button aria-pressed={largeText} onClick={() => { setLargeText(!largeText); localStorage.setItem("om.largeText", String(!largeText)); }}>Aa · {largeText ? "恢复标准字号" : "大字模式"}</button><button onClick={() => setModal("settings")}>设置与连接</button></div>}
+          <div className="business-preferences"><button onClick={() => setModal("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
         <div className="product-content">
-          {view === "workspaces" ? (
+          {view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={()=>{setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "tasks" && medical ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces} onNew={()=>{setHomeKey(v=>v+1);navigate("home");}}/> : view === "workspaces" ? (
             <WorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}
+              initialPanel={workspaceTarget?.panel || "files"}
+              displayMode={workspaceDisplay}
+              onDisplayModeChange={setWorkspaceDisplay}
               initialWorkspaceId={workspaceTarget?.id || ""}
               initialCreate={Boolean(workspaceTarget?.create)}
               initialPrompt={workspaceTarget?.prompt || ""}
@@ -1606,7 +1669,7 @@ function App() {
                   )}
                   <IconButton
                     title="显示材料与产物"
-                    onClick={() => setInspector(!inspector)}
+                    onClick={() => {setInspector(!inspector);setDisplayMode(inspector?"chat":"work");}}
                   >
                     <FolderOpen size={18} />
                   </IconButton>
@@ -1781,7 +1844,12 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {session?.messages.map((m) => (
+                    {session?.patientId && session.runs.length > 1 && (
+                      <button className="text-btn" onClick={() => setTab("events")}>
+                        查看历史任务（{session.runs.length - 1}）
+                      </button>
+                    )}
+                    {session?.messages.filter((m) => !session.patientId || !session.runs.length || m.runId === session.runs.at(-1)?.id).map((m) => (
                       <article
                         key={m.id}
                         className={`message ${m.role === "user" ? "user-message" : ""}`}
@@ -1798,10 +1866,10 @@ function App() {
                             {m.role === "user" ? (
                               m.content
                             ) : (
-                              <RichMessage text={m.content} />
+                              runOf(m.runId)?.artifacts?.some(a => a.type === "similar_cases") ? <SimilarCases key={m.runId} onOpen={() => setAcceptId(runOf(m.runId).artifacts.find(a => a.type === "similar_cases").id)} artifact={runOf(m.runId).artifacts.find(a => a.type === "similar_cases")} onRefresh={busy ? undefined : () => send(null, {message:"请重新检索这个患者的相似病例，并逐项对照疾病、阶段、治疗、用药和年龄性别，保存有原文依据的相似度结果。"})} /> : <RichMessage text={m.content} />
                             )}
                           </div>
-                          {m.role !== "user" &&
+                          {m.role !== "user" && !completedCaseRun(runOf(m.runId)) &&
                             (m.outcome || runOf(m.runId)?.outcome) && (
                               <OutcomeCard
                                 outcome={m.outcome || runOf(m.runId)?.outcome}
@@ -1820,7 +1888,7 @@ function App() {
                         </div>
                       </article>
                     ))}
-                    {(busy || session?.artifacts.length > 0) &&
+                    {(busy || !completedCaseRun(session?.runs.at(-1))) && (busy || session?.artifacts.length > 0) &&
                       (/时间线|检验|用药|病历|文书|整理|总结/.test(
                         session?.messages.findLast((m) => m.role === "user")?.content || "",
                       ) ||
@@ -1829,8 +1897,9 @@ function App() {
                         <GoalCard
                           message={session?.messages.findLast((m) => m.role === "user")?.content || ""}
                           running={busy}
-                          artifacts={session?.artifacts || []}
-                          round={session?.runs.length || 1}
+                          runStatus={session?.runs.at(-1)?.status}
+                          artifacts={session?.runs.at(-1)?.artifacts || []}
+                          round={session?.runs.at(-1)?.roundsUsed || 1}
                           onStop={stop}
                         />
                       )}
@@ -1845,7 +1914,7 @@ function App() {
                             pendingCount={0}
                           />
                           <StepsFlow
-                            events={activeRun?.events || []}
+                            events={activeRun?.busy ? activeRun.events || [] : persistedRunning?.events || []}
                             running={busy}
                             fallbackText={
                               persistedRunning &&
@@ -1855,14 +1924,12 @@ function App() {
                             }
                           />
                           {(activeRun?.partial || persistedRunning?.partial) && (
-                            <div className="message-content streaming">
-                              <RichMessage
-                                text={
-                                  activeRun?.partial ||
-                                  persistedRunning?.partial
-                                }
-                              />
-                            </div>
+                            ["patient-assessment", "similar-case-search"].includes(persistedRunning?.policy?.workflow) ? (
+                              <details className="message-content streaming execution-notes">
+                                <summary>查看执行过程（非最终结论）</summary>
+                                <RichMessage text={activeRun?.partial || persistedRunning?.partial} />
+                              </details>
+                            ) : <div className="message-content streaming"><RichMessage text={activeRun?.partial || persistedRunning?.partial} /></div>
                           )}
                         </div>
                       </article>
@@ -1870,6 +1937,7 @@ function App() {
                     {!busy &&
                       (session?.artifacts.length || 0) > 0 &&
                       session.artifacts
+                        .filter(a => session.runs.at(-1)?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun(session.runs.at(-1)) && session.messages.some(m => m.role === "assistant" && m.runId === session.runs.at(-1).id)))
                         .slice(-3)
                         .reverse()
                         .map((a) => (
@@ -1890,56 +1958,14 @@ function App() {
                                   setAcceptId(a.id);
                                 }}
                               >
-                                打开验收视图
+                                {a.type === "similar_cases" ? "查看病例详情" : "打开验收视图"}
                               </button>
                             </div>
                           </div>
                         ))}
-                    {session?.runs
-                      .filter((r) =>
-                        ["failed", "cancelled", "interrupted"].includes(
-                          r.status,
-                        ),
-                      )
-                      .map((r) => (
-                        <div className="incomplete-run" key={r.id}>
-                          <Badge status={r.status} />
-                          {r.derivedStatus === "blocked" && (
-                            <span className="error-text">
-                              受阻：{blockedText(r.waitingReason)}
-                            </span>
-                          )}
-                          <p>{r.error}</p>
-                          <button
-                            className="secondary"
-                            disabled={busy || loading}
-                            onClick={() => {
-                              const original = session.messages.find(
-                                (m) => m.runId === r.id && m.role === "user",
-                              );
-                              if (original) {
-                                setDraft(original.content);
-                                setConsent(false);
-                                setFileSelection((prev) => ({
-                                  ...prev,
-                                  [activeId]: r.fileIds.filter((id) =>
-                                    session.files.some((f) => f.id === id),
-                                  ),
-                                }));
-                                inputRef.current?.focus();
-                              }
-                            }}
-                          >
-                            载入原任务重试
-                          </button>
-                          {r.partial && (
-                            <details>
-                              <summary>查看保留的部分内容</summary>
-                              <p>{r.partial}</p>
-                            </details>
-                          )}
-                        </div>
-                      ))}
+                    {!busy && session?.runs.slice(-1)
+                      .filter(r => ["failed", "cancelled", "interrupted"].includes(r.status))
+                      .map(r => renderIncompleteRun(r))}
                     <div ref={endRef} />
                   </div>
                 )}
@@ -2635,6 +2661,17 @@ function App() {
                               {INTENTS[run.policy?.intent] || "医疗任务"} ·{" "}
                               {run.mode === "local" ? "本地整理" : "Agent 执行"}
                             </p>
+                            <p>{session.messages.find(m => m.role === "user" && m.runId === run.id)?.content}</p>
+                            <details className="run-conversation">
+                              <summary>查看这次任务的对话</summary>
+                              {session.messages.filter(m => m.runId === run.id).map((m, index) => (
+                                <article key={m.id || index} className="history-message">
+                                  <b>{m.role === "user" ? "你的提问" : "医疗工作助理"}</b>
+                                  <RichMessage text={m.content} />
+                                </article>
+                              ))}
+                            </details>
+                            {["failed", "cancelled", "interrupted"].includes(run.status) && renderIncompleteRun(run, true)}
                             {(run.children || []).map((child) => (
                               <div className="child-run" key={child.id}>
                                 <span>{child.name}</span>

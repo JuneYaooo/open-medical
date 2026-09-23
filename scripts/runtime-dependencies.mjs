@@ -4,6 +4,9 @@ import { dirname, join, relative } from "node:path";
 
 export const runtimeDependencies = [
   "ws",
+  "wecom",
+  "@wecom/crypto",
+  "fast-xml-parser",
   "js-yaml",
   "node-pty",
   "@modelcontextprotocol/sdk",

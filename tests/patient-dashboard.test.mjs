@@ -39,6 +39,8 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   await page.locator('.patient-card').filter({hasText:'资料面板验收'}).click();
   const panel=page.getByRole('region',{name:'患者资料面板'});
   await panel.getByRole('heading',{name:'患者资料总览'}).waitFor();
+  assert.doesNotMatch(await panel.locator(".chart-history").innerText(),/病史摘要：合成验收资料/);
+  await panel.getByText("资料备注与待核对信息",{exact:true}).click();
   assert.match(await panel.innerText(),/病史摘要：合成验收资料/);
   await panel.getByRole('img',{name:'验收指标 U/L 检验趋势，2 次记录'}).waitFor();
   const table=panel.getByRole('table');assert.match(await table.innerText(),/0/);

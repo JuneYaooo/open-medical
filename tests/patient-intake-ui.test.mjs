@@ -20,7 +20,7 @@ test('upload-first intake automatically runs, allows natural-language correction
     const batch=readBatch(messages); if(batch) return batch;
     if(messages.filter(m=>m.role==='tool').some(m=>m.name==='patient_create_propose' || m.content.includes('提案已创建'))) return {message:{role:'assistant',content:'资料已整理，请核对建档草稿。'}};
     turns++;
-    return {message:{role:'assistant',content:'',tool_calls:[{id:`intake-${turns}`,type:'function',function:{name:'patient_create_propose',arguments:JSON.stringify({name:turns===1?'自动建档样本':'纠正后样本',gender:'male',summary:'从上传资料整理',diagnoses:[{name:'合成诊断',source:'history.txt 第1行'}],labs:[{item:'合成检验',value:12,unit:'g/L',date:'2026-09-20',source:'history.txt 第2行'}]})}}]}};
+    return {message:{role:'assistant',content:'',tool_calls:[{id:`intake-${turns}`,type:'function',function:{name:'patient_create_propose',arguments:JSON.stringify({name:turns===1?'自动建档样本':'纠正后样本',gender:'male',summary:'从上传资料整理',clinicalSummary:{text:'2026-09-20就诊记录有合成诊断与合成检验。',source:'history.txt 第1-2行'},note:'合成核对备注：报告编号待核对',diagnoses:[{name:'合成诊断',source:'history.txt 第1行'}],labs:[{item:'合成检验',value:12,unit:'g/L',date:'2026-09-20',source:'history.txt 第2行'}]})}}]}};
   };
   const f=await fixture(t,{provider});
   const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
@@ -34,6 +34,7 @@ test('upload-first intake automatically runs, allows natural-language correction
   assert.equal(await dialog.getByRole('textbox').count(),0);
   await dialog.locator('input[type=file]').setInputFiles({name:'history.txt',mimeType:'text/plain',buffer:Buffer.from('自动建档样本 男 合成诊断\n合成检验 12 g/L 2026-09-20')});
   await dialog.getByRole('button',{name:'确认建档',exact:true}).waitFor({timeout:30000});
+  await dialog.getByRole('heading',{name:'病史摘要',exact:true}).waitFor();
   assert.equal((await f.json('/api/patients')).data.patients.length,0);
   await dialog.getByRole('textbox').fill('姓名更正为纠正后样本');
   await dialog.getByRole('button',{name:'按补充内容重新整理'}).click();
@@ -41,6 +42,11 @@ test('upload-first intake automatically runs, allows natural-language correction
   await dialog.getByRole('button',{name:'确认建档',exact:true}).click();
   await dialog.waitFor({state:'hidden'});
   await page.getByRole('region',{name:'患者资料面板'}).getByRole('heading',{name:'患者资料总览'}).waitFor();
+  const history=page.getByRole('article',{name:'病程概览'});
+  assert.match(await history.innerText(),/2026-09-20就诊记录/);
+  assert.doesNotMatch(await history.innerText(),/合成核对备注/);
+  await history.getByText('资料备注与待核对信息',{exact:true}).click();
+  assert.match(await history.innerText(),/合成核对备注/);
   const patients=(await f.json('/api/patients')).data.patients;
   assert.equal(patients.length,1);assert.equal(patients[0].name,'纠正后样本');
   const session=(await f.json(`/api/sessions/${patients[0].sessionId}`)).data;

@@ -64,10 +64,14 @@ export function WorkspacesView({
   initialWorkspaceId = "",
   initialCreate = false,
   initialPrompt = "",
+  initialPanel = "files",
   onChanged,
+  displayMode = "work",
+  onDisplayModeChange,
 }) {
   const [panel, setPanel] = useState("files");
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  useEffect(() => { setInspectorOpen(displayMode !== "chat"); }, [displayMode]);
   const [showCreate, setShowCreate] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -123,6 +127,7 @@ export function WorkspacesView({
         setContent(result.text || "");
         setPanel("files");
         setInspectorOpen(true);
+        onDisplayModeChange?.("work");
         setOpenTabs((tabs) =>
           tabs.some((t) => t.path === path)
             ? tabs
@@ -432,7 +437,7 @@ export function WorkspacesView({
               last && r.workspaces.some((w) => w.id === last && !w.archived)
                 ? last
                 : r.workspaces.find((w) => !w.archived)?.id;
-            if (target) select(target);
+            if (!initialWorkspaceId && !initialCreate && target) select(target);
           } catch {}
         }
       })
@@ -537,7 +542,7 @@ export function WorkspacesView({
     setEvents([]);
     setRunning(false);
     setError("");
-    setPanel("files");
+    setPanel(initialPanel);
     setBrowserOpen(false);
     setDirectory(".");
     setPartial("");
@@ -892,7 +897,7 @@ export function WorkspacesView({
               </div>
               <IconButton
                 title="显示工作面板"
-                onClick={() => setInspectorOpen(!inspectorOpen)}
+                onClick={() => {setInspectorOpen(!inspectorOpen);onDisplayModeChange?.(inspectorOpen?"chat":"work");}}
               >
                 <FolderOpen size={18} />
               </IconButton>
@@ -1007,10 +1012,12 @@ export function WorkspacesView({
                         onReview={() => {
                           setPanel("review");
                           setInspectorOpen(true);
+                          onDisplayModeChange?.("work");
                         }}
                         onHistory={() => {
                           setPanel("history");
                           setInspectorOpen(true);
+                          onDisplayModeChange?.("work");
                         }}
                       />
                       {partial && (
@@ -1028,6 +1035,7 @@ export function WorkspacesView({
                 onApprove={() => {
                   setPanel("review");
                   setInspectorOpen(true);
+                  onDisplayModeChange?.("work");
                 }}
               />
               {!running && lastRun && (lastRun.outcome || lastRun.delivery) && (
@@ -1108,6 +1116,7 @@ export function WorkspacesView({
                     onMention={() => {
                       setPanel("files");
                       setInspectorOpen(true);
+                      onDisplayModeChange?.("work");
                       list().catch((e) => setError(e.message));
                     }}
                   />
@@ -1262,6 +1271,7 @@ export function WorkspacesView({
                   onClick={() => {
                     setPanel(key);
                     setInspectorOpen(true);
+                    onDisplayModeChange?.("work");
                     // 进入文件标签时，没有打开的文件就直接展开目录浏览
                     if (
                       key === "files" &&

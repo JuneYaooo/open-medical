@@ -2178,7 +2178,7 @@ export class WorkspaceService {
             : {}),
         };
       };
-      const result = await new AgentRuntime({
+      let result = await new AgentRuntime({
         provider: this.provider,
         ...run.limits,
         maxRounds: Math.max(0, run.limits.maxRounds - (run.roundsUsed || 0)),
@@ -2321,7 +2321,7 @@ export class WorkspaceService {
               run.artifacts ||= [];
               this.store.update(id, (current) => {
                 const target = current.runs.find((r) => r.id === run.id);
-                if (target) target.artifacts = [...(target.artifacts || []), artifact];
+                if (target) target.artifacts = [...(target.artifacts || []).filter(item => item.id !== artifact.id), artifact];
               });
             }
           }
@@ -2390,6 +2390,7 @@ export class WorkspaceService {
             : genericDeliveryCheck,
       });
       controller.signal.throwIfAborted();
+      result = this.domain.finalizeResult?.(this.store.get(id), run.id, result) || result;
       const finalStatus = result.status === "waiting_approval" ? "waiting_approval" : "completed";
       await this.extensions.runHooks(id, "run_end", { status: finalStatus }, controller.signal, run.id);
       controller.signal.throwIfAborted();

@@ -126,6 +126,7 @@ export class PatientRegistry {
         groups: optionalStrings(input.groups, "分组", 10, 40),
         tags: optionalStrings(input.tags, "标签", 20, 40),
         note: input.note === undefined ? "" : string(input.note, "备注", 2000),
+        ...(input.clinicalSummary !== undefined ? { clinicalSummary: optionalClinicalSummary(input.clinicalSummary) } : {}),
         diagnoses: optionalDiagnoses(input.diagnoses),
         medications: optionalMedications(input.medications),
         allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
@@ -219,6 +220,8 @@ export class PatientRegistry {
         patient.tags = optionalStrings(input.tags, "标签", 20, 40);
       if (input.note !== undefined)
         patient.note = input.note === "" ? "" : string(input.note, "备注", 2000);
+      if (input.clinicalSummary !== undefined)
+        patient.clinicalSummary = optionalClinicalSummary(input.clinicalSummary);
       if (input.diagnoses !== undefined)
         patient.diagnoses = optionalDiagnoses(input.diagnoses);
       if (input.medications !== undefined)
@@ -608,6 +611,7 @@ function structuredList(value, label, maxCount, build) {
 // Normalized clinical-field validation shared with the agent proposal flow.
 export function validateClinicalInput(input = {}) {
   return {
+    ...(input.clinicalSummary !== undefined ? { clinicalSummary: optionalClinicalSummary(input.clinicalSummary) } : {}),
     ...(input.diagnoses !== undefined
       ? { diagnoses: optionalDiagnoses(input.diagnoses) }
       : {}),
@@ -682,3 +686,8 @@ function optionalVisits(value) {
 }
 
 function timestamp(value) { return typeof value === "number" ? value : Date.parse(value) || 0; }
+
+function optionalClinicalSummary(value) {
+  check(value && typeof value === "object" && !Array.isArray(value), "INVALID_INPUT", "病史摘要须包含正文与来源");
+  return {text:string(value.text,"病史摘要正文",4000), source:string(value.source,"病史摘要来源",2000)};
+}

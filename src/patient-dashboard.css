@@ -63,3 +63,15 @@
 .chart-files details details { margin-top:10px; }
 @media(max-width:850px) { .chart-columns { grid-template-columns:1fr; gap:0; } .chart-heading { flex-wrap:wrap; } .chart-metrics a { padding:0 12px; gap:8px; } }
 @media(max-width:520px) { .chart-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 0; } .chart-metrics a:nth-child(2) { border:0; } .chart-section,.chart-history { padding:18px; } .chart-lab-picker { flex-direction:column; align-items:stretch; gap:8px; } }
+
+.chart-history .clinical-summary-text,.chart-record-notes p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.history-overview { list-style:none; padding:0; margin:22px 0; }
+.history-overview li { padding:14px 0; border-bottom:1px solid var(--border); }
+.history-overview time { font-size:14px; font-weight:600; color:var(--accent); }
+.history-overview p { margin:6px 0; }
+.history-overview a { font-size:13px; color:var(--accent); }
+.chart-record-notes { margin-top:22px; padding:14px 0; border-top:1px solid var(--border); }
+.chart-record-notes summary { cursor:pointer; color:var(--muted); font-size:14px; }
+.chart-history .chart-record-notes p { font-size:var(--body-size,16px); }
+.chart-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+.chart-tags span { display:inline-block; padding:5px 10px; background:var(--soft); border-radius:4px; font-size:14px; line-height:1.5; }

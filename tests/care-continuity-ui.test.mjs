@@ -40,6 +40,7 @@ test(
     ).data;
     f.server.followups.createReminder(patient, job, "待联系患者并登记反馈");
     await f.page.goto(f.origin + "/?view=home");
+  await f.page.locator(".advanced-nav>summary").click();
     await f.page
       .locator('.app-navigation nav[aria-label="患者"] .session', {
         hasText: patient.name,
@@ -94,6 +95,7 @@ test(
       fullPage: true,
     });
     await f.page.reload();
+ await f.page.locator(".advanced-nav>summary").click();
     await f.page
       .locator('.app-navigation nav[aria-label="患者"] .session', {
         hasText: patient.name,
@@ -119,6 +121,7 @@ test(
   async (t) => {
     const f = await browserFixture(t);
     await f.page.goto(f.origin + "/?view=home");
+  await f.page.locator(".advanced-nav>summary").click();
     await f.page.getByRole("button", { name: "打开", exact: true }).click();
     await f.page.getByRole("button", { name: /知识库/ }).click();
     await f.page.getByRole("button", { name: /^整页打开/ }).click();

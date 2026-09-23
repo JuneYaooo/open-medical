@@ -1,3 +1,4 @@
+import { SimilarCases } from "./similar-cases";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,13 +20,14 @@ const TOOL_NAMES = {
   medication_safety_check: "用药安全核查",
   make_review_checklist: "生成复核清单",
   draft_treatment_review: "起草治疗评估",
+  finish_similar_case_search: "整理相似病例结果",
   guideline_search: "检索指南知识库",
   guideline_read: "精读指南段落",
   read_patient_profile: "读取患者档案",
   read_patient_brief: "读取当前患者近况",
   list_skills: "发现可用技能",
   read_skill: "读取技能说明",
-  read_source: "通读原始材料",
+  read_source: "读取资料片段",
   web_search: "检索网页",
   document_create: "生成文档",
   sandbox_run: "本地沙箱计算",
@@ -130,7 +132,7 @@ export function artifactToLines(a) {
 /* ---------- 验收视图（叠加层） ---------- */
 const STATUS_TEXT = { draft: "待复核", approved: "已复核", rejected: "需修订" };
 export function AcceptanceView({ artifact, previous, onSource, onClose, onReview }) {
-  const [view, setView] = useState("diff");
+  const [view, setView] = useState(previous ? "diff" : "preview");
   const [reviewing, setReviewing] = useState(null); // 'approved' | 'rejected'
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -156,7 +158,7 @@ export function AcceptanceView({ artifact, previous, onSource, onClose, onReview
       await onReview({
         reviewer: f.get("reviewer"),
         note: f.get("note"),
-        decision: reviewing,
+        decision: reviewing || (artifact.type === "similar_cases" ? "approved" : reviewing),
         attested: f.get("attested") === "on",
         version: artifact.version,
       });
@@ -167,6 +169,26 @@ export function AcceptanceView({ artifact, previous, onSource, onClose, onReview
       setSaving(false);
     }
   };
+  if (artifact.type === "similar_cases") return (
+    <div className="acceptance case-reader" role="dialog" aria-label="查看相似病例">
+      <div className="accept-bar"><button className="text-button" onClick={onClose}>‹ 返回对话</button><h3>查看相似病例</h3></div>
+      <div className="case-reader-body">
+        <SimilarCases key={artifact.id} artifact={artifact}/>
+        <details className="case-review-records"><summary>记录我的核对意见（可选）</summary>
+          <p>仅记录你对这些病例资料的核对意见，不代表认可其中的治疗方案。</p>
+          {artifact.review && <p>{artifact.review.reviewer}：{artifact.review.note}</p>}
+          {artifact.history?.filter(h=>h.review).map(h=><p key={h.version}>{h.review.reviewer}：{h.review.note}</p>)}
+          <form className="review-form" onSubmit={submitReview}>
+            <input name="reviewer" aria-label="核对医生" placeholder="你的姓名或代号" defaultValue={reviewer} maxLength={80} required/>
+            <input name="note" aria-label="核对意见" placeholder="例如：疾病相同，但肝功能不同" required/>
+            <label className="attest"><input type="checkbox" name="attested" required/>我已查看原文及适用范围</label>
+            <button className="btn" disabled={saving} onClick={()=>setReviewing("approved")}>保存核对意见</button>
+          </form>
+          {error && <p className="error-text" role="alert">{error}</p>}
+        </details>
+      </div>
+    </div>
+  );
   return (
     <div className="acceptance" role="dialog" aria-label="产物验收">
       <div className="accept-bar">
@@ -185,7 +207,7 @@ export function AcceptanceView({ artifact, previous, onSource, onClose, onReview
         <div className="accept-main">
           {view === "preview" && (
             <div className="acc-doc">
-              {cur.map((l, i) => (
+              {artifact.type === "similar_cases" ? <SimilarCases key={artifact.id} artifact={artifact} /> : cur.map((l, i) => (
                 <p key={i} className={l.startsWith("【") || l.startsWith("—") ? "acc-head" : ""}>{l}</p>
               ))}
             </div>
@@ -224,9 +246,13 @@ export function AcceptanceView({ artifact, previous, onSource, onClose, onReview
               {(artifact.matches || []).map((m, i) => (
                 <div className="src-row" key={`m${i}`}>
                   <span>{m.quote}</span>
-                  <button className="source-link" onClick={() => onSource(m)}>
-                    {m.sourceName}{m.page ? ` · P${m.page}` : ""} · L{m.line}
-                  </button>
+                  {/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(m.url || "") ?
+                    <a className="source-link" href={m.url} target="_blank" rel="noreferrer">{m.sourceName} · PubMed</a> :
+                    artifact.type === "similar_cases" ? <span>{m.sourceName} · 本地记录</span> :
+                    <button className="source-link" onClick={() => onSource(m)}>{m.sourceName}{m.line ? ` · L${m.line}` : ""}</button>}
+                  {m.scope && <small>{m.scope}</small>}
+                  {m.evidence?.text && <details><summary>查看检索时保存的{m.evidence.type === "abstract" ? "摘要" : "记录"}</summary><p>{m.evidence.text}</p></details>}
+
                 </div>
               ))}
               {!artifact.events?.length && !artifact.matches?.length && (
@@ -526,6 +552,7 @@ export function Timeline({ items }) {
 
 /* ---------- Goal 卡（长任务目标 × 证据） ---------- */
 const GOAL_KEYWORDS = [
+  { re: /相似|类似|相近/, label: "相似病例检索" },
   { re: /出院小结/, label: "出院小结" },
   { re: /时间线/, label: "病历时间线" },
   { re: /检验|数值|摘录/, label: "检验数值摘录" },
@@ -534,7 +561,7 @@ const GOAL_KEYWORDS = [
   { re: /循证|PICO|检索式/, label: "循证检索准备" },
   { re: /治疗评估|治疗方案/, label: "治疗方案评估" },
 ];
-export function GoalCard({ message = "", running, artifacts = [], onStop, round = 1 }) {
+export function GoalCard({ message = "", running, runStatus, artifacts = [], onStop, round = 1 }) {
   const rows = useMemo(() => {
     let rows = GOAL_KEYWORDS.filter((k) => k.re.test(message)).map((k) => ({
       label: k.label,
@@ -551,31 +578,34 @@ export function GoalCard({ message = "", running, artifacts = [], onStop, round 
         return t.includes(row.label.slice(0, 2)) || row.label.includes(t.slice(0, 2));
       });
       if (hit) {
-        row.done = true;
-        row.evidence = `已写入 v${hit.version || 1} · 出处 ${(hit.events || []).length} 条 · 待复核`;
-      }
-    }
-    if (!running && artifacts.length) {
-      for (const r of rows)
-        if (!r.done) {
-          r.done = true;
-          r.evidence = r.evidence || "已归入本次成果";
+        const sourceCount = (hit.events || []).length + (hit.matches || []).length;
+        if (hit.type === "similar_cases") {
+          row.done = true;
+          const cases = hit.cases || [];
+          const metadata = cases.filter(c => c.evidence?.type === "metadata" || /仅题录/.test(c.scope)).length;
+          const failed = (hit.searches || []).filter(s => s.status === "failed").length;
+          row.evidence = `检索已结束 · ${cases.length} 条候选${metadata ? ` · ${metadata} 条仅题录` : ""}${failed ? ` · ${failed} 次来源请求失败` : ""} · 待复核`;
+          continue;
         }
+        row.done = hit.type !== "treatment_review" || sourceCount > 0;
+        row.evidence = `已生成草稿 v${hit.version || 1} · 出处 ${sourceCount} 条 · ${sourceCount || hit.type !== "treatment_review" ? "待复核" : "缺少出处，尚未完成"}`;
+      }
     }
     return rows;
   }, [message, artifacts, running]);
   const doneCount = rows.filter((r) => r.done).length;
+  const incomplete = ["failed", "cancelled", "interrupted"].includes(runStatus);
   return (
-    <div className={`goal-card ${running ? "running" : "done"}`}>
+    <div className={`goal-card ${running ? "running" : incomplete ? "incomplete" : "done"}`}>
       <div className="g-head">
         <span className="g-ico">🎯</span>
         <b>目标：{rows.map((r) => r.label).join(" + ")}</b>
-        <span className={`badge ${running ? "run" : "ok"}`}>
-          {running ? `第 ${round} 轮执行中 · ${doneCount}/${rows.length}` : "已完成"}
+        <span className={`badge ${running ? "run" : incomplete ? "failed" : "ok"}`}>
+          {running ? `第 ${round} 轮执行中 · ${doneCount}/${rows.length}` : incomplete ? "执行未完成，已保留结果" : doneCount === rows.length ? "本轮已结束 · 待复核" : "未完成"}
         </span>
         {running && onStop && (
           <button className="mini-btn plain" style={{ marginLeft: "auto" }} onClick={onStop}>
-            暂停
+            停止
           </button>
         )}
       </div>
@@ -590,7 +620,7 @@ export function GoalCard({ message = "", running, artifacts = [], onStop, round 
           </li>
         ))}
       </ul>
-      <div className="g-foot">完成标准：产物写入并保留出处，经人工复核后生效。{running ? "未完成将继续执行。" : ""}</div>
+      <div className="g-foot">完成标准：生成带出处的草稿并结束本次执行；人工复核是后续独立步骤。</div>
     </div>
   );
 }

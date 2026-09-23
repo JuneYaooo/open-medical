@@ -316,7 +316,8 @@ export function pendingActionTools(pending, doctor = null) {
           phone: textDef,
           groups: { type: "array", items: textDef },
           tags: { type: "array", items: textDef },
-          note: textDef,
+          note: {type:"string",description:"资料备注与待核对信息：身份比对、OCR冲突、缺失项目。不是病史摘要。"},
+          clinicalSummary: clinicalSummaryDef,
           diagnoses: {
             type: "array",
             items: {
@@ -396,6 +397,7 @@ export function pendingActionTools(pending, doctor = null) {
         "提议更新患者临床档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。只创建待确认提案，医生对照复核后才落库。",
         {
           patientId: textDef,
+          clinicalSummary: clinicalSummaryDef,
           updateMode: { type: "string", enum: ["append", "replace"], description: "append 保留旧记录；replace 须提供所更改字段完整列表，遗漏的字段不变" },
           diagnoses: {
             type: "array",
@@ -533,3 +535,5 @@ export function pendingActionTools(pending, doctor = null) {
     },
   ];
 }
+
+const clinicalSummaryDef = {type:"object",description:"供医生阅读的病史摘要：按时间概括主要疾病、关键治疗、复查变化与最新资料。保留疑似限定词；身份编号/OCR错误/归属不明联系方式只写备注，不进入本字段。",properties:{text:{type:"string",description:"清晰分段的病史正文，不是标签或资料核对清单"},source:{type:"string",description:"所依据的文件名、页码或行号，必须能回查"}},required:["text","source"],additionalProperties:false};

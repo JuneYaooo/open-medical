@@ -77,6 +77,10 @@ export function artifactTitle(artifact) {
 }
 export function artifactLines(artifact) {
   if (!artifact) return [];
+  if (artifact.type === "similar_cases") return [artifact.summary,
+    ...(artifact.cases || []).flatMap(c => [c.title, c.scope, `相同点／检索关联：${c.reason}`, `差异与未知：${c.differences}`, c.url || "本地记录"]),
+    ...(artifact.limitations || []).map(x => `局限：${x}`),
+  ];
   if (artifact.observations)
     return artifact.observations.map(
       (o) => `${o.name} ${o.value} ${o.unit}（未评价）`,
@@ -91,10 +95,6 @@ export function artifactLines(artifact) {
       ),
       `检索式：${artifact.query || "尚未生成"}`,
     ];
-  if (artifact.matches)
-    return artifact.matches.map(
-      (m) => `${m.sourceName} L${m.line}：${m.quote}`,
-    );
   if (artifact.concerns)
     return [
       artifact.summary,
@@ -102,6 +102,10 @@ export function artifactLines(artifact) {
       ...(artifact.infoGaps || []).map((x) => `信息缺口：${x}`),
       ...(artifact.questions || []).map((q) => `建议核对：${q}`),
     ];
+  if (artifact.matches)
+    return artifact.matches.map(
+      (m) => `${m.sourceName}${m.line ? ` L${m.line}` : ""}：${m.quote || "仅题录，未取得原文"}`,
+    );
   return [
     ...(artifact.items || []),
     ...(artifact.missing || []).map((x) => `待补充：${x}`),

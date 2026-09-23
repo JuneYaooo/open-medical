@@ -16,3 +16,8 @@ export function dashboardLabGroups(labs = []) {
     return { ...group, records, points, conflict, canPlot: !!group.unit && !conflict && points.length > 1 };
   });
 }
+
+// Notes contain arbitrary provenance/identity checks and are never a clinical summary.
+export function dashboardHistory(patient) {
+  return [...(patient.visits || [])].sort((a,b)=>String(a.date || "9999").localeCompare(String(b.date || "9999")));
+}

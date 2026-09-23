@@ -1,3 +1,4 @@
+import { WeComPanel } from "./wecom-panel";
 import { PatientDashboard } from "./patient-dashboard";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { FollowupRecords } from "./followup-records";
@@ -926,6 +927,7 @@ export function PatientsView({
           )}
           {tab === "messages" && (
             <div className="detail-panel">
+              <WeComPanel key={detail.id} patientId={detail.id} />
               <div className="digest-row">
                 <button
                   className="primary"

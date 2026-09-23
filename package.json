@@ -1,7 +1,7 @@
 {
   "name": "open-medical-agent",
   "private": true,
-  "version": "0.9.17",
+  "version": "0.9.29",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -46,6 +46,7 @@
     "@lancedb/lancedb": "^0.38.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "@wecom/crypto": "1.0.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "ajv": "^8.20.0",
@@ -53,6 +54,7 @@
     "cron-parser": "^5.10.0",
     "diff": "^9.0.0",
     "exceljs": "^4.4.0",
+    "fast-xml-parser": "5.11.1",
     "js-yaml": "^4.3.2",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.3",
@@ -67,11 +69,12 @@
     "remark-gfm": "^4.0.1",
     "tar-stream": "^3.2.1",
     "vite": "^8.2.2",
+    "wecom": "1.0.0-rc.2",
     "ws": "^8.21.3",
     "zod": "^4.6.1"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.18"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

@@ -50,6 +50,7 @@ export class PatientBrief {
     if (!diagnoses.length) gaps.push({ field: "diagnoses", label: "尚无已登记诊断", tab: "clinical" });
     const result = {
       patientId: p.id, sessionId: p.sessionId, revision: p.revision, updatedAt: p.updatedAt,
+      ...(p.clinicalSummary ? { clinicalSummary: p.clinicalSummary } : {}),
       identity: { name: p.name, patientNumber: p.patientNumber || "", birthYear: p.birthYear || null, gender: p.gender || "unknown" },
       diagnoses: diagnoses.slice(0, 8), medications: medications.slice(0, 20),
       allergies: p.allergies || [], allergyStatus, labs: labs.slice(0, 8),

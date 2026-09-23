@@ -1,10 +1,10 @@
 import { Modal } from "./components";
 
-const fields = { diagnoses: "诊断", medications: "用药", allergies: "过敏原", allergyStatus: "过敏史核对状态", labs: "检验", visits: "就诊" };
+const fields = { clinicalSummary: "病史摘要", diagnoses: "诊断", medications: "用药", allergies: "过敏原", allergyStatus: "过敏史核对状态", labs: "检验", visits: "就诊" };
 const states = { active: "正在使用", stopped: "已停用", unknown: "待核对", none_known: "已核对无已知过敏", recorded: "已记录过敏原" };
 const label = (value) => {
   if (typeof value === "string") return states[value] || value;
-  return [value.date, value.name || value.item || value.reason, value.code, value.value !== undefined ? `${value.value} ${value.unit || "单位未填"}` : "", value.dose, value.frequency, states[value.status], value.note, value.source ? `来源：${value.source}` : ""].filter(Boolean).join(" · ");
+  return [value.text, value.date, value.name || value.item || value.reason, value.code, value.value !== undefined ? `${value.value} ${value.unit || "单位未填"}` : "", value.dose, value.frequency, states[value.status], value.note, value.source ? `来源：${value.source}` : ""].filter(Boolean).join(" · ");
 };
 const values = (value) => value === undefined ? [] : Array.isArray(value) ? value : [value];
 

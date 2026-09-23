@@ -216,7 +216,8 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         <h3>核对建档草稿</h3>
         <p><b>{proposal.payload.name}</b> · {({ male: "男", female: "女" })[proposal.payload.gender] || "性别待补充"}{proposal.payload.birthYear ? ` · ${proposal.payload.birthYear} 年生` : ""}{proposal.payload.phone ? ` · ${proposal.payload.phone}` : ""}</p>
         <p>{proposal.summary}</p>
-        {proposal.payload.note && <p>{proposal.payload.note}</p>}
+        {proposal.payload.clinicalSummary && <section><h4>病史摘要</h4><p style={{whiteSpace:"pre-wrap"}}>{proposal.payload.clinicalSummary.text}</p><small>来源：{proposal.payload.clinicalSummary.source}</small></section>}
+        {proposal.payload.note && <details><summary>资料备注与待核对信息</summary><p>{proposal.payload.note}</p></details>}
         {!!proposal.payload.groups?.length && <p>分组：{proposal.payload.groups.join("、")}</p>}
         {!!proposal.payload.tags?.length && <p>标签：{proposal.payload.tags.join("、")}</p>}
         <p>过敏史：{({ none_known: "已核对无已知过敏", recorded: "已记录过敏原" })[proposal.payload.allergyStatus] || "待核对"}</p>

@@ -138,7 +138,7 @@ export function collectWorkspaceDelivery(service, id, runId, signal) {
   if (!evidence.length) gaps.push({ reason: "no_current_run_evidence",
     detail: requirements.kind === "answer" ? "本次为文字问答，无需文件交付。" : "仅有文字回答；尚无本次运行可核对的产物或执行回执。" });
   signal?.throwIfAborted();
-  return normalizeDelivery({ delivered: requirements.kind !== "answer" && evidence.length > 0 && !gaps.length,
+  return normalizeDelivery({ delivered: evidence.length > 0 && !gaps.length,
     evidence, gaps, warnings, method: requirements.kind === "auto" ? "current-run-facts-only" : "explicit-requirements" });
 }
 

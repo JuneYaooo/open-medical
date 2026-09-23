@@ -1,3 +1,6 @@
+import { collectWorkspaceDelivery } from "./core/workspace-delivery.mjs";
+import {similarCaseQuestion} from './medical/similar-case-workflow.mjs';
+import { assessmentQuestion } from "./medical/assessment-tools.mjs";
 // Session Bridge：把「统一内核工作区（kind:"session"）」投影成首页医疗
 // 会话的 API 形状，并按会话类别双轨分派——新建会话走 WorkspaceService
 // （通用内核 + 医疗叠层），既有 sessions 表会话继续走 MedicalRuntime。
@@ -328,6 +331,18 @@ export class SessionBridge {
       active: run.id === activeRunId,
     });
     const runs = (w.runs || []).map((run) => {
+      // Recheck the old answer-with-artifact classification against current runtime
+      // receipts. Preserve audit records and never clear genuine delivery gaps.
+      let delivery = run.delivery, outcome = run.outcome;
+      if (run.status === "completed" && outcome === "delivery_failed" &&
+          ["patient-assessment", "similar-case-search"].includes(run.policy?.workflow) &&
+          run.completion?.kind === "answer" && run.artifacts?.length &&
+          delivery?.gaps?.length === 1 && delivery.gaps[0].reason === "no_verifiable_output") {
+        try {
+          const verified = collectWorkspaceDelivery(this.service, w.id, run.id);
+          if (verified.delivered) { delivery = verified; outcome = "delivered"; }
+        } catch { /* Keep the recorded failure when receipts cannot be checked. */ }
+      }
       const facts = runFacts(run);
       const waitingReason = waitingReasonFor(run, facts);
       return {
@@ -349,18 +364,19 @@ export class SessionBridge {
         },
         fileIds: run.fileIds || [],
         artifacts: run.artifacts || [],
+        draftsArchived: run.draftsArchived === true,
         children: run.children || [],
         events: run.events || recentEvents.filter((event) => event.run_id === run.id).map((event) => ({ ...event, seq: event.id })),
         sourceHashes: (run.sourceHashes || []).map((source, index) => typeof source === "string" ? { id: String(index), hash: source } : source),
-        ...(run.delivery ? { delivery: run.delivery } : {}),
-        ...(run.outcome ? { outcome: run.outcome } : {}),
+        ...(delivery ? { delivery } : {}),
+        ...(outcome ? { outcome } : {}),
       };
     });
     const intentOf = (runId) =>
       runs.find((r) => r.id === runId)?.policy?.intent;
     const messages = (w.messages || []).map((m) => ({
       ...m,
-      ...(m.role === "assistant" ? { intent: intentOf(m.runId) } : {}),
+      ...(m.role === "assistant" ? { intent: intentOf(m.runId), outcome: runs.find(r => r.id === m.runId)?.outcome || m.outcome } : {}),
     }));
     return {
       id: w.id,
@@ -375,7 +391,7 @@ export class SessionBridge {
       files: (w.materials || []).map((f) => ({ ...f })),
       intakeIssues: w.intakeIssues || [],
       intakeJob: w.intakeJob || null,
-      artifacts: runs.flatMap((run) => run.artifacts),
+      artifacts: runs.flatMap((run) => run.artifacts.filter(a => !run.draftsArchived || a.status !== "draft")),
       runs,
     };
   }
@@ -552,27 +568,33 @@ export class SessionBridge {
       "请先确认本次输入可以发送给所配置的模型服务",
       412,
     );
+    const assessment = Boolean(w.patientId && policy.workflow !== "patient-intake" && assessmentQuestion(message));
+    const similarCases = Boolean(w.patientId && policy.workflow !== "patient-intake" && similarCaseQuestion(message));
+    if (assessment) policy.workflow = "patient-assessment";
+    if (similarCases) { policy.workflow = "similar-case-search"; policy.intent = "similar_cases"; policy.searchScope = /(?:只|仅).{0,6}本地|不要.{0,3}(?:联网|网上)/.test(message) ? "local" : "online"; }
+    const focused = assessment || similarCases;
     const fileIds = this.selectMaterials(w, body.fileIds);
     const sources = this.buildSources(w, message, fileIds);
     const handle = this.service.prepare(id, {
       revision: body.sessionRevision ?? body.revision ?? w.revision,
       message,
       externalConsent: true,
-      completion: body.completion,
+      completion: focused ? {kind:"answer"} : body.completion,
       requestId: body.requestId,
       thinking: body.thinking,
       skills: body.skills,
-      isolatedContext: body.isolatedContext === true,
+      isolatedContext: focused || body.isolatedContext === true,
       policy,
       collectArtifacts: true,
       skipArtifact: (output) =>
-        policy.intent === "consultation" && output.type === "source_search",
+        (similarCases ? output.type !== "similar_cases" : assessment ? output.type !== "treatment_review" : policy.intent === "consultation" && output.type === "source_search"),
       fileIds,
       sourceHashes: sources.map((s) => s.hash),
       sources,
       limits: {
         maxContextChars: Math.max(this.contextBudget, 10000),
         ...(Number.isFinite(this.maxRounds) ? { maxRounds: this.maxRounds } : {}),
+        ...(focused ? {maxRounds:20,maxTotalToolCalls:48,timeoutMs:480000} : {}),
       },
     });
     return { kind: "workspace", handle };
@@ -843,6 +865,17 @@ export class SessionBridge {
       if (a) return a;
     }
     throw new AppError("NOT_FOUND", "产物不存在", 404);
+  }
+  archiveRunDrafts(id, runId, archived) {
+    check(typeof archived === "boolean", "INVALID_INPUT", "请指定是否归档");
+    this.workspace(id);
+    this.service.store.update(id, w => {
+      const run = w.runs.find(r => r.id === runId);
+      check(run, "NOT_FOUND", "找不到本次执行", 404);
+      check(["failed", "cancelled", "interrupted"].includes(run.status), "RUN_ACTIVE", "只能归档未完成执行的草稿", 409);
+      run.draftsArchived = archived;
+    });
+    return this.get(id);
   }
   reviewArtifact(id, artifactId, body) {
     const reviewer = body.reviewer

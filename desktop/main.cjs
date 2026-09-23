@@ -155,7 +155,7 @@ async function verify() {
     let state;
     do {
       state = await window.webContents.executeJavaScript(
-        '({ready:document.body.innerText.includes("桌面包合成验收"),node:typeof process,require:typeof require,title:document.title})',
+        '({ready:!!document.querySelector(".hub-composer") && document.body.innerText.includes("这次需要做什么？"),node:typeof process,require:typeof require,title:document.title})',
       );
       if (state.ready) break;
       await new Promise((r) => setTimeout(r, 100));
@@ -237,7 +237,7 @@ async function start() {
     });
   chmodSync(configuration, 0o600);
   const allowed =
-    /^(AI_PROVIDER|AI_REASONING_EFFORT|MODEL_PROVIDER|AI_API_KEY|AI_TIMEOUT_MS|AI_MAX_TOKENS|DEEPSEEK_(API_KEY|BASE_URL|MODEL|THINKING|MAX_TOKENS|TIMEOUT_MS)|OPENAI_(API_KEY|BASE_URL|MODEL)|OPENROUTER_(API_KEY|MODEL)|ANTHROPIC_(API_KEY|BASE_URL|MODEL|TIMEOUT_MS|MAX_TOKENS)|LOCAL_MODEL_(BASE_URL|NAME)|MEDICAL_SANDBOX_PYTHON|AGENT_DOCKER_EXECUTABLE|MCP_[A-Z0-9_]+_(TOKEN|API_KEY)|MEDICAL_EMBEDDING_(PROVIDER|URL|MODEL|KEY))$/;
+    /^(AI_PROVIDER|AI_REASONING_EFFORT|MODEL_PROVIDER|AI_API_KEY|AI_TIMEOUT_MS|AI_MAX_TOKENS|DEEPSEEK_(API_KEY|BASE_URL|MODEL|THINKING|MAX_TOKENS|TIMEOUT_MS)|OPENAI_(API_KEY|BASE_URL|MODEL)|OPENROUTER_(API_KEY|MODEL)|ANTHROPIC_(API_KEY|BASE_URL|MODEL|TIMEOUT_MS|MAX_TOKENS)|LOCAL_MODEL_(BASE_URL|NAME)|MEDICAL_SANDBOX_PYTHON|AGENT_DOCKER_EXECUTABLE|MCP_[A-Z0-9_]+_(TOKEN|API_KEY)|MEDICAL_EMBEDDING_(PROVIDER|URL|MODEL|KEY)|MEDICAL_WECOM_(CORP_ID|SECRET|CALLBACK_TOKEN|AES_KEY))$/;
   for (const key of Object.keys(process.env))
     if (allowed.test(key)) delete process.env[key];
   for (const [key, value] of Object.entries(

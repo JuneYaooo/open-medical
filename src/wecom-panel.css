@@ -1,0 +1,18 @@
+.wecom-panel { border:1px solid var(--line, #e2e2e0); border-radius:12px; padding:20px; margin-bottom:24px; }
+.wecom-heading,.wecom-fields,.wecom-binding { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.wecom-heading h3 { margin:0; }
+.wecom-panel details { margin:12px 0; }
+.wecom-panel summary { cursor:pointer; }
+.wecom-panel fieldset { border:0; padding:14px 0; margin:0; min-width:0; }
+.wecom-panel legend { font-weight:600; padding:0; }
+.wecom-panel label { display:flex; flex-direction:column; gap:6px; margin:10px 0; }
+.wecom-panel input:not([type=checkbox]),.wecom-panel select,.wecom-panel textarea { width:100%; border:1px solid var(--line,#ddd); border-radius:6px; background:var(--surface,#fff); color:inherit; padding:9px; font:inherit; }
+.wecom-panel .wecom-check { flex-direction:row; align-items:center; }
+.wecom-fields label { flex:1; min-width:180px; }
+.wecom-panel code { overflow-wrap:anywhere; }
+.wecom-binding,.wecom-tasks article { border-top:1px solid var(--line,#ddd); padding:14px 0; }
+.wecom-message { white-space:pre-wrap; overflow-wrap:anywhere; }
+
+.wecom-panel button { border:1px solid var(--line,#ddd); border-radius:7px; padding:8px 12px; background:var(--surface,#fff); color:inherit; font:inherit; cursor:pointer; }
+.wecom-panel button:hover:not(:disabled) { background:var(--hover,#f2f5f2); }
+.wecom-panel button:disabled { cursor:default; opacity:.5; }

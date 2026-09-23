@@ -25,6 +25,7 @@ import {
   selectDigestMessages,
 } from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
+import { WeComConnector } from "./wecom.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
@@ -523,6 +524,7 @@ export function createServer(options = {}) {
     workspaces.provider = provider;
     workspaces.agent.provider = provider;
   };
+  const wecom = new WeComConnector(store, patients, options.wecom);
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -644,6 +646,23 @@ export function createServer(options = {}) {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const path = url.pathname;
+      // This single public route authenticates with WeCom signature + encrypted corp ID.
+      // All other routes retain the localhost/origin/session-token guards.
+      if (path === "/api/wecom/callback" && ["GET", "POST"].includes(req.method)) {
+        let raw;
+        if (req.method === "POST") {
+          const chunks = []; let bytes = 0;
+          for await (const chunk of req) {
+            bytes += chunk.length;
+            check(bytes <= 65536, "BODY_LIMIT", "回调超过 64KB", 413);
+            chunks.push(chunk);
+          }
+          raw = Buffer.concat(chunks).toString("utf8");
+        }
+        const response = wecom.callback(url.searchParams, raw);
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        return res.end(response);
+      }
       guard(req, false);
       if (path === "/api/agent/health" && req.method === "GET")
         return send(res, 200, {
@@ -880,6 +899,8 @@ export function createServer(options = {}) {
       if (parts[0] === "api" && parts[1] === "sessions" && parts[2]) {
         const id = identifier(parts[2]);
         if (sessionBridge.isSessionWorkspace(id)) {
+          if (parts[3] === "runs" && parts[4] && parts[5] === "archive-drafts" && parts.length === 6 && req.method === "POST")
+            return send(res, 200, sessionBridge.archiveRunDrafts(id, identifier(parts[4]), (await body(req)).archived));
           if (parts[3] === "schedules") {
             if (parts.length === 4 && req.method === "GET")
               return send(res, 200, { jobs: scheduler.list(id) });
@@ -1176,6 +1197,18 @@ export function createServer(options = {}) {
               runtime.editArtifact(id, identifier(parts[4]), await body(req)),
             );
         }
+      }
+      if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
+      if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, { contacts: wecom.contacts() });
+      if (path === "/api/wecom/sync" && req.method === "POST") return send(res, 200, await track(wecom.sync(await body(req))));
+      if (path === "/api/wecom/bindings" && req.method === "GET") return send(res, 200, { bindings: wecom.bindings(url.searchParams.get("patientId")) });
+      if (path === "/api/wecom/bindings" && req.method === "POST") return send(res, 201, wecom.bind(await body(req)));
+      if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "bindings" && parts.length === 4 && req.method === "DELETE") return send(res, 200, wecom.unbind(parts[3]));
+      if (path === "/api/wecom/tasks" && req.method === "GET") return send(res, 200, { tasks: wecom.tasks(url.searchParams.get("patientId")) });
+      if (path === "/api/wecom/tasks" && req.method === "POST") return send(res, 201, wecom.draft(await body(req)));
+      if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "tasks" && parts.length === 5 && req.method === "POST") {
+        if (parts[4] === "submit") return send(res, 200, await track(wecom.submit(parts[3], await body(req))));
+        if (parts[4] === "refresh") return send(res, 200, await track(wecom.refresh(parts[3])));
       }
       if (path === "/api/wechat/status" && req.method === "GET")
         return send(res, 200, wechat.status());
@@ -1904,6 +1937,7 @@ export function createServer(options = {}) {
   server.drg = drg;
   server.cases = cases;
   server.wechat = wechat;
+  server.wecom = wecom;
   server.once("listening", () => {
     scheduler.start();
     workspaces.scheduler.start();

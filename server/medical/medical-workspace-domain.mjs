@@ -1,3 +1,5 @@
+import {configureSimilarCaseTools, SIMILAR_CASE_GUIDANCE, similarCaseAnswer} from './similar-case-workflow.mjs';
+import { configureAssessmentTools, ASSESSMENT_GUIDANCE, assessmentAnswer } from "./assessment-tools.mjs";
 import { configureIntakeTools } from "./intake-tools.mjs";
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 import { TOOL_DEFINITIONS, runTool, medicalToolAllowed } from "../medical-core.mjs";
@@ -64,6 +66,7 @@ export function createMedicalWorkspaceDomain({
         : GenericDomain.system;
     },
     limits: GenericDomain.limits,
+    finalizeResult: (workspace,runId,result) => similarCaseAnswer(workspace,runId,assessmentAnswer(workspace,runId,result)),
     contextManagement: true,
     allowAutoFileWrites: true,
     // 能力快照的领域事实：医疗叠层开关走共享判定点，通用内核不感知。
@@ -84,6 +87,8 @@ export function createMedicalWorkspaceDomain({
       }));
       return [
         workspace.patientId ? `当前已关联患者编号：${workspace.patientId}。可调用 read_patient_brief 读取最新档案；不必让医生重新输入已有病史。` : "",
+        run.policy?.workflow === "patient-assessment" ? ASSESSMENT_GUIDANCE : "",
+        run.policy?.workflow === "similar-case-search" ? SIMILAR_CASE_GUIDANCE : "",
         doctor?.digest(),
         `可用技能：${JSON.stringify(skills?.list() || [])}`,
         run.pinnedSkills?.length
@@ -147,6 +152,8 @@ export function createMedicalWorkspaceDomain({
               execute(plugin.definition.function.name, args, context),
           });
         const intakeRun = workspace.runs?.find(run => run.id === runId);
+        if (intakeRun?.policy?.workflow === "patient-assessment") configureAssessmentTools(registry, workspace, intakeRun);
+        if (intakeRun?.policy?.workflow === "similar-case-search") configureSimilarCaseTools(registry, workspace, intakeRun);
         if (intakeRun?.policy?.workflow === "patient-intake") {
           const sameFiles = run => JSON.stringify([...(run.fileIds || [])].sort()) === JSON.stringify([...(intakeRun.fileIds || [])].sort());
           const previous = [...workspace.runs].reverse().find(run => run.id !== runId && ["failed", "cancelled", "interrupted"].includes(run.status) && sameFiles(run) && run.policy?.workflow === "patient-intake" && run.intakeNotes?.length);

@@ -98,7 +98,8 @@ export class RunProgress {
       return { repeated: entry.count > 1, failure: true };
     }
     const spec = tool?.observation;
-    if (!spec || typeof output?.[spec.revision] !== "string" || typeof output?.[spec.content] !== "string") {
+    const observedContent = spec?.content === "$json" ? stable(output) : output?.[spec?.content];
+    if (!spec || typeof output?.[spec.revision] !== "string" || typeof observedContent !== "string") {
       // Pending proposals are not mutations. Historical observations remain
       // available, and each subsequent real read checks its current version.
       if (tool?.permission === "filesystem.write" && output?.status === "applied") {
@@ -141,11 +142,11 @@ export class RunProgress {
     else if (this.state.visits.length < 2048) this.state.visits.push({ key: visitKey, repeats: 0 });
     let reference = spec.archiveReference ? output[spec.archiveReference] : old?.resultHash === resultHash ? old.archiveId : undefined;
     if (!reference && archive) reference = (await archive(output))?.id;
-    const content = output[spec.content];
+    const content = observedContent;
     const entry = {
       key, resultHash, tool: call.function.name, args: JSON.parse(call.function.arguments),
       revision: output[spec.revision], archiveId: reference,
-      excerpt: content.slice(0, 256), chars: content.length,
+      excerpt: content.slice(0, Math.min(9000, spec.excerptChars || 256)), displayChars: Math.min(9000, spec.excerptChars || 48), chars: content.length,
       repeats: unchanged ? Math.max((old?.repeats || 0) + 1, visit?.repeats || 0, this.state.stalledRounds + 1) : 0,
     };
     if (call.function.name === "read_file") {
@@ -193,7 +194,7 @@ export class RunProgress {
       const fileKey = entry.tool === "read_file" ? hash([entry.args.path, entry.revision]) : null;
       if (fileKey && (displayedFiles.has(fileKey) || !entry.sourceReadComplete && fullSources.has(fileKey))) continue;
       const row = [entry.tool, entry.args, entry.revision.slice(0, 12),
-        entry.archiveId, entry.excerpt.slice(0, 48), entry.chars > 48, entry.sourceReadComplete === true];
+        entry.archiveId, entry.excerpt.slice(0, entry.displayChars || 48), entry.chars > (entry.displayChars || 48), entry.sourceReadComplete === true];
       if (render([...rows, row]).length > maxChars) continue;
       rows.push(row);
       if (fileKey && entry.sourceReadComplete) displayedFiles.add(fileKey);

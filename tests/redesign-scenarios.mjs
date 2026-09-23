@@ -33,7 +33,6 @@ export const SCENARIOS = [
   await page.locator('.modal-form button:has-text("创建患者档案")').click();
   await page.waitForSelector(".detail-head");
   assert.match(await page.locator(".detail-head").innerText(), /测试患者甲/);
-  await page.locator(".advanced-nav>summary").click();
   await page.waitForTimeout(400);
   assert.ok(
     await page
@@ -53,6 +52,7 @@ export const SCENARIOS = [
   });
   await seed.json("/api/risk-alerts/evaluate", "POST", {});
   await page.reload();
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', {
@@ -149,6 +149,7 @@ export const SCENARIOS = [
   });
   await seed.json("/api/risk-alerts/evaluate", "POST", {});
   await page.reload();
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', {
@@ -182,6 +183,7 @@ export const SCENARIOS = [
   });
   void work;
   await page.goto(origin + "/?view=home");
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', {
@@ -258,6 +260,7 @@ export const SCENARIOS = [
   const p = await seed.json("/api/patients", "POST", { name: "知识引用患者" });
   void p;
   await page.goto(origin + "/?view=home");
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   // 首页一次发送独立任务（本地档位快速完成）
   await page.locator(".app-navigation .new-session").click();
@@ -282,6 +285,7 @@ export const SCENARIOS = [
     fn: async ({ page, seed, origin }) => {
   await seed.json("/api/patients", "POST", { name: "引用目标患者", tags: ["糖尿病"] });
   await page.goto(origin + "/?view=home");
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("整理一下");
@@ -306,6 +310,7 @@ export const SCENARIOS = [
     text: "2026-08-12 入院行 PCI。\n2026-08-14 血钾 4.2 mmol/L。\n2026-08-20 出院带药阿司匹林。",
   });
   await page.goto(origin + "/?view=home");
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "目标卡患者" })
@@ -338,6 +343,7 @@ export const SCENARIOS = [
     text: "2026-08-12 入院行 PCI。\n2026-08-20 出院。",
   });
   await page.goto(origin + "/?view=home");
+  await page.locator(".advanced-nav>summary").click();
   await page.waitForSelector(".app-navigation");
   await page
     .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "记忆标注患者" })
