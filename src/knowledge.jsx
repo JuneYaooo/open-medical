@@ -36,6 +36,11 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
   });
   const [reader, setReader] = useState(null); // {doc, highlight}
   const fileRef = useRef();
+  const selectedLineRef = useRef(null);
+  const targetLine = reader?.highlight?.matches?.[0]?.lineNo || reader?.highlight?.startLine || 1;
+  useEffect(() => {
+    selectedLineRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [reader?.doc?.id, targetLine]);
   const visibleDocs = docs.filter((doc) => (!filters.kind || doc.kind === filters.kind) && (!filters.collection || (doc.collection || "默认知识库") === filters.collection) && (filters.reviewStatus === "all" || (filters.reviewStatus ? doc.reviewStatus === filters.reviewStatus : doc.reviewStatus !== "retired")));
 
   const refresh = async () => {
@@ -211,6 +216,8 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
               return (
                 <p
                   key={lineNo}
+                  ref={lineNo === targetLine ? selectedLineRef : null}
+                  data-line={lineNo}
                   className={`guideline-line ${isMatch ? "matched" : ""}`}
                 >
                   <span className="line-no">{lineNo}</span>

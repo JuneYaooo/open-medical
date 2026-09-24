@@ -284,3 +284,12 @@ fieldset.trial-form {
 @media(max-width:700px){.trial-ai{padding:16px;}.trial-ai .module-head{align-items:stretch;flex-direction:column;}.trial-ai-stats{gap:6px;}.trial-ai-stats>div{padding:10px;}}
 
 .trial-ai-results > .trial-ai-item { margin:0;align-self:stretch; }
+
+/* Let the library page scroll as a whole; nested grid scrolling squeezed long sources. */
+.medical-shell .library-hub > .module-view {
+  overflow: visible;
+  min-height: auto;
+}
+.library-hub:has(.guidelines-reader-head) > .library-description {
+  display: none;
+}

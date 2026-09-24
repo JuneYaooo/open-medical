@@ -515,7 +515,8 @@ export const SCENARIOS = [
   fn: async ({ page, seed }) => {
     const p = await seed.json("/api/patients", "POST", { name: "消息导入患者" });
     void p;
-    await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "消息导入患者" }).click();
+    await page.goto(new URL('/?view=patients', page.url()).href);
+    await page.locator('.patient-card', { hasText: "消息导入患者" }).click();
     await page.waitForSelector(".detail-head");
     await page.getByRole('button', { name: '沟通与随访', exact: true }).click();
     await page.locator('.tab-row button:has-text("消息记录")').click();
@@ -529,7 +530,8 @@ export const SCENARIOS = [
   name: "临床资料编辑：添加诊断",
   fn: async ({ page, seed }) => {
     await seed.json("/api/patients", "POST", { name: "临床编辑患者" });
-    await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "临床编辑患者" }).click();
+    await page.goto(new URL('/?view=patients', page.url()).href);
+    await page.locator('.patient-card', { hasText: "临床编辑患者" }).click();
     await page.waitForSelector(".detail-head");
     await page.getByRole("button",{name:"诊断与病史",exact:true}).click();
     await page.getByRole("button",{name:"核对与编辑",exact:true}).click();

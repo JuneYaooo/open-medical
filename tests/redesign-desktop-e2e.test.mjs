@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -33,10 +33,13 @@ async function openDesktopApp(t) {
       MEDICAL_DESKTOP_TEST_DIR: directory,
     },
   });
+  const desktopProcess = app.process();
   t.after(async () => {
     try {
       await app.close();
     } catch {}
+    // Only remove this fixture's data after its isolated Electron process exits.
+    if (desktopProcess.exitCode !== null) await rm(directory, { recursive: true, maxRetries: 3, retryDelay: 100 });
   });
   const window = await app.firstWindow();
   await window.waitForSelector(".app-navigation", { timeout: 30000 });

@@ -282,30 +282,22 @@ export class GuidelineLibrary {
         const lower = chunk.text.toLowerCase();
         let score = 0;
         let missing = false;
+        let partialMatch = false;
+        const matchedNeedles = new Set();
         for (const { term, subs } of termDefs) {
-          let needle = term;
-          let index = lower.indexOf(needle);
-          if (index < 0 && subs.length) {
-            for (const sub of subs) {
-              const at = lower.indexOf(sub);
-              if (at >= 0) {
-                needle = sub;
-                index = at;
-                break;
-              }
-            }
+          const exact = lower.includes(term);
+          const found = exact ? [term] : [...new Set(subs)].filter(sub => lower.includes(sub));
+          if (!found.length) { missing = true; break; }
+          for (const needle of found) matchedNeedles.add(needle);
+          if (exact) {
+            // A frequent generic bigram must never outrank an actual term match.
+            let occurrences = 0, at = lower.indexOf(term);
+            while (at >= 0 && occurrences < 10) { occurrences++; at = lower.indexOf(term, at + term.length); }
+            score += 100 + occurrences;
+          } else {
+            partialMatch = true;
+            score += found.length / new Set(subs).size;
           }
-          if (index < 0) {
-            missing = true;
-            break;
-          }
-          let occurrences = 0;
-          let at = lower.indexOf(needle);
-          while (at >= 0) {
-            occurrences++;
-            at = lower.indexOf(needle, at + needle.length);
-          }
-          score += occurrences;
         }
         const vectorKey = `${doc.id}:${chunk.ord}`;
         const vectorScore = vectorScores.get(vectorKey);
@@ -315,7 +307,7 @@ export class GuidelineLibrary {
         const lines = chunk.text.split("\n");
         const matched = lines
           .map((line, i) => ({ line, i }))
-          .filter(({ line }) => terms.some((term) => line.toLowerCase().includes(term)))
+          .filter(({ line }) => [...matchedNeedles].some((term) => line.toLowerCase().includes(term)))
           .slice(0, 3)
           .map(({ line, i }) => ({
             lineNo: chunk.start_line + i,
@@ -335,6 +327,7 @@ export class GuidelineLibrary {
           startLine: chunk.start_line,
           endLine: chunk.end_line,
           score,
+          lexicalMatchType: lexicalMatch ? (partialMatch ? "partial" : "exact") : null,
           vectorScore: vectorScore === undefined ? null : Math.round(vectorScore * 1000) / 1000,
           matchedVia:
             vectorScore >= 0.9 ? (score >= 1 ? "hybrid" : "vector") : "text",
@@ -460,7 +453,7 @@ export function knowledgeTools(library) {
     {
       definition: definition(
         "knowledge_search",
-        "在本地医学知识库中检索（指南/书籍/资料等全部类别），返回带文档名与行号出处的原文块。先通过 knowledge_collections 了解何时使用各库，再检索。collection/kind/org 为精确匹配筛选，不确定时请省略，先用自然语言检索词即可。",
+        "在本地医学知识库中检索（指南/书籍/资料等全部类别），返回带文档名与行号出处的原文块。先通过 knowledge_collections 了解何时使用各库，再检索。collection/kind/org 为筛选条件。优先用1–3个短医学术语；英文资料用英文术语（如 drainage），不要拼接长问句和大量同义词。partial 只代表部分词命中，须 knowledge_read 核对正文，不能当作推荐依据。",
         {
           query: textDef,
           kind: textDef,

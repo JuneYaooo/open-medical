@@ -164,3 +164,16 @@ test('documents with an implicit default collection remain countable and selecta
  assert.equal(library.list({collection:'默认知识库'}).length,1);
  assert.equal(library.store.db.prepare('SELECT data FROM guideline_docs WHERE id=?').get(doc.id).data,saved);
 });
+
+test('guideline search ranks exact Chinese terms before frequent partial words and exposes actual matching lines', async t => {
+  const library = newLibrary(t);
+  const partial = await library.addDocument({title:'合成部分匹配资料',text:'肝功能变化。'.repeat(50)+'\n仅供检索测试。'});
+  const exact = await library.addDocument({title:'合成目标资料',text:'肝功能储备评估。\n仅供检索测试，不含临床建议。'});
+  const hits = (await library.search({query:'肝功能储备'})).hits;
+  assert.equal(hits[0].docId, exact.id);
+  assert.equal(hits[0].lexicalMatchType, 'exact');
+  const fallback = hits.find(h => h.docId === partial.id);
+  assert.equal(fallback.lexicalMatchType, 'partial');
+  assert.ok(fallback.matches.length);
+  for (const hit of hits) for (const line of hit.matches) assert.equal(library.get(hit.docId).text.split('\n')[line.lineNo-1].slice(0,300),line.text);
+});
