@@ -645,8 +645,8 @@ export function PatientsView({
           )}
           <nav className="tab-row patient-area-tabs" aria-label="患者工作内容">
             <button className={isRecordTab(tab) ? "active" : ""} onClick={() => setTab("overview")}>患者档案</button>
-            <button className={["messages", "followups", "tracking"].includes(tab) ? "active" : ""} onClick={() => setTab("messages")}>沟通与随访</button>
             <button className={tab === "assistance" ? "active" : ""} onClick={() => setTab("assistance")}>诊疗辅助</button>
+            <button className={["messages", "followups", "tracking"].includes(tab) ? "active" : ""} onClick={() => setTab("messages")}>沟通与随访</button>
           </nav>
           {tab !== "assistance" && <nav className="tab-row patient-section-tabs" aria-label="患者栏目">
             {(isRecordTab(tab) ? RECORD_TABS : [["messages", `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`], ["followups", "随访计划"], ["tracking", "检查与转诊"]]).map(([id, label]) => <button key={id} aria-current={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "page" : undefined} className={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}

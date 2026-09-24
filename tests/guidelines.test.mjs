@@ -177,3 +177,42 @@ test('guideline search ranks exact Chinese terms before frequent partial words a
   assert.ok(fallback.matches.length);
   for (const hit of hits) for (const line of hit.matches) assert.equal(library.get(hit.docId).text.split('\n')[line.lineNo-1].slice(0,300),line.text);
 });
+
+test("collection deletion checks current contents, removes chunks and vectors, preserves other libraries", async (t) => {
+  const library = newLibrary(t);
+  const deleted = [];
+  library.vectorStore = { removeDocs: async ids => deleted.push(...ids) };
+  library.saveCollection("待删除", { expectedRevision: 0, description: "测试资料", whenToUse: "测试" });
+  const first = await library.addDocument({ title: "一", text: SAMPLE, collection: "待删除" });
+  const stale = library.collections().find(c => c.name === "待删除");
+  const second = await library.addDocument({ title: "二", text: SAMPLE + "\n新资料", collection: "待删除" });
+  const keep = await library.addDocument({ title: "保留", text: SAMPLE, collection: "保留库" });
+  await assert.rejects(library.removeCollection("待删除", stale), { code: "REVISION_CONFLICT" });
+  assert.equal(library.list().length, 3);
+  const current = library.collections().find(c => c.name === "待删除");
+  assert.equal((await library.removeCollection("待删除", current)).deletedDocuments, 2);
+  assert.deepEqual(deleted.sort(), [first.id, second.id].sort());
+  assert.deepEqual(library.list().map(d => d.id), [keep.id]);
+  assert.equal(library.store.db.prepare("SELECT count(*) AS n FROM guideline_chunks WHERE doc_id=?").get(first.id).n, 0);
+  assert.equal(library.collections().some(c => c.name === "待删除"), false);
+  await assert.rejects(library.removeCollection("待删除", current), { code: "NOT_FOUND" });
+  const implicit = library.collections()[0];
+  await library.removeCollection(implicit.name, implicit);
+  assert.deepEqual(library.collections(), []);
+});
+
+test("empty collection deletion rolls back on audit failure and rejects concurrent indexing", async (t) => {
+  const library = newLibrary(t);
+  library.saveCollection("空库", { expectedRevision: 0, description: "测试", whenToUse: "测试" });
+  const current = library.collections()[0];
+  library.activeIndexWrites = 1;
+  await assert.rejects(library.removeCollection("空库", current), { code: "KNOWLEDGE_BUSY" });
+  library.activeIndexWrites = 0;
+  const audit = library.store.audit;
+  library.store.audit = () => { throw new Error("audit failed"); };
+  await assert.rejects(library.removeCollection("空库", current), /audit failed/);
+  assert.equal(library.collections().length, 1);
+  library.store.audit = audit;
+  await library.removeCollection("空库", current);
+  assert.deepEqual(library.collections(), []);
+});

@@ -8,7 +8,9 @@ export function KnowledgeLibraries({ onOpenTask }) {
     [selected, setSelected] = useState(null),
     [form, setForm] = useState(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [deleting, setDeleting] = useState(null),
+    [notice, setNotice] = useState("");
   const load = async () => {
     const data = await api("/api/knowledge/collections");
     setLibraries(data.collections);
@@ -18,6 +20,9 @@ export function KnowledgeLibraries({ onOpenTask }) {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (deleting) document.getElementById("delete-library-title")?.scrollIntoView({ block: "center" });
+  }, [deleting]);
   const save = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -37,6 +42,34 @@ export function KnowledgeLibraries({ onOpenTask }) {
     } finally {
       setBusy(false);
     }
+  };
+  const prepareDelete = async (name) => {
+    setError("");
+    setNotice("");
+    try {
+      const data = await api("/api/knowledge/collections");
+      setLibraries(data.collections);
+      const item = data.collections.find(item => item.name === name);
+      if (!item) throw new Error("知识库已不存在，请刷新列表");
+      setDeleting(item);
+    } catch (e) { setError(e.message); }
+  };
+  const remove = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api(
+        `/api/knowledge/collections/${encodeURIComponent(deleting.name)}`,
+        "DELETE", { deletionToken: deleting.deletionToken },
+      );
+      if (selected?.name === deleting.name) setSelected(null);
+      if (form?.name === deleting.name) setForm(null);
+      setDeleting(null);
+      setNotice(result.warning || "知识库已删除");
+      await load();
+    } catch (e) { setError(e.message); setDeleting(null); }
+    finally { setBusy(false); }
   };
   return (
     <div className="module-view library-hub">
@@ -68,6 +101,20 @@ export function KnowledgeLibraries({ onOpenTask }) {
         <p className="form-error" role="alert">
           {error}
         </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
+      {deleting && (
+        <section className="module-card library-delete-confirm" role="alertdialog" aria-labelledby="delete-library-title" aria-describedby="delete-library-description">
+          <h2 id="delete-library-title">删除“{deleting.name}”？</h2>
+          <p id="delete-library-description">
+            将删除此知识库及其中的 {deleting.documentCount} 份资料和检索索引，无法撤销。
+            患者档案、历史任务和电脑上的原始文件会保留。历史回答中的知识库出处可能无法再打开。
+          </p>
+          <div className="toolbar-actions">
+            <button className="secondary" disabled={busy} onClick={() => setDeleting(null)}>取消</button>
+            <button className="library-delete-button" disabled={busy} onClick={remove}>{busy ? "正在删除…" : "确认删除知识库"}</button>
+          </div>
+        </section>
       )}
       {form && (
         <form className="module-card library-form" onSubmit={save}>
@@ -154,6 +201,7 @@ export function KnowledgeLibraries({ onOpenTask }) {
               >
                 编辑说明
               </button>
+              <button className="text-button library-delete-button" disabled={busy} onClick={() => prepareDelete(selected.name)}>删除知识库</button>
             </header>
             <p>{selected.description || "尚未填写收录说明"}</p>
             <p>
@@ -205,6 +253,7 @@ export function KnowledgeLibraries({ onOpenTask }) {
                   >
                     编辑说明
                   </button>
+                  <button className="text-button library-delete-button" disabled={busy} onClick={() => prepareDelete(item.name)}>删除知识库</button>
                 </div>
               </article>
             ))}

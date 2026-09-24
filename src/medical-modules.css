@@ -293,3 +293,7 @@ fieldset.trial-form {
 .library-hub:has(.guidelines-reader-head) > .library-description {
   display: none;
 }
+
+.library-hub .library-delete-button { color: #a33a32; }
+.library-delete-confirm { border: 1px solid #d9a79d; background: #fffaf8; }
+.library-delete-confirm p { line-height: 1.7; }

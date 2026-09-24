@@ -15,6 +15,8 @@ const sha256 = (value) =>
 export class GuidelineLibrary {
   constructor(store, embedder = null, vectorStore = null) {
     this.store = store;
+    this.activeIndexWrites = 0;
+    this.deletingCollection = false;
     store.db.exec("CREATE TABLE IF NOT EXISTS knowledge_collections (name TEXT PRIMARY KEY, data TEXT NOT NULL)");
     this.embedder = embedder; // { available(), model, embed(inputs) } — optional
     this.vectorStore = vectorStore; // LanceVectorStore — optional
@@ -26,7 +28,7 @@ export class GuidelineLibrary {
       if (!saved.has(name)) saved.set(name, {name, description:"", whenToUse:"", limitations:"", revision:0});
     }
     const docs = this.list();
-    return [...saved.values()].map(item=>({...item, documentCount:docs.filter(d=>d.collection===item.name).length, needsDescription:!item.description || !item.whenToUse})).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
+    return [...saved.values()].map(item=>({...item, deletionToken:sha256(JSON.stringify([item,docs.filter(d=>d.collection===item.name).map(d=>[d.id,d.revision]).sort()])), documentCount:docs.filter(d=>d.collection===item.name).length, needsDescription:!item.description || !item.whenToUse})).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
   }
   saveCollection(name, input) {
     name = string(name, "知识库名称", 60);
@@ -40,6 +42,34 @@ export class GuidelineLibrary {
       this.store.audit(null,"knowledge.collection.saved",{name,revision:item.revision});
       return item;
     });
+  }
+  async removeCollection(name, input) {
+    name = string(name, "知识库名称", 60);
+    check(!this.activeIndexWrites && !this.deletingCollection, "KNOWLEDGE_BUSY", "资料正在上传、建立索引或删除，请完成后重试", 409);
+    const current = this.collections().find(item => item.name === name);
+    check(current, "NOT_FOUND", "知识库不存在，请刷新列表", 404);
+    check(input?.deletionToken === current.deletionToken, "REVISION_CONFLICT", "知识库内容已变更，请重新打开删除确认", 409);
+    const docs = this.list({ collection: name });
+    this.deletingCollection = true;
+    try {
+      sqliteTransaction(this.store.db, () => {
+        for (const doc of docs) {
+          this.store.db.prepare("DELETE FROM guideline_chunks WHERE doc_id=?").run(doc.id);
+          this.store.db.prepare("DELETE FROM guideline_docs WHERE id=?").run(doc.id);
+        }
+        this.store.db.prepare("DELETE FROM knowledge_collections WHERE name=?").run(name);
+        this.store.audit(null, "knowledge.collection.deleted", { name, documentCount: docs.length });
+      });
+      let warning = "";
+      try {
+        if (docs.length && this.vectorStore) await this.vectorStore.removeDocs(docs.map(doc => doc.id));
+      } catch {
+        warning = "知识库已删除，残留向量索引清理失败；这些资料已不参与检索。";
+      }
+      return { ok: true, deletedDocuments: docs.length, warning };
+    } finally {
+      this.deletingCollection = false;
+    }
   }
   async ragStatus() {
     const stats = this.vectorStore
@@ -105,7 +135,13 @@ export class GuidelineLibrary {
       return this.get(id);
     });
   }
-  async addDocument({
+  async addDocument(input) {
+    check(!this.deletingCollection, "KNOWLEDGE_BUSY", "正在删除知识库，请稍后上传", 409);
+    this.activeIndexWrites++;
+    try { return await this.ingestDocument(input); }
+    finally { this.activeIndexWrites--; }
+  }
+  async ingestDocument({
     title,
     org = "",
     year,
@@ -356,6 +392,12 @@ export class GuidelineLibrary {
   }
   // Re-embed every stored document with the current embedder model.
   async reindex() {
+    check(!this.deletingCollection, "KNOWLEDGE_BUSY", "正在删除知识库，请稍后重建索引", 409);
+    this.activeIndexWrites++;
+    try { return await this.reindexDocuments(); }
+    finally { this.activeIndexWrites--; }
+  }
+  async reindexDocuments() {
     check(
       this.embedder?.available() && this.vectorStore,
       "EMBEDDING_UNAVAILABLE",

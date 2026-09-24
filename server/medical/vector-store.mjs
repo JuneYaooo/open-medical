@@ -59,6 +59,16 @@ export class LanceVectorStore {
     await table.delete(`doc_id = '${docId}'`);
     if (rows.length) await table.add(rows);
   }
+  async removeDocs(ids) {
+    if (!ids.length) return;
+    const db = await this.ensureDb();
+    const predicate = "doc_id IN (" + ids.map(id => "'" + String(id).replaceAll("'", "''") + "'").join(",") + ")";
+    for (const name of await db.tableNames()) {
+      if (!name.startsWith("chunks_")) continue;
+      const table = await db.openTable(name);
+      await table.delete(predicate);
+    }
+  }
   async search(model, vector, limit = 20) {
     const db = await this.ensureDb();
     const name = this.tableName(model);

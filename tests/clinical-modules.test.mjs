@@ -186,3 +186,18 @@ test("follow-up clinical feedback reaches patient context and filters history on
   const brief = (await f.json(`/api/patients/${p.id}/brief`)).data;
   assert.match(briefDraft(brief), /药盒照片尚待核实/);
 });
+
+test("collection DELETE requires a fresh confirmation and preserves patient records", async (t) => {
+  const f = await fixture(t);
+  const patient = (await f.json("/api/patients", "POST", { name: "合成删除隔离患者" })).data;
+  const path = "/api/knowledge/collections/" + encodeURIComponent("合成/删除库");
+  await f.json(path, "PUT", { expectedRevision: 0, description: "合成", whenToUse: "测试" });
+  await f.json("/api/knowledge", "POST", { title: "合成", text: "仅测试删除的内容", collection: "合成/删除库" });
+  assert.equal((await f.json(path, "DELETE", {})).status, 409);
+  const current = (await f.json("/api/knowledge/collections")).data.collections.find(c => c.name === "合成/删除库");
+  const result = await f.json(path, "DELETE", { deletionToken: current.deletionToken });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.deletedDocuments, 1);
+  assert.equal((await f.json("/api/knowledge")).data.documents.length, 0);
+  assert.deepEqual((await f.json("/api/patients/" + patient.id)).data, patient);
+});

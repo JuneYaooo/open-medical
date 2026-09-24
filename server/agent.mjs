@@ -1686,6 +1686,7 @@ export function createServer(options = {}) {
           return send(res,200,{text:result.lines.map(line=>line.text+(line.confidence<0.7?" [识别置信度低，请核对原图]":"")).join("\n"),method:"local-ocr"});
         }
         if (sub[0] === "collections") {
+          if (sub.length === 2 && req.method === "DELETE") return send(res,200,await guidelines.removeCollection(decodeURIComponent(sub[1]),await body(req)));
           if (sub.length === 1 && req.method === "GET") return send(res,200,{collections:guidelines.collections()});
           if (sub.length === 2 && req.method === "PUT") return send(res,200,guidelines.saveCollection(decodeURIComponent(sub[1]),await body(req)));
         }
