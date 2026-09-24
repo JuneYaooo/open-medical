@@ -350,6 +350,8 @@ export class SessionBridge {
       return {
         id: run.id,
         requestId: run.requestId,
+        conversationParentRunId: run.conversationParentRunId || null,
+        resumes: run.resumes || null,
         status: run.status,
         derivedStatus: deriveRunStatus(run, facts),
         ...(waitingReason ? { waitingReason } : {}),
@@ -587,7 +589,8 @@ export class SessionBridge {
       requestId: body.requestId,
       thinking: body.thinking,
       skills: body.skills,
-      isolatedContext: focused || body.isolatedContext === true,
+      isolatedContext: w.patientId ? !body.conversationParentRunId : focused || body.isolatedContext === true,
+      ...(w.patientId && body.conversationParentRunId ? { conversationParentRunId: body.conversationParentRunId } : {}),
       policy,
       collectArtifacts: true,
       skipArtifact: (output) =>

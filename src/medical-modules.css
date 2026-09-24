@@ -297,3 +297,17 @@ fieldset.trial-form {
 .library-hub .library-delete-button { color: #a33a32; }
 .library-delete-confirm { border: 1px solid #d9a79d; background: #fffaf8; }
 .library-delete-confirm p { line-height: 1.7; }
+.patient-question-nav { flex-shrink: 0; margin: 0; padding: 12px 24px; border-bottom: 1px solid var(--border, #dfe5de); }
+.patient-question-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.patient-question-actions p, .patient-question-history p { color: var(--muted, #69786e); font-size: 13px; margin: 6px 0; }
+.patient-question-actions button { flex-shrink: 0; }
+.patient-question-history { margin-top: 12px; }
+.patient-question-history summary { cursor: pointer; font-size: 14px; }
+.patient-question-history > div { max-height: 260px; overflow: auto; display: grid; gap: 4px; margin-top: 8px; }
+.patient-question-history button { text-align: left; padding: 12px; display: flex; gap: 12px; justify-content: space-between; background: #f5f7f3; border: 1px solid transparent; border-radius: 8px; }
+.patient-question-history button[aria-current="true"] { border-color: #2b705b; }
+.patient-question-history button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patient-question-history button small { flex-shrink: 0; color: #607267; }
+.patient-question-context { color: #53665b; font-size: 13px; padding: 8px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patient-question-context span { display: block; white-space: normal; }
+@media (max-width: 600px) { .patient-question-actions { align-items: flex-start; } .patient-question-actions p { max-width: 22ch; } }

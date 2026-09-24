@@ -1,3 +1,4 @@
+import { conversationRunIds } from "../../shared/patient-conversations.mjs";
 import { localOcrAvailable, recognizeImage } from "./image-ocr.mjs";
 import { normalizeDelivery } from "./delivery.mjs";
 import { completionRequirements, collectWorkspaceDelivery, collectApprovalReadiness } from "./workspace-delivery.mjs";
@@ -1704,6 +1705,14 @@ export class WorkspaceService {
         409,
       );
     }
+    if (body.conversationParentRunId) {
+      const parent = w.runs.find(r => r.id === body.conversationParentRunId);
+      check(w.patientId && parent && parent.status === "completed" &&
+        parent.authority === hashText(JSON.stringify(w.permissions)) &&
+        parent.contextIdentity === this.contextIdentity(id) &&
+        !body.resumeRunId && !body.isolatedContext,
+        "CONVERSATION_STATE", "这段问答暂不能追问，请选择已完成的回答或问新问题", 409);
+    }
     const completion = completionRequirements(body.completion, w.root);
     const run = {
       // Child job identities can survive a parent resume. Persist the evidence
@@ -1719,6 +1728,7 @@ export class WorkspaceService {
       resumeOnRestart: body.resumeOnRestart === true,
       recoveryAttempts: 0,
       resumes: body.resumeRunId || null,
+      conversationParentRunId: body.conversationParentRunId || null,
       inputs: body.resumeRunId
         ? structuredClone(
             (w.runs.find((r) => r.id === body.resumeRunId).inputs || []).filter(
@@ -1765,7 +1775,7 @@ export class WorkspaceService {
       message,
       controller: new AbortController(),
       permissions,
-      isolatedContext: body.isolatedContext === true,
+      isolatedContext: body.isolatedContext === true || Boolean(w.patientId && !body.conversationParentRunId && !body.resumeRunId),
       resumeRunId: body.resumeRunId,
       // 会话型叠层：材料全文（context.sources）与结构化产物收集。
       ...(Array.isArray(body.sources) && body.sources.length
@@ -1983,6 +1993,13 @@ export class WorkspaceService {
                 .flatMap((r) => r.providerMessages || []),
             ]
           : compatible.flatMap((r) => r.providerMessages || []);
+      if (run.conversationParentRunId) {
+        const questionRuns = conversationRunIds(w.runs, run.conversationParentRunId);
+        // Rebuild from visible exchanges, not old provider checkpoints that may
+        // contain unrelated historical tasks or stale tool observations.
+        previous = w.messages.filter(m => questionRuns.has(m.runId) &&
+          ["user", "assistant"].includes(m.role)).map(m => ({ role: m.role, content: m.content }));
+      }
       const resumed = handle.resumeRunId
         ? w.runs.find((r) => r.id === handle.resumeRunId)
         : handle.recovering

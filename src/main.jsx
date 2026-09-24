@@ -1,3 +1,5 @@
+import { conversationRunIds } from "../shared/patient-conversations.mjs";
+import { PatientConversationNav } from "./patient-conversation-nav";
 import { TaskResult, hasTaskResult } from "./task-result";
 import { SimilarCases } from "./similar-cases";
 import { ProjectDirectory, ToolDirectory, TaskDirectory } from "./work-directory";
@@ -537,6 +539,8 @@ function App() {
     [activeId, setActiveId] = useState(""),
     [draft, setDraft] = useState(""),
     [consent, setConsent] = useState(false);
+  const [questionSelection, setQuestionSelection] = useState({});
+  const questionDrafts = useRef(new Map());
   const [accessMode, setAccessMode] = useState("auto");
   const [thinking, setThinking] = useState("disabled");
   const [pickedSkills, setPickedSkills] = useState([]),
@@ -647,6 +651,20 @@ function App() {
   const canSteer =
     busy && session?.kind === "session" && Boolean(persistedRunning?.id);
   const runOf = (runId) => session?.runs?.find((r) => r.id === runId);
+  const questionRunId = session?.patientId
+    ? (questionSelection.sessionId === session.id ? questionSelection.runId : session.runs.at(-1)?.id) : undefined;
+  const questionRun = session?.runs.find(r => r.id === questionRunId);
+  const questionIds = conversationRunIds(session?.runs, questionRunId);
+  const canFollowQuestion = questionRun?.status === "completed" && questionRun?.mode !== "local";
+  const chooseQuestion = (runId) => {
+    questionDrafts.current.set(session.id + ":" + (questionRunId || "new"), draft);
+    setQuestionSelection({ sessionId: session.id, runId });
+    setAcceptId("");
+    setDraft(questionDrafts.current.get(session.id + ":" + (runId || "new")) || "");
+    setError("");
+    setNotice("");
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
   const completedCaseRun = (r) => r?.status === "completed" && (!r.outcome || r.outcome === "delivered") && r.artifacts?.some(a => a.type === "similar_cases");
   const messageMeta = (m) => {
     if (m.role === "user") return "本轮输入";
@@ -717,6 +735,7 @@ function App() {
     setMaterialQuery("");
     setMaterialMatches(null);
     setSession(null);
+    setQuestionSelection({});
     setMeters({ chars: 0, tokens: 0, rounds: 0, retrievals: 0, compacted: false });
     activeRef.current = id;
     setActiveId(id);
@@ -923,6 +942,7 @@ function App() {
     if (!current) current = await create();
     if (!current || sendingRef.current.has(current.id)) return;
     const id = current.id;
+    questionDrafts.current.delete(id + ":" + (questionRunId || "new"));
     sendingRef.current.add(id);
     followOutput.current = true;
     lastScrollTop.current = 0;
@@ -953,6 +973,7 @@ function App() {
             : {}),
           skills: pickedSkills,
           delegations: [],
+          ...(current.patientId ? { conversationParentRunId: current.id === session?.id && canFollowQuestion ? questionRunId : null } : {}),
           ...override,
           sessionRevision: current.revision,
           fileIds: (
@@ -998,10 +1019,10 @@ function App() {
           if (event.type === "message.start" && activeRef.current === id)
             api(`/api/sessions/${id}`)
               .then((s) => {
-                if (activeRef.current === id)
-                  setSession((prev) =>
-                    prev?.id === s.id && prev.revision > s.revision ? prev : s,
-                  );
+                if (activeRef.current === id) {
+                  setQuestionSelection({ sessionId: id, runId: s.runs.at(-1)?.id });
+                  setSession((prev) => prev?.id === s.id && prev.revision > s.revision ? prev : s);
+                }
               })
               .catch((err) => {
                 if (activeRef.current === id) setError(err.message);
@@ -1043,6 +1064,8 @@ function App() {
         const data = await api(`/api/sessions/${id}`);
         if (activeRef.current === id) {
           setSession(data);
+          if (data.patientId && data.runs.at(-1)?.id !== current.runs.at(-1)?.id)
+            setQuestionSelection({ sessionId: id, runId: data.runs.at(-1)?.id });
           setMeters((m) => ({ ...m, ...metersFromSession(data) }));
         }
         await refreshList();
@@ -1158,6 +1181,7 @@ function App() {
     setView("workbench");
     const data = await select(id);
     if (data) {
+      if (data.patientId && (options.draft || options.newQuestion)) setQuestionSelection({ sessionId: data.id, runId: null });
       setTab(options.tab || "materials");
       setArtifactId(
         options.artifactId ||
@@ -1203,7 +1227,8 @@ function App() {
         `任务已在 ${patient.name} 的病例工作区发起，材料范围可在右侧核对。`,
       );
     }
-    send(null, { message: prompt, skills }, data);
+    setQuestionSelection({ sessionId: data.id, runId: null });
+    send(null, { message: prompt, skills, conversationParentRunId: null }, data);
   };
   const pendingReviews = sessions.reduce(
     (sum, item) => sum + item.reviewCount,
@@ -1550,7 +1575,7 @@ function App() {
               initialTab={patientRoute.tab}
               initialCreate={patientRoute.create}
               initialImport={patientRoute.import}
-              onOpenWorkspace={openTask}
+              onOpenWorkspace={(id, options = {}) => openTask(id, { newQuestion: !options.tab, ...options })}
               onSwitchCurrent={switchCurrentPatient}
               onChanged={refreshList}
             />
@@ -1686,7 +1711,7 @@ function App() {
                 </div>
                 {session && (
                   <div className="task-context-bar">
-                    {(session.files.length > 0 ||
+                    {!session.patientId && (session.files.length > 0 ||
                       session.artifacts.length > 0) && (
                       <div className="task-steps" aria-label="任务阶段">
                         <span
@@ -1740,6 +1765,7 @@ function App() {
                     </IconButton>
                   </div>
                 )}
+                {session?.patientId && !loading && !acceptArtifact && <PatientConversationNav session={session} runId={questionRunId} busy={busy} onSelect={chooseQuestion} />}
                 {loading ? (
                   <div className="loading-state">
                     <Loader2 className="spin" />
@@ -1798,7 +1824,7 @@ function App() {
                         }
                       />
                     )}
-                    {!session?.messages.length && (
+                    {(!session?.messages.length || (session?.patientId && !questionRunId && !busy)) && (
                       <div className="welcome task-preparation">
                         <div className="welcome-symbol">
                           {session?.files.length ? (
@@ -1809,13 +1835,13 @@ function App() {
                         </div>
                         <p className="eyebrow">直接提问，或描述任务</p>
                         <h2>
-                          {session?.files.length
+                          {session?.patientId ? "这次想了解患者的哪方面？" : session?.files.length
                             ? "材料已就绪，可以直接开始。"
                             : "有什么可以帮你？"}
                         </h2>
                         <p>
                           {session?.patientId
-                            ? "这位患者的原始材料、任务与成果都保留在当前病例工作区。"
+                            ? "可以直接问这位患者的新问题。病历资料会共享，以前的聊天不会自动带入。"
                             : "咨询、指标解读这类问题会直接回答；整理病历、写文书时助手会自动选择合适的技能模板，需要时再添加材料。"}
                         </p>
                         <button
@@ -1854,7 +1880,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {session?.messages.filter((m) => !session.patientId || !session.runs.length || m.runId === session.runs.at(-1)?.id).map((m) => (
+                    {session?.messages.filter((m) => !session.patientId || questionIds.has(m.runId)).map((m) => (
                       <article
                         key={m.id}
                         className={`message ${m.role === "user" ? "user-message" : ""}`}
@@ -1924,10 +1950,10 @@ function App() {
                         </div>
                       </article>
                     )}
-                    {!busy &&
+                    {!busy && (!session?.patientId || questionRunId) &&
                       (session?.artifacts.length || 0) > 0 &&
                       session.artifacts
-                        .filter(a => !(a.type === "treatment_review" && session.messages.some(m=>m.role==="assistant" && m.runId===session.runs.at(-1)?.id)) && session.runs.at(-1)?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun(session.runs.at(-1)) && session.messages.some(m => m.role === "assistant" && m.runId === session.runs.at(-1).id)))
+                        .filter(a => !(a.type === "treatment_review" && session.messages.some(m=>m.role==="assistant" && m.runId===(session.patientId ? questionRun : session.runs.at(-1))?.id)) && (session.patientId ? questionRun : session.runs.at(-1))?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun((session.patientId ? questionRun : session.runs.at(-1))) && session.messages.some(m => m.role === "assistant" && m.runId === (session.patientId ? questionRun : session.runs.at(-1)).id)))
                         .slice(-3)
                         .reverse()
                         .map((a) => (
@@ -1953,7 +1979,7 @@ function App() {
                             </div>
                           </div>
                         ))}
-                    {!busy && session?.runs.slice(-1)
+                    {!busy && (session?.patientId ? (questionRun ? [questionRun] : []) : (session?.runs.slice(-1) || []))
                       .filter(r => ["failed", "cancelled", "interrupted"].includes(r.status))
                       .map(r => renderIncompleteRun(r))}
                     <div ref={endRef} />
@@ -2074,6 +2100,10 @@ function App() {
                       <small>本轮固定技能，发送后清除</small>
                     </div>
                   )}
+                  {session?.patientId && <div className="patient-question-context" role="status">
+                    {busy ? "正在处理当前问题，可补充要求。" : canFollowQuestion ? <>继续追问 · {session.messages.find(m => m.role === "user" && m.runId === [...questionIds].at(-1))?.content}</> : "新问题 · 使用患者档案与所选资料"}
+                    {!busy && questionRunId && !canFollowQuestion && <span>这次问答未形成可追问的模型回答。再次发送会独立开始。</span>}
+                  </div>}
                   <form className="composer" onSubmit={send}>
                     <textarea
                       ref={inputRef}
@@ -2082,6 +2112,7 @@ function App() {
                       placeholder={
                         canSteer
                           ? "任务执行中…输入补充要求可直接追加（Enter 发送）"
+                          : session?.patientId ? (canFollowQuestion ? "继续追问这段回答，如：请解释第二点…" : "问这位患者的新问题，如：总结过往用药情况…")
                           : "输入问题或任务，如「血糖有点高，27 岁男生，怎么办」；输入 @ 可固定技能…"
                       }
                       value={draft}
