@@ -46,6 +46,7 @@ export class GuidelineLibrary {
   async removeCollection(name, input) {
     name = string(name, "知识库名称", 60);
     check(!this.activeIndexWrites && !this.deletingCollection, "KNOWLEDGE_BUSY", "资料正在上传、建立索引或删除，请完成后重试", 409);
+    this.beforeRemoveCollection?.(name);
     const current = this.collections().find(item => item.name === name);
     check(current, "NOT_FOUND", "知识库不存在，请刷新列表", 404);
     check(input?.deletionToken === current.deletionToken, "REVISION_CONFLICT", "知识库内容已变更，请重新打开删除确认", 409);
@@ -60,6 +61,7 @@ export class GuidelineLibrary {
         this.store.db.prepare("DELETE FROM knowledge_collections WHERE name=?").run(name);
         this.store.audit(null, "knowledge.collection.deleted", { name, documentCount: docs.length });
       });
+      await this.afterRemoveDocuments?.(docs.map(doc => doc.id), name);
       let warning = "";
       try {
         if (docs.length && this.vectorStore) await this.vectorStore.removeDocs(docs.map(doc => doc.id));
@@ -111,6 +113,7 @@ export class GuidelineLibrary {
     return sqliteTransaction(this.store.db, () => {
       const doc = this.docRow(id);
       check(input.expectedRevision === (doc.revision || 0), "REVISION_CONFLICT", "资料已被修改，请重新打开文档后再编辑", 409);
+      if(input.collection && input.collection !== doc.collection)this.beforeMoveDocument?.(id);
       const previous = { ...knowledgeMetadata(doc), title: doc.title, org: doc.org, year: doc.year, kind: doc.kind, collection: doc.collection, revision: doc.revision || 0 };
       for (const [key, max] of [["title", 150], ["org", 80], ["kind", 20], ["collection", 60], ["edition", 100]]) {
         if (input[key] !== undefined) doc[key] = ["org", "edition"].includes(key) && input[key] === "" ? "" : string(input[key], key, max);
@@ -131,6 +134,7 @@ export class GuidelineLibrary {
       doc.updatedAt = Date.now();
       doc.metadataHistory = [...(doc.metadataHistory || []), { ...previous, replacedAt: doc.updatedAt }].slice(-50);
       this.store.db.prepare("UPDATE guideline_docs SET data=? WHERE id=?").run(JSON.stringify(doc), id);
+      if(doc.collection!==previous.collection)this.afterMoveDocument?.(id,doc.collection);
       this.store.audit(null, "knowledge.metadata.updated", { docId: id, revision: doc.revision, reviewStatus: status });
       return this.get(id);
     });
@@ -242,8 +246,10 @@ export class GuidelineLibrary {
   }
   removeDocument(id) {
     this.docRow(id);
+    this.beforeRemoveDocument?.(id);
     this.store.db.prepare("DELETE FROM guideline_chunks WHERE doc_id=?").run(id);
     this.store.db.prepare("DELETE FROM guideline_docs WHERE id=?").run(id);
+    if (this.afterRemoveDocuments) return this.afterRemoveDocuments([id]).then(() => ({ ok: true }));
     return { ok: true };
   }
   get(id) {

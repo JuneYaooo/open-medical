@@ -13,7 +13,7 @@ test('doctor journey: create a purposeful library, import/search/read, then scre
  await page.goto(f.origin+'/?view=knowledge');await page.getByRole('button',{name:'新建知识库',exact:true}).click();
  await page.getByLabel('知识库名称',{exact:true}).fill('合成科室规范');await page.getByLabel('收录什么',{exact:true}).fill('仅用于软件验收的合成资料');await page.getByLabel('什么时候用',{exact:true}).fill('准备合成随访问题时');await page.getByRole('button',{name:'保存知识库',exact:true}).click();
  const card=page.locator('.library-card',{hasText:'合成科室规范'});await card.waitFor();await card.getByRole('button',{name:'打开知识库'}).click();
- await page.locator('.guidelines-view input[type=file]').setInputFiles({name:'合成复诊规范.txt',mimeType:'text/plain',buffer:Buffer.from('合成复诊规范。记录患者反馈，核对资料日期与来源。此内容仅供软件测试，不用于真实诊疗。\n'.repeat(8))});
+ await page.getByLabel('手动导入文件',{exact:true}).setInputFiles({name:'合成复诊规范.txt',mimeType:'text/plain',buffer:Buffer.from('合成复诊规范。记录患者反馈，核对资料日期与来源。此内容仅供软件测试，不用于真实诊疗。\n'.repeat(8))});
  await page.getByRole('button',{name:'导入并建索引',exact:true}).click();await page.getByText(/资料已保存.*关键词检索/).waitFor();
  await page.locator('.literature-query').fill('复诊');await page.getByRole('button',{name:'检索',exact:true}).click();await page.getByText('全文关键词检索可用',{exact:false}).waitFor();
  assert.equal((await f.json('/api/knowledge?collection='+encodeURIComponent('合成科室规范'))).data.documents.length,1);

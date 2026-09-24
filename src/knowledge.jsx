@@ -1,3 +1,4 @@
+import { KnowledgeOrganization, KnowledgeMap, KnowledgeReading } from "./knowledge-organization";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { KnowledgeMetadataModal, knowledgeStateLabels } from "./knowledge-metadata";
@@ -15,6 +16,7 @@ import {
 // browser), full-text search with line provenance, and an inline reader.
 export function KnowledgeView({ onOpenTask, collection = "" }) {
   const [docs, setDocs] = useState([]);
+  const [displayMode, setDisplayMode] = useState("list");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState(null);
   const [rag, setRag] = useState(null);
@@ -206,6 +208,7 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
           <p className="muted">
             保留原文出处；进入任务后可补充临床问题，并在发送前核对外发范围。
           </p>
+          <KnowledgeReading doc={reader.doc} highlight={highlight} />
           <div className="guidelines-text">
             {lines.map((line, index) => {
               const lineNo = index + 1;
@@ -237,7 +240,7 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
         <div className="module-head">
           <div>
             <h2>知识库资料</h2>
-            <p className="module-phase">支持图片、PDF、Word、Excel、TXT、Markdown、CSV、JSON</p>
+            <p className="module-phase">原始资料、带出处的知识条目与知识地图</p>
           </div>
         </div>
         {error && (
@@ -247,6 +250,18 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
         )}
         {notice && <p className="form-notice">{notice}</p>}
 
+        <nav className="tab-row knowledge-view-tabs" aria-label="知识库视图">
+          <button className={displayMode==="list"?"active":""} onClick={()=>setDisplayMode("list")}>资料列表</button>
+          <button className={displayMode==="map"?"active":""} onClick={()=>setDisplayMode("map")}>知识地图</button>
+        </nav>
+        <KnowledgeOrganization collection={filters.collection} docs={visibleDocs} onRefresh={refresh} onRead={openReader}/>
+        {displayMode==="map" && <KnowledgeMap collection={filters.collection} refreshKey={docs} onRead={openReader} onAsk={onOpenTask ? async node=>{
+          try {
+            const task=await api("/api/sessions","POST",{title:"知识问答："+node.label});
+            await onOpenTask(task.id,{draft:`请围绕「${node.label}」回答我的问题。先读取知识库「${filters.collection || "相关知识库"}」原文，以下只是待核对线索，不能当作已确认推荐：${node.evidence.slice(0,5).map(e=>`${e.docTitle}（${e.docId}）第${e.startLine}–${e.endLine}行`).join("；")}。区分资料类型、适用条件和来源分歧。我的问题是：`});
+          } catch(e){setError(e.message);}
+        } : undefined}/>}
+        <div hidden={displayMode==="map"}>
         {pending ? (
           <div className="guideline-import">
             <h3>确认导入：{pending.name}</h3>
@@ -311,12 +326,13 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
             onClick={() => fileRef.current?.click()}
             disabled={busy}
           >
-            <Upload size={14} /> 上传资料
+            <Upload size={14} /> 手动导入（仅建索引）
           </button>
         )}
         <input
           ref={fileRef}
           type="file"
+          aria-label="手动导入文件"
           accept=".pdf,.md,.txt,.markdown,.docx,.xlsx,.csv,.json,.png,.jpg,.jpeg,.webp"
           hidden
           onChange={onPickFile}
@@ -471,6 +487,7 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
         <p className="module-note">
           指南内容仅作为参考资料，检索引用时请核对原文行号；不构成处方或剂量建议。
         </p>
+        </div>
       </section>
     </div>
   );

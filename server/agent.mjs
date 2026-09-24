@@ -1,3 +1,6 @@
+import { KnowledgeOrganizer } from "./medical/knowledge-organizer.mjs";
+import { ModelProfiles } from "./core/model-profiles.mjs";
+import { createReadStream } from "node:fs";
 import {TrialEligibilityJobs} from './medical/trial-eligibility-jobs.mjs';
 import { recognizeImage } from "./core/image-ocr.mjs";
 import { TrialRegistry } from "./medical/trial-registry.mjs";
@@ -251,6 +254,18 @@ export function createServer(options = {}) {
     options.materials || new MaterialLibrary(patientEmbedder, materialVectors);
   const guidelines =
     options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
+  const knowledgeRoot = databasePath === ":memory:" ? mkdtempSync(join(tmpdir(), "omw-knowledge-")) : join(dirname(databasePath), "knowledge-uploads");
+  const knowledgeProfiles = new ModelProfiles(models);
+  const knowledgeOrganizer = new KnowledgeOrganizer({
+    store, library: guidelines, root: knowledgeRoot, getProvider: () => provider,
+    getTranscription: () => knowledgeProfiles.all()["knowledge-transcription"],
+    ...options.knowledgeOrganizerOptions,
+  });
+  guidelines.beforeRemoveCollection = name => knowledgeOrganizer.assertRemovable(name);
+  guidelines.beforeMoveDocument = id => knowledgeOrganizer.assertRemovable(null, [id]);
+  guidelines.afterMoveDocument = (id,collection) => knowledgeOrganizer.moveDocument(id,collection);
+  guidelines.beforeRemoveDocument = id => knowledgeOrganizer.assertRemovable(null, [id]);
+  guidelines.afterRemoveDocuments = (ids, name) => knowledgeOrganizer.purge(ids, name);
   const cases = options.cases || new CaseLibrary(store);
   const research = options.research || new ResearchService();
   const drg = options.drg || new DrgService(store);
@@ -404,6 +419,15 @@ export function createServer(options = {}) {
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? value : fallback;
   };
+  knowledgeToolPlugins.push({
+    definition: { type: "function", function: { name: "knowledge_map", description: "读取指定知识库中由原文提取的待核对知识节点、关系及引文。仅用于导航，不能当作已确认指南推荐。", parameters: { type: "object", properties: { collection: { type: "string" }, query: {type:"string"} }, required: ["collection"], additionalProperties: false } } },
+    capability: { backend: "local" }, execute: ({ collection, query }) => {
+      const graph=knowledgeOrganizer.graph(collection), matched=graph.nodes.filter(n=>!query||n.label.toLowerCase().includes(query.toLowerCase()));
+      const nodes=matched.slice(0,30).map(n=>({...n,evidence:n.evidence.slice(0,3)})),ids=new Set(nodes.map(n=>n.id));
+      const edges=graph.edges.filter(e=>ids.has(e.from)&&ids.has(e.to)).slice(0,50);
+      return {nodes,edges,matchedNodes:matched.length,truncated:matched.length>nodes.length,notice:"知识地图为待核对导航，引用时须 knowledge_read 阅读原文。"};
+    },
+  });
   const runtime = new MedicalRuntime(store, provider, {
     maxContextChars: envNumber("MEDICAL_CONTEXT_BUDGET", 80000),
     maxRounds: envNumber("MEDICAL_MAX_ROUNDS", Infinity),
@@ -812,6 +836,23 @@ export function createServer(options = {}) {
           cases: cases.counts(),
           wechat: { enabled: wechat.enabled },
         });
+      if (path.startsWith("/api/knowledge/playback/") && ["GET", "HEAD"].includes(req.method)) {
+        const file = knowledgeOrganizer.playbackFile(path.split("/").at(-1));
+        const info = await stat(file.path), range = req.headers.range;
+        let start = 0, end = info.size - 1;
+        if (range) {
+          const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+          check(match && (match[1] || match[2]), "RANGE", "不支持的读取范围", 416);
+          if (!match[1]) start = Math.max(0, info.size - Number(match[2]));
+          else { start = Number(match[1]); if (match[2]) end = Math.min(end, Number(match[2])); }
+          check(Number.isSafeInteger(start) && start >= 0 && start <= end && start < info.size, "RANGE", "读取范围超出文件", 416);
+        }
+        const mime = ({".mp3":"audio/mpeg",".m4a":"audio/mp4",".wav":"audio/wav",".mp4":"video/mp4",".mov":"video/quicktime",".pdf":"application/pdf",".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",".webp":"image/webp"})[extname(file.name).toLowerCase()] || "application/octet-stream";
+        res.writeHead(range ? 206 : 200, {"Content-Type":mime, "Accept-Ranges":"bytes", "Content-Length":end-start+1, "Cache-Control":"no-store", "Referrer-Policy":"no-referrer", "Content-Disposition":`inline; filename*=UTF-8''${encodeURIComponent(file.name)}`, ...(range?{"Content-Range":`bytes ${start}-${end}/${info.size}`}:{})});
+        if(req.method==="HEAD")return res.end();
+        const stream=createReadStream(file.path,{start,end});
+        res.on("close",()=>stream.destroy());stream.on("error",()=>res.destroy());stream.pipe(res);return;
+      }
       if (path.startsWith("/api/")) guard(req, true);
       // 医疗领域能力按需启用（W6）：普通项目默认通用工具面；以下显式
       // 入口打开医疗叠层。会话型工作区（首页/患者会话）始终医疗，不经
@@ -1678,6 +1719,27 @@ export function createServer(options = {}) {
         (parts[1] === "knowledge" || parts[1] === "guidelines");
       if (knowledgeRoutes) {
         const sub = parts.slice(2);
+        if(sub[0]==="organization") {
+          if(sub.length===2 && req.method==="DELETE")return send(res,200,await knowledgeOrganizer.discard(sub[1]));
+          if(sub.length===1 && req.method==="GET")return send(res,200,{jobs:knowledgeOrganizer.list(url.searchParams.get("collection")||""),...knowledgeOrganizer.capabilities()});
+          if(sub.length===1 && req.method==="POST")return send(res,202,await knowledgeOrganizer.upload(req,{collection:url.searchParams.get("collection"),name:url.searchParams.get("name"),sourceKind:url.searchParams.get("sourceKind")||"资料",externalConsent:req.headers["x-knowledge-consent"]==="true"}));
+          if(sub.length===3 && sub[2]==="retry" && req.method==="POST")return send(res,202,knowledgeOrganizer.retry(sub[1],await body(req)));
+          if(sub.length===3 && sub[2]==="cancel" && req.method==="POST")return send(res,200,knowledgeOrganizer.cancel(sub[1]));
+          if(sub.length===3 && sub[2]==="playback" && req.method==="POST")return send(res,200,knowledgeOrganizer.playback(sub[1]));
+        }
+        if(sub[0]==="transcription-settings") {
+          if(req.method==="PUT") {
+            const value=await body(req);
+            knowledgeProfiles.save("knowledge-transcription",value);
+            return send(res,200,knowledgeOrganizer.capabilities());
+          }
+          if(req.method==="GET")return send(res,200,knowledgeOrganizer.capabilities());
+        }
+        if(sub[0]==="map" && req.method==="GET")return send(res,200,knowledgeOrganizer.graph(url.searchParams.get("collection")||undefined));
+        if(sub.length===2 && sub[1]==="organization") {
+          if(req.method==="GET")return send(res,200,knowledgeOrganizer.detail(sub[0]));
+          if(req.method==="POST")return send(res,202,await knowledgeOrganizer.organizeDocument(sub[0],await body(req)));
+        }
         if (sub.length === 1 && sub[0] === "ocr" && req.method === "POST") {
           const input=await body(req);
           check(typeof input?.image === "string" && input.image.length>0 && input.image.length<=5400000 && /^[A-Za-z0-9+/=]+$/.test(input.image),"INVALID_INPUT","图片数据无效或超过容量");
@@ -1725,7 +1787,7 @@ export function createServer(options = {}) {
           if (req.method === "PATCH")
             return send(res, 200, guidelines.updateMetadata(sub[0], await body(req)));
           if (req.method === "DELETE")
-            return send(res, 200, guidelines.removeDocument(sub[0]));
+            return send(res, 200, await guidelines.removeDocument(sub[0]));
         }
       }
       if (parts[0] === "api" && parts[1] === "doctor") {
@@ -1978,6 +2040,7 @@ export function createServer(options = {}) {
   server.doctor = runtime.doctor;
   server.literature = literature;
   server.guidelines = guidelines;
+  server.knowledgeOrganizer = knowledgeOrganizer;
   server.risks = risks;
   server.drg = drg;
   server.cases = cases;
@@ -2001,6 +2064,7 @@ export function createServer(options = {}) {
       if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
     await intakeJobs.stop();
     await trialJobs.stop();
+    await knowledgeOrganizer.stop();
     for (const ws of sockets.clients) ws.terminate();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
@@ -2010,7 +2074,7 @@ export function createServer(options = {}) {
     await workspaces.recovery.drain();
     await workspaces.extensions.close();
     if (databasePath === ":memory:")
-      rmSync(vectorDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      { rmSync(vectorDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); rmSync(knowledgeRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
     await followups.drain();
     sockets.close();
     store.close();

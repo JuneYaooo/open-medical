@@ -128,7 +128,7 @@ test(
     await f.page.getByRole("button", { name: /^整页打开/ }).click();
     await f.page.getByRole('button',{name:'新建知识库',exact:true}).click();
     await f.page.getByLabel('知识库名称',{exact:true}).fill('随访规范库');await f.page.getByLabel('收录什么',{exact:true}).fill('合成随访资料');await f.page.getByLabel('什么时候用',{exact:true}).fill('核对随访记录');await f.page.getByRole('button',{name:'保存知识库',exact:true}).click();await f.page.getByRole('button',{name:'打开知识库',exact:true}).click();
-    await f.page.locator('.guidelines-view input[type="file"]').setInputFiles({
+    await f.page.getByLabel("手动导入文件",{exact:true}).setInputFiles({
       name: "随访记录规范.txt",
       mimeType: "text/plain",
       buffer: Buffer.from(
