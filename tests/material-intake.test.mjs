@@ -5,8 +5,27 @@ import { fixture } from './helpers.mjs';
 import { PermissionEngine } from '../server/core/permissions.mjs';
 import { extractOfficeText } from '../shared/office-text.mjs';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { onlineCaseTools } from '../server/medical/online-cases.mjs';
 const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSAAAAABJRU5ErkJggg==';
+
+test('xlsx accepts nested comment parts and absolute note relationships without changing the input', async () => {
+  const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('Synthetic');
+  sheet.getCell('A1').value = 'synthetic laboratory';
+  sheet.getCell('B1').value = 321;
+  sheet.getCell('A1').note = 'synthetic note';
+  const zip = await JSZip.loadAsync(await book.xlsx.writeBuffer());
+  zip.file('xl/comments/comment1.xml', await zip.file('xl/comments1.xml').async('uint8array'));
+  zip.file('xl/drawings/commentsDrawing1.vml', await zip.file('xl/drawings/vmlDrawing1.vml').async('uint8array'));
+  zip.remove('xl/comments1.xml'); zip.remove('xl/drawings/vmlDrawing1.vml');
+  const relPath = 'xl/worksheets/_rels/sheet1.xml.rels';
+  zip.file(relPath, (await zip.file(relPath).async('string')).replace('../comments1.xml','/xl/comments/comment1.xml').replace('../drawings/vmlDrawing1.vml','/xl/drawings/commentsDrawing1.vml'));
+  const bytes = await zip.generateAsync({type:'uint8array'}), original = bytes.slice();
+  const result = await extractOfficeText(bytes, 'synthetic.xlsx');
+  assert.match(result.text, /A1=synthetic laboratory/);
+  assert.match(result.text, /B1=321/);
+  assert.deepEqual(bytes, original);
+});
 
 test('image upload keeps original, rejects duplicates, copies with a new owned artifact', async (t) => {
   const f = await fixture(t), session = await f.session();

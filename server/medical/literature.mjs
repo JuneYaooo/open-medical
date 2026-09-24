@@ -242,7 +242,7 @@ export class LiteratureService {
     const url = `${EUROPEPMC}/search?query=${encodeURIComponent(terms.join(" AND "))}&format=json&pageSize=${limit}&resultType=lite${sortParam}`;
     const result = await this.request(url);
     return (result?.resultList?.result || []).map((item) => ({
-      pmid: item.pmid || null,
+      pmid: item.pmid || (item.source === "MED" ? item.id : null) || null,
       pmcid: item.pmcid || null,
       doi: item.doi || null,
       title: String(item.title || "").replace(/\.$/, ""),
@@ -276,7 +276,7 @@ export class LiteratureService {
     const item = result?.resultList?.result?.[0];
     check(item, "NOT_FOUND", "未找到该文献", 404);
     const article = {
-      pmid: item.pmid || null,
+      pmid: item.pmid || (item.source === "MED" ? item.id : null) || null,
       pmcid: item.pmcid || null,
       doi: item.doi || null,
       title: String(item.title || "").replace(/\.$/, ""),

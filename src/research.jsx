@@ -106,7 +106,7 @@ export function ResearchView() {
           </p>
         )}
         <div className="followup-apply">
-          <select value={sessionId} onChange={(e) => pickSession(e.target.value)}>
+          <select value={sessionId} disabled={busy} onChange={(e) => pickSession(e.target.value)}>
             <option value="">选择任务会话…</option>
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
@@ -114,7 +114,7 @@ export function ResearchView() {
               </option>
             ))}
           </select>
-          <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} disabled={!files.length}>
+          <select value={sourceId} onChange={(e) => { setSourceId(e.target.value); setProfile(null); setTestResult(null); setError(""); }} disabled={busy || !files.length}>
             <option value="">{files.length ? "选择 CSV 数据…" : "该会话没有 CSV 材料"}</option>
             {files.map((f) => (
               <option key={f.id} value={f.id}>

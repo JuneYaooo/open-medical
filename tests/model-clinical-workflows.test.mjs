@@ -35,7 +35,12 @@ test('real model: similar-case lookup ends with traceable candidates or explicit
  t.diagnostic(JSON.stringify({comparisons:drafts[0].cases.map(caseForDisplay).map(c=>({reference:c.reference,score:comparisonScore(c.comparison),available:(c.comparison||[]).filter(row=>row.candidateQuote).map(row=>row.dimension)}))}));
  const chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
  if(existsSync(chrome)){
-  const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.goto(f.origin+'/?view=patients');await page.locator('.patient-card',{hasText:'合成临床流程患者'}).click();await page.getByRole('button',{name:'打开病例工作区',exact:true}).click();await page.getByRole('region',{name:'相似患者对照'}).waitFor();assert.equal(await page.locator('.case-row').count(),drafts[0].cases.length);await page.screenshot({path:'output/playwright/iteration38-real-cases.png',fullPage:true});if(drafts[0].cases.length){await page.locator('.case-row').first().click();await page.getByRole('region',{name:'病例概况'}).waitFor();await page.screenshot({path:'output/playwright/iteration38-real-case-detail.png',fullPage:true});}
+  const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.goto(f.origin+'/?view=patients');await page.locator('.patient-card',{hasText:'合成临床流程患者'}).click();await page.getByRole('button',{name:'打开病例工作区',exact:true}).click();
+  // Entering a patient workspace starts a new question; select the saved run explicitly.
+  const history=page.locator('.patient-question-history');
+  await history.locator('summary').click();
+  await history.getByRole('button',{name:/查找这个患者的相似病例/}).click();
+  await page.getByRole('region',{name:'相似患者对照'}).waitFor();assert.equal(await page.locator('.case-row').count(),drafts[0].cases.length);await page.screenshot({path:'output/playwright/iteration38-real-cases.png',fullPage:true});if(drafts[0].cases.length){await page.locator('.case-row').first().click();await page.getByRole('region',{name:'病例概况'}).waitFor();await page.screenshot({path:'output/playwright/iteration38-real-case-detail.png',fullPage:true});}
  }
 
 });

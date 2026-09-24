@@ -92,6 +92,15 @@ const newLiterature = (t, fetchImpl) => {
   return new LiteratureService(store, { fetchImpl });
 };
 
+test('Europe PMC MED identifiers survive lite search and core fetch without a pmid field', async t => {
+  const literature = newLiterature(t, async () => ({ ok: true, json: async () => ({resultList:{result:[{id:'39918244',source:'MED',title:'Identifier fixture',pubYear:'2025'}]}}) }));
+  const found=await literature.search({query:'identifier fixture',source:'europepmc'});
+  assert.equal(found.articles[0].pmid,'39918244');
+  const article=await literature.fetchArticle({pmid:found.articles[0].pmid});
+  assert.equal(article.pmid,'39918244');
+  assert.match(literature.materialText(article),/PMID: 39918244/);
+});
+
 test("literature search over PubMed normalizes results with evidence hints", async (t) => {
   const urls = [];
   const literature = newLiterature(t, async (url) => pubmedResponses(urls)(url));

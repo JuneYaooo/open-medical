@@ -7,6 +7,7 @@ import { Loader2, Search, Calculator, FlaskConical, FileCode2, ShieldAlert } fro
 // are deterministic local outputs for clinician review.
 export function ClinicalRefView() {
   const [tab, setTab] = useState("scales");
+  const [initialScale, setInitialScale] = useState("");
   return (
     <div className="module-view">
       <section className="module-card clinical-ref-view">
@@ -28,18 +29,18 @@ export function ClinicalRefView() {
             </button>
           ))}
         </nav>
-        {tab === "scales" && <ScalesTab />}
+        {tab === "scales" && <ScalesTab initialScale={initialScale} />}
         {tab === "labs" && <LabsTab />}
         {tab === "codes" && <CodesTab />}
-        {tab === "adr" && <AdrTab onGoScales={() => setTab("scales")} />}
+        {tab === "adr" && <AdrTab onGoScales={() => { setInitialScale("naranjo"); setTab("scales"); }} />}
       </section>
     </div>
   );
 }
 
-function ScalesTab() {
+function ScalesTab({ initialScale = "" }) {
   const [scales, setScales] = useState([]);
-  const [scaleId, setScaleId] = useState("");
+  const [scaleId, setScaleId] = useState(initialScale);
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);

@@ -81,7 +81,7 @@ export function LiteratureView({ onOpenTask }) {
       await api("/api/literature/import", "POST", {
         sessionId: session.id,
         pmid: article.pmid || undefined,
-        doi: article.doi || undefined,
+        doi: article.pmid ? undefined : article.doi || undefined,
       });
       setImported((prev) => ({ ...prev, [article.pmid || article.doi]: true }));
       onOpenTask?.(session.id);

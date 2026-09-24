@@ -548,7 +548,7 @@ function App() {
     [mentionIndex, setMentionIndex] = useState(0);
   const [view, setView] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
-    return ["home", "patients", "followups", "research", "projects", "tools", "tasks", "knowledge"].includes(requested) ? requested : "home";
+    return ["home", "patients", "followups", "research", "data-analysis", "projects", "tools", "tasks", "knowledge"].includes(requested) ? requested : "home";
   });
   const [displayMode, setDisplayMode] = useState("work");
   const [workspaceDisplay, setWorkspaceDisplay] = useState("work");
@@ -1591,6 +1591,8 @@ function App() {
             <CasesView />
           ) : view === "research" && medical ? (
             <TrialScreeningView onOpenTask={openTask} onOpenPatient={id=>openPatient({id})} />
+          ) : view === "data-analysis" ? (
+            <ResearchView />
           ) : view === "drg" ? (
             <DrgView />
           ) : view !== "workbench" ? (
@@ -2782,7 +2784,7 @@ function App() {
                     <button
                       className="secondary"
                       onClick={() => {
-                        const v = toolPanel;
+                        const v = toolPanel === "research" ? "data-analysis" : toolPanel;
                         setToolPanel(null);
                         navigate(v);
                       }}
