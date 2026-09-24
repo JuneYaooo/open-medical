@@ -84,13 +84,26 @@ try {
     const bundle = join(output, "Open Medical.app");
     await mkdir(output, { recursive: true });
     await rm(bundle, { recursive: true, force: true });
-    execFileSync("/bin/cp", ["-cR", cachedApp, bundle]);
+    // An explicitly selected verified local bundle can retain unchanged signed
+    // frameworks. Re-sign only the enclosing app to avoid duplicating Electron
+    // binaries on a nearly full APFS volume.
+    const reuse = arg("reuse-signed-app");
+    if (reuse) {
+      const base = resolve(reuse);
+      const basePackage = JSON.parse(await readFile(join(base,"Contents/Resources/app/package.json"),"utf8"));
+      if (basePackage.name !== "open-medical-desktop") throw new Error("Reuse base is not an Open Medical bundle");
+      execFileSync("/usr/bin/codesign",["--verify","--deep","--strict",base],{stdio:"pipe"});
+      const frameworkVersion = path => execFileSync("/usr/bin/plutil",["-extract","CFBundleVersion","raw",join(path,"Contents/Frameworks/Electron Framework.framework/Resources/Info.plist")],{encoding:"utf8"}).trim();
+      if (frameworkVersion(base) !== frameworkVersion(cachedApp)) throw new Error("Reuse base Electron version differs from installed dependency");
+      execFileSync("/bin/cp",["-cR",base,bundle]);
+      await rm(join(bundle,"Contents/Resources/app"),{recursive:true,force:true});
+    } else execFileSync("/bin/cp", ["-cR", cachedApp, bundle]);
     // Clone staged dependencies too: copying them twice can exhaust a low-space disk.
     execFileSync("/bin/cp", ["-cR", stage, join(bundle, "Contents/Resources/app")]);
     await rm(join(bundle, "Contents/Resources/default_app.asar"), {
       force: true,
     });
-    execFileSync("/bin/mv", [
+    if (!reuse) execFileSync("/bin/mv", [
       join(bundle, "Contents/MacOS/Electron"),
       join(bundle, "Contents/MacOS/Open Medical"),
     ]);
@@ -120,7 +133,7 @@ try {
       "/usr/bin/codesign",
       [
         "--force",
-        "--deep",
+        ...(!reuse ? ["--deep"] : []),
         "--sign",
         "-",
         "--preserve-metadata=entitlements,flags,runtime",

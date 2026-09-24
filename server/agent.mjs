@@ -1,3 +1,4 @@
+import {TrialEligibilityJobs} from './medical/trial-eligibility-jobs.mjs';
 import { recognizeImage } from "./core/image-ocr.mjs";
 import { TrialRegistry } from "./medical/trial-registry.mjs";
 import { TrialScreening } from "./medical/trial-screening.mjs";
@@ -417,6 +418,7 @@ export function createServer(options = {}) {
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     domain: createMedicalWorkspaceDomain({
+      trialJobs: {load:id=>trialJobs.get(id),save:(id,checks)=>trialJobs.save(id,checks)},
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
       saveDisplayResult: (id, runId, value) => workspaces.store.update(id, w => { const run=w.runs.find(r=>r.id===runId);run.displayResults=[...(run.displayResults||[]).filter(r=>r.key!==value.key),value].slice(-12); }),
       readPatientBrief: (patientId) => patientBrief.read(patientId),
@@ -517,6 +519,7 @@ export function createServer(options = {}) {
   const risks = new RiskEngine(store, followups);
   const doctorOverview = new DoctorOverview(store, sessionBridge);
   const trialScreening = new TrialScreening(store, patients);
+  const trialJobs = new TrialEligibilityJobs({store,patients,trials:trialScreening,bridge:sessionBridge,workspaces});
   const trialRegistry = new TrialRegistry(options.trialRegistryOptions);
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
@@ -1649,6 +1652,17 @@ export function createServer(options = {}) {
         }
       }
       if (parts[0] === "api" && parts[1] === "trials") {
+        if(parts.length===6 && parts[3]==='screenings' && parts[5]==='ai') {
+          const trialId=identifier(parts[2]),patientId=identifier(parts[4]);
+          trialScreening.get(trialId);patients.get(patientId);
+          if(req.method==='GET')return send(res,200,{jobs:trialJobs.list(trialId,patientId).map(j=>trialJobs.public(j))});
+          if(req.method==='POST')return send(res,202,trialJobs.start(trialId,patientId,await body(req)));
+        }
+        if(parts.length===7 && parts[3]==='screenings' && parts[5]==='ai' && req.method==='DELETE') {
+          const job=trialJobs.get(identifier(parts[6]));
+          check(job.trialId===parts[2]&&job.patientId===parts[4],'NOT_FOUND','初筛任务不存在',404);
+          return send(res,200,trialJobs.cancel(job.id));
+        }
         if (parts.length === 4 && parts[2] === "registry" && req.method === "GET") return send(res,200,await trialRegistry.lookup(parts[3]));
         if (parts.length === 2 && req.method === "GET") return send(res,200,{trials:trialScreening.list()});
         if (parts.length === 2 && req.method === "POST") return send(res,201,trialScreening.create(await body(req)));
@@ -1985,6 +1999,7 @@ export function createServer(options = {}) {
     for (const id of workspaces.active.keys())
       if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
     await intakeJobs.stop();
+    await trialJobs.stop();
     for (const ws of sockets.clients) ws.terminate();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));

@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile } from "node:fs/promises";
+import {execFileSync} from "node:child_process";
+import { cp, mkdir, readFile, readdir } from "node:fs/promises";
 import { existsSync, constants } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
@@ -38,7 +39,13 @@ export async function bundleRuntimeDependencies(root, target) {
     copied.add(source);
     const destination = join(target, relative(root, source));
     await mkdir(dirname(destination), { recursive: true });
-    await cp(source, destination, {
+    if (process.platform === "darwin") {
+      // Node's COPYFILE_FICLONE may fall back to full copies on macOS. cp -c
+      // uses clonefile directly and preserves symlinks like fs.cp's default.
+      await mkdir(destination, {recursive:true});
+      for (const entry of await readdir(source)) if (entry !== "node_modules")
+        execFileSync("/bin/cp",["-cR",join(source,entry),join(destination,entry)]);
+    } else await cp(source, destination, {
       recursive: true,
       // Copy-on-write on supporting filesystems; normal-copy fallback elsewhere.
       mode: constants.COPYFILE_FICLONE,

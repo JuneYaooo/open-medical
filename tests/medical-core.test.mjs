@@ -363,6 +363,7 @@ test("skill registry discovers medical instructions and rejects path or extra ar
       "medication-review",
       "patient-education",
       "similar-case-search",
+      "trial-eligibility",
     ],
   );
   const result = await runTool(

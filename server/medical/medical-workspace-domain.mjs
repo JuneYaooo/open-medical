@@ -1,3 +1,4 @@
+import {configureTrialTools,TRIAL_GUIDANCE,trialAnswer} from './trial-eligibility-tools.mjs';
 import {configureTaskPresentation} from './task-presentation.mjs';
 import {configureSimilarCaseTools, SIMILAR_CASE_GUIDANCE, similarCaseAnswer} from './similar-case-workflow.mjs';
 import { configureAssessmentTools, ASSESSMENT_GUIDANCE, assessmentAnswer } from "./assessment-tools.mjs";
@@ -42,6 +43,7 @@ export function medicalWorkspaceEnabled(workspace) {
 }
 
 export function createMedicalWorkspaceDomain({
+  trialJobs = null,
   plugins = [],
   sessionPlugins = [],
   skills = null,
@@ -71,13 +73,14 @@ export function createMedicalWorkspaceDomain({
     preparedResponse(workspace,runId) {
       if(!workspace?.runs)return null;
       const run=workspace.runs.find(r=>r.id===runId);
+      if(run?.policy?.workflow==='trial-eligibility')return run.artifacts?.some(a=>a.type==='trial_eligibility')?{message:{role:'assistant',content:trialAnswer(workspace,runId,{text:''}).text}}:null;
       const type=run?.policy?.workflow==='similar-case-search'?'similar_cases':run?.policy?.workflow==='patient-assessment'?'treatment_review':null;
       const artifact=type && run.artifacts?.find(a=>a.type===type && (type!=='treatment_review'||a.matches?.length));
       if(!artifact || run.inputs?.some(i=>i.createdAt>=new Date(artifact.createdAt).getTime()))return null;
       const result=type==='similar_cases'?similarCaseAnswer(workspace,runId,{text:''}):assessmentAnswer(workspace,runId,{text:''});
       return {message:{role:'assistant',content:result.text}};
     },
-    finalizeResult: (workspace,runId,result) => similarCaseAnswer(workspace,runId,assessmentAnswer(workspace,runId,result)),
+    finalizeResult: (workspace,runId,result) => trialAnswer(workspace,runId,similarCaseAnswer(workspace,runId,assessmentAnswer(workspace,runId,result))),
     contextManagement: true,
     allowAutoFileWrites: true,
     // 能力快照的领域事实：医疗叠层开关走共享判定点，通用内核不感知。
@@ -102,6 +105,7 @@ export function createMedicalWorkspaceDomain({
         run.policy?.workflow === "similar-case-search" ? SIMILAR_CASE_GUIDANCE : "",
         run.policy?.presentation === "diagnostic" ? "辅助诊断结果请调用 present_diagnostic_review 整理支持依据、不同点和待补资料，不能把可能诊断当确诊。若只是评估治疗方案，继续用治疗方案评估工具。" : "",
         run.policy?.presentation === "answer" ? "本轮默认是普通问答：直接回答用户问题。只有用户明确要求整理材料、生成文档或修改档案时，才生成对应成果；不要为了展示界面额外创建草稿、目标清单或复核任务。" : "",
+        run.policy?.workflow === "trial-eligibility" ? TRIAL_GUIDANCE : "",
         doctor?.digest(),
         `可用技能：${JSON.stringify(skills?.list() || [])}`,
         run.pinnedSkills?.length
@@ -174,6 +178,7 @@ export function createMedicalWorkspaceDomain({
           if (initialNotes.length) saveIntakeNotes(workspace.id, runId, initialNotes);
           configureIntakeTools(registry, workspace, notes => saveIntakeNotes(workspace.id, runId, notes), initialNotes);
         }
+        if (intakeRun?.policy?.workflow === "trial-eligibility") { configureTrialTools(registry,workspace,intakeRun,trialJobs); return; }
         configureTaskPresentation(registry, intakeRun?.policy?.workflow === "patient-assessment" ? undefined : intakeRun?.policy?.presentation, value => saveDisplayResult(workspace.id, runId, value));
         return;
       }
