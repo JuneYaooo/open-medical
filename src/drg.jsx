@@ -22,6 +22,10 @@ export function DrgView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => { setCaseResult(null); }, [caseForm]);
+  useEffect(() => { setBatchResult(null); }, [csvText]);
+  useEffect(() => { setCaseResult(null); setBatchResult(null); }, [settings]);
+
   const refreshSettings = async () => {
     const value = await api("/api/drg/settings");
     setSettings(value);
@@ -83,14 +87,15 @@ export function DrgView() {
       <section className="module-card drg-view">
         <div className="module-head">
           <div>
-            <h1>DRG 测算</h1>
+            <h1>DRG 示例测算</h1>
+            <p role="note">此页面仅用于演示简化分组，不是完整的本院医保分组器。导入权重也不会补齐分组规则，不能用于实际医保结算。</p>
             <p className="module-phase">
               {settings?.schemeVersion || "加载方案…"} · 费率 {fmt(settings?.rate)} 元/权重
             </p>
           </div>
           <div className="drg-settings">
             <Settings2 size={15} />
-            <input
+            <input disabled={busy}
               value={rateInput}
               inputMode="decimal"
               title="费率（元/权重）"
@@ -116,25 +121,25 @@ export function DrgView() {
             <Calculator size={14} /> 单例分组
           </h3>
           <div className="drg-form">
-            <input
+            <input disabled={busy}
               value={caseForm.principalDx}
-              placeholder="主要诊断（ICD-10，如 J18.9 社区获得性肺炎）"
+              aria-label="主要诊断" placeholder="主要诊断（ICD-10，如 J18.9 社区获得性肺炎）"
               onChange={(e) => setCaseForm({ ...caseForm, principalDx: e.target.value })}
             />
-            <input
+            <input disabled={busy}
               value={caseForm.secondaryDx}
-              placeholder="其他诊断（多个用 ; 分隔，如 I50.9;E11.9）"
+              aria-label="其他诊断" placeholder="其他诊断（多个用 ; 分隔，如 I50.9;E11.9）"
               onChange={(e) => setCaseForm({ ...caseForm, secondaryDx: e.target.value })}
             />
-            <input
+            <input disabled={busy}
               value={caseForm.procedures}
-              placeholder="手术操作（ICD-9-CM-3，多个用 ; 分隔，可留空）"
+              aria-label="手术操作" placeholder="手术操作（ICD-9-CM-3，多个用 ; 分隔，可留空）"
               onChange={(e) => setCaseForm({ ...caseForm, procedures: e.target.value })}
             />
-            <input
+            <input disabled={busy}
               value={caseForm.totalCost}
               inputMode="decimal"
-              placeholder="实际总费用（元，可选）"
+              aria-label="实际总费用（元，可选）" placeholder="实际总费用（元，可选）"
               onChange={(e) =>
                 setCaseForm({ ...caseForm, totalCost: e.target.value.replace(/[^\d.]/g, "") })
               }
@@ -179,7 +184,7 @@ export function DrgView() {
 
         <section className="followups-section">
           <h3>批量分析（CSV：principal_dx, secondary_dx, procedures, total_cost）</h3>
-          <textarea
+          <textarea aria-label="批量分组 CSV" disabled={busy}
             className="case-summary"
             rows={4}
             value={csvText}

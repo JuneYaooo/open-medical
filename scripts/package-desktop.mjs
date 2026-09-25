@@ -29,7 +29,7 @@ try {
     const name = relative(root, path).split(sep).join("/");
     return !prohibited(name) && name !== "server/data" && !name.startsWith("server/data/");
   };
-  for (const entry of ["dist", "desktop", "shared", "skills", "examples", "build/icons"])
+  for (const entry of ["dist", "desktop", "shared", "skills", "integrations", "examples", "build/icons"])
     await cp(join(root, entry), join(stage, entry), { recursive: true, filter: safeSource });
   await cp(join(root, "server"), join(stage, "server"), {
     recursive: true,

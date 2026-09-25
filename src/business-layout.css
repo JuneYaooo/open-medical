@@ -67,3 +67,42 @@
 @media(max-width:1000px) { .medical-shell .chart-columns { grid-template-columns:1fr; gap:0; } .medical-shell .patients-view { padding:24px; } }
 @media(max-width:640px) { .medical-shell .patients-view,.medical-shell .module-view>.module-card { padding:18px; } .medical-shell .patient-dashboard { padding:20px 16px; } .medical-shell .patient-area-tabs { gap:18px; overflow:auto; } .medical-shell .patient-area-tabs button { white-space:nowrap; } .medical-shell .chart-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 0; } }
 @media(prefers-reduced-motion:reduce) { .medical-shell * { scroll-behavior:auto!important; } }
+.navigation-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+  color: #794512;
+  background: #fff7e9;
+  border-bottom: 1px solid #ecd8b8;
+}
+.connection-recovery, .patient-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+.connection-recovery p, .patient-empty-state p {
+  max-width: 40em;
+  margin: 0;
+  line-height: 1.7;
+  color: var(--muted, #646b72);
+}
+.patient-empty-state { grid-column: 1 / -1; }
+.patient-empty-state h3 { margin: 0; }
+.patient-empty-state .toolbar-actions { flex-wrap: wrap; justify-content: center; }
+.patient-loading { display: flex; align-items: center; gap: 8px; padding: 12px 18px; }
+/* Destructive icon buttons must not inherit red-on-red filled button styles. */
+.agent-app .icon-button.danger {
+  color: #963d32;
+  background: transparent;
+  border: 1px solid #e4c7c2;
+}
+.agent-app .icon-button.danger:hover:not(:disabled) {
+  background: #fff0ed;
+}

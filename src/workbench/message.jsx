@@ -12,6 +12,8 @@ function MermaidBlock({ chart }) {
   const [error, setError] = useState("");
   useEffect(() => {
     let live = true;
+    setSvg("");
+    setError("");
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;

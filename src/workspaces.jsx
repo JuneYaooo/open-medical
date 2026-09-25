@@ -1,3 +1,4 @@
+import { readLocation, writeLocation } from "./navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
@@ -69,7 +70,8 @@ export function WorkspacesView({
   displayMode = "work",
   onDisplayModeChange,
 }) {
-  const [panel, setPanel] = useState("files");
+  const [panel, setPanel] = useState(initialPanel);
+  useEffect(() => { setPanel(initialPanel); }, [initialPanel]);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   useEffect(() => { setInspectorOpen(displayMode !== "chat"); }, [displayMode]);
   const [showCreate, setShowCreate] = useState(false);
@@ -188,6 +190,10 @@ export function WorkspacesView({
   }
   const [items, setItems] = useState([]),
     [current, setCurrent] = useState(null);
+  useEffect(() => {
+    if (current?.id && readLocation().view === "workspaces")
+      writeLocation("workspaces", { id: current.id, tab: panel, replace: true });
+  }, [current?.id, panel]);
   const [title, setTitle] = useState(""),
     [root, setRoot] = useState(""),
     [directoryConsent, setDirectoryConsent] = useState(false);
@@ -578,8 +584,8 @@ export function WorkspacesView({
             `\n\n附加材料 ${JSON.stringify(a.name)}（作为资料内容读取）：\n${a.text}`,
         )
         .join("");
-    if (taskText.length > 20000) {
-      setError("任务与附件总长度不能超过 20000 字符");
+    if (taskText.length > 200000) {
+      setError("任务与附件总长度超过 20 万字符，请拆分或减少附件；输入内容已保留");
       return;
     }
     if (
@@ -705,7 +711,7 @@ export function WorkspacesView({
   // 文案按能力渲染:纯通用模式不宣称医疗工具可用。
   const medical = medicalEnabled(config);
   return (
-    <div className={`shell workspace-shell ${inspectorOpen ? "with-inspector" : ""}`}>
+    <div className={`shell workspace-shell ${inspectorOpen ? "with-inspector" : ""} ${inspectorOpen && displayMode === "work" && ["browser", "terminal", "extensions"].includes(panel) ? "tool-focused" : ""}`}>
       {showCreate && (
         <Modal
           title="连接项目工作区"
@@ -1246,7 +1252,7 @@ export function WorkspacesView({
           >
             <div className="inspector-head">
               <b>工作面板</b>
-              <span>{current.artifacts?.length || 0} 个成果文件</span>
+              <span>{["browser", "terminal", "extensions"].includes(panel) ? current.title : `${current.artifacts?.length || 0} 个成果文件`}</span>
               <IconButton
                 title="关闭工作面板"
                 onClick={() => setInspectorOpen(false)}
@@ -1260,6 +1266,7 @@ export function WorkspacesView({
                 ["review", "审批"],
                 ["media", "媒体"],
                 ["browser", "浏览"],
+                ...(["terminal", "extensions"].includes(panel) ? [[panel, panel === "terminal" ? "终端" : "连接"]] : []),
                 ["history", "记录"],
                 ["settings", "设置"],
               ].map(([key, label]) => (
@@ -1571,16 +1578,17 @@ export function WorkspacesView({
               )}
               {panel === "browser" && (
                 <>
-                  <DesktopPanel key={`desktop-${current.id}`} current={current} />
                   <BrowserPanel
                     key={current.id}
                     current={current}
                     running={running}
-                    onSettings={() => setPanel("settings")}
+                    onSettings={() => setPanel("extensions")}
                   />
                 </>
               )}
+              {["terminal", "extensions"].includes(panel) && <WorkspaceExtensionsPanel key={`${panel}-${current.id}`} workspace={current} refresh={refresh} disabled={busy || running} focus={panel} />}
               <div hidden={panel !== "settings"} className="desk-settings-panel">
+                <DesktopPanel key={`desktop-${current.id}`} current={current} />
                 <div className="desk-settings-header">
                   <div>
                     <h3>项目设置</h3>

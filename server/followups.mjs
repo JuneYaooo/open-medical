@@ -284,9 +284,15 @@ export class FollowUpManager {
     });
   }
   // Cross-patient schedule overview for the follow-up management view.
-  overview({ limit = 200 } = {}) {
+  overviewPage({ limit = 200, offset = 0 } = {}) {
+    const jobs = this.overview({ limit, offset });
+    const total = this.store.db.prepare("SELECT COUNT(*) AS n FROM follow_ups WHERE status IN ('active','running','paused')").get().n;
+    return { jobs, total, offset, limit, hasMore: offset + jobs.length < total };
+  }
+
+  overview({ limit = 200, offset = 0 } = {}) {
     check(
-      Number.isInteger(limit) && limit > 0 && limit <= 500,
+      Number.isInteger(limit) && limit > 0 && limit <= 500 && Number.isSafeInteger(offset) && offset >= 0,
       "INVALID_INPUT",
       "分页参数无效",
     );
@@ -295,9 +301,9 @@ export class FollowUpManager {
         `SELECT f.data AS job, p.data AS patient FROM follow_ups f
          LEFT JOIN patients p ON p.id=f.patient_id
          WHERE f.status IN ('active','running','paused')
-         ORDER BY f.next_due ASC LIMIT ?`,
+         ORDER BY f.next_due ASC, f.id ASC LIMIT ? OFFSET ?`,
       )
-      .all(limit)
+      .all(limit, offset)
       .map((row) => {
         const job = JSON.parse(row.job);
         const patient = row.patient ? JSON.parse(row.patient) : null;
@@ -682,7 +688,7 @@ export class FollowUpManager {
         });
       }
       const contactMethod=input.contactMethod || "unspecified";
-      check(["unspecified","phone","in_person","wechat","other"].includes(contactMethod),"INVALID_INPUT","联系方式无效");
+      check(["unspecified","phone","in_person","wechat","wecom","other"].includes(contactMethod),"INVALID_INPUT","联系方式无效");
       const clinical={};
       for(const key of ["symptoms","medications","results","plan"]) {
         if(input.clinical?.[key]) clinical[key]=string(input.clinical[key],"随访要点",1200);

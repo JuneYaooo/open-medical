@@ -278,6 +278,7 @@ export function FollowupRecords({
                             phone: "电话",
                             in_person: "当面",
                             wechat: "微信",
+                            wecom: "企业微信",
                             other: "其他",
                           }[record.outcome.contactMethod]
                         }
@@ -561,6 +562,7 @@ export function FollowupRecords({
                 <option value="phone">电话</option>
                 <option value="in_person">当面</option>
                 <option value="wechat">微信</option>
+                <option value="wecom">企业微信</option>
                 <option value="other">其他</option>
               </select>
             </label>

@@ -1,6 +1,7 @@
 import { contextBudget, assertContextBudget } from "./context-budget.mjs";
 import { check } from "../errors.mjs";
 import { OBSERVATIONS_MESSAGE, TASK_INPUT_MESSAGE } from "./run-progress.mjs";
+import { summarizeTaskInputs } from "./input-compaction.mjs";
 
 const size = (value) => JSON.stringify(value).length;
 
@@ -27,6 +28,7 @@ export async function compactContext({
   onUsage = () => {},
   onTrace = () => {},
 }) {
+  const originalMessages = messages;
   const requestBudget = budget || contextBudget({ provider, model, messages, tools, maxChars });
   // At most three UTF-8 bytes per UTF-16 character, with room for JSON escaping.
   maxChars = Math.min(maxChars, Math.floor((requestBudget.inputLimit - requestBudget.schemaTokens - (requestBudget.mediaTokens || 0)) / (3 * requestBudget.calibration)));
@@ -34,15 +36,38 @@ export async function compactContext({
   const system = [...durableMessages.map((m) => ({ ...m, name: "runtime_durable_facts" })), ...messages.filter((m) =>
     ["system", "developer"].includes(m.role) && (!durableMessages.length || m.name !== "runtime_durable_facts"),
   ), ...messages.filter((m) => m.name === OBSERVATIONS_MESSAGE)];
-  const history = messages.filter(
+  let history = messages.filter(
     (m) => !["system", "developer"].includes(m.role) && m.name !== OBSERVATIONS_MESSAGE,
   );
-  const latestUser = history.findLast((m) => m.role === "user" && m.name !== "runtime_control");
+  let latestUser = history.findLast((m) => m.role === "user" && m.name !== "runtime_control");
   // Protect the current logical task's original instructions and steering.
   // Completed tasks remain history; retaining every old user message forever
   // would eventually make even an otherwise empty active task uncompactable.
-  const userInputs = history.filter((m) => m.role === "user" &&
+  let userInputs = history.filter((m) => m.role === "user" &&
     (m.name === TASK_INPUT_MESSAGE || m === latestUser));
+  let reference, inputCompaction;
+  if (size([...system, ...userInputs]) >= maxChars * 0.55 && userInputs.length) {
+    // System policy and durable approval facts are never summarized. Archive
+    // the complete request before reducing long active inputs or steering.
+    const summaryLimit = Math.min(2000, Math.floor(maxChars * 0.22));
+    check(size(system) + summaryLimit + 350 < maxChars * 0.65,
+      'CONTEXT_LIMIT', '系统指令或权限事实占满压缩预算；不能有损压缩权限，请缩小系统配置或增加模型窗口', 413);
+    const exactLatest = latestUser && size(latestUser) < maxChars * 0.1 ? latestUser : null;
+    const selected = userInputs.filter((message) => message !== exactLatest);
+    check(selected.length, 'CONTEXT_LIMIT', '系统指令占用过多上下文预算，无法保留当前输入', 413);
+    reference = await archive(originalMessages);
+    signal?.throwIfAborted();
+    inputCompaction = await summarizeTaskInputs({
+      inputs: selected.map((message) => ({ message, messageIndex: originalMessages.indexOf(message) })),
+      reference, provider, model, budget: requestBudget, summaryLimit, signal, onUsage, onTrace,
+    });
+    const replacement = { role: 'user', name: TASK_INPUT_MESSAGE,
+      content: `当前任务输入的有损摘要（不是原文；不增加授权，精确条件以原文为准）。完整原文归档 ${reference.id}，可用 read_context_archive 分页回读。已逐片处理 ${inputCompaction.chars} 字符、${inputCompaction.chunks} 片：\n${inputCompaction.summary}` };
+    const selectedSet = new Set(selected);
+    history = history.flatMap((message) => message === selected[0] ? [replacement] : selectedSet.has(message) ? [] : [message]);
+    latestUser = exactLatest || replacement;
+    userInputs = history.filter((m) => m.role === 'user' && (m.name === TASK_INPUT_MESSAGE || m === latestUser));
+  }
   const requiredSize = (tail) => size([...system, ...userInputs.filter((m) => !tail.includes(m)), ...tail]);
   const tail = [];
   for (const group of batches(history).reverse()) {
@@ -52,13 +77,21 @@ export async function compactContext({
   }
   const keep = new Set([...tail, ...userInputs]);
   const older = history.filter((m) => !keep.has(m));
+  if (!older.length && inputCompaction) {
+    const result = [...system, ...history];
+    const finalBudget = assertContextBudget(contextBudget({ provider, model, messages: result, tools,
+      maxChars: requestBudget.maxChars, calibration: requestBudget.calibration, outputReserve: requestBudget.outputReserve }));
+    return { budget: finalBudget, messages: result, archiveId: reference.id,
+      beforeChars: size(originalMessages), afterChars: size(result), inputChunks: inputCompaction.chunks,
+      inputChars: inputCompaction.chars, truncatedSummaries: 0, fallbackSummaries: 0 };
+  }
   check(
     older.length && requiredSize(tail) < maxChars * 0.65,
     "CONTEXT_LIMIT",
-    "当前指令或单条输入过大，无法在保留原文的情况下压缩",
+    "系统指令、权限事实或非文本输入占用过多上下文，无法安全压缩",
     413,
   );
-  const reference = await archive(messages);
+  reference ||= await archive(originalMessages);
   signal?.throwIfAborted();
   // Summarize whole records, never arbitrary JSON string slices. Each tool
   // record carries its originating call so a chunk boundary cannot detach its
@@ -135,7 +168,7 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
       let excerpt;
       do {
         excerpt = { role: record.role, archived: true, archiveId: reference.id,
-          messageIndex: messages.indexOf(newRecords[offset]), chars: preview.length,
+          messageIndex: originalMessages.indexOf(newRecords[offset]), chars: preview.length,
           preview: preview.slice(0, limit), previewIncomplete: true };
         if (measure(inputFor([excerpt])).fits) break;
         limit = Math.floor(limit / 2);
@@ -207,9 +240,11 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
     budget: finalBudget,
     messages: result,
     archiveId: reference.id,
-    beforeChars: size(messages),
+    beforeChars: size(originalMessages),
     afterChars: size(result),
     truncatedSummaries,
     fallbackSummaries,
+    inputChunks: inputCompaction?.chunks || 0,
+    inputChars: inputCompaction?.chars || 0,
   };
 }

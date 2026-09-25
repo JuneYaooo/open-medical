@@ -482,15 +482,19 @@ export const SCENARIOS = [
   },
 },
 {
-  name: "DRG 测算：单病例分组出 RW 与预估费用",
+  name: "DRG 示例不出现在常用工具，旧链接明确展示限制",
   fn: async ({ page }) => {
     await page.locator('.nav-label button:has-text("打开")').click();
     await page.waitForSelector(".tool-slide");
-    await page.locator('.ts-menu button:has-text("DRG 测算")').click();
-    await page.locator('.tool-slide input[placeholder*="主要诊断"]').fill("I21.9");
-    await page.locator('.tool-slide button:has-text("分组")').first().click();
-    await page.waitForSelector(".tool-slide .drg-result", { timeout: 8000 });
-    assert.match(await page.locator(".tool-slide .drg-result").innerText(), /RW/);
+    assert.equal(await page.locator('.ts-menu button:has-text("DRG")').count(),0);
+    const url=new URL(page.url());url.search='?view=drg';
+    await page.goto(url.href);
+    await page.getByRole('heading',{name:'DRG 示例测算',exact:true}).waitFor();
+    assert.match(await page.getByRole('note').innerText(),/不是完整的本院医保分组器/);
+    await page.locator('.drg-view input[placeholder*="主要诊断"]').fill("I21.9");
+    await page.locator('.drg-view button:has-text("分组")').first().click();
+    await page.waitForSelector(".drg-view .drg-result", { timeout: 8000 });
+    assert.match(await page.locator(".drg-view .drg-result").innerText(), /RW/);
   },
 },
 {

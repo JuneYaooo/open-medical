@@ -171,7 +171,7 @@ test("file scope, payload limits, duplicate data and deletion are enforced", asy
     (await f.chat(b.id, "读取病历", { fileIds: [file.id] })).status,
     404,
   );
-  assert.equal((await f.chat(b.id, "x".repeat(20001))).status, 400);
+  assert.equal((await f.chat(b.id, "x".repeat(200001))).status, 400);
   assert.equal((await f.json(`/api/sessions/${a.id}`, "DELETE")).status, 200);
   assert.equal((await f.json(`/api/sessions/${a.id}`)).status, 404);
 });

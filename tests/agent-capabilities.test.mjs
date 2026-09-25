@@ -373,3 +373,29 @@ test("dependent writers may hand off a file while unrelated aliases and parent p
     assert.equal(approvals[1].content, "second");
   } finally { release(); await team.close(); f.service.teams.delete(f.id); f.service.active.delete(f.id); }
 });
+
+test('long task runs through automatic chunking and original input remains readable from the authorized archive', async t => {
+  const input = 'Only explain; never write. BEGIN\n' + 'synthetic source row, value 12.5 mg.\n'.repeat(1500) + 'END exact requirement';
+  const parts = [];
+  const f = fixture(t, { async complete(messages) {
+    if (messages[0].content.includes('长输入分片压缩器')) {
+      parts.push(JSON.parse(messages.at(-1).content).part.text);
+      return answer('Only explain; no write authorized. Synthetic value 12.5 mg. BEGIN and END retained.');
+    }
+    if (messages[0].content.includes('会话历史压缩器')) return answer('Historical notes.');
+    assert.ok(messages.some(m => m.content?.includes('当前任务输入的有损摘要')));
+    return answer('Long input completed without writes.');
+  }});
+  const result = await f.run(input, { limits: { maxContextChars: 10000 } });
+  assert.equal(result.status, 'completed', result.error);
+  assert.ok(parts.length > 1); assert.ok(parts.join('') === input);
+  const event = f.service.store.events(f.id).find(e => e.type === 'context.compacted');
+  assert.equal(event.payload.inputChars, input.length);
+  let text = '', offset = 0;
+  do {
+    const page = await f.service.tool(f.id, {tool:'read_context_archive', arguments:{archiveId:event.payload.archiveId, offset, limit:16000}});
+    text += page.text; offset = page.nextOffset;
+  } while (offset !== null);
+  assert.ok(JSON.parse(text).some(m => m.role === 'user' && m.content === input));
+  assert.equal(f.service.get(f.id).approvals.length, 0);
+});

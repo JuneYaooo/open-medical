@@ -1,3 +1,5 @@
+import { ChatFollowupsPanel } from "./chat-followups";
+import { Modal } from "./components";
 import { patientOptionLabel } from "./patient-labels";
 import { useEffect, useState } from "react";
 import {
@@ -23,8 +25,12 @@ const fmtDue = (value) => {
 
 // Follow-up management across all patients: apply plan templates, track the
 // schedule (due / upcoming), and acknowledge fired reminders.
-export function FollowupsView({ onOpenPatient, onOpenTask }) {
-  const [section, setSection] = useState("queue");
+export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [visibleUpcoming, setVisibleUpcoming] = useState(20);
+  const [deleting, setDeleting] = useState(null);
+  const [section, setSection] = useState(() => new URLSearchParams(window.location.search).get("followupTab") === "chat" ? "chats" : "queue");
   const [plans, setPlans] = useState([]);
   const [patients, setPatients] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -46,14 +52,26 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
   const [notice, setNotice] = useState("");
 
   const refresh = async () => {
-    const [planList, patientList, jobList] = await Promise.all([
-      api("/api/followup-plans"),
-      api("/api/patients?summary=1"),
-      api("/api/followups/overview"),
-    ]);
-    setPlans(planList.plans);
-    setPatients(patientList.patients.filter((p) => !p.archived));
-    setJobs(jobList.jobs);
+    setLoading(true);
+    try {
+      const [planList, patientList, jobList] = await Promise.all([
+        api("/api/followup-plans"),
+        api("/api/patients?summary=1"),
+        api("/api/followups/overview"),
+      ]);
+      setPlans(planList.plans);
+      setPatients(patientList.patients.filter((p) => !p.archived));
+      const allJobs = [...jobList.jobs];
+      let page = jobList;
+      while (page.hasMore) {
+        page = await api(`/api/followups/overview?offset=${allJobs.length}`);
+        allJobs.push(...page.jobs);
+        if (!page.jobs.length) break;
+      }
+      setJobs(allJobs);
+      setLoadFailed(false);
+    } catch (err) { setLoadFailed(true); throw err; }
+    finally { setLoading(false); }
   };
   useEffect(() => {
     refresh().catch((err) => setError(err.message));
@@ -65,6 +83,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
     setNotice("");
     try {
       await action();
+      setDeleting(null);
       if (message) setNotice(message);
       await refresh();
     } catch (err) {
@@ -144,6 +163,12 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
 
   return (
     <div className="module-view">
+      {deleting && <Modal title={deleting.type === "job" ? "删除随访计划" : "删除随访模板"} onClose={() => { if (!busy) setDeleting(null); }}>
+        <p>{deleting.type === "job" ? `${deleting.item.patientName} · ${deleting.item.name}` : deleting.item.name}</p>
+        <p>{deleting.type === "job" ? "删除后此计划不再生成提醒。若只是暂时不用，可以取消并选择暂停。" : "此模板删除后不能再用于安排随访，已经创建的患者计划会保留。"}</p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="toolbar-actions"><button className="secondary" disabled={busy} onClick={() => setDeleting(null)}>取消</button><button className="danger" disabled={busy} onClick={() => deleting.type === "job" ? deleteJob(deleting.item) : removePlan(deleting.item.id)}>{busy ? "正在删除…" : "确认删除"}</button></div>
+      </Modal>}
       <section className="module-card followups-view">
         <div className="module-head">
           <div>
@@ -156,7 +181,9 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
             {error}
           </p>
         )}
-        {notice && <p className="form-notice">{notice}</p>}
+        {loading && <p role="status">正在读取随访计划…</p>}
+        {loadFailed && <button className="secondary" onClick={() => refresh().then(() => setError("")).catch(err => setError(err.message))}>重新加载随访</button>}
+        {notice && <p className="form-notice" role="status">{notice}</p>}
 
         <nav className="tab-row business-tabs" aria-label="随访工作内容">
           <button
@@ -171,7 +198,9 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
           >
             计划与模板
           </button>
+          <button className={section === "chats" ? "active" : ""} onClick={() => setSection("chats")}>聊天随访</button>
         </nav>
+        {section === "chats" && <ChatFollowupsPanel patients={patients} onSettings={onSettings} />}
         <div hidden={section !== "queue"}>
           <FollowupRecords
             onOpenTask={onOpenTask}
@@ -329,7 +358,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                       <button
                         className="icon-button danger"
                         title="删除模板"
-                        onClick={() => removePlan(plan.id)}
+                        onClick={() => setDeleting({ type: "template", item: plan })}
                         disabled={busy}
                       >
                         <Trash2 size={13} />
@@ -484,7 +513,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                     <button
                       className="icon-button danger"
                       title="删除"
-                      onClick={() => deleteJob(job)}
+                      onClick={() => setDeleting({ type: "job", item: job })}
                       disabled={busy}
                     >
                       <Trash2 size={13} />
@@ -492,7 +521,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                   </div>
                 </li>
               ))}
-              {!dueJobs.length && (
+              {!loading && !loadFailed && !dueJobs.length && (
                 <li className="memory-empty">没有到期随访。</li>
               )}
             </ul>
@@ -503,7 +532,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
               未来与暂停 <em className="count-chip muted">{upcoming.length}</em>
             </h3>
             <ul className="job-list">
-              {upcoming.slice(0, 20).map((job) => (
+              {upcoming.slice(0, visibleUpcoming).map((job) => (
                 <li key={job.id}>
                   <div className="job-main">
                     <b>{job.patientName}</b> · {job.name}
@@ -513,6 +542,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                     </small>
                   </div>
                   <div className="job-actions">
+                    <button className="icon-button" title="打开患者" onClick={() => onOpenPatient?.(job.patientId)}><Stethoscope size={14} /></button>
                     <button
                       className="icon-button"
                       title={job.status === "paused" ? "恢复" : "暂停"}
@@ -528,7 +558,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                     <button
                       className="icon-button danger"
                       title="删除"
-                      onClick={() => deleteJob(job)}
+                      onClick={() => setDeleting({ type: "job", item: job })}
                       disabled={busy}
                     >
                       <Trash2 size={13} />
@@ -536,10 +566,11 @@ export function FollowupsView({ onOpenPatient, onOpenTask }) {
                   </div>
                 </li>
               ))}
-              {!upcoming.length && (
+              {!loading && !loadFailed && !upcoming.length && (
                 <li className="memory-empty">没有未来计划。</li>
               )}
             </ul>
+            {upcoming.length > visibleUpcoming && <button className="secondary" onClick={() => setVisibleUpcoming(count => count + 20)}>显示更多计划（还有 {upcoming.length - visibleUpcoming} 项）</button>}
           </section>
         </div>
       </section>

@@ -87,6 +87,7 @@ export class WorkspaceService {
     {
       sandbox,
       modelProfiles,
+      jev,
       chooseDirectory,
       maxActive = 3,
       extensions = {},
@@ -95,6 +96,7 @@ export class WorkspaceService {
     } = {},
   ) {
     this.modelProfiles = modelProfiles;
+    this.jev = jev;
     this.store = new WorkspaceStore(db);
     this.artifacts = new WorkspaceArtifacts(this.store);
     this.provider = provider;
@@ -1669,7 +1671,7 @@ export class WorkspaceService {
       "请确认本次任务和授权目录中读取的文件可以发送给当前模型",
       412,
     );
-    const message = string(body.message, "任务", 20000);
+    const message = string(body.message, "任务", 200000);
     const permissions = new PermissionEngine(w.permissions);
     permissions.require("model.external");
     const requestId = string(body.requestId || randomUUID(), "请求标识", 100);
@@ -1859,7 +1861,7 @@ export class WorkspaceService {
       "追加指令需要模型外发授权",
       412,
     );
-    const message = string(body.message, "追加指令", 20000);
+    const message = string(body.message, "追加指令", 200000);
     const requestId = string(body.requestId || randomUUID(), "请求标识", 100);
     let update;
     this.store.update(id, (w) => {
@@ -2097,6 +2099,12 @@ export class WorkspaceService {
         run.id,
       );
       emit("message.start", { mode: permissions.profile });
+      // Optional per-task observation; never enters prompts or changes authority.
+      // Recovery reuses prior execution without sending the task to a new service.
+      if (this.jev && !resumed && permissions.can("model.external")) {
+        const observation = await this.jev.observe(message, controller.signal);
+        if (observation) emit("decision.observed", observation);
+      }
       const instructionFiles = permissions.can("filesystem.read")
         ? new ProjectInstructions(new WorkspaceFiles(w.root)).read()
         : [];

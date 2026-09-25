@@ -15,7 +15,7 @@ const defaults = {
   braveKey: "",
   memory: { provider: "lsa" },
 };
-export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
+export function WorkspaceExtensionsPanel({ workspace, refresh, disabled, focus = "" }) {
   const base = `/api/workspaces/${workspace.id}`,
     [data, setData] = useState(null),
     [form, setForm] = useState(defaults),
@@ -141,8 +141,8 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
   const tool = (name, args = {}) =>
     api(base + "/tools", "POST", { tool: name, arguments: args });
   return (
-    <details className="workspace-files extension-panel">
-      <summary>工具、插件与记忆</summary>
+    <details className="workspace-files extension-panel" open={focus ? true : undefined}>
+      <summary>{focus === "terminal" ? "终端与代码" : focus === "extensions" || focus === "configuration" ? "项目工具与连接" : "工具、插件与记忆"}</summary>
       {error && (
         <p role="alert" className="workspace-error">
           {error}
@@ -157,7 +157,7 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
             {data.sandbox.available ? "Docker 已就绪" : data.sandbox.reason} ·
             浏览器：{data.browser.available ? "已就绪" : data.browser.reason}
           </p>
-          <details>
+          <details open={focus ? true : undefined}>
             <summary>授权与运行环境</summary>
             <fieldset disabled={locked}>
               <p>
@@ -316,7 +316,7 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
               </button>
             </fieldset>
           </details>
-          <details>
+          <details hidden={focus === "terminal"} open={focus === "extensions" ? true : undefined}>
             <summary>插件安装与管理 · {data.config.plugins.length}</summary>
             <fieldset disabled={locked}>
               <p>
@@ -405,7 +405,7 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
               ))}
             </fieldset>
           </details>
-          <details>
+          <details hidden={focus === "terminal"} open={focus === "extensions" ? true : undefined}>
             <summary>MCP 服务器 · {data.config.mcpServers.length}</summary>
             <label>导入常见客户端 MCP JSON<textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='{"mcpServers":{"tools":{"url":"https://example.com/mcp"}}}' /></label>
             <button disabled={locked||!importText.trim()} onClick={()=>act(async()=>setImported((await manage({action:"import-mcp-preview",config:JSON.parse(importText)})).servers))}>检查并转换配置</button>
@@ -549,9 +549,11 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
               )}
             </fieldset>
           </details>
-          <details>
+          <details hidden={focus === "extensions" || focus === "configuration"} open={focus === "terminal" ? true : undefined}>
             <summary>通用终端</summary>
-            <fieldset disabled={locked}>
+            {!data.sandbox.available && <p role="status">当前不可用：{data.sandbox.reason}</p>}
+            {!workspace.permissions.grants["process.spawn"] && <p>请先在上方「授权与运行环境」中启用隔离终端并保存配置。</p>}
+            <fieldset disabled={locked || !data.sandbox.available || !workspace.permissions.grants["process.spawn"]}>
               <p>
                 在容器副本中执行，最长 5
                 分钟。容器禁止网络，输出文件需返回文件提案后批准。文件删除不会同步到本机。
@@ -666,9 +668,11 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
               )}
             </fieldset>
           </details>
-          <details>
+          <details hidden={Boolean(focus)}>
             <summary>浏览器与操作审批</summary>
-            <fieldset disabled={locked}>
+            {!data.browser.available && <p role="status">当前不可用：{data.browser.reason}</p>}
+            {!workspace.permissions.grants["browser.read"] && <p>请先在上方「授权与运行环境」中启用浏览网页、填写允许访问的网址来源并保存。</p>}
+            <fieldset disabled={locked || !data.browser.available || !workspace.permissions.grants["browser.read"]}>
               <input
                 aria-label="工具浏览器网址"
                 value={url}
@@ -785,7 +789,7 @@ export function WorkspaceExtensionsPanel({ workspace, refresh, disabled }) {
               ))}
             </fieldset>
           </details>
-          <details>
+          <details hidden={Boolean(focus)}>
             <summary>持久语义记忆 · {data.memories.length} 个片段</summary>
             <fieldset disabled={locked}>
               <textarea

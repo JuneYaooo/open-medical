@@ -87,13 +87,22 @@ test('oversized lossy summaries are bounded without losing original constraints 
   assert.ok(traces.some((t) => t.type === 'model.response' && t.message.content.length === 3000));
 });
 
-test('cumulative original user constraints cannot be silently replaced by a summary', async () => {
-  let calls = 0;
-  const provider = { complete: async () => { calls++; throw new Error('must not be called'); } };
-  await assert.rejects(compactContext({ provider, maxChars: 4000,
-    messages: [{ role: 'user', name: TASK_INPUT_MESSAGE, content: 'original '.repeat(500) }, { role: 'assistant', content: 'history '.repeat(1000) },
-      { role: 'user', content: 'short latest input' }], archive: async () => ({ id: 'archive' }) }), { code: 'CONTEXT_LIMIT' });
-  assert.equal(calls, 0);
+test('long original constraints are archived and summarized while short latest steering remains exact', async () => {
+  let archived; const parts = [];
+  const messages = [{ role: 'user', name: TASK_INPUT_MESSAGE, content: 'original '.repeat(500) },
+    { role: 'assistant', content: 'history '.repeat(1000) }, { role: 'user', content: 'short latest input' }];
+  const provider = { complete: async (input) => {
+    const payload = JSON.parse(input.at(-1).content);
+    if (payload.part) parts.push(payload.part.text);
+    return { message: { role: 'assistant', content: 'Original task constraints remain pending; do not act without approval.' } };
+  } };
+  const result = await compactContext({ provider, maxChars: 4000, messages,
+    archive: async value => { archived = structuredClone(value); return { id: 'archive' }; } });
+  assert.deepEqual(archived, messages);
+  assert.equal(parts.join(''), messages[0].content);
+  assert.ok(result.messages.some(m => m.content === 'short latest input'));
+  assert.ok(result.messages.some(m => m.content.includes('有损摘要') && m.content.includes('archive')));
+  assert.equal(result.budget.fits, true);
 });
 
 test('compaction without a retained tail ends on the genuine user, never synthetic assistant prefill', async () => {
@@ -112,7 +121,7 @@ test('compaction without a retained tail ends on the genuine user, never synthet
   await assert.rejects(provider.complete(result.messages, []), /captured/);
   assert.equal(payload.messages.at(-1).role, 'user');
 });
-test('oversized single current input fails without model request; compaction failure is bounded', async () => {
+test('runtime without a configured compactor rejects oversize input; provider failure propagates', async () => {
   let requests = 0;
   const provider = { model: 'small', contextWindow: 4096, maxTokens: 512, complete: async () => { requests++; throw new Error('offline'); } };
   const runtime = new AgentRuntime({ provider });

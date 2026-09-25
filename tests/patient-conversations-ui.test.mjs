@@ -45,8 +45,9 @@ test("patient question UI: new question, follow-up, history, reload and patient 
  mkdirSync("output/patient-questions",{recursive:true});
  await page.screenshot({path:"output/patient-questions/follow-up.png",fullPage:false});
  await page.reload();
- await page.locator(".patient-card",{hasText:"问答测试甲"}).click();
- await page.getByRole("button",{name:"打开病例工作区",exact:true}).click();
+ // Refresh now restores the task directly instead of dropping back to the patient list.
+ await page.getByRole("textbox",{name:"医疗工作需求",exact:true}).waitFor();
+ assert.equal(new URL(page.url()).searchParams.get("view"),"workbench");
  await page.locator(".patient-question-history summary").click();
  await page.locator(".patient-question-history button",{hasText:"问题甲"}).click();
  await page.locator(".user-message").filter({hasText:"再追问甲项"}).waitFor();

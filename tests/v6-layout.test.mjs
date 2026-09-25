@@ -33,13 +33,10 @@ test('V6 uses real navigation, project identity, task history and display modes 
  await nav.getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('main',{name:'工具目录'}).waitFor();
  await page.getByRole('button',{name:'医疗工具',exact:true}).click();await page.getByRole('heading',{name:'临床速查',exact:true}).waitFor();
  await page.screenshot({path:'output/playwright/v6-tools.png'});
- await page.getByRole('button',{name:'工作环境',exact:true}).click();
- await page.locator('.directory-tools article').filter({has:page.getByRole('heading',{name:'浏览器',exact:true})}).getByRole('button',{name:/选择项目/}).click();
- await projects.getByText('选择项目，打开浏览器工作面板。',{exact:true}).waitFor();
- await projects.locator('.directory-open',{hasText:'项目乙'}).click();
- await page.getByRole('tab',{name:'浏览',exact:true}).waitFor();
- assert.equal(await page.getByRole('tab',{name:'浏览',exact:true}).getAttribute('aria-selected'),'true');
- await nav.getByRole('button',{name:'任务',exact:true}).click();await page.getByRole('button',{name:'任务记录',exact:true}).click();
+ assert.equal(await page.getByRole('heading',{name:'浏览器',exact:true}).count(),0);
+ assert.equal(await page.getByRole('heading',{name:'终端与代码',exact:true}).count(),0);
+ assert.equal(await page.getByRole('heading',{name:'技能与连接',exact:true}).count(),0);
+ await nav.getByRole('button',{name:'任务',exact:true}).click();
  const history=page.getByRole('main',{name:'任务记录'});await history.waitFor();
  assert.equal(await history.getByRole('button',{name:/持续任务验收/}).count(),1);
  await history.getByRole('button',{name:/持续任务验收/}).click();await page.locator('.conversation-head h1').filter({hasText:'持续任务验收'}).waitFor();

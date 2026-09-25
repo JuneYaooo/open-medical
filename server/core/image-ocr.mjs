@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { check } from '../errors.mjs';
 const executable = resolve(import.meta.dirname, '../../desktop/bin/native-ocr');
 export const localOcrAvailable = () => process.platform === 'darwin' && existsSync(executable);
-export async function recognizeImage(data, signal) {
+export async function recognizeImage(data, signal, options = {}) {
   check(localOcrAvailable(), 'OCR_UNAVAILABLE', '此平台未安装本地 OCR，请使用视觉模型读取图片', 503);
   check(data.length <= 4000000, 'IMAGE_LIMIT', '图片超过 4MB');
   return new Promise((done, reject) => {
@@ -15,11 +15,11 @@ export async function recognizeImage(data, signal) {
     child.on('error', (error) => finish(error));
     child.stdin.on('error', () => {});
     child.stderr.resume();
-    child.stdout.on('data', (part) => { output += part.toString(); if (output.length > 1000000) child.kill(); });
+    child.stdout.on('data', (part) => { output += part.toString(); if (output.length > (options.includeImage ? 8000000 : 1000000)) child.kill(); });
     child.on('close', (code) => {
       if (code !== 0) return finish(new Error('本地 OCR 未完成，请检查图片格式、清晰度或切换视觉模型'));
       try { finish(null, JSON.parse(output)); } catch { finish(new Error('本地 OCR 返回格式无效')); }
     });
-    child.stdin.end(JSON.stringify({ image: data.toString('base64') }));
+    child.stdin.end(JSON.stringify({ image: data.toString('base64'), region: options.region, includeImage: options.includeImage === true }));
   });
 }

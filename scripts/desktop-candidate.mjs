@@ -5,7 +5,7 @@ import { resolve, relative, join, dirname, sep, isAbsolute } from 'node:path';
 
 export const manifestName = 'candidate-manifest.json';
 export const sourceManifestName = 'candidate-source.json';
-export const sourceEntries = ['src', 'dist', 'desktop', 'server', 'shared', 'skills', 'examples', 'scripts', 'package.json', 'package-lock.json', 'vite.config.mjs', '.env.example', 'build/icons'];
+export const sourceEntries = ['src', 'dist', 'desktop', 'server', 'shared', 'skills', 'integrations', 'examples', 'scripts', 'package.json', 'package-lock.json', 'vite.config.mjs', '.env.example', 'build/icons'];
 const inside = (root, path) => { const r = relative(root, path); return r === '' || (r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r)); };
 const normalize = (path) => path.split(sep).join('/');
 export function prohibited(path) {
@@ -13,6 +13,7 @@ export function prohibited(path) {
   return parts.some((part) => /^\.env(?:\.|$)/i.test(part) && path !== '.env.example'
     || /^(?:model\.env|\.git|\.ssh|\.aws|\.codex|\.gnupg|\.npmrc|\.netrc|\.git-credentials)$/i.test(part)
     || /\.(?:sqlite(?:3)?|db)(?:-(?:wal|shm))?$/i.test(part)
+    || /^(?:__pycache__)$/i.test(part) || /\.pyc$/i.test(part)
     || /\.(?:pem|key)$/i.test(part));
 }
 export function argument(args, name) {
@@ -102,7 +103,7 @@ export async function verifyCandidate(directory, sourceRoot) {
   if (!source?.files || fingerprint(source.files) !== source.fingerprint || source.fingerprint !== manifest.sourceFingerprint) throw new Error('Source manifest mismatch');
   const packaged = new Map((await inventory(app)).map((file) => [file.path, file]));
   for (const original of source.files) {
-    if (!/^(?:dist|desktop|server|shared|skills|examples)\//.test(original.path)
+    if (!/^(?:dist|desktop|server|shared|skills|integrations|examples)\//.test(original.path)
       && !['.env.example', 'scripts/workspace-cli.mjs', 'scripts/agent-daemon.mjs', 'scripts/daemon-supervisor.mjs'].includes(original.path)) continue;
     const included = packaged.get(original.path);
     if (!included || included.type !== original.type || included.sha256 !== original.sha256 || included.target !== original.target)

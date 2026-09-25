@@ -225,9 +225,9 @@ test(
       await page.locator('nav[aria-label="最近任务"]').count(),
       1,
     );
-    await page.waitForSelector(".hub-scenarios", { timeout: 15000 });
+    await page.getByRole("main", { name: "任务记录" }).waitFor();
     const body = await page.evaluate(() => document.body.innerText);
-    assert.equal(body.includes("这次需要做什么？"), true);
+    assert.equal(body.includes("任务记录"), true);
     assert.equal(body.includes("接口不存在"), false);
     assert.equal(sessionsStatus, 200);
     assert.deepEqual(pageErrors, []);

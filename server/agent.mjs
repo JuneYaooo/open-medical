@@ -1,3 +1,5 @@
+import { ChatFollowups } from "./chat-followups.mjs";
+import { chatFollowupsApi } from "./chat-followups-api.mjs";
 import { KnowledgeOrganizer } from "./medical/knowledge-organizer.mjs";
 import { ModelProfiles } from "./core/model-profiles.mjs";
 import { createReadStream } from "node:fs";
@@ -69,6 +71,7 @@ import { EmbeddingService } from "./medical/embeddings.mjs";
 import { LanceVectorStore } from "./medical/vector-store.mjs";
 import { MaterialLibrary, materialSearchTools } from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
+import { JevSettings } from "./core/jev-settings.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -207,6 +210,7 @@ export function createServer(options = {}) {
       timeoutMs: options.timeoutMs,
     });
   const models = new ModelSettings(store.db, vaultDir, initialProvider);
+  const jev = new JevSettings(models.vault);
   let provider = models.provider();
   const skills =
     options.skills ||
@@ -441,6 +445,7 @@ export function createServer(options = {}) {
     doctor,
   });
   const workspaces = new WorkspaceService(store.db, provider, {
+    jev,
     domain: createMedicalWorkspaceDomain({
       trialJobs: {load:id=>trialJobs.get(id),save:(id,checks)=>trialJobs.save(id,checks)},
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
@@ -572,6 +577,7 @@ export function createServer(options = {}) {
     // 测试缝:允许 fixture 注入 darwin 以覆盖桥接逻辑;默认真实平台。
     platform: options.wechatBridgePlatform ?? process.platform,
   });
+  const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, ...options.chatFollowups });
   const ingestSecret =
     options.ingestSecret || process.env.MEDICAL_INGEST_SECRET || "";
   const digestMessages = async (pid, bodyData) => {
@@ -834,7 +840,7 @@ export function createServer(options = {}) {
           labKnowledge: { enabled: true, count: "常见指标内置" },
           drg: { enabled: true, ...drg.settings() },
           cases: cases.counts(),
-          wechat: { enabled: wechat.enabled },
+          wechat: { enabled: chatFollowups.config("wechat").enabled },
         });
       if (path.startsWith("/api/knowledge/playback/") && ["GET", "HEAD"].includes(req.method)) {
         const file = knowledgeOrganizer.playbackFile(path.split("/").at(-1));
@@ -1248,6 +1254,7 @@ export function createServer(options = {}) {
             );
         }
       }
+      if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
       if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, { contacts: wecom.contacts() });
       if (path === "/api/wecom/sync" && req.method === "POST") return send(res, 200, await track(wecom.sync(await body(req))));
@@ -1261,23 +1268,9 @@ export function createServer(options = {}) {
         if (parts[4] === "refresh") return send(res, 200, await track(wecom.refresh(parts[3])));
       }
       if (path === "/api/wechat/status" && req.method === "GET")
-        return send(res, 200, wechat.status());
-      if (path === "/api/wechat/read" && req.method === "POST") {
-        const b = await body(req);
-        return send(
-          res,
-          200,
-          await wechat.readFrontChat(identifier(b.patientId)),
-        );
-      }
-      if (path === "/api/wechat/send" && req.method === "POST") {
-        const b = await body(req);
-        return send(
-          res,
-          200,
-          await wechat.send(identifier(b.patientId), b.text),
-        );
-      }
+        return send(res, 200, { enabled: false, available: false, retired: true, reason: "请使用随访 → 聊天随访中的会话核验与读取" });
+      if (["/api/wechat/read", "/api/wechat/send"].includes(path) && req.method === "POST")
+        throw new AppError("WECHAT_LEGACY_RETIRED", "旧微信桥接已停用。请在随访 → 聊天随访中核验并关联会话；发送请在微信中完成。", 410);
       if (path === "/api/doctor/overview" && req.method === "GET")
         return send(res, 200, doctorOverview.read({
           kind: url.searchParams.get("kind") || "all", query: url.searchParams.get("q") || "",
@@ -1300,13 +1293,10 @@ export function createServer(options = {}) {
         parts[2] === "overview" &&
         req.method === "GET"
       )
-        return send(res, 200, {
-          jobs: followups.overview({
-            limit: url.searchParams.get("limit")
-              ? Number(url.searchParams.get("limit"))
-              : undefined,
-          }),
-        });
+        return send(res, 200, followups.overviewPage({
+          limit: url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined,
+          offset: url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : undefined,
+        }));
       if (path === "/api/risk-alerts" && req.method === "GET")
         return send(res, 200, {
           alerts: risks.list({
@@ -1382,6 +1372,12 @@ export function createServer(options = {}) {
         );
       if (path === "/api/med-cautions" && req.method === "POST")
         return send(res, 200, specialPopulationCautions(await body(req)));
+      if (path === "/api/jev-settings") {
+        if (req.method === "GET") return send(res, 200, jev.public());
+        if (req.method === "PUT") return send(res, 200, jev.save(await body(req)));
+      }
+      if (path === "/api/jev-settings/test" && req.method === "POST")
+        return send(res, 200, await track(jev.test(await body(req))));
       if (path === "/api/model-settings") {
         if (req.method === "GET") return send(res, 200, models.public());
         if (req.method === "PUT") {
@@ -2046,11 +2042,13 @@ export function createServer(options = {}) {
   server.cases = cases;
   server.wechat = wechat;
   server.wecom = wecom;
+  server.chatFollowups = chatFollowups;
   server.once("listening", () => {
     scheduler.start();
     workspaces.scheduler.start();
     workspaces.recovery.start();
     followups.start();
+    chatFollowups.start();
   });
   server.shutdown = async () => {
     workspaces.stopping = true;
@@ -2058,6 +2056,7 @@ export function createServer(options = {}) {
     workspaces.scheduler.stop();
     workspaces.recovery.stop();
     followups.stop();
+    await chatFollowups.stop();
     for (const id of workspaces.active.keys()) workspaces.interrupt(id);
     for (const id of runtime.active.keys()) runtime.cancel(id);
     for (const id of workspaces.active.keys())

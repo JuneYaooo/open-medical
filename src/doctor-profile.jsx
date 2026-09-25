@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { Check, Pin, PinOff, Trash2, RotateCcw, Loader2, Sparkles, Eye } from "lucide-react";
 
@@ -22,6 +22,7 @@ const MEMORY_TABS = [
 ];
 
 export function DoctorProfilePanel() {
+  const memoryGeneration = useRef(0);
   const [profile, setProfile] = useState(null);
   const [fields, setFields] = useState({});
   const [lists, setLists] = useState({});
@@ -33,27 +34,31 @@ export function DoctorProfilePanel() {
   const [modelConsent, setModelConsent] = useState(false);
   const [newMemory, setNewMemory] = useState("");
 
-  const loadProfile = async () => {
+  const loadProfile = async (keepDraft = false) => {
     const value = await api("/api/doctor/profile");
     setProfile(value);
-    setFields({
-      specialty: value.fields?.specialty || "",
-      note: value.fields?.note || "",
-    });
-    setLists(Object.fromEntries(LIST_FIELDS.map(([key]) => [key, value.fields?.[key] || []])));
+    if (!keepDraft) {
+      setFields({
+        specialty: value.fields?.specialty || "",
+        note: value.fields?.note || "",
+      });
+      setLists(Object.fromEntries(LIST_FIELDS.map(([key]) => [key, value.fields?.[key] || []])));
+    }
     return value;
   };
   const loadMemories = async (which = tab) => {
+    const generation = ++memoryGeneration.current;
     const status = which === "confirmed" ? "" : which;
     const value = await api(
       `/api/doctor/memories${which === "confirmed" ? "?status=confirmed" : `?status=${status}`}`,
     );
-    setMemories(value.memories);
+    if (generation === memoryGeneration.current) setMemories(value.memories);
   };
   useEffect(() => {
     loadProfile().catch((err) => setError(err.message));
   }, []);
   useEffect(() => {
+    setMemories([]);
     loadMemories(tab).catch((err) => setError(err.message));
   }, [tab]);
 
@@ -70,7 +75,7 @@ export function DoctorProfilePanel() {
       setNotice("偏好已保存，会注入后续每一次医疗任务。");
     } catch (err) {
       setError(err.message);
-      loadProfile().catch(() => {});
+
     } finally {
       setBusy(false);
     }
@@ -80,7 +85,7 @@ export function DoctorProfilePanel() {
     setError("");
     try {
       await api(`/api/doctor/memories/${id}/${action}`, "POST", body || {});
-      await Promise.all([loadMemories(), loadProfile()]);
+      await Promise.all([loadMemories(), loadProfile(true)]);
     } catch (err) {
       setError(err.message);
     }
@@ -89,7 +94,7 @@ export function DoctorProfilePanel() {
     setError("");
     try {
       await api(`/api/doctor/memories/${id}`, "DELETE");
-      await Promise.all([loadMemories(), loadProfile()]);
+      await Promise.all([loadMemories(), loadProfile(true)]);
     } catch (err) {
       setError(err.message);
     }
@@ -113,7 +118,7 @@ export function DoctorProfilePanel() {
       );
       setTab("pending");
       await loadMemories("pending");
-      await loadProfile();
+      await loadProfile(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -128,7 +133,7 @@ export function DoctorProfilePanel() {
       await api("/api/doctor/memories", "POST", { content: newMemory });
       setNewMemory("");
       setTab("confirmed");
-      await Promise.all([loadMemories("confirmed"), loadProfile()]);
+      await Promise.all([loadMemories("confirmed"), loadProfile(true)]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -148,16 +153,16 @@ export function DoctorProfilePanel() {
       [key]: prev[key].filter((_, i) => i !== index),
     }));
 
-  if (!profile) return <p className="muted">正在加载医生档案…</p>;
+  if (!profile) return error ? <div className="form-error" role="alert"><p>{error}</p><button className="secondary" onClick={() => { setError(""); loadProfile().catch(err => setError(err.message)); }}>重新加载医生档案</button></div> : <p className="muted" role="status">正在加载医生档案…</p>;
 
   return (
     <div className="doctor-panel">
       {error && (
         <p className="form-error" role="alert">
-          {error}
+          {error} <button className="text-button" onClick={() => loadProfile().then(() => setError("")).catch(err => setError(err.message))}>放弃未保存偏好并载入最新配置</button>
         </p>
       )}
-      {notice && <p className="form-notice">{notice}</p>}
+      {notice && <p className="form-notice" role="status">{notice}</p>}
 
       <details className="doctor-section">
         <summary style={{ cursor: "pointer", fontWeight: 600 }}>
@@ -169,7 +174,7 @@ export function DoctorProfilePanel() {
         {TEXT_FIELDS.map(([key, label, placeholder]) => (
           <label className="doctor-field" key={key}>
             <span>{label}</span>
-            <input
+            <input disabled={busy}
               value={fields[key] || ""}
               placeholder={placeholder}
               onChange={(e) =>
@@ -183,7 +188,8 @@ export function DoctorProfilePanel() {
             <legend>{label}</legend>
             {(lists[key] || []).map((item, index) => (
               <div className="doctor-list-row" key={index}>
-                <input
+                <input disabled={busy}
+                  aria-label={`${label} 第 ${index + 1} 条`}
                   value={item}
                   onChange={(e) => setListItem(key, index, e.target.value)}
                 />
@@ -212,7 +218,7 @@ export function DoctorProfilePanel() {
           </button>
           <button
             className="secondary"
-            onClick={() => loadProfile().catch(() => {})}
+            onClick={() => loadProfile().catch(err => setError(err.message))}
             disabled={busy}
           >
             <RotateCcw size={14} /> 重读

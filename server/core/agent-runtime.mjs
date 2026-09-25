@@ -164,6 +164,16 @@ export class AgentRuntime {
         }
         budget = measure(messages);
         emit("run.steered", { count: preparedInput.length });
+        if (compact && budget.shouldCompact) {
+          emit("context.compacting", { round: round + 1, budget });
+          const result = await compact(messages, { budget, tools, model, thinking });
+          messages = result.messages;
+          refreshObservations();
+          budget = measure(messages);
+          await checkpoint(structuredClone(messages));
+          const { messages: _messages, ...metadata } = result;
+          emit("context.compacted", metadata);
+        }
       }
       signal.throwIfAborted();
       assertContextBudget(budget);

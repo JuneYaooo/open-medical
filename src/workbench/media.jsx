@@ -12,6 +12,7 @@ export function MediaPanel({ current, refresh, running, onSettings }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [result, setResult] = useState(null);
+  useEffect(() => { setResult(null); setConsent(false); }, [action, profile, text, voice, artifact]);
   const base = `/api/workspaces/${current.id}`;
   useEffect(() => {
     let alive = true;
@@ -123,7 +124,7 @@ export function MediaPanel({ current, refresh, running, onSettings }) {
               <input
                 type="file"
                 accept=".mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac"
-                onChange={(e) => upload(e.target.files[0])}
+                onChange={(e) => { const file = e.target.files[0]; e.target.value = ""; upload(file); }}
               />
             </label>
             <label>

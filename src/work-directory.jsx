@@ -8,7 +8,6 @@ import {
   Pin,
   Plus,
   Search,
-  Settings2,
   Stethoscope,
 } from "lucide-react";
 import { api, medicalEnabled } from "./agent-runtime";
@@ -60,7 +59,7 @@ export function ProjectDirectory({ purpose, items, onOpen, onChanged }) {
           <h1>项目</h1>
           <p>
             {purpose
-              ? `选择项目，打开${{ browser: "浏览器", terminal: "终端与代码", extensions: "技能与连接" }[purpose]}工作面板。`
+              ? `选择项目，${{ documents: "在任务中处理文档与表格", browser: "配置浏览器访问范围后预览网页", terminal: "配置隔离终端与目录授权", extensions: "管理技能与连接" }[purpose]}。`
               : "把相关任务、文件和成果放在同一个工作空间。"}
           </p>
         </div>
@@ -157,7 +156,7 @@ const catalog = [
   [
     "documents",
     "文档与表格",
-    "整理文字、表格和资料，在任务中继续修改。",
+    "整理文字、表格与资料，生成可复核的文档。",
     "内容处理",
     FileText,
     "任务内使用",
@@ -178,30 +177,7 @@ const catalog = [
     BookOpen,
     "本地知识库",
   ],
-  [
-    "browser",
-    "浏览器",
-    "在项目工作面板中查看网页与浏览工具。",
-    "工作环境",
-    Search,
-    "项目内使用",
-  ],
-  [
-    "terminal",
-    "终端与代码",
-    "在授权目录中运行、检查和修改文件。",
-    "工作环境",
-    FolderOpen,
-    "项目内使用",
-  ],
-  [
-    "extensions",
-    "技能与连接",
-    "查看项目技能、插件、MCP 与连接配置。",
-    "工作环境",
-    Settings2,
-    "项目内配置",
-  ],
+
   [
     "clinical-ref",
     "临床速查",
@@ -218,24 +194,18 @@ const catalog = [
     BookOpen,
     "本地病例",
   ],
-  [
-    "drg",
-    "DRG 测算",
-    "使用现有分组与费用测算工具。",
-    "医疗工具",
-    FileText,
-    "本地工具",
-  ],
 ];
-export function ToolDirectory({ config, onNavigate, onProjects, onNewTask }) {
+export function ToolDirectory({ config, onNavigate, onProjects, onModelSettings }) {
   const [filter, setFilter] = useState("全部"),
     [query, setQuery] = useState("");
+  const availability = id => id === "documents"
+    ? config?.modelConfigured ? { action: "开始处理" } : { label: "需要配置模型", action: "配置模型", model: true }
+    : { action: "打开" };
   const medical = medicalEnabled(config),
     categories = [
       "全部",
       "内容处理",
       "信息查找",
-      "工作环境",
       ...(medical ? ["医疗工具"] : []),
     ];
   const rows = catalog.filter(
@@ -252,7 +222,7 @@ export function ToolDirectory({ config, onNavigate, onProjects, onNewTask }) {
       <header className="directory-heading">
         <div>
           <h1>工具</h1>
-          <p>需要时打开，也可以在任务里让 AI 调用。</p>
+          <p>选择一项业务工具，开始处理资料。</p>
         </div>
       </header>
       <div className="directory-toolbar">
@@ -278,40 +248,35 @@ export function ToolDirectory({ config, onNavigate, onProjects, onNewTask }) {
         </label>
       </div>
       <div className="directory-tools">
-        {rows.map(([id, name, desc, _category, Icon, status]) => (
+        {rows.map(([id, name, desc, _category, Icon, status]) => {
+          const state = availability(id);
+          return (
           <article key={id}>
+            <a className="tool-card-link" href={`?view=${id === "documents" ? "projects" : id}`} onClick={event => {
+              event.preventDefault();
+                      if (state.model) onModelSettings();
+              else if (id === "documents") onProjects(id);
+              else onNavigate(id);
+            }}>
             <Icon size={24} />
             <h2>{name}</h2>
             <p>{desc}</p>
             <footer>
               <small>
-                {id === "documents" && !config?.modelConfigured
-                  ? "需要配置模型"
-                  : status}
+                {state.label || status}
               </small>
-              <button
-                onClick={() =>
-                  id === "documents"
-                    ? onNewTask()
-                    : ["browser", "terminal", "extensions"].includes(id)
-                      ? onProjects(id)
-                      : onNavigate(id)
-                }
-              >
-                {["browser", "terminal", "extensions"].includes(id)
-                  ? "选择项目"
-                  : id === "documents"
-                    ? "新建任务"
-                    : "打开"}{" "}
+              <span className="tool-card-action">
+                {state.action}{" "}
                 →
-              </button>
+              </span>
             </footer>
+            </a>
           </article>
-        ))}
+        );})}
       </div>
       {!rows.length && <p className="directory-empty">没有找到匹配工具。</p>}
       <p className="directory-note">
-        工具沿用任务的资料范围和授权；连接状态与可用操作可在对应工作面板查看。
+        工具使用当前任务授权的资料。项目的高级能力可在项目设置中管理。
       </p>
     </main>
   );
@@ -364,7 +329,7 @@ export function TaskDirectory({
       </header>
       <div className="directory-toolbar">
         <div className="directory-filters">
-          {["全部", "一般", "患者关联", "项目"].map((c) => (
+          {["全部", "一般", ...(patients.length || sessions.some(x => x.patientId) ? ["患者关联"] : []), "项目"].map((c) => (
             <button
               key={c}
               aria-pressed={filter === c}

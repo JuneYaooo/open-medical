@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-import { check } from "../errors.mjs";
+import { AppError, check } from "../errors.mjs";
 import { resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -80,6 +80,7 @@ export class BrowserTools {
     };
   }
   async get(owner, origins, root) {
+    check(!this.factory || origins?.length > 0, "BROWSER_ORIGIN", "桌面浏览器尚未配置允许访问的网址来源，请在连接面板添加网址并确认授权。", 412);
     const existing = this.pages.get(owner);
     if (existing) {
       check(
@@ -182,7 +183,12 @@ export class BrowserTools {
   async navigate(owner, origins, url, root) {
     const target = permittedURL(url, origins, root),
       driver = await this.get(owner, origins, root);
-    return driver.navigate(target);
+    try { return await driver.navigate(target); }
+    catch (error) {
+      if (error instanceof AppError) throw error;
+      const reason = /net::(ERR_[A-Z_]+)/.exec(error.message)?.[1];
+      throw new AppError("BROWSER_NAVIGATION", `网页未能加载${reason ? `（${reason}）` : ""}，请检查网络与允许访问的网址来源后重试。`, 502);
+    }
   }
   async snapshot(owner, origins) {
     return (await this.get(owner, origins)).snapshot();

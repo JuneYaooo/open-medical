@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { Search, Loader2, FilePlus, Copy, ExternalLink, Check } from "lucide-react";
 
@@ -15,6 +15,10 @@ export function LiteratureView({ onOpenTask }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState({});
+  const importsInFlight = useRef(new Set());
+  const importSessions = useRef(new Map());
+  const [importing, setImporting] = useState({});
+  const [abstractErrors, setAbstractErrors] = useState({});
   const [abstracts, setAbstracts] = useState({});
   const [imported, setImported] = useState({});
   const [copied, setCopied] = useState("");
@@ -63,9 +67,14 @@ export function LiteratureView({ onOpenTask }) {
     const params = new URLSearchParams();
     if (article.pmid) params.set("pmid", article.pmid);
     else params.set("doi", article.doi);
-    const full = await api(`/api/literature/article?${params}`);
-    setAbstracts((prev) => ({ ...prev, [key]: full }));
-    return full;
+    setAbstractErrors(prev => ({ ...prev, [key]: "" }));
+    try {
+      const full = await api(`/api/literature/article?${params}`);
+      setAbstracts((prev) => ({ ...prev, [key]: full }));
+      return full;
+    } catch (err) {
+      setAbstractErrors(prev => ({ ...prev, [key]: err.message }));
+    }
   };
   const toggleExpand = async (article) => {
     const key = article.pmid || article.doi;
@@ -73,20 +82,29 @@ export function LiteratureView({ onOpenTask }) {
     if (!expanded[key]) loadAbstract(article).catch(() => {});
   };
   const importAsMaterial = async (article) => {
+    const key = article.pmid || article.doi;
+    if (importsInFlight.current.has(key)) return;
+    importsInFlight.current.add(key);
+    setImporting(prev => ({ ...prev, [key]: true }));
     setError("");
     try {
-      const session = await api("/api/sessions", "POST", {
-        title: `文献 · ${(article.title || "未命名").slice(0, 40)}`,
-      });
+      let session = importSessions.current.get(key);
+      if (!session) {
+        session = await api("/api/sessions", "POST", { title: `文献 · ${(article.title || "未命名").slice(0, 40)}` });
+        importSessions.current.set(key, session);
+      }
       await api("/api/literature/import", "POST", {
         sessionId: session.id,
         pmid: article.pmid || undefined,
         doi: article.pmid ? undefined : article.doi || undefined,
       });
       setImported((prev) => ({ ...prev, [article.pmid || article.doi]: true }));
-      onOpenTask?.(session.id);
+      await onOpenTask?.(session.id);
     } catch (err) {
       setError(err.message);
+    } finally {
+      importsInFlight.current.delete(key);
+      setImporting(prev => ({ ...prev, [key]: false }));
     }
   };
   const citation = (article) => {
@@ -138,24 +156,24 @@ export function LiteratureView({ onOpenTask }) {
           <input
             className="literature-query"
             value={query}
-            placeholder="英文关键词，或用中文描述论文主题"
+            aria-label="文献检索主题" placeholder="英文关键词，或用中文描述论文主题"
             onChange={(e) => setQuery(e.target.value)}
           />
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <select aria-label="文献来源" value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="pubmed">PubMed</option>
             <option value="europepmc">Europe PMC</option>
           </select>
           <input
             className="literature-year"
             value={yearFrom}
-            placeholder="起始年"
+            aria-label="检索起始年" placeholder="起始年"
             inputMode="numeric"
             onChange={(e) => setYearFrom(e.target.value.replace(/\D/g, ""))}
           />
           <input
             className="literature-year"
             value={yearTo}
-            placeholder="结束年"
+            aria-label="检索结束年" placeholder="结束年"
             inputMode="numeric"
             onChange={(e) => setYearTo(e.target.value.replace(/\D/g, ""))}
           />
@@ -183,7 +201,7 @@ export function LiteratureView({ onOpenTask }) {
             return (
               <li className="literature-item" key={key}>
                 <div className="literature-title-row">
-                  <button className="literature-title" onClick={() => toggleExpand(article)}>
+                  <button aria-expanded={Boolean(expanded[key])} className="literature-title" onClick={() => toggleExpand(article)}>
                     {article.title}
                   </button>
                   <span className="literature-journal">
@@ -207,7 +225,7 @@ export function LiteratureView({ onOpenTask }) {
                 )}
                 {expanded[key] && (
                   <div className="literature-abstract">
-                    {abstracts[key] ? (
+                    {abstractErrors[key] ? <div role="alert"><p>摘要读取失败：{abstractErrors[key]}</p><button className="secondary" onClick={() => loadAbstract(article)}>重试摘要</button></div> : abstracts[key] ? (
                       abstracts[key].abstract ? (
                         <p>{abstracts[key].abstract.replace(/<[^>]+>/g, "")}</p>
                       ) : (
@@ -222,10 +240,10 @@ export function LiteratureView({ onOpenTask }) {
                   <button
                     className="secondary"
                     onClick={() => importAsMaterial(article)}
-                    disabled={imported[key]}
+                    disabled={imported[key] || importing[key]}
                   >
                     {imported[key] ? <Check size={14} /> : <FilePlus size={14} />}
-                    {imported[key] ? "已导入" : "导入为材料"}
+                    {importing[key] ? "正在导入…" : imported[key] ? "已导入" : "导入为材料"}
                   </button>
                   <button className="secondary" onClick={() => copyCitation(article)}>
                     {copied === key ? <Check size={14} /> : <Copy size={14} />}
@@ -236,7 +254,7 @@ export function LiteratureView({ onOpenTask }) {
                     href={pubmedLink(article)}
                     target="_blank"
                     rel="noreferrer"
-                    title="在 PubMed 打开"
+                    title={article.pmid ? "在 PubMed 打开" : "打开 DOI 来源"}
                   >
                     <ExternalLink size={14} />
                   </a>

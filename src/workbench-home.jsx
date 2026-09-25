@@ -197,6 +197,9 @@ export function WorkbenchHome({
   onThinkingChange,
   consent,
   onConsentChange,
+  draftState = {},
+  onDraftChange,
+  attachmentError,
   onModelSettings,
   onAttach,
   uploading,
@@ -210,16 +213,17 @@ export function WorkbenchHome({
   const [showAgenda, setShowAgenda] = useState(false);
   const [showAllFlows, setShowAllFlows] = useState(false);
   const [runtimeOptions, setRuntimeOptions] = useState(false);
-  const [taskType, setTaskType] = useState("medical");
-  const [flowId, setFlowId] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [patientId, setPatientId] = useState("");
+  const [taskType, setTaskType] = useState(draftState.taskType ?? "medical");
+  const [flowId, setFlowId] = useState(draftState.flowId ?? "");
+  const [prompt, setPrompt] = useState(draftState.prompt ?? "");
+  const [patientId, setPatientId] = useState(draftState.patientId ?? "");
   const [starting, setStarting] = useState(false);
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [skillMention, setSkillMention] = useState(null);
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [pickedSkills, setPickedSkills] = useState([]);
+  const [pickedSkills, setPickedSkills] = useState(draftState.pickedSkills ?? []);
+  useEffect(() => { onDraftChange?.({prompt, patientId, taskType, flowId, pickedSkills}); }, [prompt, patientId, taskType, flowId, pickedSkills]);
   const inputRef = useRef(null);
   const selectedFlow = MEDICAL_WORKFLOWS.find((flow) => flow.id === flowId);
   const isFollowup = flowId === "followup";
@@ -315,6 +319,10 @@ export function WorkbenchHome({
       return;
     }
     if (!prompt.trim()) return;
+    if (prompt.trim().length > 200000) {
+      setError("任务超过 20 万字符，请拆成多个任务或上传为资料；输入内容已保留。");
+      return;
+    }
     setStarting(true);
     try {
       await onStart({
@@ -413,6 +421,7 @@ export function WorkbenchHome({
           })}
         </span>
       </div>
+      {attachmentError && <p className="error-text" role="alert">操作未完成：{attachmentError}</p>}
       {error && (
         <p className="error-text" role="alert">
           {error}{" "}
@@ -522,7 +531,6 @@ export function WorkbenchHome({
                 }}
                 disabled={starting}
                 rows={3}
-                maxLength={12000}
               />
             )}
             {skillMention && (

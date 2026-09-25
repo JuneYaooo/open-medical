@@ -99,7 +99,7 @@ export function KnowledgeLibraries({ onOpenTask }) {
       </div>
       {error && (
         <p className="form-error" role="alert">
-          {error}
+          {error} <button className="text-button" onClick={() => { setLoading(true); load().then(() => setError("")).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>重新加载知识库</button>
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
@@ -259,7 +259,7 @@ export function KnowledgeLibraries({ onOpenTask }) {
             ))}
           </div>
           {loading && <p role="status">正在读取知识库…</p>}
-          {!loading && !libraries.length && (
+          {!loading && !error && !libraries.length && (
             <p className="module-card">
               还没有知识库。先创建一个，例如“科室随访规范”，然后上传资料。
             </p>

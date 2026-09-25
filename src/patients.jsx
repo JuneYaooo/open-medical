@@ -1,3 +1,4 @@
+import { ChatFollowupsPanel } from "./chat-followups";
 import { WeComPanel } from "./wecom-panel";
 import { PatientDashboard } from "./patient-dashboard";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
@@ -97,6 +98,7 @@ export function PatientsView({
   onOpenWorkspace,
   onSwitchCurrent,
   onChanged,
+  onLocationChange,
   initialPatientId,
   initialTab = "overview",
   initialCreate = false,
@@ -105,11 +107,15 @@ export function PatientsView({
   const panelRoot = useRef(null);
   const listScroll = useRef(0);
   const [patients, setPatients] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listFailed, setListFailed] = useState(false);
   const patientGeneration = useRef(0);
   const [reminders, setReminders] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState("overview");
+  const [patientLoading, setPatientLoading] = useState(false);
+  useEffect(() => { if (detail) onLocationChange?.(detail.id, tab); }, [detail?.id, tab]);
   useEffect(() => { panelRoot.current?.scrollTo({ top: detail ? 0 : listScroll.current }); }, [detail?.id]);
   const [messages, setMessages] = useState([]);
   const [followups, setFollowups] = useState([]);
@@ -131,8 +137,6 @@ export function PatientsView({
   const [modal, setModal] = useState(initialCreate ? "new-patient" : initialImport ? "import-patients" : null);
   const [consent, setConsent] = useState(false);
   const [paste, setPaste] = useState("");
-  const [bridge, setBridge] = useState(null);
-  const [reply, setReply] = useState("");
   const groups = [...new Set(patients.flatMap((p) => p.groups || []))].sort();
   const filtered = patients
     .filter((p) => archiveFilter === "archived" ? p.archived : !p.archived)
@@ -149,45 +153,57 @@ export function PatientsView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / 24));
   const visiblePage = Math.min(patientPage, pageCount - 1);
   const refresh = async () => {
-    const [list, todo, box, pending] = await Promise.all([
-      api("/api/patients?summary=1&archived=1"),
-      api("/api/reminders"),
-      api("/api/inbox"),
-      api("/api/pending-actions?status=pending").catch(() => ({ actions: [] })),
-    ]);
-    setPatients(list.patients);
-    setReminders(todo.reminders);
-    setInbox(box.messages);
-    setCreateProposals(
-      (pending.actions || []).filter((a) => a.type === "patient-create"),
-    );
-    onChanged?.();
-    return list.patients;
+    setListLoading(true);
+    try {
+      const [list, todo, box, pending] = await Promise.all([
+        api("/api/patients?summary=1&archived=1"),
+        api("/api/reminders"),
+        api("/api/inbox"),
+        api("/api/pending-actions?status=pending").catch(() => ({ actions: [] })),
+      ]);
+      setPatients(list.patients);
+      setReminders(todo.reminders);
+      setInbox(box.messages);
+      setCreateProposals(
+        (pending.actions || []).filter((a) => a.type === "patient-create"),
+      );
+      onChanged?.();
+      setListFailed(false);
+      return list.patients;
+    } catch (err) {
+      setListFailed(true);
+      throw err;
+    } finally { setListLoading(false); }
   };
   const openPatient = async (id, nextTab = "overview") => {
     if (!detail) listScroll.current = panelRoot.current?.scrollTop || 0;
     const version = ++patientGeneration.current;
     setError("");
-    setTab(nextTab);
+    setPatientLoading(true);
     setReviewProposal(null);
     setConsent(false);
     setPaste("");
-    onSwitchCurrent?.(id);
-    const [one, msgs, jobs, risks, proposals] = await Promise.all([
-      api(`/api/patients/${id}`),
-      api(`/api/patients/${id}/messages`),
-      api(`/api/patients/${id}/followups`),
-      api(`/api/risk-alerts?patientId=${id}`),
-      api(`/api/pending-actions?patientId=${id}`),
-    ]);
-    const work = await api(`/api/sessions/${one.sessionId}`);
-    if (version !== patientGeneration.current) return;
-    setDetail(one);
-    setMessages(msgs.messages);
-    setFollowups(jobs.jobs);
-    setRisks(risks.alerts);
-    setProposals(proposals.actions);
-    setSession(work);
+    try {
+      const [one, msgs, jobs, risks, proposals] = await Promise.all([
+        api(`/api/patients/${encodeURIComponent(id)}`),
+        api(`/api/patients/${id}/messages`),
+        api(`/api/patients/${id}/followups`),
+        api(`/api/risk-alerts?patientId=${id}`),
+        api(`/api/pending-actions?patientId=${id}`),
+      ]);
+      const work = await api(`/api/sessions/${one.sessionId}`);
+      if (version !== patientGeneration.current) return;
+      setTab(nextTab);
+      onSwitchCurrent?.(id);
+      setDetail(one);
+      setMessages(msgs.messages);
+      setFollowups(jobs.jobs);
+      setRisks(risks.alerts);
+      setProposals(proposals.actions);
+      setSession(work);
+    } finally {
+      if (version === patientGeneration.current) setPatientLoading(false);
+    }
   };
   const refreshPatient = async () => {
     if (!detail) return;
@@ -227,64 +243,8 @@ export function PatientsView({
       openPatient(initialPatientId, initialTab).catch((err) =>
         setError(err.message),
       );
-    api("/api/wechat/status")
-      .then(setBridge)
-      .catch(() => setBridge(null));
+    return () => { patientGeneration.current++; };
   }, []);
-  const refreshBridge = () =>
-    api("/api/wechat/status")
-      .then(setBridge)
-      .catch(() => setBridge(null));
-  const syncWechat = async () => {
-    if (
-      !window.confirm(
-        "请先把微信切到该患者的聊天窗口。\n同步会抓取当前微信窗口的可见文本并归档到该患者，继续？",
-      )
-    )
-      return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api("/api/wechat/read", "POST", {
-        patientId: detail.id,
-      });
-      setNotice(
-        `已从微信窗口抓取 ${result.captured} 条文本：新增 ${result.stored} 条，重复跳过 ${result.duplicates} 条。`,
-      );
-      await refreshPatient();
-    } catch (err) {
-      setError(err.message);
-      refreshBridge();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const sendWechat = async () => {
-    if (
-      !window.confirm(
-        `将通过本机微信客户端发送给「${detail.name}」：\n\n${reply}\n\n微信会用 ${detail.phone || "姓名"} 搜索并选中第一个结果，请确认搜索词能唯一定位该患者。确认发送？`,
-      )
-    )
-      return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api("/api/wechat/send", "POST", {
-        patientId: detail.id,
-        text: reply,
-      });
-      setNotice(`已通过微信发送给 ${result.contact}，并记录到消息列表。`);
-      setReply("");
-      await refreshPatient();
-    } catch (err) {
-      setError(err.message);
-      refreshBridge();
-    } finally {
-      setBusy(false);
-    }
-  };
   const digest = async () => {
     if (busy) return;
     setBusy(true);
@@ -339,6 +299,7 @@ export function PatientsView({
         archived: !detail.archived,
       });
       await refresh();
+      onLocationChange?.();
       setDetail(null);
       setSession(null);
       setNotice(detail.archived ? "患者已恢复到在管列表。" : "患者已归档，可在已归档列表中恢复。");
@@ -355,6 +316,7 @@ export function PatientsView({
       return;
     try {
       await api(`/api/patients/${detail.id}`, "DELETE");
+      onLocationChange?.();
       setDetail(null);
       setSession(null);
       await refresh();
@@ -367,9 +329,9 @@ export function PatientsView({
       {filtered.slice(visiblePage * 24, (visiblePage + 1) * 24).map((p) => (
         <button
           className="patient-card"
+          disabled={patientLoading}
           key={p.id}
           onClick={() => {
-            onSwitchCurrent?.(p.id);
             openPatient(p.id).catch((err) => setError(err.message));
           }}
         >
@@ -407,10 +369,13 @@ export function PatientsView({
           )}
         </button>
       ))}
-      {!filtered.length && (
-        <p className="sidebar-empty">
-          {patients.length ? "没有匹配的患者，请尝试其他姓名、编号或分组。" : "还没有在管患者。点击「上传资料建档」，自动解析病例并核对结果。"}
-        </p>
+      {!filtered.length && !listLoading && !listFailed && (
+        <div className="patient-empty-state">
+          <Stethoscope size={28} />
+          <h3>{query || group ? "没有匹配的患者" : archiveFilter === "archived" ? "暂无已归档患者" : "建立第一份患者档案"}</h3>
+          <p>{query || group ? "试试其他姓名、编号或标签，也可以清除筛选查看全部患者。" : archiveFilter === "archived" ? "归档后的患者会保留在这里，随时可以恢复到在管列表。" : "上传病例材料并核对整理结果，或直接填写基本信息。"}</p>
+          {query || group ? <button className="secondary" onClick={() => {setQuery(""); setGroup(""); setPatientPage(0);}}>清除筛选</button> : archiveFilter === "archived" ? <button className="secondary" onClick={() => setArchiveFilter("active")}>查看在管患者</button> : <div className="toolbar-actions"><button className="primary" onClick={() => setModal("new-patient")}>上传第一份病例</button><button className="secondary" onClick={() => setModal("manual-patient")}>手动填写基本信息</button></div>}
+        </div>
       )}
     </div>
   );
@@ -431,6 +396,8 @@ export function PatientsView({
               className="secondary"
               onClick={() => {
                 patientGeneration.current++;
+                setPatientLoading(false);
+                onLocationChange?.();
                 setDetail(null);
                 setSession(null);
               }}
@@ -454,6 +421,9 @@ export function PatientsView({
           </div>
         )}
       </div>
+      {listLoading && !detail && <p className="patient-loading" role="status"><Loader2 size={16} className="spin" />正在读取患者列表…</p>}
+      {listFailed && <p className="navigation-notice" role="alert">患者列表读取失败，已保留此前读取的数据。<button className="secondary" onClick={() => refresh().then(() => setError("")).catch(err => setError(err.message))}>重新加载患者</button></p>}
+      {patientLoading && <p className="patient-loading" role="status"><Loader2 size={16} className="spin" />正在打开患者档案…</p>}
       {error && (
         <p className="error-text" role="alert">
           {error}
@@ -823,49 +793,7 @@ export function PatientsView({
                   总结会调用模型并把消息标记为已处理；产物进入病例工作区待复核。
                 </small>
               </div>
-              {bridge && (
-                <div className="bridge-panel">
-                  <div className="bridge-row">
-                    <span
-                      className={`connection ${bridge.available ? "" : "offline"}`}
-                    >
-                      <i />
-                      {bridge.enabled
-                        ? bridge.available
-                          ? "微信桥接已连接"
-                          : `微信桥接不可用：${bridge.reason || "未知原因"}`
-                        : "微信桥接未启用（.env 设置 MEDICAL_WECHAT_BRIDGE=on）"}
-                    </span>
-                    <button
-                      className="secondary"
-                      disabled={!bridge.available || busy}
-                      onClick={syncWechat}
-                    >
-                      同步微信当前聊天窗口
-                    </button>
-                  </div>
-                  <label className="paste-box">
-                    <b>回复草稿（通过微信发送）</b>
-                    <textarea
-                      rows={2}
-                      value={reply}
-                      onChange={(e) => setReply(e.target.value)}
-                      placeholder="写给该患者的消息……每一条都需要你手动点击发送"
-                    />
-                    <button
-                      className="primary"
-                      disabled={!bridge.available || !reply.trim() || busy}
-                      onClick={sendWechat}
-                    >
-                      通过微信发送
-                    </button>
-                    <small className="muted">
-                      发送通过本机微信客户端完成（搜索联系人 → 粘贴 →
-                      回车），系统不会自动发送任何消息。
-                    </small>
-                  </label>
-                </div>
-              )}
+              <ChatFollowupsPanel key={detail.id} patients={[detail]} initialPatientId={detail.id} />
               <label className="paste-box">
                 <b>粘贴消息记录</b>
                 <small className="muted">

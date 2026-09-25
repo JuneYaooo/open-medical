@@ -13,6 +13,7 @@ import {
 } from "./core/index.mjs";
 import { ModelProfiles } from "./core/model-profiles.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
+import { JevSettings } from "./core/jev-settings.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import { workspaceApi } from "./core/workspace-api.mjs";
 import { check, AppError } from "./errors.mjs";
@@ -29,10 +30,12 @@ export function createWorkspaceServer(options = {}) {
     options.provider || createProvider(),
   );
   const profiles = new ModelProfiles(models);
+  const jev = new JevSettings(models.vault);
   let provider = models.provider();
   const service = new WorkspaceService(database.db, provider, {
     sandbox: new PythonSandbox(),
     modelProfiles: profiles,
+    jev,
     ...options,
   });
   const token = randomBytes(32).toString("hex");
@@ -158,6 +161,12 @@ export function createWorkspaceServer(options = {}) {
           if (req.method === "DELETE")
             return send(res, 200, { profiles: profiles.remove(input.id) });
         }
+        if (path === "/api/jev-settings") {
+          if (req.method === "GET") return send(res, 200, jev.public());
+          if (req.method === "PUT") return send(res, 200, jev.save(await body(req)));
+        }
+        if (path === "/api/jev-settings/test" && req.method === "POST")
+          return send(res, 200, await track(jev.test(await body(req))));
         if (path === "/api/model-settings") {
           if (req.method === "GET") return send(res, 200, models.public());
           if (req.method === "PUT") {

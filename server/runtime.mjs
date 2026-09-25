@@ -174,7 +174,7 @@ export class MedicalRuntime {
       "通用工作区请使用通用运行接口",
       403,
     );
-    const message = string(body.message, "消息", 20000);
+    const message = string(body.message, "消息", 200000);
     check(
       !this.active.has(sessionId),
       "RUN_ACTIVE",

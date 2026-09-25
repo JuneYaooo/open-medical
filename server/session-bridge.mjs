@@ -508,7 +508,7 @@ export class SessionBridge {
       "会话资料已更新，请刷新核对后再发送",
       409,
     );
-    const message = string(body.message, "任务", 20000);
+    const message = string(body.message, "任务", 200000);
     const requestedMode = body.mode || "local";
     const mode = resolveMode(requestedMode);
     const policy = medicalPolicy(message);
@@ -626,16 +626,13 @@ export class SessionBridge {
         time: event.time,
       });
     };
-    // 上下文预算预检：系统提示+本轮输入+材料超过预算时直接失败，
-    // 与旧引擎「不静默截断病历历史」的行为一致。
+    // Only fixed system policy can fail this preflight. Active input and
+    // source/history data must reach the runtime's archive + compaction path.
     {
       const budget = this.contextBudget;
-      const approx =
-        this.service.systemFor(this.workspace(workspaceId)).length +
-        (prepared.handle.message || "").length +
-        (prepared.handle.sources || []).reduce((n, src) => n + src.text.length, 0);
+      const approx = this.service.systemFor(this.workspace(workspaceId)).length;
       if (Number.isFinite(budget) && approx > budget) {
-        const message = "上下文超过预算，请减少本轮勾选的材料";
+        const message = "系统提示超过上下文预算，请增加上下文预算或缩小系统配置";
         this.service.store.update(workspaceId, (current) => {
           const target = current.runs.find((r) => r.id === prepared.handle.run.id);
           if (target) {
@@ -1120,7 +1117,7 @@ export class SessionBridge {
         if (!bridge.isSessionWorkspace(sessionId))
           return bridge.runtime.prepare(sessionId, body);
         const w = bridge.requireSessionWorkspace(sessionId);
-        const message = string(body.message, "任务", 20000);
+        const message = string(body.message, "任务", 200000);
         const mode = resolveMode(body.mode);
         const policy = medicalPolicy(message);
     if (body.workflow === "patient-intake") policy.workflow = "patient-intake";

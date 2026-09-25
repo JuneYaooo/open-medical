@@ -165,7 +165,7 @@ export function CasesView() {
           <input
             className="literature-query"
             value={query}
-            placeholder="检索病例（诊断、治疗、摘要关键词）"
+            aria-label="检索病例" placeholder="检索病例（诊断、治疗、摘要关键词）"
             onChange={(e) => setQuery(e.target.value)}
           />
           <button type="submit" disabled={busy}>
@@ -177,14 +177,14 @@ export function CasesView() {
           <input
             className="literature-query"
             value={similarText}
-            placeholder="相似病例搜索：粘贴当前病例描述（诊断、表现、检验）"
+            aria-label="相似病例描述" placeholder="相似病例搜索：粘贴当前病例描述（诊断、表现、检验）"
             onChange={(e) => setSimilarText(e.target.value)}
           />
           <input
             className="literature-year"
             style={{ width: 140 }}
             value={similarDiagnosis}
-            placeholder="诊断加权（可选）"
+            aria-label="诊断加权（可选）" placeholder="诊断加权（可选）"
             onChange={(e) => setSimilarDiagnosis(e.target.value)}
           />
           <button type="submit" disabled={busy || !similarText.trim()}>

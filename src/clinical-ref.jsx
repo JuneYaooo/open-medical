@@ -50,6 +50,7 @@ function ScalesTab({ initialScale = "" }) {
       .then((value) => setScales(value.scales))
       .catch((err) => setError(err.message));
   }, []);
+  useEffect(() => { setResult(null); }, [answers]);
   const scale = scales.find((s) => s.id === scaleId);
   const run = async (event) => {
     event?.preventDefault();
@@ -69,7 +70,7 @@ function ScalesTab({ initialScale = "" }) {
     <section className="followups-section">
       <h3>量表与计算器</h3>
       <div className="followup-apply">
-        <select value={scaleId} onChange={(e) => { setScaleId(e.target.value); setAnswers({}); setResult(null); }}>
+        <select disabled={busy} aria-label="选择量表" value={scaleId} onChange={(e) => { setScaleId(e.target.value); setAnswers({}); setResult(null); }}>
           <option value="">选择量表…</option>
           {scales.map((s) => (
             <option key={s.id} value={s.id}>
@@ -87,6 +88,7 @@ function ScalesTab({ initialScale = "" }) {
                 <span>{item.label}</span>
                 {item.type === "select" ? (
                   <select
+                    disabled={busy}
                     value={answers[item.key] || ""}
                     onChange={(e) => setAnswers({ ...answers, [item.key]: e.target.value })}
                   >
@@ -104,6 +106,7 @@ function ScalesTab({ initialScale = "" }) {
                     step="any"
                     min={item.min}
                     max={item.max}
+                    disabled={busy}
                     value={answers[item.key] ?? ""}
                     onChange={(e) =>
                       setAnswers({ ...answers, [item.key]: e.target.value === "" ? "" : Number(e.target.value) })

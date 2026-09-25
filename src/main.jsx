@@ -1,3 +1,5 @@
+import { AppSettingsView } from "./app-settings";
+import { readLocation, writeLocation, VIEW_LABELS } from "./navigation";
 import { conversationRunIds } from "../shared/patient-conversations.mjs";
 import { PatientConversationNav } from "./patient-conversation-nav";
 import { TaskResult, hasTaskResult } from "./task-result";
@@ -137,8 +139,8 @@ const eventLabel = (event) =>
     "sandbox.started": "开始隔离计算",
     "sandbox.completed": "隔离计算完成",
     "sandbox.failed": event.payload?.error,
-    "context.compacting": "上下文接近预算，正在压缩历史",
-    "context.compacted": `历史已压缩${
+    "context.compacting": "正在整理长输入或压缩历史，原文会保留",
+    "context.compacted": `${event.payload?.inputChunks ? `长输入已分 ${event.payload.inputChunks} 片整理` : "历史已压缩"}${
       event.payload?.beforeChars
         ? `（${event.payload.beforeChars} → ${event.payload.afterChars} 字符，原文可按 archiveId 读回）`
         : ""
@@ -533,10 +535,11 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
   );
 }
 function App() {
+  const initialLocation = useRef(readLocation()).current;
   const [config, setConfig] = useState(null),
     [sessions, setSessions] = useState([]),
     [session, setSession] = useState(null),
-    [activeId, setActiveId] = useState(""),
+    [activeId, setActiveId] = useState(initialLocation.view === "workbench" ? initialLocation.id : ""),
     [draft, setDraft] = useState(""),
     [consent, setConsent] = useState(false);
   const [questionSelection, setQuestionSelection] = useState({});
@@ -546,20 +549,23 @@ function App() {
   const [pickedSkills, setPickedSkills] = useState([]),
     [mention, setMention] = useState(null),
     [mentionIndex, setMentionIndex] = useState(0);
-  const [view, setView] = useState(() => {
-    const requested = new URLSearchParams(window.location.search).get("view");
-    return ["home", "patients", "followups", "research", "data-analysis", "projects", "tools", "tasks", "knowledge"].includes(requested) ? requested : "home";
-  });
+  const [view, setViewState] = useState(initialLocation.view);
+  const setView = (next, location = {}) => {
+    writeLocation(next, location);
+    setViewState(next);
+  };
   const [displayMode, setDisplayMode] = useState("work");
   const [workspaceDisplay, setWorkspaceDisplay] = useState("work");
   const [largeText, setLargeText] = useState(() => localStorage.getItem("om.largeText") === "true");
-  const [workspaceTarget, setWorkspaceTarget] = useState(null);
+  const [workspaceTarget, setWorkspaceTarget] = useState(initialLocation.view === "workspaces" ? { id: initialLocation.id, panel: initialLocation.tab } : null);
   const [projectTool, setProjectTool] = useState("");
   const [activeWsId, setActiveWsId] = useState("");
   const [wsList, setWsList] = useState([]);
-  const [patientRoute, setPatientRoute] = useState({});
+  const [patientRoute, setPatientRoute] = useState(initialLocation.view === "patients" ? { id: initialLocation.id, tab: initialLocation.tab } : {});
   const [homeKey, setHomeKey] = useState(0);
+  const [homeDraft, setHomeDraft] = useState({});
   const [patientsList, setPatientsList] = useState([]);
+  const [listError, setListError] = useState("");
   const [currentPatientId, setCurrentPatientId] = useState(
     () => localStorage.getItem("om.currentPatient") || "",
   );
@@ -575,7 +581,7 @@ function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [runs, setRuns] = useState({}),
-    [tab, setTab] = useState("materials"),
+    [tab, setTab] = useState(initialLocation.view === "workbench" ? initialLocation.tab || "materials" : "materials"),
     [artifactId, setArtifactId] = useState(""),
     [audit, setAudit] = useState([]),
     [query, setQuery] = useState("");
@@ -591,7 +597,7 @@ function App() {
     [materialMatches, setMaterialMatches] = useState(null);
   const [modal, setModal] = useState(null),
     [sidebar, setSidebar] = useState(false),
-    [inspector, setInspector] = useState(false),
+    [inspector, setInspector] = useState(initialLocation.view === "workbench" && Boolean(initialLocation.tab)),
     [uploading, setUploading] = useState(false),
     [homeFileCount, setHomeFileCount] = useState(0),
     [citation, setCitation] = useState(null);
@@ -600,7 +606,7 @@ function App() {
     endRef = useRef(),
     followOutput = useRef(true),
     lastScrollTop = useRef(0),
-    activeRef = useRef(""),
+    activeRef = useRef(initialLocation.view === "workbench" ? initialLocation.id : ""),
     generation = useRef(0),
     sendingRef = useRef(new Set()),
     homePending = useRef(null);
@@ -687,29 +693,29 @@ function App() {
     []
   ).filter((id) => session?.files.some((f) => f.id === id));
   // 能力驱动刷新:通用模式(无医疗能力)只拉工作区列表,不请求 /api/sessions
-  // 等医疗接口;医疗接口偶发不可用时安全降级为空列表,不进全局错误态。
+  // 医疗列表分别读取，失败时保留已加载数据并提供重试。
   // init 的闭包可能捕获旧 config,因此允许显式传入 bootstrap 结果。
   const refreshList = async (cfg = config) => {
     const medical = medicalEnabled(cfg);
-    const [value, ws, pt] = await Promise.all([
-      medical
-        ? api("/api/sessions").catch(() => ({ sessions: [] }))
-        : Promise.resolve({ sessions: [] }),
-      api("/api/workspaces").catch(() => ({ workspaces: [] })),
-      medical
-        ? api("/api/patients?summary=1").catch(() => ({ patients: [] }))
-        : Promise.resolve({ patients: [] }),
+    const results = await Promise.allSettled([
+      medical ? api("/api/sessions") : Promise.resolve({ sessions: [] }),
+      api("/api/workspaces"),
+      medical ? api("/api/patients?summary=1") : Promise.resolve({ patients: [] }),
     ]);
-    setSessions(value.sessions);
-    setWsList((ws.workspaces || []).filter((item) => item.kind !== "session"));
-    setPatientsList(pt.patients || []);
-    return value.sessions;
+    const [tasks, projects, people] = results;
+    if (tasks.status === "fulfilled") setSessions(tasks.value.sessions);
+    if (projects.status === "fulfilled") setWsList((projects.value.workspaces || []).filter((item) => item.kind !== "session"));
+    if (people.status === "fulfilled") setPatientsList(people.value.patients || []);
+    const missing = results.flatMap((result, index) => result.status === "rejected" ? [["任务", "项目", "患者"][index]] : []);
+    setListError(missing.length ? `${missing.join("、")}列表暂时无法更新，已保留此前读取的数据。` : "");
+    return tasks.status === "fulfilled" ? tasks.value.sessions : sessions;
   };
+
   const load = async (id) => {
     const version = ++generation.current;
     setLoading(true);
     try {
-      const data = await api(`/api/sessions/${id}`);
+      const data = await api(`/api/sessions/${encodeURIComponent(id)}`);
       if (version === generation.current) {
         setSession(data);
         setMeters((m) => ({ ...m, ...metersFromSession(data) }));
@@ -718,19 +724,18 @@ function App() {
         return data;
       }
     } catch (err) {
-      setError(err.message);
+      if (version === generation.current) setError(err.message);
     } finally {
       if (version === generation.current) setLoading(false);
     }
   };
-  // 首页附件挂在「待发任务」会话上：离开首页或正式发送后作废
+  // Keep pending attachments while navigating; explicit new task or send consumes them.
   const resetHomePending = () => {
     homePending.current = null;
     setHomeFileCount(0);
   };
   const select = async (id) => {
     setError("");
-    resetHomePending();
     setNotice("");
     setMaterialQuery("");
     setMaterialMatches(null);
@@ -754,7 +759,7 @@ function App() {
       setConfig(value);
       setThinking(value.thinking === "enabled" ? "enabled" : "disabled");
       // 通用模式没有医疗首页:默认进入领域无关的项目工作区视图。
-      if (!medicalEnabled(value)) setView("workspaces");
+      if (!medicalEnabled(value) && !["workspaces", "projects", "tools", "tasks", "settings"].includes(readLocation().view)) setView("workspaces", { replace: true });
       const list = await refreshList(value);
       if (medicalEnabled(value))
         api("/api/doctor/profile")
@@ -768,6 +773,7 @@ function App() {
       )
         await load(activeRef.current);
       else {
+        if (activeRef.current) setError("这项任务不存在或已删除，可以返回任务记录继续查找。");
         setSession(null);
         setLoading(false);
       }
@@ -778,6 +784,24 @@ function App() {
   };
   useEffect(() => {
     init();
+  }, []);
+  useEffect(() => {
+    const restore = () => {
+      const route = readLocation();
+      setViewState(route.view);
+      setSidebar(false);
+      setToolPanel(null);
+      setError("");
+      if (route.view === "patients") setPatientRoute({ id: route.id, tab: route.tab, navigationKey: Date.now() });
+      if (route.view === "workspaces") setWorkspaceTarget({ id: route.id, panel: route.tab });
+      if (route.view === "workbench" && route.id) {
+        setTab(route.tab || "materials");
+        setInspector(Boolean(route.tab));
+        select(route.id);
+      }
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
   }, []);
   // 当前患者上下文：打开患者会话时跟随；详情供速览卡使用。
   // 无医疗能力时即便 localStorage 残留患者 ID 也不请求患者接口。
@@ -855,7 +879,7 @@ function App() {
   const updateSession = async () => {
     if (!activeRef.current) return;
     const id = activeRef.current;
-    const data = await api(`/api/sessions/${id}`);
+    const data = await api(`/api/sessions/${encodeURIComponent(id)}`);
     if (activeRef.current === id) {
       setSession(data);
       setMeters((m) => ({ ...m, ...metersFromSession(data) }));
@@ -1061,7 +1085,7 @@ function App() {
       sendingRef.current.delete(id);
       setRuns((prev) => ({ ...prev, [id]: { ...prev[id], busy: false } }));
       try {
-        const data = await api(`/api/sessions/${id}`);
+        const data = await api(`/api/sessions/${encodeURIComponent(id)}`);
         if (activeRef.current === id) {
           setSession(data);
           if (data.patientId && data.runs.at(-1)?.id !== current.runs.at(-1)?.id)
@@ -1095,7 +1119,7 @@ function App() {
     setUploading(true);
     setError("");
     try {
-      let current = homePending.current || session;
+      let current = readLocation().view === "home" ? homePending.current : session;
       if (!current) current = await create();
       if (!current) return;
       for (const file of files) {
@@ -1160,25 +1184,25 @@ function App() {
   };
   const navigate = (next) => {
     setView(next);
-    resetHomePending();
     setSidebar(false);
     setNotice("");
     refreshList().catch((err) => setError(err.message));
   };
   const openWorkspaces = (target = {}) => {
-    resetHomePending();
-    setWorkspaceTarget({...target, panel: target.panel || (projectTool === "browser" ? "browser" : projectTool ? "settings" : "files")});
+    if (projectTool) setWorkspaceDisplay("work");
+    setWorkspaceTarget({...target, panel: target.panel || (["browser", "terminal", "extensions"].includes(projectTool) ? projectTool : "files")});
     setProjectTool("");
     setActiveWsId(target.id || "");
     setSidebar(false);
-    setView("workspaces");
+    setView("workspaces", { id: target.id, tab: target.panel });
   };
   const openPatient = (route = {}) => {
     setPatientRoute(route);
     navigate("patients");
+    writeLocation("patients", { id: route.id, tab: route.tab, replace: true });
   };
   const openTask = async (id, options = {}) => {
-    setView("workbench");
+    setView("workbench", { id, tab: options.tab });
     const data = await select(id);
     if (data) {
       if (data.patientId && (options.draft || options.newQuestion)) setQuestionSelection({ sessionId: data.id, runId: null });
@@ -1220,7 +1244,8 @@ function App() {
     setConsent(false);
     setTab("materials");
     setInspector(false);
-    setView("workbench");
+    setHomeDraft({});
+    setView("workbench", { id: data.id });
     if (patient) {
       switchCurrentPatient(patient.id);
       setNotice(
@@ -1241,9 +1266,9 @@ function App() {
   useEffect(() => {
     if (config)
       document.title = medical
-        ? "Open Medical · 医疗工作台"
-        : "Open Agent · 通用工作台";
-  }, [config, medical]);
+        ? `${VIEW_LABELS[view] || "医疗工作台"} · Open Medical`
+        : `${VIEW_LABELS[view] || "通用工作台"} · Open Agent`;
+  }, [config, medical, view]);
   useEffect(() => { if(inspector) setDisplayMode(mode => mode === "chat" ? "work" : mode); }, [inspector]);
   useEffect(() => {
     if (!inspector) return;
@@ -1259,7 +1284,7 @@ function App() {
   return (
     <div className={`agent-app v6-shell mode-${view === "workspaces" ? workspaceDisplay : displayMode} ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
       {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
-      <a href="#main" className="skip-link">
+      <a href="#main-content" className="skip-link">
         跳到工作区
       </a>
       <header className="topbar">
@@ -1363,7 +1388,7 @@ function App() {
           />
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
-          <button className="new-session" onClick={()=>{if(medical){setHomeKey(v=>v+1);navigate("home");}else openWorkspaces({create:true});}}><Plus size={17}/>新建任务</button>
+          <button className="new-session" onClick={()=>{if(medical){resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);navigate("home");}else openWorkspaces({create:true});}}><Plus size={17}/>新建任务</button>
           {medical && <>
             <p className="business-nav-label">医疗业务</p>
             <nav className="business-nav" aria-label="主要业务">
@@ -1372,7 +1397,7 @@ function App() {
           </>}
           <p className="business-nav-label">通用工作</p>
           <nav className="business-nav" aria-label="通用工作">
-            {[["home","任务",MessageSquare],["projects","项目",FolderOpen],["tools","工具",Settings2]].map(([id,label,Icon])=>{const active=id==="home"?["home","tasks","workbench","review"].includes(view):id==="projects"?["projects","workspaces"].includes(view):view==="tools";return <button key={id} className={active?"active":""} aria-current={active?"page":undefined} onClick={()=>{setProjectTool("");navigate(!medical&&id==="home"?"projects":id);}}><Icon size={20}/>{label}</button>;})}
+            {[["tasks","任务",MessageSquare],["projects","项目",FolderOpen],["tools","工具",Settings2]].map(([id,label,Icon])=>{const active=id==="tasks"?["home","tasks","workbench","review"].includes(view):id==="projects"?["projects","workspaces"].includes(view):view==="tools";return <button key={id} className={active?"active":""} aria-current={active?"page":undefined} onClick={()=>{setProjectTool("");navigate(id);}}><Icon size={20}/>{label}</button>;})}
           </nav>
           {wsList.some(w=>w.pinned&&!w.archived)&&<nav className="pinned-projects" aria-label="固定项目"><p className="business-nav-label">固定项目</p>{wsList.filter(w=>w.pinned&&!w.archived).slice(0,3).map(w=><button key={w.id} onClick={()=>openWorkspaces({id:w.id})}><FolderOpen size={16}/><span>{w.title}</span></button>)}</nav>}
           <details className="advanced-nav">
@@ -1531,7 +1556,7 @@ function App() {
                 </button>
               </p>
               <p className="sidebar-empty">
-                随访 · 病例库 · 速查 · 文献 · 科研 · DRG · 知识库
+                随访 · 病例库 · 速查 · 文献 · 科研 · 知识库
               </p>
               <button
                 className="workspace-account"
@@ -1547,10 +1572,21 @@ function App() {
             </>
           )}
           </details>
-          <div className="business-preferences"><button onClick={() => setModal("settings")}><Settings2 size={16}/>设置与连接</button></div>
+          <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
-        <div className="product-content">
-          {view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={()=>{setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "tasks" && medical ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces} onNew={()=>{setHomeKey(v=>v+1);navigate("home");}}/> : view === "workspaces" ? (
+        <div className="product-content" id="main-content" tabIndex={-1}>
+          {listError && <div className="navigation-notice" role="alert"><span>{listError}</span><button className="secondary" onClick={() => refreshList()}>重新加载列表</button></div>}
+          {!config ? (<main id="main" className="workbench-hub">
+                {error ? <div className="connection-recovery" role="alert">
+                  <AlertCircle size={28} />
+                  <h1>暂时无法连接工作台</h1>
+                  <p>{error}</p>
+                  <p>确认本地服务已启动后重试，你的本机数据不会因此删除。</p>
+                  <button className="primary" onClick={init} disabled={loading}>{loading ? "正在重试…" : "重新连接"}</button>
+                </div> : <div className="loading-state" role="status">
+                  <Loader2 className="spin" />正在连接本地运行时…
+                </div>}
+              </main>) : view === "settings" && config ? <AppSettingsView config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} /> : view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={()=>{resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "tasks" ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces} onNew={()=>{resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "workspaces" ? (
             <WorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}
@@ -1563,7 +1599,10 @@ function App() {
               onOpenSettings={() => setModal("settings")}
               onMenu={() => setSidebar(!sidebar)}
               onChanged={(id) => {
-                if (id) setActiveWsId(id);
+                if (id) {
+                  setActiveWsId(id);
+                  if (readLocation().view === "workspaces") writeLocation("workspaces", { id, tab: readLocation().tab, replace: !readLocation().id });
+                }
                 refreshList().catch(() => {});
               }}
             />
@@ -1571,6 +1610,7 @@ function App() {
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}
+              onLocationChange={(id, tab) => writeLocation("patients", { id, tab })}
               initialPatientId={patientRoute.id}
               initialTab={patientRoute.tab}
               initialCreate={patientRoute.create}
@@ -1586,7 +1626,7 @@ function App() {
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
           ) : view === "followups" && medical ? (
-            <FollowupsView onOpenTask={openTask} onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
+            <FollowupsView onSettings={()=>{navigate("settings");window.history.replaceState({},"", "?view=settings&settingsTab=followup");}} onOpenTask={openTask} onOpenPatient={(id) => openPatient({ id, tab: "followups" })} />
           ) : view === "cases" ? (
             <CasesView />
           ) : view === "research" && medical ? (
@@ -1596,18 +1636,10 @@ function App() {
           ) : view === "drg" ? (
             <DrgView />
           ) : view !== "workbench" ? (
-            // bootstrap 未完成前不挂载任何领域视图:医疗首页挂载即请求
-            // /api/patients 等医疗接口,在通用服务上会直接进入错误态。
-            !config ? (
-              <main id="main" className="workbench-hub">
-                <div className="loading-state">
-                  <Loader2 className="spin" />
-                  正在连接本地运行时…
-                </div>
-              </main>
-            ) : (
             <WorkbenchHome
               key={homeKey}
+              draftState={homeDraft}
+              onDraftChange={setHomeDraft}
               view={view}
               config={config}
               sessions={sessions}
@@ -1629,12 +1661,12 @@ function App() {
               onConsentChange={setConsent}
               onModelSettings={() => setModal("model")}
               onAttach={homeAttach}
+              attachmentError={error}
               uploading={uploading}
               attachedCount={homeFileCount}
               fileInputRef={fileRef}
               onFilesPicked={upload}
             />
-            )
           ) : (
             <div className={`shell ${inspector ? "with-inspector" : ""}`}>
               <main id="main" className="conversation">
@@ -1759,6 +1791,7 @@ function App() {
                     <AlertCircle size={16} />
                     <span>{error}</span>
                     {!config && <button onClick={init}>重新连接</button>}
+                    {!session && config && <button onClick={() => navigate("tasks")}>返回任务记录</button>}
                     <IconButton
                       title="关闭错误提示"
                       onClick={() => setError("")}
@@ -2767,7 +2800,6 @@ function App() {
                     ["knowledge", "知识库", "指南导入与检索"],
                     ["literature", "文献检索", "PubMed 检索与导入"],
                     ["research", "科研统计", "统计工具"],
-                    ["drg", "DRG 测算", "入组与测算"],
                   ].map(([id, label, desc]) => (
                     <button key={id} onClick={() => setToolPanel(id)}>
                       <span>
@@ -2842,6 +2874,7 @@ function App() {
                 : "尚未配置模型，点击「切换模型」配置后使用 AI Agent。"}
             </p>
             <div className="modal-actions">
+              <button onClick={() => { setModal(null); navigate("settings"); }}>打开完整设置</button>
               <button className="primary" onClick={() => setModal("model")}>
                 切换模型
               </button>
