@@ -21,10 +21,10 @@ test('cancelled read never invokes desktop or screenshot operations',async()=>{
 });
 
 test('login prompt in AX or OCR stops before any input or source collection',async()=>{
- for(const fromAX of [true,false]) {
+ for(const prompt of ['为了你的账号安全，请重新登录。','需在手机上完成登录','请在手机上确认登录']) for(const fromAX of [true,false]) {
   const {r,calls}=reader(); const invoke=r.invoke,ocr=r.ocr;
-  r.invoke=async i=>({...await invoke(i),...(fromAX&&i.action==='snapshot'?{text:'为了你的账号安全，请重新登录。'}:{})});
-  if(!fromAX)r.ocr=async(...args)=>({...await ocr(...args),lines:[{text:'为了你的账号安全，请重新登录。',confidence:.99}]});
+  r.invoke=async i=>({...await invoke(i),...(fromAX&&i.action==='snapshot'?{text:prompt}:{})});
+  if(!fromAX)r.ocr=async(...args)=>({...await ocr(...args),lines:[{text:prompt,confidence:.99}]});
   await assert.rejects(r.read(binding),e=>e.code==='CHAT_LOGIN_REQUIRED');
   assert.equal(calls.some(c=>['key','click','type'].includes(c.action)),false);
  }

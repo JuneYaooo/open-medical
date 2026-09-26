@@ -11,7 +11,7 @@ const exec = promisify(execFile), bundle = 'com.tencent.xinWeChat';
 const normalized = value => value.normalize('NFC').trim();
 const cancelled = signal => check(!signal?.aborted,'CHAT_CANCELLED','读取已取消',409);
 export function assertWechatSession(text = '') {
-  check(!/为了你的账号安全|重新登录|重新登陆|安全验证|扫码登录|扫描二维码登录|log\s*in\s*again|sign\s*in\s*again|scan.*QR.*log/i.test(text), 'CHAT_LOGIN_REQUIRED', '微信显示登录或安全验证提示。读取已停止，请在微信中手动处理后重新读取；不会自动重试登录。',409);
+  check(!/为了你的账号安全|重新登录|重新登陆|安全验证|扫码登录|扫描二维码登录|需在手机上完成登录|请在手机上确认登录|log\s*in\s*again|sign\s*in\s*again|scan.*QR.*log|confirm.*log.?in.*phone/i.test(text), 'CHAT_LOGIN_REQUIRED', '微信显示登录或安全验证提示。读取已停止，请在微信中手动处理后重新读取；不会自动重试登录。',409);
 }
 export function validateRegion(r) {
   check(r && ['x','y','width','height'].every(k => Number.isFinite(r[k])) && r.x >= 0 && r.y >= 0 && r.width >= .02 && r.height >= .015 && r.x+r.width <= 1.000001 && r.y+r.height <= 1.000001, 'CHAT_REGION', '请在窗口预览上选择有效的标题和消息区域');
@@ -53,7 +53,7 @@ export class WechatReader {
     cancelled(signal); assertWechatSession(after.text);
     const result = await this.ocr(bytes,signal);
     cancelled(signal); assertWechatSession(result.lines.map(l=>l.text).join('\n'));
-    check(result.width>0 && result.height>0 && result.lines.length,'CHAT_IMAGE','微信窗口未读到文字，请展开主窗口后重试',409);
+    check(result.width>0 && result.height>0 && result.lines.length,'CHAT_IMAGE','微信窗口为空白或未识别到文字，未读取任何消息。请先确认微信主窗口显示正常；无需反复修改系统权限。',409);
     return { image:bytes.toString('base64'),width:result.width,height:result.height,lines:result.lines,bounds:before.bounds,windowId:before.windowId };
   }
   async title(snapshot,region,signal) {

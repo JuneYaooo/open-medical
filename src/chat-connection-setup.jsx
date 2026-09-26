@@ -1,3 +1,4 @@
+import { MacPermissionHelp } from './mac-permission-help';
 import { useState } from 'react';
 import { api } from './agent-runtime';
 const when=value=>value?new Date(value).toLocaleString():'尚未同步';
@@ -15,11 +16,12 @@ export function ConnectionForm({initial,onSaved}) {
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {saved.enabled&&!editing?<section className="chat-setup-connected"><h3>{wechat?'微信读取已配置':'企业服务已配置'}</h3><p>{wechat?'人工核验的账号':'企业 ID'}：{saved.accountId}</p><p role="status">{saved.status?.message}</p>{wechat&&<p className="muted">账号由你核验，应用不能自动证明登录身份。换号后请重新配置并关联会话。</p>}
    <div className="toolbar-actions"><button disabled={busy} onClick={test}>{busy?'正在检查…':'重新检查连接'}</button><button disabled={busy} onClick={()=>{setEditing(true);setCheck(null);setConfirmed(false);}}>更换连接</button><button disabled={busy} onClick={()=>act(async()=>{accept(await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,enabled:false,autoUntil:'',autoSummarize:false}));setEditing(true);setNotice('连接已停用，已有记录保留');})}>停用连接</button></div>
+   {wechat&&!usable&&<MacPermissionHelp onRecheck={test} busy={busy}/>}
    {usable?<div className="chat-setup-next"><h3>下一步：关联患者或家属</h3><p>选择患者，核对聊天对象。同步后的内容先进入待复核草稿。</p><a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联患者会话 →</a></div>:<p className="muted">先重新检查连接，通过后再关联会话。已保存配置不代表当前服务可用。</p>}
    {usable&&<AutomaticSettings key={`${saved.channel}:${saved.revision}`} initial={saved} onSaved={value=>{accept(value);setNotice(value.autoUntil?'自动同步设置已保存':'自动同步已停止');}}/>}
   </section>:<>
    {wechat?<section className="chat-setup-detect"><h3>先检查本机微信</h3><p>打开并登录 Mac 微信，再检查客户端、辅助功能与录屏权限。这一步不会读取聊天内容。</p><button disabled={busy} onClick={test}>{busy?'正在检查…':'检查微信与权限'}</button>{check&&<p role="status">{check.message}</p>}
-    {check&&!check.ready&&<p className="chat-help">确认微信已打开；按检测提示在 macOS 系统设置 → 隐私与安全性中检查权限，完成后重新检测。当前安装版不支持 Windows 微信。</p>}
+    {check&&!check.ready&&<MacPermissionHelp onRecheck={test} busy={busy}/>}
    </section>:<section className="chat-setup-detect"><h3>{saved.accountId?'重新连接企业服务':'尚未配置企业服务'}</h3><p>医生使用已配置的企业连接，无需管理 SDK 或密钥。请由管理员完成一次接入，再关联患者会话。</p><button type="button" aria-expanded={admin} onClick={()=>setAdmin(v=>!v)}>{admin?'收起管理员配置':'管理员配置'}</button></section>}
    {(wechat?check?.ready:admin)&&<form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(async()=>{const value=await api(`/api/chat-followups/connections/${saved.channel}/connect`,'POST',{...form,revision:saved.revision,accountConfirmed:confirmed});accept(value);setCheck(value.status);if(value.enabled){setEditing(false);setNotice(wechat?'权限检查通过，账号核验声明已保存。请继续关联患者会话。':'企业服务验证通过，可以关联患者会话。');}else setNotice('配置已保存，但连接验证未通过，尚未启用。请按提示修正后重试。');});}}>
     <h3>{wechat?'核对你正在使用的账号':'管理员接入'}</h3>

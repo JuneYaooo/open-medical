@@ -7,6 +7,7 @@ const {
   session,
   Notification,
   desktopCapturer,
+  systemPreferences,
   Tray,
   ipcMain,
   nativeImage,
@@ -290,6 +291,7 @@ async function start() {
     });
     origin = `http://127.0.0.1:${runtime.address().port}`;
   }
+  require('./permission-help.cjs').registerPermissionHelp({ipcMain,shell,app,systemPreferences,getWindow:()=>window,getOrigin:()=>origin});
   const trustedMedia = (wc, permission) => wc === window?.webContents && wc?.getURL().startsWith(origin + "/") && ["media", "display-capture"].includes(permission);
   session.defaultSession.setPermissionRequestHandler(async (wc, permission, callback) => {
     if (!trustedMedia(wc, permission)) return callback(false);

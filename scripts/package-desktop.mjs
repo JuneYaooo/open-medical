@@ -1,3 +1,4 @@
+import { signingConfiguration, signMacApp, verifyUpdateIdentity } from './macos-signing.mjs';
 import {
   bundleRuntimeDependencies,
   runtimeDependencies,
@@ -12,6 +13,7 @@ import { execFileSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
 const arg = (name) => argument(process.argv.slice(2), name);
+const macSigning = (arg('platform') || process.env.TARGET_PLATFORM || process.platform) === 'darwin' && process.platform === 'darwin' ? signingConfiguration({identity:arg('sign-identity') || process.env.MEDICAL_MAC_SIGN_IDENTITY,allowAdhoc:process.argv.includes('--allow-adhoc')}) : null;
 const customOut = arg("out") ?? arg("output-dir");
 const outputRoot = customOut === undefined ? join(root, "release") : await reserveCandidateOutput(root, customOut);
 const targetPlatform =
@@ -128,19 +130,8 @@ try {
       join(stage, "build/icons/icon.icns"),
       join(bundle, "Contents/Resources/app-icon.icns"),
     );
-    // Local ad-hoc signing, no developer credentials or notarization required.
-    execFileSync(
-      "/usr/bin/codesign",
-      [
-        "--force",
-        ...(!reuse ? ["--deep"] : []),
-        "--sign",
-        "-",
-        "--preserve-metadata=entitlements,flags,runtime",
-        bundle,
-      ],
-      { stdio: "pipe" },
-    );
+    signMacApp(bundle,macSigning,{deep:!reuse});
+    if(reuse) verifyUpdateIdentity(resolve(reuse),bundle);
     apps = [output];
   } else
     apps = await packager({
@@ -185,7 +176,7 @@ try {
       const binary = targetPlatform === "darwin" ? "Open Medical.app/Contents/MacOS/Open Medical"
         : targetPlatform === "win32" ? "Open Medical.exe" : "Open Medical";
       await sealCandidate(output, { platform: targetPlatform, arch: targetArch, appPath, binary,
-        sourceFingerprint: source.fingerprint, signing: targetPlatform === "darwin" && process.platform === "darwin" && targetArch === process.arch && existsSync(cachedApp) ? "local-ad-hoc" : "none" });
+        sourceFingerprint: source.fingerprint, signing: targetPlatform === "darwin" && process.platform === "darwin" && targetArch === process.arch && existsSync(cachedApp) ? macSigning.mode : "none" });
     }
   }
   console.log(apps.join("\n"));

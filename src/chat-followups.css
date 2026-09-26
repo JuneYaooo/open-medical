@@ -58,3 +58,5 @@
 .chat-help { border-left:3px solid #a69260; padding-left:16px; }
 .chat-setup .chat-connection-form { border-top:1px solid #d8e1d7; padding-top:24px; }
 .chat-import-text { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--bg-secondary, #f4f5f5); border-radius: 8px; }
+.chat-permission-help { padding: 16px; margin: 16px 0; border: 1px solid var(--border, #dbe3de); border-radius: 10px; text-align: left; }
+.chat-permission-help ol { padding-left: 24px; line-height: 1.8; }
