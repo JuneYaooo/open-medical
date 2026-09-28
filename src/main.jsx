@@ -1,3 +1,4 @@
+import { DoctorAgenda } from "./doctor-agenda";
 import { AppSettingsView } from "./app-settings";
 import { readLocation, writeLocation, VIEW_LABELS } from "./navigation";
 import { conversationRunIds } from "../shared/patient-conversations.mjs";
@@ -7,7 +8,6 @@ import { SimilarCases } from "./similar-cases";
 import { ProjectDirectory, ToolDirectory, TaskDirectory } from "./work-directory";
 import { IntakeBackground } from "./intake-background";
 import { MaterialDetails } from "./material-details";
-import { patientOptionLabel } from "./patient-labels";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -51,6 +51,7 @@ import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import "./style.css";
 import "./business-layout.css";
 import "./v6-layout.css";
+import "./agent-experience.css";
 import { importMaterial } from "./import-material";
 import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
@@ -75,7 +76,6 @@ import {
   AcceptanceView,
   MemoryNote,
   PatientSummaryCard,
-  PatientSwitcher,
   StepsFlow,
   modeToRequest,
 } from "./ui";
@@ -140,6 +140,7 @@ const eventLabel = (event) =>
     "sandbox.completed": "隔离计算完成",
     "sandbox.failed": event.payload?.error,
     "context.compacting": "正在整理长输入或压缩历史，原文会保留",
+    "context.compaction_skipped": "完整上下文仍在预算内，继续处理",
     "context.compacted": `${event.payload?.inputChunks ? `长输入已分 ${event.payload.inputChunks} 片整理` : "历史已压缩"}${
       event.payload?.beforeChars
         ? `（${event.payload.beforeChars} → ${event.payload.afterChars} 字符，原文可按 archiveId 读回）`
@@ -559,7 +560,7 @@ function App() {
   const [largeText, setLargeText] = useState(() => localStorage.getItem("om.largeText") === "true");
   const [workspaceTarget, setWorkspaceTarget] = useState(initialLocation.view === "workspaces" ? { id: initialLocation.id, panel: initialLocation.tab } : null);
   const [projectTool, setProjectTool] = useState("");
-  const [activeWsId, setActiveWsId] = useState("");
+  const [, setActiveWsId] = useState("");
   const [wsList, setWsList] = useState([]);
   const [patientRoute, setPatientRoute] = useState(initialLocation.view === "patients" ? { id: initialLocation.id, tab: initialLocation.tab } : {});
   const [homeKey, setHomeKey] = useState(0);
@@ -573,7 +574,6 @@ function App() {
   const [acceptId, setAcceptId] = useState("");
   const [doctorMemCount, setDoctorMemCount] = useState(0);
   const [referencedPatients, setReferencedPatients] = useState([]);
-  const [toolPanel, setToolPanel] = useState(null);
   const [kQuery, setKQuery] = useState("");
   const [kHits, setKHits] = useState(null);
   const [kBusy, setKBusy] = useState(false);
@@ -583,8 +583,7 @@ function App() {
     [runs, setRuns] = useState({}),
     [tab, setTab] = useState(initialLocation.view === "workbench" ? initialLocation.tab || "materials" : "materials"),
     [artifactId, setArtifactId] = useState(""),
-    [audit, setAudit] = useState([]),
-    [query, setQuery] = useState("");
+    [audit, setAudit] = useState([]);
   const [meters, setMeters] = useState({
     chars: 0,
     tokens: 0,
@@ -790,7 +789,6 @@ function App() {
       const route = readLocation();
       setViewState(route.view);
       setSidebar(false);
-      setToolPanel(null);
       setError("");
       if (route.view === "patients") setPatientRoute({ id: route.id, tab: route.tab, navigationKey: Date.now() });
       if (route.view === "workspaces") setWorkspaceTarget({ id: route.id, panel: route.tab });
@@ -1188,6 +1186,18 @@ function App() {
     setNotice("");
     refreshList().catch((err) => setError(err.message));
   };
+  const startNewTask = () => {
+    if (medicalEnabled(config)) {
+      navigate("home");
+      setHomeKey(value => value + 1);
+    } else openWorkspaces({ create: true });
+  };
+  const startProjectTask = async ({ id, prompt }) => {
+    const task = await api(`/api/workspaces/${id}/tasks`, "POST", {});
+    setHomeDraft({});
+    setWorkspaceDisplay("chat");
+    openWorkspaces({ id: task.id, prompt });
+  };
   const openWorkspaces = (target = {}) => {
     if (projectTool) setWorkspaceDisplay("work");
     setWorkspaceTarget({...target, panel: target.panel || (["browser", "terminal", "extensions"].includes(projectTool) ? projectTool : "files")});
@@ -1217,6 +1227,7 @@ function App() {
       setInspector(options.tab === "results");
       if (options.artifactId) setAcceptId(options.artifactId);
       if (options.draft) {
+        setNotice("已准备好任务要求。核对材料与问题后，点击发送开始；当前尚未执行。");
         setDraft(options.draft);
         setConsent(false);
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -1255,10 +1266,6 @@ function App() {
     setQuestionSelection({ sessionId: data.id, runId: null });
     send(null, { message: prompt, skills, conversationParentRunId: null }, data);
   };
-  const pendingReviews = sessions.reduce(
-    (sum, item) => sum + item.reviewCount,
-    0,
-  );
   const modelEnabled =
     Boolean(config?.modelConfigured) && accessMode !== "local";
   // 领域能力:医疗模式渲染完整医疗工作台,通用模式只渲染领域无关 App Shell。
@@ -1301,16 +1308,17 @@ function App() {
             {medical ? <Stethoscope size={21} /> : <Bot size={21} />}
           </span>
           <b>{medical ? "Open Medical" : "Open Agent"}</b>
+          {!sidebar && <button className="mobile-agent-entry" aria-label="新建任务" onClick={startNewTask}><Plus size={16}/>新任务</button>}
           <span className="brand-divider" />
           <span className="brand-caption">
             {medical ? "医疗工作台" : "通用工作台"}
           </span>
         </div>
         <div className="top-actions">
-          <div className="display-modes" role="group" aria-label="工作区显示方式">
+          {["workbench", "workspaces"].includes(view) && <div className="display-modes" role="group" aria-label="工作区显示方式">
             {[["work", "工作区"], ["split", "AI 半屏"], ["chat", "AI 全屏"]].map(([id,label]) => <button key={id} disabled={!["workbench","workspaces"].includes(view)} title={["workbench","workspaces"].includes(view)?label:"打开任务或项目后切换显示方式"} aria-pressed={(view==="workspaces"?workspaceDisplay:displayMode)===id} onClick={()=>{if(view==="workspaces")setWorkspaceDisplay(id);else {setDisplayMode(id);setInspector(id!=="chat");}}}>{label}</button>)}
           </div>
-          <button className="text-size-control" aria-label={largeText ? "Aa · 恢复标准字号" : "Aa · 大字模式"} aria-pressed={largeText} onClick={()=>{setLargeText(!largeText);localStorage.setItem("om.largeText",String(!largeText));}}>Aa <span>{largeText?"标准字号":"大字模式"}</span></button>
+          }<button className="text-size-control" aria-label={largeText ? "Aa · 恢复标准字号" : "Aa · 大字模式"} aria-pressed={largeText} onClick={()=>{setLargeText(!largeText);localStorage.setItem("om.largeText",String(!largeText));}}>Aa <span>{largeText?"标准字号":"大字模式"}</span></button>
           {session && (
             <div className="top-meters" role="status" aria-label="会话用量指标">
               <span
@@ -1346,14 +1354,6 @@ function App() {
               </span>
             </div>
           )}
-          {medical && (
-            <PatientSwitcher
-              patients={patientsList}
-              currentId={currentPatientId}
-              onSwitch={(p) => switchCurrentPatient(p.id)}
-              onManage={() => navigate("patients")}
-            />
-          )}
           <span className={`connection ${config ? "" : "offline"}`}>
             <i />
             {config ? "本机工作空间" : "连接未就绪"}
@@ -1363,12 +1363,9 @@ function App() {
             title={`当前模型：${config?.model || "未配置"}（${config?.provider || "-"}）；点击切换或配置模型`}
             onClick={() => setModal("model")}
           >
-            {config?.model || "未配置模型"}
+            {config?.modelConfigured ? config.model : "配置模型"}
           </button>
-          <IconButton title="运行设置" onClick={() => setModal("settings")}>
-            <Settings2 size={18} />
-          </IconButton>
-          {medical && (
+          {medical && view === "workbench" && (
             <IconButton
               title="计划任务与沙箱"
               disabled={view !== "workbench" || !session || busy}
@@ -1388,193 +1385,32 @@ function App() {
           />
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
-          <button className="new-session" onClick={()=>{if(medical){resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);navigate("home");}else openWorkspaces({create:true});}}><Plus size={17}/>新建任务</button>
+          <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
+            <Plus size={20}/><span>新建任务<small>和 Agent 说说你想做什么</small></span>
+          </button>
+          <nav className="business-nav" aria-label="通用工作">
+            {[["tasks", "任务记录", MessageSquare], ["projects", "项目文件", FolderOpen]].map(([id,label,Icon]) => <button key={id} aria-current={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "page" : undefined} className={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "active" : ""} onClick={() => navigate(id)}><Icon size={18}/>{label}</button>)}
+          </nav>
           {medical && <>
-            <p className="business-nav-label">医疗业务</p>
+            <p className="business-nav-label">医疗工作</p>
             <nav className="business-nav" aria-label="主要业务">
-              {[["patients", "患者", Stethoscope], ["followups", "随访", CalendarClock], ["research", "临床试验", BookOpen], ["knowledge", "知识库", FolderOpen]].map(([id, label, Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={20} />{label}</button>)}
+              {[["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={18}/>{label}</button>)}
             </nav>
           </>}
-          <p className="business-nav-label">通用工作</p>
-          <nav className="business-nav" aria-label="通用工作">
-            {[["tasks","任务",MessageSquare],["projects","项目",FolderOpen],["tools","工具",Settings2]].map(([id,label,Icon])=>{const active=id==="tasks"?["home","tasks","workbench","review"].includes(view):id==="projects"?["projects","workspaces"].includes(view):view==="tools";return <button key={id} className={active?"active":""} aria-current={active?"page":undefined} onClick={()=>{setProjectTool("");navigate(id);}}><Icon size={20}/>{label}</button>;})}
+          <nav className="business-nav resource-nav" aria-label="资料与工具">
+            <button aria-current={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "page" : undefined} className={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={18}/>资料与工具</button>
           </nav>
           {wsList.some(w=>w.pinned&&!w.archived)&&<nav className="pinned-projects" aria-label="固定项目"><p className="business-nav-label">固定项目</p>{wsList.filter(w=>w.pinned&&!w.archived).slice(0,3).map(w=><button key={w.id} onClick={()=>openWorkspaces({id:w.id})}><FolderOpen size={16}/><span>{w.title}</span></button>)}</nav>}
-          <details className="advanced-nav">
-            <summary>最近使用与快捷入口</summary>
-          {medical && (
-            <label className="search">
-              <Search size={14} />
-              <input
-                aria-label="搜索任务"
-                placeholder="搜索任务"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
-          )}
-          <p className="nav-label">
-            项目
-            <button
-              className="nav-label-action"
-              onClick={() => openWorkspaces({ create: true })}
-            >
-              ＋ 新建
-            </button>
-          </p>
-          <nav className="sessions" aria-label="项目">
-            {wsList
-              .filter((item) => !item.archived)
-              .sort((a, b) => Number(b.pinned) - Number(a.pinned))
-              .slice(0, 3)
-              .map((item) => (
-                <button
-                  className={`session ${
-                    view === "workspaces" &&
-                    (activeWsId || workspaceTarget?.id) === item.id
-                      ? "active"
-                      : ""
-                  }`}
-                  key={item.id}
-                  onClick={() => openWorkspaces({ id: item.id })}
-                >
-                  <FolderOpen size={14} />
-                  <span>
-                    <b>{item.title}</b>
-                    <small>
-                      {item.running
-                        ? "执行中"
-                        : item.pending
-                          ? `${item.pending} 项待审批`
-                          : "项目工作区"}
-                    </small>
-                  </span>
-                  {item.pinned && <em className="nav-dot" />}
-                </button>
-              ))}
-            {!wsList.filter((item) => !item.archived).length && (
-              <p className="sidebar-empty">
-                还没有项目。点「＋ 新建」把相关任务归到一起。
-              </p>
-            )}
-          </nav>
-          {medical && (
-            <>
-              <p className="nav-label">
-                最近任务 <span>{sessions.length}</span>
-                {pendingReviews > 0 && (
-                  <button
-                    className="nav-label-action warn"
-                    onClick={() => navigate("review")}
-                  >
-                    待复核 {pendingReviews}
-                  </button>
-                )}
-              </p>
-              <nav className="sessions" aria-label="最近任务">
-                {sessions
-                  .filter(
-                    (item) =>
-                      !query ||
-                      item.title.toLowerCase().includes(query.toLowerCase()),
-                  )
-                  .slice(0, 3)
-                  .map((item) => (
-                    <button
-                      className={`session ${view === "workbench" && item.id === activeId ? "active" : ""}`}
-                      key={item.id}
-                      onClick={() => openTask(item.id)}
-                    >
-                      <MessageSquare size={14} />
-                      <span>
-                        <b>{item.title}</b>
-                        <small>
-                          {item.running
-                            ? "执行中"
-                            : item.reviewCount
-                              ? `${item.reviewCount} 份待复核`
-                              : item.patientId
-                                ? "患者工作区"
-                                : "独立任务"}
-                        </small>
-                      </span>
-                    </button>
-                  ))}
-                {!sessions.length && (
-                  <p className="sidebar-empty">
-                    任务与成果会保存在这里，随时继续。
-                  </p>
-                )}
-              </nav>
-              <p className="nav-label">
-                患者
-                <button
-                  className="nav-label-action"
-                  onClick={() => openPatient()}
-                >
-                  管理
-                </button>
-              </p>
-              <nav className="sessions" aria-label="患者">
-                {patientsList.slice(0, 3).map((p) => (
-                  <button
-                    key={p.id}
-                    className={`session ${currentPatientId === p.id ? "active" : ""}`}
-                    onClick={() => {
-                      switchCurrentPatient(p.id);
-                      openPatient({ id: p.id });
-                    }}
-                  >
-                    <Stethoscope size={14} />
-                    <span>
-                      <b>{patientOptionLabel(p, patientsList)}</b>
-                      <small>
-                        {p.counts?.dueFollowups
-                          ? `${p.counts.dueFollowups} 项随访到期`
-                          : p.counts?.unprocessedMessages
-                            ? `${p.counts.unprocessedMessages} 条新消息`
-                            : "点击查看"}
-                      </small>
-                    </span>
-                    {(p.counts?.dueFollowups > 0 ||
-                      p.counts?.unprocessedMessages > 0) && (
-                      <em className="nav-dot" />
-                    )}
-                  </button>
-                ))}
-                {!patientsList.length && (
-                  <p className="sidebar-empty">还没有患者档案。</p>
-                )}
-              </nav>
-              <p className="nav-label">
-                工具箱
-                <button
-                  className="nav-label-action"
-                  onClick={() => setToolPanel("__menu")}
-                >
-                  打开
-                </button>
-              </p>
-              <p className="sidebar-empty">
-                随访 · 病例库 · 速查 · 文献 · 科研 · 知识库
-              </p>
-              <button
-                className="workspace-account"
-                onClick={() => setModal("doctor")}
-              >
-                <span className="avatar">医</span>
-                <span>
-                  <b>医生记忆</b>
-                  <small>档案 · 偏好 · 每晚整理</small>
-                </span>
-                <Settings2 size={15} />
-              </button>
-            </>
-          )}
-          </details>
+          {medical && <nav className="agent-recents" aria-label="最近任务">
+            <p className="business-nav-label">最近对话</p>
+            {sessions.slice(0,4).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
+            {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+          </nav>}
           <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
         <div className="product-content" id="main-content" tabIndex={-1}>
+          {["knowledge","literature","clinical-ref","cases","data-analysis","drg"].includes(view) && <nav className="page-trail" aria-label="当前位置"><button onClick={() => navigate("tools")}>资料与工具</button><ChevronRight size={14}/><span>{VIEW_LABELS[view]}</span></nav>}
+          {view === "workbench" && session?.patientId && <nav className="page-trail" aria-label="当前患者"><button onClick={() => openPatient({id:session.patientId})}><Stethoscope size={15}/>{patientsList.find(p => p.id === session.patientId)?.name || "患者档案"}</button><ChevronRight size={14}/><span>当前对话与成果保存在此患者下</span></nav>}
           {listError && <div className="navigation-notice" role="alert"><span>{listError}</span><button className="secondary" onClick={() => refreshList()}>重新加载列表</button></div>}
           {!config ? (<main id="main" className="workbench-hub">
                 {error ? <div className="connection-recovery" role="alert">
@@ -1586,7 +1422,7 @@ function App() {
                 </div> : <div className="loading-state" role="status">
                   <Loader2 className="spin" />正在连接本地运行时…
                 </div>}
-              </main>) : view === "settings" && config ? <AppSettingsView config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} /> : view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={()=>{resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "tasks" ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces} onNew={()=>{resetHomePending();setHomeDraft({});setHomeKey(v=>v+1);medical?navigate("home"):openWorkspaces({create:true});}}/> : view === "workspaces" ? (
+              </main>) : view === "settings" && config ? <AppSettingsView config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} /> : view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
             <WorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}
@@ -1596,7 +1432,7 @@ function App() {
               initialWorkspaceId={workspaceTarget?.id || ""}
               initialCreate={Boolean(workspaceTarget?.create)}
               initialPrompt={workspaceTarget?.prompt || ""}
-              onOpenSettings={() => setModal("settings")}
+              onOpenSettings={() => navigate("settings")}
               onMenu={() => setSidebar(!sidebar)}
               onChanged={(id) => {
                 if (id) {
@@ -1606,7 +1442,7 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "patients" && medical ? (
+          ) : view === "agenda" && medical ? (<main id="main" className="work-directory"><header className="directory-heading"><div><h1>今日待办</h1><p>处理患者消息、随访和待复核成果。</p></div></header><DoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}
@@ -1622,7 +1458,7 @@ function App() {
           ) : view === "literature" ? (
             <LiteratureView onOpenTask={openTask} />
           ) : view === "knowledge" ? (
-            <KnowledgeLibraries onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />
+            <KnowledgeLibraries onOpenTask={openTask} />
           ) : view === "clinical-ref" ? (
             <ClinicalRefView />
           ) : view === "followups" && medical ? (
@@ -1649,7 +1485,9 @@ function App() {
               onView={navigate}
               onRefresh={refreshList}
               onReconnect={init}
-              onOpenProjects={openWorkspaces}
+              projects={wsList}
+              onOpenProjects={startProjectTask}
+              onClearDraft={() => { resetHomePending(); setHomeDraft({}); setHomeKey(value => value + 1); }}
               accessMode={accessMode}
               onAccessModeChange={(value) => {
                 setAccessMode(value);
@@ -1679,7 +1517,7 @@ function App() {
                   </IconButton>
                   <div className="heading-copy">
                     <small>
-                      {session?.patientId ? "患者病例工作区" : "独立医疗任务"}
+                      {session?.patientId ? "患者关联任务" : "Agent 对话"}
                     </small>
                     <h1>{session?.title || "今天，需要处理什么材料？"}</h1>
                   </div>
@@ -2768,90 +2606,6 @@ function App() {
           )}
         </div>
       </div>
-      {toolPanel && (
-        <>
-          <div
-            className="tool-slide-scrim"
-            onClick={() => setToolPanel(null)}
-            aria-hidden
-          />
-          <aside className="tool-slide" aria-label="工具箱面板">
-            <div className="ts-head">
-              <b>工具箱</b>
-              {toolPanel !== "__menu" && (
-                <button
-                  className="text-button"
-                  onClick={() => setToolPanel("__menu")}
-                >
-                  ‹ 工具列表
-                </button>
-              )}
-              <IconButton title="关闭工具面板" onClick={() => setToolPanel(null)}>
-                <X size={16} />
-              </IconButton>
-            </div>
-            <div className="ts-body">
-              {toolPanel === "__menu" ? (
-                <div className="ts-menu">
-                  {[
-                    ["followups", "随访计划", "到期提醒与计划"],
-                    ["cases", "病例库", "相似病例检索"],
-                    ["clinical-ref", "临床速查", "量表 · 检验 · 编码 · ADR"],
-                    ["knowledge", "知识库", "指南导入与检索"],
-                    ["literature", "文献检索", "PubMed 检索与导入"],
-                    ["research", "科研统计", "统计工具"],
-                  ].map(([id, label, desc]) => (
-                    <button key={id} onClick={() => setToolPanel(id)}>
-                      <span>
-                        <b>{label}</b>
-                        <small>{desc}</small>
-                      </span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <div className="ts-open">
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        const v = toolPanel === "research" ? "data-analysis" : toolPanel;
-                        setToolPanel(null);
-                        navigate(v);
-                      }}
-                    >
-                      整页打开 {toolPanel}
-                    </button>
-                  </div>
-                  {toolPanel === "followups" && (
-                    <FollowupsView
-                      onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }}
-                      onOpenPatient={(id) => {
-                        setToolPanel(null);
-                        openPatient({ id });
-                      }}
-                    />
-                  )}
-                  {toolPanel === "cases" && <CasesView />}
-                  {toolPanel === "clinical-ref" && <ClinicalRefView />}
-                  {toolPanel === "knowledge" && <KnowledgeLibraries onOpenTask={async (id, options) => { setToolPanel(null); await openTask(id, options); }} />}
-                  {toolPanel === "literature" && (
-                    <LiteratureView
-                      onOpenTask={async (id, options) => {
-                        setToolPanel(null);
-                        await openTask(id, options);
-                      }}
-                    />
-                  )}
-                  {toolPanel === "research" && <ResearchView />}
-                  {toolPanel === "drg" && <DrgView />}
-                </>
-              )}
-            </div>
-          </aside>
-        </>
-      )}
       {notice && (
         <div className="notice" role="status">
           {notice}
@@ -2859,42 +2613,6 @@ function App() {
             <X size={14} />
           </IconButton>
         </div>
-      )}
-      {modal === "settings" && (
-        <Modal title="运行设置" onClose={() => setModal(null)}>
-          <div className="settings-body">
-            <p>
-              {medical
-                ? "医疗策略、会话、资料与复核在本地运行时管理。模型只承担辅助推理。"
-                : "任务、工作区、审批与产物在本地运行时管理。模型只承担辅助推理。"}
-            </p>
-            <p className="boundary">
-              {config?.modelConfigured
-                ? `当前模型：${config.provider || "model"} · ${config.model}`
-                : "尚未配置模型，点击「切换模型」配置后使用 AI Agent。"}
-            </p>
-            <div className="modal-actions">
-              <button onClick={() => { setModal(null); navigate("settings"); }}>打开完整设置</button>
-              <button className="primary" onClick={() => setModal("model")}>
-                切换模型
-              </button>
-              {medical && (
-                <button className="secondary" onClick={() => setModal("doctor")}>
-                  医生档案与记忆
-                </button>
-              )}
-              <button
-                className="secondary"
-                onClick={async () => {
-                  await init();
-                  setModal(null);
-                }}
-              >
-                刷新连接状态
-              </button>
-            </div>
-          </div>
-        </Modal>
       )}
       {modal === "model" && (
         <Modal title="切换模型" onClose={() => setModal(null)}>

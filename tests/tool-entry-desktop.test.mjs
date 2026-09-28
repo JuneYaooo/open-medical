@@ -25,9 +25,8 @@ test('advanced project tools execute real browser terminal and MCP without globa
  const denied=await api(`/api/workspaces/${w.id}/tools`,'POST',{tool:'browser_open',arguments:{url:siteOrigin}});
  assert.equal(denied.data.code,'BROWSER_ORIGIN',JSON.stringify(denied));
  assert.match(denied.data.error,/网址来源/);
- const nav=page.getByRole('navigation',{name:'通用工作'});
  async function openTool(name,tab){
-  await nav.getByRole('button',{name:'工具',exact:true}).click();
+  await page.getByRole('navigation',{name:'资料与工具',exact:true}).getByRole('button').click();
   assert.equal(await page.getByRole('heading',{name,exact:true}).count(),0);
   // Exercise advanced project capability routes without advertising them as business tools.
   const panel={浏览:'browser',终端:'terminal',连接:'extensions'}[tab];

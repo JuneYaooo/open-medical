@@ -156,7 +156,7 @@ async function verify() {
     let state;
     do {
       state = await window.webContents.executeJavaScript(
-        '({ready:!!document.querySelector(".hub-composer") && document.body.innerText.includes("这次需要做什么？"),node:typeof process,require:typeof require,title:document.title})',
+        '({ready:!!document.querySelector(".hub-composer textarea[aria-label=任务内容]") && !!document.querySelector(".hub-composer button[aria-label=发送任务]"),node:typeof process,require:typeof require,title:document.title})',
       );
       if (state.ready) break;
       await new Promise((r) => setTimeout(r, 100));

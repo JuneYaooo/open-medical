@@ -67,7 +67,7 @@ test('recovery bootstrap and patient list failure offer retry without claiming e
   await page.getByRole('heading',{name:'暂时无法连接工作台'}).waitFor();
   await page.unroute('**/api/bootstrap');
   await page.getByRole('button',{name:'重新连接',exact:true}).click();
-  await page.getByRole('textbox',{name:'医疗任务内容'}).waitFor();
+  await page.getByRole('textbox',{name:'任务内容'}).waitFor();
   await page.route('**/api/patients?*',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'合成列表失败'})}));
   await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'患者',exact:true}).click();
   await page.getByRole('button',{name:'重新加载患者'}).waitFor();
@@ -109,19 +109,19 @@ test('followup queue exposes plans beyond twenty and deletion requires a reviewa
 test('draft navigation retains unsent home text and attachments until explicit new task', {skip}, async t => {
   const {page, origin} = await setup(t);
   await page.goto(origin);
-  await page.getByRole('textbox',{name:'医疗任务内容'}).fill('暂存的合成病例整理要求');
+  await page.getByRole('textbox',{name:'任务内容'}).fill('暂存的合成病例整理要求');
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button',{name:'附件',exact:true}).click();
+  await page.getByRole('button',{name:'添加材料',exact:true}).click();
   const uploaded = page.waitForResponse(r=>r.url().endsWith('/files')&&r.request().method()==='POST');
   await (await chooser).setFiles({name:'draft.txt',mimeType:'text/plain',buffer:Buffer.from('仅用于导航验证的合成材料')});
   await uploaded;
   await page.getByText('已附 1 份材料',{exact:true}).waitFor();
   await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'患者',exact:true}).click();
   await page.goBack();
-  assert.equal(await page.getByRole('textbox',{name:'医疗任务内容'}).inputValue(),'暂存的合成病例整理要求');
+  assert.equal(await page.getByRole('textbox',{name:'任务内容'}).inputValue(),'暂存的合成病例整理要求');
   assert.match(await page.locator('.hub-composer').innerText(),/已附 1 份材料/);
-  await page.getByRole('button',{name:'新建任务',exact:true}).click();
-  assert.equal(await page.getByRole('textbox',{name:'医疗任务内容'}).inputValue(),'');
+  await page.getByRole('button',{name:'清空草稿',exact:true}).click();
+  assert.equal(await page.getByRole('textbox',{name:'任务内容'}).inputValue(),'');
 });
 
 test('literature abstract failure recovers in place and repeated import creates one task', {skip}, async t => {
@@ -169,8 +169,8 @@ test('statistics and clinical scale input changes remove obsolete results', {ski
 test('doctor preferences failed save keeps typed changes and can retry successfully', {skip}, async t=>{
   const {page,origin}=await setup(t);
   await page.goto(origin);
-  await page.locator('.advanced-nav>summary').click();
-  await page.locator('.workspace-account').click();
+  await page.locator(".app-navigation").waitFor();
+  await page.getByRole('button',{name:'设置与连接',exact:true}).click();await page.getByRole('button',{name:'医生档案与记忆',exact:true}).click();
   const dialog=page.getByRole('dialog');
   await dialog.getByText('结构化偏好表单（高级）',{exact:true}).click();
   await dialog.getByLabel('科室',{exact:true}).fill('合成偏好草稿');
@@ -210,12 +210,12 @@ test('patient open failure keeps the previously selected identity and offers the
   await page.route(`**/api/patients/${b.id}`,route=>route.fulfill({status:503,json:{error:'合成患者读取失败'}}));
   await page.locator('.patient-card').filter({hasText:b.name}).click();
   await page.getByRole('alert').filter({hasText:'合成患者读取失败'}).waitFor();
-  assert.match(await page.locator('.patient-pill').innerText(),/原患者合成/);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('om.currentPatient')),a.id);
   assert.equal(await page.locator('.patient-card').count(),2);
   await page.unroute(`**/api/patients/${b.id}`);
   await page.locator('.patient-card').filter({hasText:b.name}).click();
   await page.getByRole('heading',{name:b.name,exact:true}).waitFor();
-  assert.match(await page.locator('.patient-pill').innerText(),/失败患者合成/);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('om.currentPatient')),b.id);
 });
 
 

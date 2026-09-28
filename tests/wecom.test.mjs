@@ -1,3 +1,4 @@
+import {openPatient} from "./navigation-ui.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -122,8 +123,8 @@ test('browser: discover connector, sync, verify family, draft, cancel, submit an
   t.after(() => browser.close()); const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(f.origin + '/?view=home');
-  await page.locator('.advanced-nav>summary').click();
-  await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: f.patient.name }).click();
+  await page.locator(".app-navigation").waitFor();
+  await openPatient(page, f.patient.name);
   await page.getByRole('button', { name: '沟通与随访', exact: true }).click();
   const panel = page.getByRole('region', { name: '企业微信患者联系' });
   await panel.getByLabel('负责成员 UserID').fill('doctor-a');
@@ -148,8 +149,8 @@ test('browser: discover connector, sync, verify family, draft, cancel, submit an
   await panel.getByText('已发送 · 不代表已读', { exact: true }).waitFor();
   mkdirSync('output/wecom', {recursive:true}); await panel.screenshot({ path: 'output/wecom/patient-contact.png' });
   await page.reload();
-  await page.locator('.advanced-nav>summary').click();
-  await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: f.patient.name }).click();
+  await page.locator(".app-navigation").waitFor();
+  await openPatient(page, f.patient.name);
   await page.getByRole('button', { name: '沟通与随访', exact: true }).click();
   await panel.getByText('已发送 · 不代表已读', { exact: true }).waitFor();
   assert.deepEqual(errors, []);

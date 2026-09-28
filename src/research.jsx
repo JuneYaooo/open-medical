@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
-import { Download, Loader2, Sigma } from "lucide-react";
+import { Download, Loader2, Sigma, Upload } from "lucide-react";
 
 // Research analysis view: pick a session CSV, run deterministic descriptive
 // stats / two-group tests / sample-size / de-identification. Results are
@@ -10,6 +10,10 @@ const fmt = (value) =>
 
 export function ResearchView() {
   const selectionGeneration = useRef(0);
+  const uploadRef = useRef(null);
+  const uploadSession = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState("");
   const [filesLoading, setFilesLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [sessionId, setSessionId] = useState("");
@@ -29,6 +33,32 @@ export function ResearchView() {
       .then((value) => setSessions(value.sessions))
       .catch((err) => setError(err.message));
   }, []);
+  const uploadDataset = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || uploading) return;
+    if (!/\.csv$/i.test(file.name) || !file.size || file.size > 2000000) {
+      setError("请选择非空 CSV 文件，大小不超过 2MB。"); return;
+    }
+    setUploading(true); setError(""); setUploadNotice("");
+    const version = ++selectionGeneration.current;
+    try {
+      const text = await file.text();
+      let task = uploadSession.current;
+      if (!task) { task = await api("/api/sessions", "POST", {title: `数据分析 · ${file.name}`}); uploadSession.current = task; }
+      await api(`/api/sessions/${task.id}/files`, "POST", {name:file.name, text});
+      const detail = await api(`/api/sessions/${task.id}`);
+      if (version !== selectionGeneration.current) return;
+      setSessions(old => [{...detail}, ...old.filter(s => s.id !== detail.id)]);
+      setSessionId(detail.id);
+      const datasets = detail.files.filter(f => /\.csv$/i.test(f.name));
+      setFiles(datasets); setSourceId(datasets.at(-1)?.id || "");
+      setProfile(null); setTestResult(null);
+      setUploadNotice(`已保存「${file.name}」，可开始分析；文件可在任务记录中继续使用。`);
+      uploadSession.current = null;
+    } catch (err) { setError(err.message); }
+    finally { setUploading(false); }
+  };
   const pickSession = async (id) => {
     const version = ++selectionGeneration.current;
     setSessionId(id);
@@ -110,8 +140,8 @@ export function ResearchView() {
       <section className="module-card research-view">
         <div className="module-head">
           <div>
-            <h1>数据分析</h1>
-            <p className="module-phase">会话 CSV · 确定性统计 · 结果为待复核草稿</p>
+            <h1>科研统计 · 数据分析</h1>
+            <p className="module-phase">上传 CSV 或选择已有任务中的数据，先检查数据，再选择分析方法。</p>
           </div>
         </div>
         {error && (
@@ -119,17 +149,23 @@ export function ResearchView() {
             {error}
           </p>
         )}
+        <div className="research-import">
+          <button className="primary" disabled={busy || uploading} onClick={() => uploadRef.current?.click()}><Upload size={16}/>{uploading ? "正在导入…" : "上传 CSV 数据"}</button>
+          <input ref={uploadRef} type="file" accept=".csv" hidden onChange={uploadDataset}/>
+          <span>也可以选择已有数据。文件保存在本机任务中。</span>
+        </div>
+        {uploadNotice && <p role="status">{uploadNotice}</p>}
         <div className="followup-apply">
-          <select aria-label="选择数据所在任务" value={sessionId} disabled={busy} onChange={(e) => pickSession(e.target.value)}>
-            <option value="">选择任务会话…</option>
+          <select aria-label="选择数据所在任务" value={sessionId} disabled={busy || uploading} onChange={(e) => pickSession(e.target.value)}>
+            <option value="">选择已有任务…</option>
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.title}
               </option>
             ))}
           </select>
-          <select aria-label="选择 CSV 数据" value={sourceId} onChange={(e) => { setSourceId(e.target.value); setProfile(null); setTestResult(null); setError(""); }} disabled={busy || filesLoading || !files.length}>
-            <option value="">{filesLoading ? "正在读取材料…" : !sessionId ? "请先选择任务会话" : files.length ? "选择 CSV 数据…" : "该会话没有 CSV 材料"}</option>
+          <select aria-label="选择 CSV 数据" value={sourceId} onChange={(e) => { setSourceId(e.target.value); setProfile(null); setTestResult(null); setError(""); }} disabled={busy || uploading || filesLoading || !files.length}>
+            <option value="">{filesLoading ? "正在读取材料…" : !sessionId ? "请上传 CSV 或选择任务" : files.length ? "选择 CSV 数据…" : "该会话没有 CSV 材料"}</option>
             {files.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name}
@@ -142,7 +178,7 @@ export function ResearchView() {
           <h3>
             <Sigma size={14} /> 描述统计
           </h3>
-          <button className="secondary" onClick={runProfile} disabled={busy || !sourceId}>
+          <button className="secondary" onClick={runProfile} disabled={busy || uploading || !sourceId}>
             {busy ? <Loader2 className="spin" size={14} /> : null}
             分析数据集
           </button>
@@ -177,17 +213,17 @@ export function ResearchView() {
         <section className="followups-section">
           <h3>组间比较</h3>
           <div className="followup-apply">
-            <input disabled={busy}
+            <input disabled={busy || uploading}
               value={test.outcome}
               aria-label="结局变量列名" placeholder="结局变量列名"
               onChange={(e) => setTest({ ...test, outcome: e.target.value })}
             />
-            <input disabled={busy}
+            <input disabled={busy || uploading}
               value={test.group}
               aria-label="分组变量列名" placeholder="分组变量列名"
               onChange={(e) => setTest({ ...test, group: e.target.value })}
             />
-            <select aria-label="统计检验方法" disabled={busy} value={test.method} onChange={(e) => setTest({ ...test, method: e.target.value })}>
+            <select aria-label="统计检验方法" disabled={busy || uploading} value={test.method} onChange={(e) => setTest({ ...test, method: e.target.value })}>
               <option value="auto">自动选择</option>
               <option value="welch-t">Welch t 检验</option>
               <option value="mann-whitney">Mann-Whitney U</option>
@@ -196,7 +232,7 @@ export function ResearchView() {
             </select>
             <button
               onClick={runTest}
-              disabled={busy || !sourceId || !test.outcome.trim() || !test.group.trim()}
+              disabled={busy || uploading || !sourceId || !test.outcome.trim() || !test.group.trim()}
             >
               运行检验
             </button>
@@ -218,18 +254,18 @@ export function ResearchView() {
         <section className="followups-section">
           <h3>样本量估算（两独立组）</h3>
           <div className="followup-apply">
-            <select aria-label="样本量研究设计" disabled={busy} value={size.design} onChange={(e) => setSize({ ...size, design: e.target.value })}>
+            <select aria-label="样本量研究设计" disabled={busy || uploading} value={size.design} onChange={(e) => setSize({ ...size, design: e.target.value })}>
               <option value="means">均值比较</option>
               <option value="proportions">比例比较</option>
             </select>
             {size.design === "means" ? (
               <>
-                <input disabled={busy}
+                <input disabled={busy || uploading}
                   value={size.delta}
                   aria-label="预期差值 Δ" placeholder="预期差值 Δ"
                   onChange={(e) => setSize({ ...size, delta: e.target.value })}
                 />
-                <input disabled={busy}
+                <input disabled={busy || uploading}
                   value={size.sd}
                   aria-label="标准差 σ" placeholder="标准差 σ"
                   onChange={(e) => setSize({ ...size, sd: e.target.value })}
@@ -237,19 +273,19 @@ export function ResearchView() {
               </>
             ) : (
               <>
-                <input disabled={busy}
+                <input disabled={busy || uploading}
                   value={size.p1}
                   aria-label="对照组率 p1" placeholder="对照组率 p1"
                   onChange={(e) => setSize({ ...size, p1: e.target.value })}
                 />
-                <input disabled={busy}
+                <input disabled={busy || uploading}
                   value={size.p2}
                   aria-label="试验组率 p2" placeholder="试验组率 p2"
                   onChange={(e) => setSize({ ...size, p2: e.target.value })}
                 />
               </>
             )}
-            <button onClick={runSize} disabled={busy}>
+            <button onClick={runSize} disabled={busy || uploading}>
               计算
             </button>
           </div>
@@ -264,12 +300,12 @@ export function ResearchView() {
         <section className="followups-section">
           <h3>数据脱敏导出</h3>
           <div className="followup-apply">
-            <input disabled={busy}
+            <input disabled={busy || uploading}
               value={deidColumns}
               aria-label="需要脱敏的列名" placeholder="需要脱敏的列名，逗号分隔（如 姓名,住院号）"
               onChange={(e) => setDeidColumns(e.target.value)}
             />
-            <button className="secondary" onClick={runDeidentify} disabled={busy || !sourceId || !deidColumns.trim()}>
+            <button className="secondary" onClick={runDeidentify} disabled={busy || uploading || !sourceId || !deidColumns.trim()}>
               <Download size={14} /> 生成脱敏 CSV
             </button>
           </div>

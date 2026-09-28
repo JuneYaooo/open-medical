@@ -24,7 +24,7 @@ for (const scenario of SCENARIOS) {
       throw new Error(`页面脚本错误：${err.message}`);
     });
     await page.goto(f.origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
     await page.waitForSelector(".app-navigation", { timeout: 15000 });
     await scenario.fn({ page, seed: f, origin: f.origin });
   });

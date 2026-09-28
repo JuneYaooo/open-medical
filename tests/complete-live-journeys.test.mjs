@@ -1,3 +1,4 @@
+import {openTool, openIntake} from "./navigation-ui.mjs";
 // Explicit live provider opt-in. All business data is synthetic and databases isolated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,7 +48,7 @@ test('live journey empty settings to real connection first task restart and reta
  assert.equal((await f.json('/api/model-settings')).model,'unconfigured','Test must not activate configuration');
  await dialog.getByRole('button',{name:'保存并启用',exact:true}).click();await dialog.getByText(/已保存并启用/).waitFor();
  assert.equal(await dialog.getByLabel(/^API Key/).inputValue(),'');await dialog.getByRole('button',{name:'关闭模型设置'}).click();
- await page.getByRole('textbox',{name:'医疗任务内容'}).fill('这是合成软件验收。请仅回复“连接验收成功”，不调用工具。');await page.getByRole('button',{name:'发送任务',exact:true}).click();await page.locator('.composer').waitFor();
+ await page.getByRole('textbox',{name:'任务内容'}).fill('这是合成软件验收。请仅回复“连接验收成功”，不调用工具。');await page.getByRole('button',{name:'发送任务',exact:true}).click();await page.locator('.composer').waitFor();
  const sessions=await f.json('/api/sessions');assert.equal(sessions.sessions.length,1);const id=sessions.sessions[0].id;
  const completed=await finish(f,id);assert.match(completed.messages.filter(m=>m.role==='assistant').at(-1).content,/连接验收成功/);
  await f.restart();const settings=await f.json('/api/model-settings');assert.equal(settings.model,provider.model);assert.equal(settings.source,'saved');assert.equal(settings.hasKey,true);
@@ -58,7 +59,7 @@ test('live journey empty settings to real connection first task restart and reta
 test('live journey project proposal sandbox verification approval git rollback schedule restart',{skip:!enabled,timeout:420000},async t=>{
  const f=await start(t),{page}=f,root=join(f.dir,'project');mkdirSync(root);writeFileSync(join(root,'note.md'),'ORIGINAL_JOURNEY\n');
  const git=(...args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();git('init','-q');git('add','note.md');git('-c','user.name=Journey Test','-c','user.email=journey@example.invalid','commit','-qm','initial synthetic fixture');git('config','user.name','Journey Test');git('config','user.email','journey@example.invalid');
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();await page.getByLabel('名称',{exact:true}).fill('项目执行闭环');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
+ await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();await page.getByLabel('名称',{exact:true}).fill('项目执行闭环');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
  await page.getByLabel('授权模式',{exact:true}).selectOption('workspace-write');await page.getByLabel('授权模式',{exact:true}).selectOption('review');
  const w=(await f.json('/api/workspaces')).workspaces[0];
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByText('高级授权（工具模式、可写子目录、独立 Git）',{exact:true}).click();await page.getByLabel('独立授权 Git 提交（不依赖“完全批准”档位）').check();await page.getByRole('button',{name:'保存高级授权',exact:true}).click();
@@ -75,12 +76,12 @@ test('live journey project proposal sandbox verification approval git rollback s
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.locator('.workspace-schedules > summary').click();
  await page.getByLabel('任务内容',{exact:true}).fill('软件验收，只回答 JOURNEY_SCHEDULE_OK，不调用工具。');const due=new Date(Math.ceil((Date.now()+15000)/60000)*60000);due.setMinutes(due.getMinutes()-due.getTimezoneOffset());await page.getByLabel('执行时间',{exact:true}).fill(due.toISOString().slice(0,16));await page.getByLabel('授权按此计划将任务和读取文件发送给当前模型').check();await page.getByRole('button',{name:'创建计划',exact:true}).click();await page.locator('.workspace-schedules article').waitFor();
  const before=(await f.json('/api/workspaces/'+w.id)).runs.length;await f.restart();await page.goto('about:blank');const scheduled=await finish(f,w.id,before,true);assert.match(scheduled.messages.filter(m=>m.role==='assistant').at(-1).content,/JOURNEY_SCHEDULE_OK/);assert.equal(scheduled.schedules.length,1);
- await page.goto(f.origin());await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目',exact:true}).click();await page.locator('.directory-open',{hasText:'项目执行闭环'}).click();await page.getByText('JOURNEY_SCHEDULE_OK',{exact:true}).waitFor();
+ await page.goto(f.origin());await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'项目执行闭环'}).click();await page.getByText('JOURNEY_SCHEDULE_OK',{exact:true}).waitFor();
 });
 
 test('live journey one patient materials model chart proposal care followup backup restore and next consultation',{skip:!enabled,timeout:420000},async t=>{
  const f=await start(t),{page}=f;
- await page.getByRole('button',{name:'上传资料建档',exact:true}).click();await page.getByRole('button',{name:'没有资料？手动建档',exact:true}).click();
+ await openIntake(page);await page.getByRole('button',{name:'没有资料？手动建档',exact:true}).click();
  await page.getByLabel('姓名 *',{exact:true}).fill('连续闭环合成患者');await page.getByLabel('患者编号（可选）',{exact:true}).fill('JOURNEY-001');await page.getByRole('button',{name:'创建患者档案',exact:true}).click();
  await page.getByRole('button',{name:'打开病例工作区',exact:true}).click();
  const p=(await f.json('/api/patients')).patients[0];
@@ -117,7 +118,7 @@ test('live journey one patient materials model chart proposal care followup back
 });
 
 test('live journey literature search abstract citation import and durable task material',{skip:!enabled,timeout:180000},async t=>{
- const f=await start(t),{page}=f;await page.locator('.advanced-nav>summary').click();await page.getByRole('button',{name:'打开',exact:true}).click();await page.getByRole('button',{name:'文献检索 PubMed 检索与导入',exact:true}).click();
+ const f=await start(t),{page}=f;await page.locator(".app-navigation").waitFor();await openTool(page, "文献检索");
  await page.getByPlaceholder('英文关键词，或用中文描述论文主题').fill('hepatocellular carcinoma');await page.getByPlaceholder('起始年',{exact:true}).fill('2024');
  await page.locator('.literature-form select').selectOption('europepmc');await page.locator('.literature-form button[type=submit]').click();
  const item=page.locator('.literature-view .literature-item').first();await item.waitFor({timeout:90000});const title=await item.locator('.literature-title').innerText();await item.locator('.literature-title').click();

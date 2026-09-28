@@ -1,5 +1,4 @@
 import { patientOptionLabel } from "./patient-labels";
-import { DoctorAgenda } from "./doctor-agenda";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -22,7 +21,6 @@ import {
   MessageSquare,
   Search,
   Stethoscope,
-  UserPlus,
   X,
 } from "lucide-react";
 import { api, medicalEnabled } from "./agent-runtime";
@@ -187,10 +185,11 @@ export function WorkbenchHome({
   onStart,
   onOpenTask,
   onPatient,
-  onView,
   onRefresh,
   onReconnect,
   onOpenProjects,
+  projects = [],
+  onClearDraft,
   accessMode,
   onAccessModeChange,
   thinking,
@@ -210,10 +209,11 @@ export function WorkbenchHome({
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("clinical");
-  const [showAgenda, setShowAgenda] = useState(false);
   const [showAllFlows, setShowAllFlows] = useState(false);
   const [runtimeOptions, setRuntimeOptions] = useState(false);
-  const [taskType, setTaskType] = useState(draftState.taskType ?? "medical");
+  const [projectId, setProjectId] = useState(draftState.projectId ?? "");
+  const taskType = projectId ? "project" : "medical";
+  const availableProjects = projects.filter(p => !p.archived && p.kind !== "session" && p.kind !== "task");
   const [flowId, setFlowId] = useState(draftState.flowId ?? "");
   const [prompt, setPrompt] = useState(draftState.prompt ?? "");
   const [patientId, setPatientId] = useState(draftState.patientId ?? "");
@@ -223,7 +223,7 @@ export function WorkbenchHome({
   const [skillMention, setSkillMention] = useState(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [pickedSkills, setPickedSkills] = useState(draftState.pickedSkills ?? []);
-  useEffect(() => { onDraftChange?.({prompt, patientId, taskType, flowId, pickedSkills}); }, [prompt, patientId, taskType, flowId, pickedSkills]);
+  useEffect(() => { onDraftChange?.({prompt, patientId, projectId, flowId, pickedSkills}); }, [prompt, patientId, projectId, flowId, pickedSkills]);
   const inputRef = useRef(null);
   const selectedFlow = MEDICAL_WORKFLOWS.find((flow) => flow.id === flowId);
   const isFollowup = flowId === "followup";
@@ -281,7 +281,7 @@ export function WorkbenchHome({
       task.title.toLowerCase().includes(query.toLowerCase()),
   );
   const chooseFlow = (flow) => {
-    setTaskType("medical");
+    setProjectId("");
     setFlowId(flow.id);
     setPrompt(flow.prompt);
     inputRef.current?.focus();
@@ -302,7 +302,8 @@ export function WorkbenchHome({
   };
   const submit = async (e) => {
     e?.preventDefault();
-    if (starting) return;
+    if (starting || uploading) return;
+    if (consentRequired && !consent && !isFollowup) { setError("请先确认本轮允许将内容发送给配置的模型。"); return; }
     setError("");
     if (patientId && !selectedPatient) {
       setError("所选患者已不可用，请重新选择。");
@@ -313,11 +314,6 @@ export function WorkbenchHome({
         onPatient({ id: selectedPatient.id, tab: "followups" });
       return;
     }
-    if (taskType === "project") {
-      // 项目任务进入融合后的工作区视图，与临床任务同一套外壳。
-      onOpenProjects({ prompt: prompt.trim() });
-      return;
-    }
     if (!prompt.trim()) return;
     if (prompt.trim().length > 200000) {
       setError("任务超过 20 万字符，请拆成多个任务或上传为资料；输入内容已保留。");
@@ -325,6 +321,11 @@ export function WorkbenchHome({
     }
     setStarting(true);
     try {
+      if (projectId) {
+        if (!availableProjects.some(p => p.id === projectId)) throw new Error("关联项目已不可用，请重新选择。");
+        await onOpenProjects({ id: projectId, prompt: prompt.trim() });
+        return;
+      }
       await onStart({
         prompt: prompt.trim(),
         patient: selectedPatient,
@@ -439,20 +440,15 @@ export function WorkbenchHome({
       )}
       {isHome ? (
         <>
-          <nav className="hub-start-nav" aria-label="工作入口">
-            <button className="text-button" onClick={() => setShowAgenda(!showAgenda)}>
-              {showAgenda ? "返回新建任务" : "今日待办"}<ArrowRight size={14} />
-            </button>
-            <button className="text-button" onClick={() => onView("tasks")}>任务记录<History size={14} /></button>
-          </nav>
-          {showAgenda ? <DoctorAgenda onPatient={onPatient} onOpenTask={onOpenTask} onView={onView} /> : <>
           <section className="hub-intro hub-intro-compact">
-            <h1>这次需要做什么？</h1>
-            <p>直接描述需求，或添加材料开始。患者相关任务可关联档案。</p>
+            <span className="agent-eyebrow">你的医疗工作 Agent</span>
+            <h1>想做什么，直接说。</h1>
+            <p>整理病历、查文献、分析数据、写文档，或交给我一个新的目标。</p>
           </section>
           <form className="hub-composer" onSubmit={submit}>
             <div className="hub-composer-caption">
-              <span>{selectedFlow ? selectedFlow.title : "开始一项任务"}</span>
+              <span>{selectedFlow ? selectedFlow.title : "新任务"}</span>
+              {!selectedFlow && (prompt || attached || patientId || projectId) && <button type="button" disabled={starting || uploading} onClick={onClearDraft}>清空草稿</button>}
               {selectedFlow && (
                 <button
                   type="button"
@@ -476,8 +472,8 @@ export function WorkbenchHome({
             ) : (
               <textarea
                 ref={inputRef}
-                aria-label="医疗任务内容"
-                placeholder={taskType === "project" ? "例如：整理文件夹中的资料，制作一份带来源的报告…" : "例如：整理这位患者的复诊材料，列出近期变化和待核对问题…"}
+                aria-label="任务内容"
+                placeholder="描述目标，或添加文件后告诉我怎么处理。无需先选择工具…"
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
@@ -530,7 +526,7 @@ export function WorkbenchHome({
                   }
                 }}
                 disabled={starting}
-                rows={3}
+                rows={4}
               />
             )}
             {skillMention && (
@@ -585,44 +581,20 @@ export function WorkbenchHome({
               </div>
             )}
             <div className="hub-composer-controls">
-              <div
-                className="hub-task-type"
-                role="tablist"
-                aria-label="任务类型"
-              >
-                <button
-                  type="button"
-                  aria-pressed={taskType === "medical"}
-                  className={taskType === "medical" ? "active" : ""}
-                  title="患者与临床场景：可用医疗工具（整理病历/随访/知识库/文献等），产出走草稿复核"
-                  onClick={() => setTaskType("medical")}
-                  disabled={attached}
-                >
-                  临床任务
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={taskType === "project"}
-                  className={taskType === "project" ? "active" : ""}
-                  title="通用 Agent 工作区：本地文件夹、终端、Git 等，适合写代码、整理文档等非患者任务"
-                  onClick={() => { setTaskType("project"); setFlowId(""); setSkillMention(null); setPickedSkills([]); }}
-                  disabled={attached}
-                >
-                  通用任务
-                </button>
-              </div>
+              {!isFollowup && <label className="hub-patient-picker"><FolderOpen size={15}/><select aria-label="任务关联项目" value={projectId} disabled={attached || Boolean(patientId) || starting || uploading} onChange={e => { setProjectId(e.target.value); setFlowId(""); setPickedSkills([]); setSkillMention(null); }}><option value="">关联项目（可选）</option>{availableProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
               {taskType === "medical" && (
                 <label className="hub-patient-picker">
                   <Stethoscope size={15} />
                   <select
                     aria-label="任务关联患者"
                     value={patientId}
-                    onChange={(e) => setPatientId(e.target.value)}
-                    disabled={!data || starting || attached}
+                    onChange={(e) => e.target.value === "__new" ? onPatient({create:true}) : setPatientId(e.target.value)}
+                    disabled={!data || starting || attached || uploading}
                   >
                     <option value="">
-                      {isFollowup ? "请选择患者" : "独立任务 · 不关联患者"}
+                      {isFollowup ? "请选择患者" : "关联患者（可选）"}
                     </option>
+                    <option value="__new">＋ 新建患者档案</option>
                     {patients.map((patient) => (
                       <option key={patient.id} value={patient.id}>
                         {patientOptionLabel(patient, patients)}
@@ -632,17 +604,6 @@ export function WorkbenchHome({
                   </select>
                 </label>
               )}
-              {taskType === "medical" && (
-                <button
-                  type="button"
-                  className="hub-add-patient"
-                  onClick={() => onPatient({ create: true })}
-                  disabled={attached}
-                >
-                  <UserPlus size={15} />
-                  上传资料建档
-                </button>
-              )}
               {taskType === "medical" && !isFollowup && (
                 <>
                   <button
@@ -650,10 +611,10 @@ export function WorkbenchHome({
                     className="attach-button"
                     title="添加图片、PDF、Word、Excel、TXT、Markdown、CSV 或 JSON，随本次任务一起发送"
                     onClick={() => onAttach(selectedPatient?.sessionId)}
-                    disabled={uploading || !config}
+                    disabled={starting || uploading || !config}
                   >
                     <Paperclip size={16} />
-                    {uploading ? "导入中…" : "附件"}
+                    {uploading ? "导入中…" : "添加材料"}
                   </button>
                   <input
                     ref={fileInputRef}
@@ -725,7 +686,7 @@ export function WorkbenchHome({
                 </span>
               )}
               <span className="composer-spacer" />
-              {consentRequired && taskType === "medical" && !isFollowup && (
+              {consentRequired && !isFollowup && (
                 <label className="tb-check">
                   <input
                     type="checkbox"
@@ -736,100 +697,34 @@ export function WorkbenchHome({
                   本轮允许外发
                 </label>
               )}
-              {isFollowup || taskType === "project" ? (
-                <button
-                  className="hub-start"
-                  disabled={
-                    !config ||
-                    starting ||
-                    (taskType === "project" ? false : !selectedPatient)
-                  }
-                >
-                  {starting ? (
-                    <Loader2 size={16} className="spin" />
-                  ) : taskType === "project" ? (
-                    "发送并打开工作区"
-                  ) : (
-                    "进入随访"
-                  )}
-                  <ArrowRight size={16} />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  className="send-button"
-                  aria-label="发送任务"
-                  disabled={
-                    !config ||
-                    starting ||
-                    !prompt.trim() ||
-                    (consentRequired && !consent)
-                  }
-                >
-                  {starting ? (
-                    <Loader2 size={16} className="spin" />
-                  ) : (
-                    <ArrowUp size={19} />
-                  )}
-                </button>
-              )}
+              <button type="submit" className="agent-send" aria-label={isFollowup ? "进入随访" : "发送任务"} disabled={!config || starting || uploading || (isFollowup ? !selectedPatient : !prompt.trim() || (Boolean(patientId) && !data) || (consentRequired && !consent))}>
+                {starting ? <Loader2 size={17} className="spin"/> : isFollowup ? <ArrowRight size={17}/> : <ArrowUp size={17}/>}
+                {starting ? "正在开始…" : isFollowup ? "进入随访" : "开始任务"}
+              </button>
             </div>
           </form>
           <p className="hub-composer-hint">
             {taskType === "project"
-              ? "通用任务可处理文件、表格、代码与浏览器工作。进入工作区后选择目录与工具权限。"
+              ? `将在「${availableProjects.find(p => p.id === projectId)?.title || "所选项目"}」中新建对话，使用同一文件夹；工具权限在任务中管理。`
               : attached
                 ? `已附加 ${attachedCount} 份材料，将随本次任务一起发送。Enter 发送 · Shift + Enter 换行`
                 : selectedPatient
                   ? `将沿用「${selectedPatient.name}」的病例材料直接发起任务，发送后仍可在右侧核对范围。Enter 发送 · Shift + Enter 换行`
-                  : "临床任务围绕患者与诊疗材料，AI 产出均为待你复核的草稿。Enter 发送 · Shift + Enter 换行"}
+                  : "直接开始即可；只有需要已有资料时才关联患者或项目。Enter 发送 · Shift + Enter 换行"}
           </p>
-          <section className={`hub-scenarios ${showAllFlows || category !== "clinical" ? "" : "hub-scenarios-compact"}`} aria-label="医疗工作场景">
-            <div className="hub-section-head">
-              <h2>常用场景</h2>
-              <div className="hub-category" aria-label="场景分类">
-                <button
-                  aria-pressed={category === "clinical"}
-                  className={category === "clinical" ? "active" : ""}
-                  onClick={() => { setCategory("clinical"); setShowAllFlows(false); }}
-                >
-                  临床与患者
-                </button>
-                <button
-                  aria-pressed={category === "research"}
-                  className={category === "research" ? "active" : ""}
-                  onClick={() => { setCategory("research"); setShowAllFlows(false); }}
-                >
-                  循证准备
-                </button>
-              </div>
+          <section className="agent-starters" aria-label="任务灵感">
+            <div className="agent-starter-row">
+              {[["timeline", "整理病历"], ["evidence", "准备循证检索"], ["patient-edu", "撰写患教材料"]].map(([id,label]) => <button key={id} aria-pressed={flowId === id} disabled={starting || uploading} onClick={() => chooseFlow(MEDICAL_WORKFLOWS.find(f => f.id === id))}>{label}</button>)}
+              <button disabled={starting || uploading} onClick={() => { setFlowId(""); setPrompt("请分析我提供的数据，先检查字段、缺失值和数据质量，再根据研究问题建议统计方法，输出结果和适用条件。"); inputRef.current?.focus(); }}>分析数据</button>
+              <button aria-expanded={showAllFlows} onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起模板" : "更多任务模板"}</button>
             </div>
-            <div className="hub-scene-grid">
-              {MEDICAL_WORKFLOWS.filter(
-                (flow) => flow.category === category && (showAllFlows || category !== "clinical" || ["timeline", "record-draft", "med-safety", "lab-read", "patient-edu", "followup"].includes(flow.id)),
-              ).map((flow) => (
-                <button
-                  key={flow.id}
-                  className={`hub-scene ${flow.id === flowId ? "selected" : ""}`}
-                  title={flow.desc}
-                  aria-pressed={flow.id === flowId}
-                  onClick={() => chooseFlow(flow)}
-                >
-                  <span className="hub-scene-icon">
-                    <flow.icon size={20} />
-                  </span>
-                  <b>{flow.title}</b>
-                  <p>{flow.desc}</p>
-                  <small>
-                    {flow.output}
-                    <ArrowUpRight size={14} />
-                  </small>
-                </button>
-              ))}
-            </div>
-            {category === "clinical" && <button className="text-button hub-more-flows" onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起更多场景" : "更多场景"}</button>}
+            {showAllFlows && <div className="agent-template-library">
+              <div className="hub-section-head"><h2>从模板开始</h2><div className="hub-category">{[["clinical","临床与患者"],["research","科研与循证"]].map(([id,label]) => <button key={id} aria-pressed={category === id} onClick={() => setCategory(id)}>{label}</button>)}</div></div>
+              <p className="muted">选择后会填入任务要求，你可以修改再发送。</p>
+              <div className="agent-template-grid">{MEDICAL_WORKFLOWS.filter(f => f.category === category).map(flow => <button key={flow.id} disabled={starting || uploading} aria-pressed={flow.id === flowId} onClick={() => chooseFlow(flow)}><flow.icon size={18}/><span><b>{flow.title}</b><small>{flow.desc}</small></span></button>)}</div>
+            </div>}
           </section>
-          </>}
+          {!config?.modelConfigured && <div className="agent-setup-note"><span>连接模型后可使用 AI 完成任务；本地资料整理仍可使用。</span><button onClick={onModelSettings}>配置模型</button></div>}
         </>
       ) : (
         <section className="hub-history">
@@ -858,7 +753,7 @@ export function WorkbenchHome({
       )}
       <footer className="hub-footer">
         <span className="hub-status-dot" />
-        本机保存 <span>·</span> AI 成果待复核 <span>·</span> 外部模型按次授权
+        对话与成果保存在任务记录中 <span>·</span> 医疗内容需复核
       </footer>
     </main>
   );

@@ -1,3 +1,4 @@
+import { resolveModelContext } from '../../shared/model-context.mjs';
 import { ModelSettings } from "./model-settings.mjs";
 import { createProvider } from "./providers.mjs";
 import { check } from "../errors.mjs";
@@ -16,6 +17,7 @@ export class ModelProfiles {
       provider: config.provider,
       model: config.model,
       contextWindow: config.contextWindow ?? null,
+      contextDefaults: resolveModelContext(config),
       maxTokens: config.maxTokens ?? 8192,
       baseUrl: config.baseUrl,
       hasKey: Boolean(config.apiKey),

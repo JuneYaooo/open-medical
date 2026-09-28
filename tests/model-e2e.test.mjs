@@ -1,3 +1,4 @@
+import {openPatient} from "./navigation-ui.mjs";
 // 真实模型端到端：DeepSeek（Anthropic 兼容端点，配置来自 .env）。
 // 前置：npm run build；.env 内配置 AI_PROVIDER=anthropic + ANTHROPIC_*；
 // 需要外网与有效 API Key，未配置时自动跳过。运行：
@@ -33,16 +34,13 @@ async function openApp(t) {
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   await page.goto(f.origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation", { timeout: 15000 });
   return { f, page };
 }
 
 async function openPatientWorkspace(page, name) {
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: name })
-    .first()
-    .click();
+  await openPatient(page, name);
   await page.waitForSelector(".detail-head");
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");

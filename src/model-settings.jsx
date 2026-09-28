@@ -1,3 +1,4 @@
+import { ModelBudgetFields } from './model-budget-fields';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './agent-runtime';
 import { JevSettings } from './jev-settings';
@@ -33,7 +34,8 @@ export function ModelSettings({ onClose, onSaved }) {
           <label>接口地址<input type="url" required value={form.baseUrl} onChange={(e) => update({ baseUrl:e.target.value, contextWindow:null, apiKey:'', hasKey:false })} placeholder="https://your-provider.example/v1" /></label>
           <label>模型名称<input required value={form.model} onChange={(e) => update({ model:e.target.value, contextWindow:null })} placeholder="填写服务商提供的模型 ID" /></label>
           <label>API Key <span>{form.hasKey ? '已保存 · 留空保留现有密钥' : form.provider === 'local' ? '本地服务可不填写' : '必填'}</span><input type="password" autoComplete="new-password" value={form.apiKey} onChange={(e) => update({ apiKey:e.target.value })} placeholder={form.hasKey ? '••••••••（已保存）' : '粘贴 API Key'} required={!form.hasKey && form.provider !== 'local'} /></label>
-          <details><summary>高级选项</summary><label>请求超时（毫秒）<input type="number" min="50" max="600000" value={form.timeoutMs} onChange={(e) => update({ timeoutMs:Number(e.target.value) })} /></label><label>上下文窗口 Token（留空使用默认预算）<input type="number" min="512" max="10000000" placeholder="131072（默认预算，非模型规格）" value={form.contextWindow ?? ''} onChange={(e) => update({ contextWindow:e.target.value === '' ? null : Number(e.target.value) })} /></label><label>最大输出 Token<input type="number" min="256" max="131072" value={form.maxTokens} onChange={(e) => update({ maxTokens:Number(e.target.value) })} /></label><p>上下文窗口需容纳输入、工具和输出。最大输出通常可设为 8192–16384；Anthropic 深入思考另预留 4096。请按服务商规格填写窗口，不能用增大数值绕过模型限制。</p></details>
+          <ModelBudgetFields form={form} onChange={update} />
+          <details><summary>高级选项</summary><label>请求超时（毫秒）<input type="number" min="50" max="600000" value={form.timeoutMs} onChange={(e) => update({ timeoutMs:Number(e.target.value) })} /></label></details>
           <p className="model-privacy">密钥加密保存在本机。测试会向所填接口发送一条固定文本，可能产生少量 API 费用，不包含工作区文件。</p>
           <footer><button type="button" onClick={(event) => { if (event.currentTarget.form.reportValidity()) submit(true); }}>测试连接</button><button className="model-save" type="submit">保存并启用</button></footer>
         </fieldset>

@@ -1,47 +1,30 @@
+import {openTool, openPatient} from "./navigation-ui.mjs";
 // 六大场景 + 框架验收的可复用剧本：web（Chromium）与桌面（Electron）端共用。
 // 每个 fn({ page, seed, origin })：page 为已加载应用的窗口，seed 提供节点侧 API。
 import assert from "node:assert/strict";
 
 export const SCENARIOS = [
   {
-    name: '重设计外壳：分组左栏替代平级页签，顶栏患者切换器就位',
+    name: 'Agent 外壳：新任务醒目，业务与工具有固定归属',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  for (const label of ["项目", "最近任务", "患者", "工具箱"]) {
-    assert.ok(
-      await page
-        .locator(".app-navigation .nav-label", { hasText: label })
-        .first()
-        .isVisible(),
-      `左栏缺少「${label}」分组`,
-    );
+  for (const label of ["新建任务", "任务记录", "项目文件", "患者", "资料与工具"]) {
+    assert.ok(await page.getByRole('button',{name:label,exact:true}).isVisible());
   }
-  assert.equal(await page.locator(".scenario-tabs").count(), 0, "平级页签应已移除");
-  assert.ok(await page.locator(".patient-pill").isVisible(), "顶栏患者切换器缺失");
-  assert.match(await page.locator(".patient-pill").innerText(), /未选择患者/);
-  await page.locator(".patient-pill").click();
-  assert.ok(await page.locator(".pt-switch-menu").isVisible(), "切换器下拉未打开");
-  await page.locator(".composer, body").click({ position: { x: 10, y: 10 } });
+  assert.equal(await page.locator('.scenario-tabs, .tool-slide, .advanced-nav').count(),0);
+  await page.getByRole('textbox',{name:'任务内容',exact:true}).waitFor();
     },
   },
   {
-    name: '患者建档 → 左栏/切换器联动，详情页风险与时间线可用',
+    name: '患者建档 → 档案身份明确，详情页风险与时间线可用',
     fn: async ({ page, seed, origin: _origin }) => {
-  await page.locator('.nav-label button', { hasText: "管理" }).click();
+  await page.getByRole("navigation",{name:"主要业务"}).getByRole("button",{name:"患者",exact:true}).click();
   await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
   await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("测试患者甲");
   await page.locator('.modal-form button:has-text("创建患者档案")').click();
   await page.waitForSelector(".detail-head");
   assert.match(await page.locator(".detail-head").innerText(), /测试患者甲/);
-  await page.waitForTimeout(400);
-  assert.ok(
-    await page
-      .locator(".app-navigation .session", { hasText: "测试患者甲" })
-      .first()
-      .isVisible(),
-    "左栏患者列表未出现新患者",
-  );
-  assert.match(await page.locator(".patient-pill").innerText(), /测试患者甲/);
+  assert.ok(new URL(page.url()).searchParams.get('patient'));
   await page.getByRole("button", { name: "就诊经过", exact: true }).click();
   assert.ok(await page.getByRole("region",{name:"就诊时间轴"}).isVisible());
   // 写入检验 → 评估风险 → 概览出现风险卡
@@ -52,14 +35,9 @@ export const SCENARIOS = [
   });
   await seed.json("/api/risk-alerts/evaluate", "POST", {});
   await page.reload();
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', {
-      hasText: "测试患者甲",
-    })
-    .first()
-    .click();
+  await openPatient(page, "测试患者甲");
   await page.waitForSelector(".detail-head");
   await page.waitForSelector(".risk-card", { timeout: 8000 });
   assert.match(await page.locator(".risk-card").first().innerText(), /血钾/);
@@ -69,7 +47,7 @@ export const SCENARIOS = [
     name: '会话：UI 上传材料 → 本地整理 → 产物卡 → 验收视图 → 轻量复核通过',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
   // 先用界面建档
-  await page.locator('.nav-label button', { hasText: "管理" }).click();
+  await page.getByRole("navigation",{name:"主要业务"}).getByRole("button",{name:"患者",exact:true}).click();
   await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
   await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("验收流程患者");
@@ -122,7 +100,7 @@ export const SCENARIOS = [
   {
     name: '医生记忆：面板可打开、可新增、列表可见',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  await page.locator('.workspace-account:has-text("医生记忆")').click();
+  await page.getByRole("button",{name:"设置与连接",exact:true}).click();await page.getByRole("button",{name:"医生档案与记忆",exact:true}).click();
   await page.waitForSelector(".modal");
   await page
     .locator('.modal .doctor-add input')
@@ -137,7 +115,7 @@ export const SCENARIOS = [
   {
     name: '风险 → 一键生成处理建议草稿，跳转会话并预填',
     fn: async ({ page, seed, origin: _origin }) => {
-  await page.locator('.nav-label button', { hasText: "管理" }).click();
+  await page.getByRole("navigation",{name:"主要业务"}).getByRole("button",{name:"患者",exact:true}).click();
   await page.getByRole("button", { name: "上传资料建档", exact: true }).first().click();
   await page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await page.locator(".modal-form input").first().fill("风险流转患者");
@@ -150,13 +128,9 @@ export const SCENARIOS = [
   });
   await seed.json("/api/risk-alerts/evaluate", "POST", {});
   await page.reload();
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', {
-      hasText: "风险流转患者",
-    })
-    .click();
+  await openPatient(page, "风险流转患者");
   await page.waitForSelector(".risk-card");
   await page.locator('button:has-text("生成处理建议草稿")').first().click();
   await page.waitForSelector(".composer");
@@ -184,13 +158,9 @@ export const SCENARIOS = [
   });
   void work;
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', {
-      hasText: "退回流转患者",
-    })
-    .click();
+  await openPatient(page, "退回流转患者");
   await page.waitForSelector(".detail-head");
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");
@@ -228,7 +198,7 @@ export const SCENARIOS = [
   {
     name: '项目：左栏「＋ 新建」打开项目创建入口',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  await page.locator('.nav-label button', { hasText: "＋ 新建" }).click();
+  await page.getByRole("button",{name:"项目文件",exact:true}).click();await page.getByRole("button",{name:"连接项目",exact:true}).click();
   // 融合后：同一医疗外壳内弹出「连接项目工作区」modal，不再有独立工作区布局
   await page.waitForSelector(".modal-backdrop", { timeout: 10000 });
   assert.match(
@@ -252,12 +222,12 @@ export const SCENARIOS = [
   const p = await seed.json("/api/patients", "POST", { name: "知识引用患者" });
   void p;
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
   // 首页一次发送独立任务（本地档位快速完成）
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("患者 PCI 术后用药方案怎么定？");
-  await page.locator(".hub-composer-controls .send-button").click();
+  await page.locator(".hub-composer-controls .agent-send").click();
   await page.waitForSelector(".composer");
   await page.locator(".send-button.stop").waitFor({ state: "hidden", timeout: 30000 }).catch(() => {});
   // 打开知识 tab 并检索
@@ -279,11 +249,11 @@ export const SCENARIOS = [
     fn: async ({ page, seed, origin }) => {
   await seed.json("/api/patients", "POST", { name: "引用目标患者", tags: ["糖尿病"] });
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea, textarea").first().fill("整理一下");
-  await page.locator(".hub-composer-controls .send-button").click();
+  await page.locator(".hub-composer-controls .agent-send").click();
   await page.waitForSelector(".composer");
   await page.locator(".send-button.stop").waitFor({ state: "hidden", timeout: 30000 }).catch(() => {});
   // 当前会话未绑定患者：@ 应出现“引用患者”分组
@@ -304,11 +274,9 @@ export const SCENARIOS = [
     text: "2026-08-12 入院行 PCI。\n2026-08-14 血钾 4.2 mmol/L。\n2026-08-20 出院带药阿司匹林。",
   });
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "目标卡患者" })
-    .click();
+  await openPatient(page, "目标卡患者");
   await page.waitForSelector(".detail-head");
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");
@@ -334,11 +302,9 @@ export const SCENARIOS = [
     text: "2026-08-12 入院行 PCI。\n2026-08-20 出院。",
   });
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   await page.waitForSelector(".app-navigation");
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "记忆标注患者" })
-    .click();
+  await openPatient(page, "记忆标注患者");
   await page.waitForSelector(".detail-head");
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");
@@ -353,16 +319,12 @@ export const SCENARIOS = [
     },
   },
   {
-    name: '工具箱滑出面板：打开 → 进入临床速查 → 整页打开',
-    fn: async ({ page }) => {
-      await page.locator('.nav-label button:has-text("打开")').click();
-      await page.waitForSelector(".tool-slide");
-      await page.locator('.ts-menu button:has-text("临床速查")').click();
-      await page.waitForSelector('.tool-slide button:has-text("量表计算")');
-      await page.locator('.tool-slide button:has-text("整页打开")').click();
-      // 整页打开后面板关闭，切换到临床速查整页视图
-      await page.waitForSelector('.tool-slide', { state: "detached" });
-      await page.waitForSelector('h3:has-text("量表与计算器")', { timeout: 8000 });
+    name: '工具目录：临床速查打开并返回固定入口',
+    fn: async ({page}) => {
+      await openTool(page,'临床速查');
+      await page.getByRole('heading',{name:'量表与计算器',exact:true}).waitFor();
+      await page.getByRole('navigation',{name:'当前位置'}).getByRole('button').click();
+      await page.getByRole('heading',{name:'资料与工具',exact:true}).waitFor();
     },
   },
 
@@ -373,7 +335,7 @@ export const SCENARIOS = [
   fn: async ({ page, seed }) => {
     await seed.json("/api/patients", "POST", { name: "筛选患者甲", groups: ["高血压组"] });
     await seed.json("/api/patients", "POST", { name: "筛选患者乙", groups: ["糖尿病组"] });
-    await page.locator('.nav-label button', { hasText: "管理" }).click();
+    await page.getByRole("navigation",{name:"主要业务"}).getByRole("button",{name:"患者",exact:true}).click();
     await page.waitForSelector(".patient-card");
     await page.locator(".patients-filter .search input").fill("筛选患者甲");
     await page.waitForTimeout(300);
@@ -393,20 +355,16 @@ export const SCENARIOS = [
       name: "出院记录.txt",
       text: "2026-08-12 入院行 PCI。\n2026-08-20 出院带药。",
     });
-    await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "复核队列患者" }).click();
+    await openPatient(page, "复核队列患者");
     await page.waitForSelector(".detail-head");
     await page.locator('button:has-text("打开病例工作区")').click();
     await page.waitForSelector(".composer");
     await page.locator(".composer textarea").fill("请整理本患者的病例材料，生成病历时间线，保留来源与行号。");
     await page.locator(".composer textarea").press("Enter");
     await page.waitForSelector(".artifact-inline", { timeout: 30000 });
-    await page.waitForFunction(
-      () => document.querySelector(".nav-label-action.warn")?.textContent.includes("待复核 1"),
-      { timeout: 8000 },
-    );
-    await page.locator(".nav-label-action.warn").click();
-    await page.waitForSelector(".hub-task-row", { timeout: 8000 });
-    await page.locator(".hub-task-row").first().click();
+    await page.getByRole('button',{name:'任务记录',exact:true}).click();
+    await page.getByRole('button',{name:'待复核',exact:true}).click();
+    await page.locator('.task-directory-row').filter({hasText:'复核队列患者'}).click();
     await page.waitForSelector(".artifact-inline", { timeout: 10000 });
     await page.locator('button:has-text("查看结果")').first().click();
     await page.waitForSelector(".acceptance");
@@ -417,10 +375,9 @@ export const SCENARIOS = [
     await page.locator('.review-form button:has-text("确认通过")').click();
     await page.waitForSelector(".accept-bar .acc-badge.approved", { timeout: 8000 });
     await page.locator('button:has-text("‹ 返回对话")').click();
-    await page.waitForFunction(
-      () => !document.querySelector(".nav-label-action.warn"),
-      { timeout: 8000 },
-    );
+    await page.getByRole('button',{name:'任务记录',exact:true}).click();
+    await page.getByRole('button',{name:'待复核',exact:true}).click();
+    assert.equal(await page.locator('.task-directory-row').count(),0);
   },
 },
 {
@@ -432,7 +389,7 @@ export const SCENARIOS = [
       labs: [{ item: "血钾", value: 2.5, unit: "mmol/L", date: "2026-09-10" }],
     });
     await seed.json("/api/risk-alerts/evaluate", "POST", {});
-    await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "风险闭环患者" }).click();
+    await openPatient(page, "风险闭环患者");
     await page.waitForSelector(".risk-card");
     await page.locator('.risk-card button:has-text("知道了")').first().click();
     await page.waitForSelector('.risk-card .badge:has-text("已确认")', { timeout: 8000 });
@@ -444,17 +401,15 @@ export const SCENARIOS = [
   name: "随访管理：模板应用到患者生成排程",
   fn: async ({ page, seed }) => {
     await seed.json("/api/patients", "POST", { name: "随访模板患者" });
-    await page.locator('.nav-label button:has-text("打开")').click();
-    await page.waitForSelector(".tool-slide");
-    await page.locator('.ts-menu button:has-text("随访计划")').click();
+    await page.getByRole("button",{name:"随访",exact:true}).click();
     await page.getByRole("button", { name: "计划与模板", exact: true }).click();
-    await page.waitForSelector(".tool-slide .followup-apply select");
-    await page.locator(".tool-slide .followup-apply select").first().selectOption({ index: 1 });
-    await page.locator(".tool-slide .followup-apply select").nth(1).selectOption({ label: "随访模板患者" });
-    await page.locator('.tool-slide button:has-text("应用")').click();
+    await page.waitForSelector(".module-view .followup-apply select");
+    await page.locator(".module-view .followup-apply select").first().selectOption({ index: 1 });
+    await page.locator(".module-view .followup-apply select").nth(1).selectOption({ label: "随访模板患者" });
+    await page.locator('.module-view button:has-text("应用")').click();
     await page.waitForFunction(
       () => {
-        const sections = [...document.querySelectorAll(".tool-slide .followups-section")];
+        const sections = [...document.querySelectorAll(".module-view .followups-section")];
         const upcoming = sections.find((section) => section.querySelector("h3")?.textContent.includes("未来与暂停"));
         return upcoming?.querySelector(".job-list")?.textContent.includes("随访模板患者");
       },
@@ -465,18 +420,16 @@ export const SCENARIOS = [
 {
   name: "临床速查：CHA₂DS₂-VASC 量表计算",
   fn: async ({ page }) => {
-    await page.locator('.nav-label button:has-text("打开")').click();
-    await page.waitForSelector(".tool-slide");
-    await page.locator('.ts-menu button:has-text("临床速查")').click();
-    await page.waitForSelector(".tool-slide .followup-apply select");
-    await page.locator(".tool-slide .followup-apply select").first().selectOption({ index: 1 });
-    await page.waitForSelector(".tool-slide .scale-item");
-    const selects = page.locator(".tool-slide .scale-item select");
+    await openTool(page,"临床速查");
+    await page.waitForSelector(".module-view .followup-apply select");
+    await page.locator(".module-view .followup-apply select").first().selectOption({ index: 1 });
+    await page.waitForSelector(".module-view .scale-item");
+    const selects = page.locator(".module-view .scale-item select");
     const n = await selects.count();
     for (let i = 0; i < n; i++) await selects.nth(i).selectOption({ index: 1 });
-    await page.locator('.tool-slide form button:has-text("计算")').click();
-    await page.waitForSelector(".tool-slide .drg-result", { timeout: 8000 });
-    const scaleResult = await page.locator(".tool-slide .drg-result").innerText();
+    await page.locator('.module-view form button:has-text("计算")').click();
+    await page.waitForSelector(".module-view .drg-result", { timeout: 8000 });
+    const scaleResult = await page.locator(".module-view .drg-result").innerText();
     assert.match(scaleResult, /CHA₂DS₂-VASc/);
     assert.match(scaleResult, /高风险|抗凝/);
   },
@@ -484,9 +437,8 @@ export const SCENARIOS = [
 {
   name: "DRG 示例不出现在常用工具，旧链接明确展示限制",
   fn: async ({ page }) => {
-    await page.locator('.nav-label button:has-text("打开")').click();
-    await page.waitForSelector(".tool-slide");
-    assert.equal(await page.locator('.ts-menu button:has-text("DRG")').count(),0);
+    await page.getByRole("navigation",{name:"资料与工具",exact:true}).getByRole("button").click();
+    assert.equal(await page.getByRole('heading',{name:/DRG/}).count(),0);
     const url=new URL(page.url());url.search='?view=drg';
     await page.goto(url.href);
     await page.getByRole('heading',{name:'DRG 示例测算',exact:true}).waitFor();
@@ -501,17 +453,15 @@ export const SCENARIOS = [
   name: "病例库：收入病例 → 相似检索",
   fn: async ({ page, seed }) => {
     await seed.json("/api/patients", "POST", { name: "病例库患者" });
-    await page.locator('.nav-label button:has-text("打开")').click();
-    await page.waitForSelector(".tool-slide");
-    await page.locator('.ts-menu button:has-text("病例库")').click();
-    await page.locator('.tool-slide button:has-text("收入病例")').click();
-    await page.locator('.tool-slide input[placeholder*="主要诊断"]').fill("社区获得性肺炎");
-    await page.locator('.tool-slide button:has-text("收入病例库")').click();
-    await page.waitForSelector('.tool-slide .notice, .tool-slide :text("病例已收入")', { timeout: 8000 });
-    await page.locator('.tool-slide input[placeholder*="相似病例搜索"]').fill("肺炎 咳嗽 发热");
-    await page.locator('.tool-slide button:has-text("检索")').first().click();
+    await openTool(page,"病例库");
+    await page.locator('.module-view button:has-text("收入病例")').click();
+    await page.locator('.module-view input[placeholder*="主要诊断"]').fill("社区获得性肺炎");
+    await page.locator('.module-view button:has-text("收入病例库")').click();
+    await page.waitForSelector('.module-view .notice, .module-view :text("病例已收入")', { timeout: 8000 });
+    await page.locator('.module-view input[placeholder*="相似病例搜索"]').fill("肺炎 咳嗽 发热");
+    await page.locator('.module-view button:has-text("检索")').first().click();
     await page.waitForTimeout(600);
-    assert.ok(await page.locator(".tool-slide").isVisible());
+    assert.ok(await page.locator(".module-view").isVisible());
   },
 },
 {
@@ -554,7 +504,7 @@ export const SCENARIOS = [
       name: "出院记录.txt",
       text: "2026-08-12 入院行 PCI。",
     });
-    await page.locator('.app-navigation nav[aria-label="患者"] .session', { hasText: "导出患者" }).click();
+    await openPatient(page, "导出患者");
     await page.waitForSelector(".detail-head");
     await page.locator('button:has-text("打开病例工作区")').click();
     await page.waitForSelector(".composer");

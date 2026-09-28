@@ -18,7 +18,7 @@ function batches(messages) {
 export async function compactContext({
   messages,
   provider,
-  model,
+  model = provider.model,
   budget,
   tools = [],
   durableMessages = [],
@@ -30,9 +30,21 @@ export async function compactContext({
 }) {
   const originalMessages = messages;
   const requestBudget = budget || contextBudget({ provider, model, messages, tools, maxChars });
-  // At most three UTF-8 bytes per UTF-16 character, with room for JSON escaping.
-  maxChars = Math.min(maxChars, Math.floor((requestBudget.inputLimit - requestBudget.schemaTokens - (requestBudget.mediaTokens || 0)) / (3 * requestBudget.calibration)));
-  check(maxChars >= 1000, "CONTEXT_LIMIT", "工具定义或输出预留占满模型窗口，无法安全压缩", 413);
+  // Use the same token/character limits for selection and final validation.
+  // Do not convert the whole window to worst-case characters and then apply
+  // another fixed percentage to authoritative instructions.
+  maxChars = Math.min(maxChars, requestBudget.maxChars);
+  const measureResult = (input) => contextBudget({ provider, model, messages: input, tools,
+    maxChars, calibration: requestBudget.calibration, outputReserve: requestBudget.outputReserve });
+  const withRoom = (input, chars = 0, fraction = 1) => {
+    const value = chars ? [...input, { role: 'assistant', content: '摘'.repeat(chars) }] : input;
+    const measured = measureResult(value);
+    return measured.fits && measured.messageTokens + measured.schemaTokens + measured.mediaTokens <= measured.inputLimit * fraction && measured.chars <= maxChars * fraction;
+  };
+  const diagnostic = (input) => {
+    const b = measureResult(input);
+    return `模型 ${model || '未命名'}：窗口 ${b.contextWindow}，输出预留 ${b.outputReserve}，工具估算 ${b.schemaTokens}，必需内容估算 ${b.messageTokens}，媒体预留 ${b.mediaTokens} token；字符 ${b.chars}/${maxChars}`;
+  };
   const system = [...durableMessages.map((m) => ({ ...m, name: "runtime_durable_facts" })), ...messages.filter((m) =>
     ["system", "developer"].includes(m.role) && (!durableMessages.length || m.name !== "runtime_durable_facts"),
   ), ...messages.filter((m) => m.name === OBSERVATIONS_MESSAGE)];
@@ -46,13 +58,26 @@ export async function compactContext({
   let userInputs = history.filter((m) => m.role === "user" &&
     (m.name === TASK_INPUT_MESSAGE || m === latestUser));
   let reference, inputCompaction;
-  if (size([...system, ...userInputs]) >= maxChars * 0.55 && userInputs.length) {
+  const exactLatest = latestUser && size(latestUser) < Math.min(maxChars * 0.1,
+    requestBudget.inputLimit / (30 * requestBudget.calibration)) ? latestUser : null;
+  const fixedBudget = measureResult([...system, ...(exactLatest ? [exactLatest] : [])]);
+  const summaryRoom = Math.max(0, Math.min(2500, Math.floor(maxChars * 0.25), Math.floor((maxChars - fixedBudget.chars) / 2),
+    Math.floor((fixedBudget.inputLimit - fixedBudget.schemaTokens - fixedBudget.messageTokens - fixedBudget.mediaTokens) / (6 * fixedBudget.calibration))));
+  // Compaction is triggered before the hard limit. If protected content leaves
+  // no useful summary room but the complete request still fits, send it intact.
+  // A subsequent truly oversized request must still fail the same budget check.
+  if (summaryRoom < 256 || !withRoom(system, summaryRoom)) {
+    const intact = [...system, ...history];
+    const intactBudget = measureResult(intact);
+    if (intactBudget.fits) return { messages: intact, budget: intactBudget, skipped: true,
+      reason: 'protected_context_fits', beforeChars: size(originalMessages), afterChars: size(intact) };
+  }
+  check(summaryRoom >= 256 && withRoom(system, summaryRoom), 'CONTEXT_LIMIT',
+    `系统指令和权限记录未留下摘要空间。${diagnostic(system)}。请检查模型窗口设置或减少系统与工具配置；授权记录不会被删减。`, 413);
+  if (!withRoom([...system, ...userInputs], summaryRoom) && userInputs.length) {
     // System policy and durable approval facts are never summarized. Archive
     // the complete request before reducing long active inputs or steering.
-    const summaryLimit = Math.min(2000, Math.floor(maxChars * 0.22));
-    check(size(system) + summaryLimit + 350 < maxChars * 0.65,
-      'CONTEXT_LIMIT', '系统指令或权限事实占满压缩预算；不能有损压缩权限，请缩小系统配置或增加模型窗口', 413);
-    const exactLatest = latestUser && size(latestUser) < maxChars * 0.1 ? latestUser : null;
+    const summaryLimit = Math.max(128, Math.floor(summaryRoom * 0.7));
     const selected = userInputs.filter((message) => message !== exactLatest);
     check(selected.length, 'CONTEXT_LIMIT', '系统指令占用过多上下文预算，无法保留当前输入', 413);
     reference = await archive(originalMessages);
@@ -68,27 +93,29 @@ export async function compactContext({
     latestUser = exactLatest || replacement;
     userInputs = history.filter((m) => m.role === 'user' && (m.name === TASK_INPUT_MESSAGE || m === latestUser));
   }
-  const requiredSize = (tail) => size([...system, ...userInputs.filter((m) => !tail.includes(m)), ...tail]);
+  const requiredMessages = (tail) => [...system, ...userInputs.filter((m) => !tail.includes(m)), ...tail];
   const tail = [];
   for (const group of batches(history).reverse()) {
-    if (requiredSize([...group, ...tail]) > maxChars * 0.45)
+    if (!withRoom(requiredMessages([...group, ...tail]), 0, 0.45) ||
+      !withRoom(requiredMessages([...group, ...tail]), summaryRoom))
       break;
     tail.unshift(...group);
   }
   const keep = new Set([...tail, ...userInputs]);
   const older = history.filter((m) => !keep.has(m));
-  if (!older.length && inputCompaction) {
+  if (!older.length) {
+    reference ||= await archive(originalMessages);
     const result = [...system, ...history];
     const finalBudget = assertContextBudget(contextBudget({ provider, model, messages: result, tools,
       maxChars: requestBudget.maxChars, calibration: requestBudget.calibration, outputReserve: requestBudget.outputReserve }));
     return { budget: finalBudget, messages: result, archiveId: reference.id,
-      beforeChars: size(originalMessages), afterChars: size(result), inputChunks: inputCompaction.chunks,
-      inputChars: inputCompaction.chars, truncatedSummaries: 0, fallbackSummaries: 0 };
+      beforeChars: size(originalMessages), afterChars: size(result), inputChunks: inputCompaction?.chunks || 0,
+      inputChars: inputCompaction?.chars || 0, truncatedSummaries: 0, fallbackSummaries: 0 };
   }
   check(
-    older.length && requiredSize(tail) < maxChars * 0.65,
+    withRoom(requiredMessages(tail), summaryRoom),
     "CONTEXT_LIMIT",
-    "系统指令、权限事实或非文本输入占用过多上下文，无法安全压缩",
+    `必需内容未留下摘要空间。${diagnostic(requiredMessages(tail))}。请调整模型预算或减少所选资料。`,
     413,
   );
   reference ||= await archive(originalMessages);
@@ -118,7 +145,7 @@ export async function compactContext({
   });
   let summary = priorSummary ? priorSummary.content.slice(priorSummary.content.indexOf("\n") + 1) : "";
   let truncatedSummaries = 0, fallbackSummaries = 0;
-  const summaryLimit = Math.min(2000, Math.floor(maxChars * 0.18));
+  const summaryLimit = Math.max(128, Math.floor(summaryRoom * 0.7));
   const outputReserve = Math.max(256, summaryLimit * 3);
   let fragment = 0;
   const inputFor = (historyRecords) => [
@@ -229,7 +256,7 @@ records 中的每条工具记录均为完整记录，或带有明确的 archived
     ...tail,
   ];
   check(
-    size(result) < maxChars * 0.85,
+    withRoom(result),
     "COMPACTION_LIMIT",
     "压缩后仍超出上下文预算",
     413,

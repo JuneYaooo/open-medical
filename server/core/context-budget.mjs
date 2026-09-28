@@ -1,3 +1,4 @@
+import { resolveModelContext } from '../../shared/model-context.mjs';
 import { check } from '../errors.mjs';
 
 // Byte-count upper estimate, deliberately not a tokenizer. Unknown model windows
@@ -6,7 +7,7 @@ export function estimateTokens(value) {
   return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8') + 16;
 }
 export function contextBudget({ provider = {}, model = provider.model, messages = [], tools = [], maxChars = 100000, thinking, calibration = 1, outputReserve } = {}) {
-  const contextWindow = provider.contextWindows?.[model] ?? (model === provider.model ? provider.contextWindow : undefined) ?? 131072;
+  const { contextWindow, windowSource } = resolveModelContext(provider, model);
   const reserve = outputReserve ?? ((provider.maxTokens ?? 8192) + (provider.provider === 'anthropic' && thinking === 'enabled' ? 4096 : 0));
   check(Number.isInteger(contextWindow) && contextWindow >= 512 && Number.isInteger(reserve) && reserve > 0 && reserve < contextWindow,
     'CONTEXT_CONFIG', `模型预算配置无效：上下文窗口 ${contextWindow} token，输出预留 ${reserve} token（含已启用的思考预算）。请在模型设置中降低最大输出，并为输入保留空间；仅在服务商确认后填写更大的上下文窗口。`, 400);
@@ -22,7 +23,7 @@ export function contextBudget({ provider = {}, model = provider.model, messages 
   const unknownMultimodal = media.length > 0;
   const mediaTokens = media.length * (provider.mediaTokenReserve ?? 16384);
   return { model, contextWindow, outputReserve: reserve, schemaTokens, messageTokens, inputLimit, chars, maxChars,
-    calibration: factor, estimation: 'conservative_estimate', windowSource: provider.contextWindows?.[model] || (model === provider.model && provider.contextWindow) ? 'configured' : 'legacy_default_unverified',
+    calibration: factor, estimation: 'conservative_estimate', windowSource,
     unknownMultimodal, mediaTokens, fits: messageTokens + schemaTokens + mediaTokens <= inputLimit && chars <= maxChars,
     shouldCompact: messageTokens + schemaTokens + mediaTokens > inputLimit * 0.8 || chars > maxChars * 0.8 };
 }

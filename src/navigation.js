@@ -1,7 +1,7 @@
 // Only opaque record IDs belong in navigation; never put chart contents in URLs.
 export const VIEW_LABELS = {
-  settings: "设置", home: "新建任务", patients: "患者", followups: "随访", research: "临床试验",
-  "data-analysis": "科研统计", projects: "项目", tools: "工具", tasks: "任务",
+  agenda: "今日待办", settings: "设置", home: "新建任务", patients: "患者", followups: "随访", research: "临床试验",
+  "data-analysis": "科研统计", projects: "项目文件", tools: "资料与工具", tasks: "任务记录",
   knowledge: "知识库", literature: "文献检索", "clinical-ref": "临床速查",
   cases: "病例库", drg: "DRG", review: "待复核", history: "任务记录",
   workspaces: "项目工作区", workbench: "任务工作区",

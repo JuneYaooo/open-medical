@@ -16,7 +16,7 @@ test('browser long pasted task chunks completely, finishes and retains the origi
  }}});
  const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(async()=>{await browser.close();for(const fn of clean)await fn();});
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(f.origin);await page.getByRole('textbox',{name:'医疗任务内容'}).fill(input);assert.ok(await page.getByRole('textbox',{name:'医疗任务内容'}).inputValue()===input);await page.getByRole('button',{name:'发送任务',exact:true}).click();
+ await page.goto(f.origin);await page.getByRole('textbox',{name:'任务内容'}).fill(input);assert.ok(await page.getByRole('textbox',{name:'任务内容'}).inputValue()===input);await page.getByRole('button',{name:'发送任务',exact:true}).click();
  let finished;
  for(let i=0;i<100;i++){
   const rows=(await f.json('/api/sessions')).data.sessions;
@@ -29,6 +29,6 @@ test('browser long pasted task chunks completely, finishes and retains the origi
  const sessions=(await f.json('/api/sessions')).data.sessions;assert.equal(sessions.length,1);const s=(await f.json('/api/sessions/'+sessions[0].id)).data;
  assert.equal(s.runs.at(-1).status,'completed');assert.ok(s.messages.some(m=>m.role==='user'&&m.content===input));
  await page.reload();const saved=(await f.json('/api/sessions/'+s.id)).data;assert.ok(saved.messages.some(m=>m.role==='user'&&m.content===input));assert.deepEqual(errors,[]);
- await page.goto(f.origin);const overflow='x'.repeat(200001);await page.getByRole('textbox',{name:'医疗任务内容'}).fill(overflow);await page.getByRole('button',{name:'发送任务',exact:true}).click();await page.getByRole('alert').filter({hasText:'任务超过 20 万字符，请拆成多个任务或上传为资料；输入内容已保留。'}).waitFor();assert.equal((await page.getByRole('textbox',{name:'医疗任务内容'}).inputValue()).length,overflow.length);assert.equal((await f.json('/api/sessions')).data.sessions.length,1);
+ await page.goto(f.origin);const overflow='x'.repeat(200001);await page.getByRole('textbox',{name:'任务内容'}).fill(overflow);await page.getByRole('button',{name:'发送任务',exact:true}).click();await page.getByRole('alert').filter({hasText:'任务超过 20 万字符，请拆成多个任务或上传为资料；输入内容已保留。'}).waitFor();assert.equal((await page.getByRole('textbox',{name:'任务内容'}).inputValue()).length,overflow.length);assert.equal((await f.json('/api/sessions')).data.sessions.length,1);
  t.diagnostic(JSON.stringify({inputChars:input.length,chunks:pieces.length,status:s.runs.at(-1).status,originalRetained:true}));
 });

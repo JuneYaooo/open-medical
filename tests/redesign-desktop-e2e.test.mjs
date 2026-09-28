@@ -73,7 +73,7 @@ for (const scenario of SCENARIOS) {
   test(`桌面 · ${scenario.name}`, { skip: !canRun }, async (t) => {
     const { page, seed, origin } = await openDesktopApp(t);
     await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
     await scenario.fn({ page, seed, origin });
   });
 }

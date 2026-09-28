@@ -1,3 +1,4 @@
+import {openIntake} from "./navigation-ui.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -27,7 +28,7 @@ test('upload-first intake automatically runs, allows natural-language correction
   const page=await browser.newPage({viewport:{width:1400,height:1100}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(f.origin + "/?view=home");
-  await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await openIntake(page);
   const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   await dialog.getByRole('button',{name:'选择资料并自动解析'}).waitFor();
   await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(b=>b.textContent.includes('选择资料并自动解析'))?.disabled);
@@ -63,7 +64,7 @@ test('unreadable upload does not invoke model or create patient; manual creation
   provider.complete=async()=>{calls++;throw new Error('should not run')};
   const f=await fixture(t,{provider}),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage();await page.goto(f.origin + "/?view=home");
-  await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await openIntake(page);
   const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   await dialog.getByRole('button',{name:'选择资料并自动解析'}).waitFor();
   await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(b=>b.textContent.includes('选择资料并自动解析'))?.disabled);
@@ -90,7 +91,7 @@ test('36 real uploaded images skip one duplicate, prepare all 35 locally, restor
   const f=await fixture(t,{provider}),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(f.origin + "/?view=home");await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await page.goto(f.origin + "/?view=home");await openIntake(page);
   const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   await page.waitForFunction(()=>![...document.querySelectorAll('button')].find(b=>b.textContent.includes('选择资料并自动解析'))?.disabled);
   const paths=(await readdir(process.env.MEDICAL_BATCH_DIRECTORY)).filter(name=>/^微信图片_2025-08-19_.*\.jpg$/.test(name)).sort().map(name=>join(process.env.MEDICAL_BATCH_DIRECTORY,name));
@@ -107,7 +108,7 @@ test('36 real uploaded images skip one duplicate, prepare all 35 locally, restor
   const completedAt=source.files.map(file=>file.extraction.ocr.completedAt);
   const repeated=await f.json(`/api/sessions/${source.id}/files/${source.files[0].id}/prepare`,'POST',{});
   assert.equal(repeated.data.extraction.ocr.completedAt,completedAt[0]);
-  await page.reload();await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await page.reload();await openIntake(page);
   await dialog.getByRole('button',{name:'核对这份草稿'}).click();
   await dialog.getByRole('button',{name:'确认建档',exact:true}).waitFor();
   assert.match(await dialog.innerText(),/已载入所选任务的 35 份资料/);
@@ -125,13 +126,13 @@ test('partial upload failures do not block good files; incomplete draft requires
   const provider=new DeepSeekProvider({apiKey:'synthetic',model:'partial-ui-test'});
   provider.complete=async messages=>readBatch(messages) || (messages.filter(m=>m.role==='tool').some(m=>m.content.includes('提案已创建'))?{message:{role:'assistant',content:'待核对'}}:{message:{role:'assistant',content:'',tool_calls:[{id:'partial',type:'function',function:{name:'patient_create_propose',arguments:JSON.stringify({name:'部分资料样本',summary:'资料不完整，待补充'})}}]}});
   const f=await fixture(t,{provider}),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
-  const page=await browser.newPage();await page.goto(f.origin + "/?view=home");await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  const page=await browser.newPage();await page.goto(f.origin + "/?view=home");await openIntake(page);
   const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   await page.waitForFunction(()=>![...document.querySelectorAll('button')].find(b=>b.textContent.includes('选择资料并自动解析'))?.disabled);
   await dialog.locator('input[type=file]').setInputFiles([{name:'good.txt',mimeType:'text/plain',buffer:Buffer.from('部分资料样本 合成病史')},{name:'bad.txt',mimeType:'text/plain',buffer:Buffer.alloc(0)}]);
   await dialog.getByRole('button',{name:'确认建档',exact:true}).waitFor();
   assert.equal(await dialog.getByRole('button',{name:'确认建档',exact:true}).isDisabled(),true);
-  await page.reload();await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await page.reload();await openIntake(page);
   await dialog.getByRole('button',{name:'核对这份草稿'}).click();
   await dialog.getByRole('button',{name:'确认建档',exact:true}).waitFor();
   assert.equal(await dialog.getByRole('button',{name:'确认建档',exact:true}).isDisabled(),true);
@@ -152,7 +153,7 @@ test('new intake and explicit resume isolate multiple patients, failed uploads a
   const first=await f.session('上传资料建档');
   await f.json(`/api/sessions/${first.id}/files`,'POST',{name:'患者甲.txt',text:'患者甲的资料，仅属于患者甲。',mimeType:'text/plain'});
   const page=await browser.newPage();await page.goto(f.origin + "/?view=home");
-  const open=()=>page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  const open=()=>openIntake(page);
   await open();const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   const task=name=>dialog.getByRole('article',{name:`建档任务：${name}`});
   await task('患者甲.txt').waitFor();
@@ -215,7 +216,7 @@ test('background intake survives closing during upload, navigation and reload; p
   const f=await fixture(t,{provider}),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage();
   await page.route('**/api/sessions/*/files',async route=>{if(route.request().method()==='POST') await uploadGate;await route.continue();});
-  await page.goto(f.origin + "/?view=home");await page.getByRole('button',{name:'上传资料建档',exact:true}).first().click();
+  await page.goto(f.origin + "/?view=home");await openIntake(page);
   const dialog=page.getByRole('dialog',{name:'上传资料建档'});
   await dialog.locator('input[type=file]').setInputFiles({name:'后台患者.txt',mimeType:'text/plain',buffer:Buffer.from('后台验收患者 病史资料')});
   await dialog.getByRole('button',{name:'后台处理，关闭窗口'}).click();await dialog.waitFor({state:'hidden'});

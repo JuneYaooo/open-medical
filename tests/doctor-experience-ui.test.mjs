@@ -1,3 +1,4 @@
+import {openTool, openPatient, openIntake} from "./navigation-ui.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
@@ -23,7 +24,7 @@ test("doctor experience: results receipt, review, communication and follow-up fo
   const patient = (await f.json("/api/patients", "POST", { name: "何跟进", patientNumber: "DEMO-TRACK" })).data;
   await f.json(`/api/patients/${patient.id}/care-tasks`, "POST", { title: "复查报告返回后核对", kind: "test", dueAt: new Date(Date.now() - 10000).toISOString() });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
+  await f.page.locator(".app-navigation").waitFor();
   await f.page.getByRole("button", { name: "今日待办", exact: true }).click();
   await f.page.locator(".agenda-item", { hasText: "复查报告返回后核对" }).click();
   await f.page.getByRole("button", { name: "登记已收到结果", exact: true }).click();
@@ -53,8 +54,8 @@ test("doctor experience: patient list paginates and search resets to matching pa
   const f = await browserFixture(t);
   for (let i = 0; i < 30; i++) await f.json("/api/patients", "POST", { name: `容量患者${i}`, patientNumber: `CAPACITY-${String(i).padStart(2, "0")}` });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("button", { name: "管理", exact: true }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await f.page.getByRole("button", { name: "患者", exact: true }).click();
   await f.page.locator(".patient-card").first().waitFor();
   assert.equal(await f.page.locator(".patient-card").count(), 24);
   await f.page.getByLabel("患者分页").getByRole("button", { name: "下一页" }).click();
@@ -69,8 +70,8 @@ test("doctor experience: paste a patient table, distinguish duplicates, import a
   const f = await browserFixture(t);
   await f.json("/api/patients", "POST", { name: "合成同名", patientNumber: "IMPORT-OLD" });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("button", { name: "管理", exact: true }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await f.page.getByRole("button", { name: "患者", exact: true }).click();
   await f.page.getByRole("button", { name: "导入已有患者", exact: true }).click();
   await f.page.getByLabel("患者表格文本", { exact: true }).fill("姓名,患者编号,出生年份\n合成同名,IMPORT-OLD,1960\n合成新患者,IMPORT-NEW,1980\n合成同名,IMPORT-OTHER,1990");
   await f.page.getByRole("button", { name: "预览并检查", exact: true }).click();
@@ -90,8 +91,8 @@ test("doctor experience: patient chart is not a project and record replacement s
   const p = (await f.json("/api/patients", "POST", { name: "合成变更复核", medications: [{ name: "合成药物", status: "active" }], labs: [{ item: "合成既往检验", value: 1, unit: "TEST", date: "2026-09-01" }] })).data;
   f.server.runtime.toolPlugins.get("patient_record_propose").execute({ patientId: p.id, summary: "核对停用记录", updateMode: "replace", medications: [{ name: "合成药物", status: "stopped", source: "合成门诊记录 L2" }] });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.locator('nav[aria-label="患者"] .session', { hasText: p.name }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openPatient(f.page, p.name);
   assert.equal(await f.page.locator('nav[aria-label="项目"] .session', { hasText: p.name }).count(), 0);
   await f.page.getByRole("button", { name: "核对变更", exact: true }).click();
   const comparison = f.page.locator(".proposal-comparison");
@@ -108,8 +109,8 @@ test("doctor experience: archived patient can be found and restored without losi
   const f = await browserFixture(t);
   const p = (await f.json("/api/patients", "POST", { name: "合成归档患者", patientNumber: "ARCHIVE-1", diagnoses: [{ name: "合成既往记录" }] })).data;
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.locator('nav[aria-label="患者"] .session', { hasText: p.name }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openPatient(f.page, p.name);
   await f.page.getByRole("button", { name: "归档患者", exact: true }).click();
   await f.page.getByLabel("患者档案状态", { exact: true }).selectOption("archived");
   await f.page.locator(".patient-card", { hasText: "ARCHIVE-1" }).click();
@@ -127,7 +128,7 @@ test("doctor experience: today's agenda opens the correct patient and tracks com
   const risk = (await f.json("/api/patients", "POST", { name: "钱复核", patientNumber: "DEMO-032", labs: [{ item: "血钾", value: 2.5, unit: "mmol/L", date: "2026-09-21" }] })).data;
   f.server.patients.ingest([{ direction: "in", text: "合成复诊反馈" }], { patientId: risk.id });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
+  await f.page.locator(".app-navigation").waitFor();
   await f.page.getByRole("button", { name: "今日待办", exact: true }).click();
   await f.page.locator(".agenda-item").first().waitFor();
   assert.match(await f.page.locator(".agenda-item").first().innerText(), /钱复核/);
@@ -147,8 +148,8 @@ test("doctor experience: same-name registration offers existing chart or explici
   const f = await browserFixture(t);
   await f.json("/api/patients", "POST", { name: "周同名", patientNumber: "DEMO-A", birthYear: 1960 });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("button", { name: "上传资料建档", exact: true }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openIntake(f.page);
   await f.page.getByRole("button", { name: "没有资料？手动建档", exact: true }).click();
   await f.page.locator(".modal-form input").first().fill("周同名");
   await f.page.locator(".identity-matches").waitFor();
@@ -165,8 +166,8 @@ test("doctor experience: previsit summary refreshes context into an unsent patie
   const f = await browserFixture(t);
   const p = (await f.json("/api/patients", "POST", { name: "陈接诊", patientNumber: "DEMO-BRIEF", medications: [{ name: "合成用药记录", status: "unknown" }], diagnoses: [{ name: "既往合成诊断", date: "2026-08-01", source: "合成病历第 2 页" }], labs: [{ item: "合成指标", value: 4, unit: "U", date: "2026-08-01" }, { item: "合成指标", value: 6, unit: "U", date: "2026-09-21" }] })).data;
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("navigation", { name: "患者", exact: true }).getByRole("button", { name: /陈接诊/ }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openPatient(f.page, "陈接诊");
   await f.page.getByRole("button", { name: "诊疗辅助", exact: true }).click();
   await f.page.getByRole("region", { name: "患者诊疗辅助面板" }).waitFor();
   await f.page.getByRole('button',{name:'编辑信息',exact:true}).click();
@@ -186,10 +187,8 @@ test("doctor experience: knowledge source review and retirement remain visible i
   const f = await browserFixture(t);
   await f.json("/api/knowledge", "POST", { title: "门诊随访合成资料", collection: "门诊资料", text: "合成随访资料，需要核对患者反馈、来源日期和后续计划。".repeat(8) });
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("button", { name: "打开", exact: true }).click();
-  await f.page.getByRole("button", { name: "知识库 指南导入与检索", exact: true }).click();
-  await f.page.getByRole("button", { name: "整页打开 knowledge", exact: true }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openTool(f.page, "知识库");
   await f.page.locator(".library-card",{hasText:"门诊资料"}).getByRole("button",{name:"打开知识库",exact:true}).click();
   await f.page.getByRole("button", { name: /门诊随访合成资料/ }).click();
   await f.page.getByRole("button", { name: "管理来源与版本", exact: true }).click();
@@ -219,8 +218,8 @@ test("doctor experience: record an unscheduled contact, append a correction and 
   const f = await browserFixture(t);
   const p = (await f.json("/api/patients", "POST", { name: "主动联系患者" })).data;
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("navigation", { name: "患者", exact: true }).getByRole("button", { name: /主动联系患者/ }).click();
+  await f.page.locator(".app-navigation").waitFor();
+  await openPatient(f.page, "主动联系患者");
   await f.page.getByRole("button", { name: "沟通与随访", exact: true }).click();
     await f.page.getByRole("button", { name: "随访计划", exact: true }).click();
   await f.page.getByRole("button", { name: "记录一次联系", exact: true }).click();
@@ -246,27 +245,20 @@ test("doctor experience: narrow screens keep context and settings reachable with
   const f = await browserFixture(t);
   const p = (await f.json("/api/patients", "POST", { name: "合成窄屏患者长姓名", patientNumber: "MOBILE-DEMO" })).data;
   await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
+  await f.page.locator(".app-navigation").waitFor();
   for (const width of [320, 390, 700]) {
     await f.page.setViewportSize({ width, height: 844 });
-    await f.page.locator(".patient-pill").click();
-    await f.page.getByLabel("搜索并切换患者", { exact: true }).fill(p.patientNumber);
-    await f.page.locator(".ps-item", { hasText: p.name }).click();
-    const bounds = await f.page.locator(".topbar button:visible").evaluateAll((buttons) => buttons.map((button) => {
-      const box = button.getBoundingClientRect();
-      return { label: button.textContent || button.title, left: box.left, right: box.right };
-    }));
-    assert.ok(bounds.every((box) => box.left >= 0 && box.right <= width), JSON.stringify({ width, bounds }));
-    await f.page.locator(".patient-pill").click();
-    const menu = await f.page.locator(".pt-switch-menu").boundingBox();
-    assert.ok(menu.x >= 0 && menu.x + menu.width <= width);
-    await f.page.keyboard.press("Escape");
-    await f.page.locator(".pt-switch-menu").waitFor({ state: "hidden" });
-    assert.equal(await f.page.locator(".patient-pill").evaluate((el) => el === document.activeElement), true);
-    await f.page.getByRole("button", { name: "运行设置", exact: true }).click();
-    await f.page.getByRole("dialog").waitFor();
-    await f.page.keyboard.press("Escape");
-    await f.page.getByRole("dialog").waitFor({ state: "hidden" });
+    await f.page.getByRole('combobox',{name:'任务关联患者'}).selectOption(p.id);
+    assert.equal(await f.page.getByRole('combobox',{name:'任务关联患者'}).inputValue(),p.id);
+    await f.page.getByRole('button',{name:'打开工作台导航'}).click();
+    const entry=f.page.getByRole('button',{name:'新建任务',exact:true});
+    const box=await entry.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=width);
+    await f.page.getByRole('button',{name:'设置与连接',exact:true}).click();
+    await f.page.getByRole('heading',{name:'设置',exact:true}).waitFor();
+    await f.page.getByRole('button',{name:'配置模型',exact:true}).click();
+    await f.page.getByRole('dialog',{name:'切换模型',exact:true}).waitFor();await f.page.keyboard.press('Escape');
+    await f.page.getByRole('dialog',{name:'切换模型',exact:true}).waitFor({state:'hidden'});
+    await f.page.getByRole('button',{name:'打开工作台导航'}).click();await entry.click();
   }
   await f.page.setViewportSize({ width: 390, height: 844 });
   await f.page.screenshot({ path: "output/doctor-workbench-8h-20260922/screenshots/mobile-patient-fixed.png" });
@@ -275,21 +267,21 @@ test("doctor experience: narrow screens keep context and settings reachable with
 
 test("new task stays focused and agenda round-trip preserves draft on desktop and narrow screens", {skip}, async(t)=>{
   const f=await browserFixture(t);await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-  await f.page.getByRole("heading",{name:"这次需要做什么？"}).waitFor();
+  await f.page.locator(".app-navigation").waitFor();
+  await f.page.getByRole("heading",{name:"想做什么，直接说。"}).waitFor();
   assert.equal(await f.page.getByRole("region",{name:"今日待办",exact:true}).count(),0);
   assert.equal(await f.page.getByRole("heading",{name:"继续最近的工作"}).count(),0);
-  const input=f.page.getByRole("textbox",{name:"医疗任务内容",exact:true});
+  const input=f.page.getByRole("textbox",{name:"任务内容",exact:true});
   assert.ok((await input.boundingBox()).y<400);
   await input.fill("保留这份未发送的任务草稿");
   await f.page.getByRole("button",{name:"今日待办",exact:true}).click();
   await f.page.getByRole("region",{name:"今日待办",exact:true}).waitFor();
-  await f.page.getByRole("button",{name:"返回新建任务",exact:true}).click();
+  await f.page.getByRole("button",{name:"新建任务",exact:true}).click();
   assert.equal(await input.inputValue(),"保留这份未发送的任务草稿");
-  await f.page.getByRole("button",{name:"更多场景",exact:true}).click();
+  await f.page.getByRole("button",{name:"更多任务模板",exact:true}).click();
   await f.page.getByRole("button",{name:/出院小结草稿/}).click();
   assert.match(await input.inputValue(),/出院小结/);
-  await f.page.getByRole("button",{name:"新建任务",exact:true}).click();
+  await f.page.getByRole("button",{name:"清除场景",exact:true}).click();
   assert.equal(await input.inputValue(),"");
   for(const width of [1200,390,320]){
     await f.page.setViewportSize({width,height:850});
@@ -300,9 +292,8 @@ test("new task stays focused and agenda round-trip preserves draft on desktop an
 
 test('Chinese literature topic opens an unsent English-search planning task with filters', {skip},async(t)=>{
  const f=await browserFixture(t);await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
- await f.page.getByRole('button',{name:'打开',exact:true}).click();
- await f.page.getByRole('button',{name:'文献检索 PubMed 检索与导入',exact:true}).click();
+  await f.page.locator(".app-navigation").waitFor();
+ await openTool(f.page, "文献检索");
  await f.page.locator('.literature-query').fill('颞叶癫痫感知性症状');
  await f.page.getByPlaceholder('起始年',{exact:true}).fill('2020');
  await f.page.getByRole('button',{name:'让助手规划检索',exact:true}).click();

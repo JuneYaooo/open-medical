@@ -1,3 +1,4 @@
+import {openTool, openPatient} from "./navigation-ui.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
@@ -40,12 +41,8 @@ test(
     ).data;
     f.server.followups.createReminder(patient, job, "待联系患者并登记反馈");
     await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-    await f.page
-      .locator('.app-navigation nav[aria-label="患者"] .session', {
-        hasText: patient.name,
-      })
-      .click();
+  await f.page.locator(".app-navigation").waitFor();
+    await openPatient(f.page, patient.name);
     await f.page.getByRole("button", { name: "用药与过敏", exact: true }).click();
     await f.page.getByRole("button", {name:"核对与编辑",exact:true}).click();
     await f.page.getByPlaceholder("药名", { exact: true }).fill("测试药品");
@@ -96,12 +93,8 @@ test(
       fullPage: true,
     });
     await f.page.reload();
- await f.page.locator(".advanced-nav>summary").click();
-    await f.page
-      .locator('.app-navigation nav[aria-label="患者"] .session', {
-        hasText: patient.name,
-      })
-      .click();
+ await f.page.locator(".app-navigation").waitFor();
+    await openPatient(f.page, patient.name);
     await f.page.getByRole("button", { name: "沟通与随访", exact: true }).click();
     await f.page.getByRole("button", { name: "随访计划", exact: true }).click();
     await f.page.getByRole("button", { name: /^随访记录/ }).click();
@@ -122,10 +115,8 @@ test(
   async (t) => {
     const f = await browserFixture(t);
     await f.page.goto(f.origin + "/?view=home");
-  await f.page.locator(".advanced-nav>summary").click();
-    await f.page.getByRole("button", { name: "打开", exact: true }).click();
-    await f.page.getByRole("button", { name: "知识库 指南导入与检索", exact:true }).click();
-    await f.page.getByRole("button", { name: /^整页打开/ }).click();
+  await f.page.locator(".app-navigation").waitFor();
+    await openTool(f.page, "知识库");
     await f.page.getByRole('button',{name:'新建知识库',exact:true}).click();
     await f.page.getByLabel('知识库名称',{exact:true}).fill('随访规范库');await f.page.getByLabel('收录什么',{exact:true}).fill('合成随访资料');await f.page.getByLabel('什么时候用',{exact:true}).fill('核对随访记录');await f.page.getByRole('button',{name:'保存知识库',exact:true}).click();await f.page.getByRole('button',{name:'打开知识库',exact:true}).click();
     await f.page.getByLabel("手动导入文件",{exact:true}).setInputFiles({

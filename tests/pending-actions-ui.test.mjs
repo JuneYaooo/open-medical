@@ -1,3 +1,4 @@
+import {openPatient} from "./navigation-ui.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -32,13 +33,8 @@ test(
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(f.origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
-    await page
-      .locator('.app-navigation nav[aria-label="患者"] .session', {
-        hasText: patient.name,
-      })
-      .first()
-      .click();
+  await page.locator(".app-navigation").waitFor();
+    await openPatient(page, patient.name);
     await page.getByRole("button", { name: "核对变更", exact: true }).waitFor();
     const edited = await f.json(`/api/patients/${patient.id}`, "PATCH", {
       expectedRevision: patient.revision,

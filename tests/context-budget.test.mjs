@@ -252,3 +252,50 @@ test('compaction associates reused call IDs with their own chronological assista
   await compactContext({ messages, provider, maxChars: 8000, archive: async () => ({ id: 'reused-calls' }) });
   assert.ok(inspected >= 6);
 });
+
+test('large authoritative policy can compact history without the old worst-case character rejection', async () => {
+  const system = { role: 'system', content: 'Policy: read only. '.repeat(450) };
+  const durable = { role: 'system', content: 'Approval pending. Do not write.' };
+  const user = { role: 'user', name: TASK_INPUT_MESSAGE, content: 'Summarize medications from the last two years.' };
+  let archived;
+  const messages = [system, user, { role: 'assistant', content: '历史资料'.repeat(14000) }];
+  const provider = { model: 'fixture', contextWindow: 32000, maxTokens: 1024,
+    complete: async () => ({ message: { role: 'assistant', content: 'Prior evidence is archived; medication review remains pending.' } }) };
+  const result = await compactContext({ provider, messages, durableMessages: [durable], maxChars: 100000,
+    archive: async value => { archived = structuredClone(value); return { id: 'policy-regression' }; } });
+  assert.deepEqual(archived, messages);
+  assert.ok(result.messages.some(m => m.content === system.content));
+  assert.ok(result.messages.some(m => m.content === durable.content));
+  assert.ok(result.messages.some(m => m.content === user.content));
+  assert.ok(result.budget.fits);
+  assert.ok(result.afterChars < result.beforeChars);
+});
+
+test('real fixed-context overflow reports budget numbers without summarizing permissions', async () => {
+  let calls = 0;
+  const provider = { model: 'small-window', contextWindow: 4096, maxTokens: 512,
+    complete: async () => { calls++; } };
+  await assert.rejects(compactContext({ provider, messages: [
+    { role: 'system', content: '权限'.repeat(3000) }, { role: 'user', content: 'current task' }],
+    archive: async () => ({ id: 'unused' }) }), error => {
+    assert.equal(error.code, 'CONTEXT_LIMIT');
+    assert.match(error.message, /small-window/);
+    assert.match(error.message, /4096/);
+    assert.match(error.message, /512/);
+    return true;
+  });
+  assert.equal(calls, 0);
+});
+
+test('soft compaction threshold cannot reject an intact request that fits near a hard limit', async () => {
+  const provider = { model: 'small', contextWindow: 4096, maxTokens: 512,
+    complete: async () => { throw new Error('must not summarize protected content'); } };
+  const messages = [{ role: 'system', content: 'x'.repeat(3150) }, { role: 'user', content: 'Summarize.' }];
+  const before = contextBudget({ provider, messages });
+  assert.ok(before.fits && before.shouldCompact);
+  const result = await compactContext({ provider, messages,
+    archive: async () => { throw new Error('no lossy transform to archive'); } });
+  assert.equal(result.skipped, true);
+  assert.deepEqual(result.messages, messages);
+  assert.ok(result.budget.fits);
+});

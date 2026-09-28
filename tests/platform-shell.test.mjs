@@ -218,8 +218,8 @@ test(
     });
     await page.goto(origin);
     await page.waitForSelector('nav[aria-label="主要业务"]', { timeout: 15000 });
-    await page.waitForSelector(".hub-scenarios");
-    await page.getByRole("navigation", { name: "通用工作" }).getByRole("button", { name: "任务", exact: true }).click();
+    await page.waitForSelector(".agent-starters");
+    await page.getByRole("navigation", { name: "通用工作" }).getByRole("button", { name: "任务记录", exact: true }).click();
     assert.match(await page.locator(".brand-caption").innerText(), /医疗工作台/);
     assert.equal(
       await page.locator('nav[aria-label="最近任务"]').count(),

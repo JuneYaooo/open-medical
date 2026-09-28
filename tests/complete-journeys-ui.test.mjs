@@ -1,3 +1,4 @@
+import {openTool} from "./navigation-ui.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -20,17 +21,15 @@ async function setup(t){
  await page.goto(f.origin);return {...f,page};
 }
 async function tool(page,name){
- await page.locator('.advanced-nav>summary').click();
- await page.getByRole('button',{name:'打开',exact:true}).click();
- await page.getByRole('button',{name,exact:true}).click();
+ await openTool(page,name.startsWith('科研')?'科研统计':'临床速查');
 }
 
 test('journey research CSV to statistics comparisons sample-size and deidentified download',{skip},async t=>{
  const f=await setup(t),{page}=f;
  // Upload through the normal attachment UI; no data API seeding.
- const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'附件',exact:true}).click();
+ const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'添加材料',exact:true}).click();
  await(await chooser).setFiles([{name:'journey-cohort.csv',mimeType:'text/csv',buffer:Buffer.from('name,group,value,binary\n合成甲,A,1,0\n合成乙,A,2,0\n合成丙,A,4,1\n合成丁,B,7,1\n合成戊,B,8,1\n合成己,B,10,0')},{name:'second-cohort.csv',mimeType:'text/csv',buffer:Buffer.from('name,group,value\n第二资料,A,999\n第二资料乙,B,1001\n第二资料丙,B,1000')}]);
- await page.getByRole('textbox',{name:'医疗任务内容'}).fill('本地整理这份合成数据，不进行临床判断');
+ await page.getByRole('textbox',{name:'任务内容'}).fill('本地整理这份合成数据，不进行临床判断');
  await page.getByRole('button',{name:'发送任务',exact:true}).click();
  await page.locator('.composer').waitFor();
  await page.waitForFunction(()=>!document.querySelector('button[title="停止执行"]'));
@@ -59,7 +58,7 @@ test('journey research CSV to statistics comparisons sample-size and deidentifie
  assert.equal(await view.locator('.research-table').count(),0);assert.equal(await view.locator('pre').count(),0);
  await page.getByRole('button',{name:'分析数据集',exact:true}).click();await view.locator('.research-table').waitFor();assert.match(await view.locator('.research-table').innerText(),/均值 1000/);
  // The advertised whole-page action must retain the same tool.
- await page.getByRole('button',{name:'整页打开 research',exact:true}).click();await page.getByRole('heading',{name:'数据分析',exact:true}).waitFor();
+ await page.reload();await page.getByRole('heading',{name:'科研统计 · 数据分析',exact:true}).waitFor();
 });
 
 test('journey all clinical scales laboratory codes and adverse-reaction calculator handoff',{skip},async t=>{
@@ -87,7 +86,7 @@ test('journey all clinical scales laboratory codes and adverse-reaction calculat
 test('journey project connect browse pin archive restore and reopen',{skip},async t=>{
  const {page}=await setup(t),root=mkdtempSync(join(tmpdir(),'journey-project-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  writeFileSync(join(root,'note.md'),'# Journey project\nOriginal text');
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目',exact:true}).click();
+ await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();
  await page.getByRole('button',{name:'连接项目',exact:true}).click();
  await page.screenshot({path:join(output,'project-connect-form.png')});
  await page.getByLabel('名称',{exact:true}).fill('完整动线项目');
@@ -98,19 +97,19 @@ test('journey project connect browse pin archive restore and reopen',{skip},asyn
  await page.getByRole('tab',{name:'文件',exact:true}).click();await page.getByText('note.md',{exact:true}).first().click();
  await page.getByText('Original text',{exact:false}).first().waitFor();
  const nav=page.getByRole('navigation',{name:'通用工作'});
- await nav.getByRole('button',{name:'项目',exact:true}).click();
+ await nav.getByRole('button',{name:'项目文件',exact:true}).click();
  await page.getByRole('button',{name:'固定完整动线项目',exact:true}).click();await page.getByRole('button',{name:'取消固定完整动线项目',exact:true}).waitFor();
  await page.getByRole('button',{name:'归档完整动线项目',exact:true}).click();
  await page.getByRole('button',{name:'已归档',exact:true}).click();await page.getByRole('button',{name:'恢复完整动线项目',exact:true}).click();
  await page.getByRole('button',{name:'使用中',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
  await page.locator('.conversation-head h1').filter({hasText:'完整动线项目'}).waitFor();
- await page.reload();await nav.getByRole('button',{name:'项目',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
+ await page.reload();await nav.getByRole('button',{name:'项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
  await page.locator('.conversation-head h1').filter({hasText:'完整动线项目'}).waitFor();assert.equal(readFileSync(join(root,'note.md'),'utf8'),'# Journey project\nOriginal text');
 });
 
 test('journey extensions authorize terminal plugin MCP memory revoke and uninstall',{skip:skip||process.env.JOURNEY_DOCKER!=='1',timeout:120000},async t=>{
  const {page,json}=await setup(t),root=mkdtempSync(join(tmpdir(),'journey-ext-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();
+ await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();
  await page.getByLabel('名称',{exact:true}).fill('扩展闭环项目');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByText('工具、插件与记忆',{exact:true}).click();
  await page.getByText('授权与运行环境',{exact:true}).click();

@@ -14,8 +14,8 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(f.origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
-  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'附件',exact:true}).click();
+  await page.locator(".app-navigation").waitFor();
+  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'添加材料',exact:true}).click();
   const book=new ExcelJS.Workbook();book.addWorksheet('检验').addRow(['synthetic Hb',100]);
   const docx=writeZip(new Map([
     ['[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'],
@@ -46,7 +46,7 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
   await page.locator('img[alt="sample.png"]').waitFor();
   assert.ok(await page.locator('img[alt="sample.png"]').evaluate(img=>img.complete && img.naturalWidth>0));
   await page.reload();
- await page.locator(".advanced-nav>summary").click();
+ await page.locator(".app-navigation").waitFor();
   await page.locator('nav[aria-label="最近任务"] button').first().click();
   await page.getByRole('button',{name:/材料/}).first().click();
   await page.getByRole('button',{name:'查看资料',exact:true}).click();
@@ -59,7 +59,7 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
 test('supplied real PDF uploads through browser and its scanned pages are readable with local OCR', {skip:!process.env.MEDICAL_INTAKE_PDF||!existsSync(chrome)}, async(t)=>{
   const f=await fixture(t),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage();await page.goto(f.origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'附件',exact:true}).click();
   await(await chooser).setFiles(process.env.MEDICAL_INTAKE_PDF);
   await page.getByText('已附加 1 份材料，将随本次任务一起发送。Enter 发送 · Shift + Enter 换行').waitFor({timeout:60000});

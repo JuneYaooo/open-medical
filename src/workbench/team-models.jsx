@@ -1,3 +1,4 @@
+import { ModelBudgetFields } from '../model-budget-fields';
 import { useEffect, useState } from "react";
 import { api } from "../agent-runtime";
 export function TeamModels({ current, refresh, disabled }) {
@@ -11,6 +12,8 @@ export function TeamModels({ current, refresh, disabled }) {
     baseUrl: "",
     model: "",
     apiKey: "",
+    contextWindow: null,
+    maxTokens: 8192,
   });
   useEffect(() => {
     let alive = true;
@@ -75,6 +78,11 @@ export function TeamModels({ current, refresh, disabled }) {
         </button>
         <details>
           <summary>添加或更新模型连接</summary>
+          <label>编辑已保存连接<select value={profiles.some(p => p.id === form.id) ? form.id : ''}
+            onChange={(e) => {
+              const profile = profiles.find(p => p.id === e.target.value);
+              setForm(profile ? { ...profile, apiKey: '' } : { id: '', provider: 'openai-compatible', baseUrl: '', model: '', apiKey: '', contextWindow: null, maxTokens: 8192 });
+            }}><option value="">新建连接</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.id} · {p.model}</option>)}</select></label>
           {[
             ["id", "连接 ID"],
             ["baseUrl", "接口地址"],
@@ -86,7 +94,7 @@ export function TeamModels({ current, refresh, disabled }) {
               <input
                 type={key === "apiKey" ? "password" : "text"}
                 value={form[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value, ...(['model', 'baseUrl'].includes(key) ? { contextWindow: null } : {}) })}
               />
             </label>
           ))}
@@ -94,7 +102,7 @@ export function TeamModels({ current, refresh, disabled }) {
             协议
             <select
               value={form.provider}
-              onChange={(e) => setForm({ ...form, provider: e.target.value })}
+              onChange={(e) => setForm({ ...form, provider: e.target.value, contextWindow: null })}
             >
               {[
                 "openai-compatible",
@@ -108,6 +116,7 @@ export function TeamModels({ current, refresh, disabled }) {
               ))}
             </select>
           </label>
+          <ModelBudgetFields form={form} onChange={(changes) => setForm({ ...form, ...changes })} />
           <button
             onClick={() =>
               execute(async () => {

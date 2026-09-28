@@ -1,3 +1,4 @@
+import {openPatient} from "./navigation-ui.mjs";
 // 真实模型 · 桌面端：Electron 壳（--e2e 隔离数据目录）+ 隔离目录内写入 model.env，
 // 验证桌面端在真实模型下咨询直接答。前置同 tests/model-e2e.test.mjs。
 import test from "node:test";
@@ -59,7 +60,7 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
     rmSync(directory,{recursive:true,force:true});
   });
   const page = await app.firstWindow();
-  await page.waitForSelector(".advanced-nav>summary", { timeout: 30000 });
+  await page.waitForSelector(".app-navigation", { timeout: 30000 });
   const origin = new URL(page.url()).origin;
   const bootstrap = await (await fetch(`${origin}/api/bootstrap`)).json();
   const token = bootstrap.token;
@@ -92,13 +93,9 @@ test("桌面 · 真实模型咨询直接答：默认档位咨询、回答实质�
     ].join("\n"),
   });
   await page.goto(origin + "/?view=home");
-  await page.locator(".advanced-nav>summary").click();
+  await page.locator(".app-navigation").waitFor();
   // 打开病例工作区
-  await page
-    .locator('.app-navigation nav[aria-label="患者"] .session', {
-      hasText: "桌面模型咨询患者",
-    })
-    .click();
+  await openPatient(page, "桌面模型咨询患者");
   await page.waitForSelector(".detail-head");
   await page.locator('button:has-text("打开病例工作区")').click();
   await page.waitForSelector(".composer");

@@ -1,3 +1,4 @@
+import { resolveModelContext } from '../../shared/model-context.mjs';
 import { CredentialVault } from './oauth.mjs';
 import { createProvider } from './providers.mjs';
 import { check, AppError } from '../errors.mjs';
@@ -20,7 +21,7 @@ export class ModelSettings {
   provider() { return this.saved.provider ? createProvider(this.saved) : this.initial; }
   public() {
     const p = this.provider();
-    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, contextWindow: p.contextWindow ?? null, maxTokens: p.maxTokens || 8192 };
+    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, contextWindow: p.contextWindow ?? null, contextDefaults: resolveModelContext(p), maxTokens: p.maxTokens || 8192 };
   }
   candidate(body) {
     check(kinds.includes(body.provider), 'MODEL_SETTINGS', '请选择支持的模型协议');

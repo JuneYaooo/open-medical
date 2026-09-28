@@ -150,7 +150,7 @@ export class AgentRuntime {
         budget = measure(messages);
         await checkpoint(structuredClone(messages));
         const { messages: _messages, ...metadata } = result;
-        emit("context.compacted", metadata);
+        emit(result.skipped ? "context.compaction_skipped" : "context.compacted", metadata);
       }
       // Preparation can be slow. Steering received during archive/compaction
       // must reach this model request, not one tool batch after it.
@@ -172,7 +172,7 @@ export class AgentRuntime {
           budget = measure(messages);
           await checkpoint(structuredClone(messages));
           const { messages: _messages, ...metadata } = result;
-          emit("context.compacted", metadata);
+          emit(result.skipped ? "context.compaction_skipped" : "context.compacted", metadata);
         }
       }
       signal.throwIfAborted();

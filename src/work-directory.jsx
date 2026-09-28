@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Stethoscope,
+  Sigma,
 } from "lucide-react";
 import { api, medicalEnabled } from "./agent-runtime";
 
@@ -194,6 +195,7 @@ const catalog = [
     BookOpen,
     "本地病例",
   ],
+  ["data-analysis", "科研统计", "上传 CSV，进行描述统计、组间比较、样本量估算与脱敏导出。", "科研工具", Sigma, "本地计算"],
 ];
 export function ToolDirectory({ config, onNavigate, onProjects, onModelSettings }) {
   const [filter, setFilter] = useState("全部"),
@@ -206,23 +208,23 @@ export function ToolDirectory({ config, onNavigate, onProjects, onModelSettings 
       "全部",
       "内容处理",
       "信息查找",
-      ...(medical ? ["医疗工具"] : []),
+      ...(medical ? ["医疗工具", "科研工具"] : []),
     ];
   const rows = catalog.filter(
     (x) =>
       (medical ||
-        !["literature", "knowledge", "clinical-ref", "cases", "drg"].includes(
+        !["literature", "knowledge", "clinical-ref", "cases", "drg", "data-analysis"].includes(
           x[0],
         )) &&
       (filter === "全部" || x[3] === filter) &&
-      `${x[1]}${x[2]}`.includes(query),
+      `${x[1]} ${x[2]} ${{"clinical-ref":"评分 计算器 不良反应 药物", "knowledge":"指南 原文 资料", "data-analysis":"数据分析 统计学 CSV", "documents":"Word Excel 报告"}[x[0]] || ""}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
   return (
     <main id="main" className="work-directory" aria-label="工具目录">
       <header className="directory-heading">
         <div>
-          <h1>工具</h1>
-          <p>选择一项业务工具，开始处理资料。</p>
+          <h1>资料与工具</h1>
+          <p>查资料或直接操作工具；需要综合处理时，在新任务中描述目标。</p>
         </div>
       </header>
       <div className="directory-toolbar">
@@ -241,7 +243,7 @@ export function ToolDirectory({ config, onNavigate, onProjects, onModelSettings 
           <Search size={17} />
           <input
             aria-label="搜索工具"
-            placeholder="搜索工具"
+            placeholder="搜索功能，如文献、量表、统计"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -287,7 +289,6 @@ export function TaskDirectory({
   patients,
   onTask,
   onProject,
-  onNew,
 }) {
   const [filter, setFilter] = useState("全部"),
     [query, setQuery] = useState("");
@@ -309,7 +310,7 @@ export function TaskDirectory({
   ]
     .filter(
       (x) =>
-        (filter === "全部" || x.type === filter) &&
+        (filter === "全部" || (filter === "待复核" ? x.reviewCount > 0 : x.type === filter)) &&
         `${x.title} ${patients.find((p) => p.id === x.patientId)?.name || ""}`
           .toLowerCase()
           .includes(query.toLowerCase()),
@@ -322,14 +323,10 @@ export function TaskDirectory({
           <h1>任务记录</h1>
           <p>继续已有对话，查看成果和需要处理的事项。</p>
         </div>
-        <button className="primary" onClick={onNew}>
-          <Plus size={17} />
-          新建任务
-        </button>
       </header>
       <div className="directory-toolbar">
         <div className="directory-filters">
-          {["全部", "一般", ...(patients.length || sessions.some(x => x.patientId) ? ["患者关联"] : []), "项目"].map((c) => (
+          {["全部", "待复核", "一般", ...(patients.length || sessions.some(x => x.patientId) ? ["患者关联"] : []), "项目"].map((c) => (
             <button
               key={c}
               aria-pressed={filter === c}
