@@ -22,7 +22,9 @@ export async function careApi(care, req, url, { body, send }) {
     if (p[2] === "ingest" && post) return reply(care.ingest(await body()), 201);
     if (p[2] === "sync" && post) return reply(await care.syncKf());
   }
-  if (p[2] === "settings" && p[3] === "test" && p.length === 4 && post) return reply(await care.testConnection());
+  if (p[2] === "settings" && p[3] === "test" && p.length === 4 && post) return reply(await care.testConnection(await body()));
+  if (p[2] === "settings" && p[3] === "kf-accounts" && p.length === 4 && get) return reply(await care.kfAccounts());
+  if (p[2] === "settings" && p[3] === "kf-link" && p.length === 4 && post) return reply(await care.kfLink());
   if (p[2] === "patients" && p.length === 4 && get) return reply(care.patientThread(p[3], q("limit")));
   if (p[2] === "patients" && p.length === 5 && p[4] === "settings") {
     if (get) return reply(care.patientSettings(p[3]));

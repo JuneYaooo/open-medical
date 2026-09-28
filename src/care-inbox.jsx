@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Bell, Inbox, Loader2, MessageSquare, RefreshCw, Send, Settings2, Stethoscope, UserCog } from "lucide-react";
 import { api } from "./agent-runtime";
 import { Modal } from "./components";
+import { CareSetup, setupProgress, takeCareSetupRequest } from "./care-setup";
 import "./care.css";
 
 const TABS = [["alerts", "提醒", Bell], ["drafts", "待回复草稿", MessageSquare], ["messages", "全部消息", Inbox], ["settings", "设置", Settings2]];
@@ -28,6 +29,11 @@ export function CareInbox({ onOpenPatient }) {
   const [sending, setSending] = useState(null);
   const [patientSettings, setPatientSettings] = useState(null);
   const [patients, setPatients] = useState(null);
+  const [setupOpen, setSetupOpen] = useState(takeCareSetupRequest);
+  const [setup, setSetup] = useState(null);
+  const [setupLater, setSetupLater] = useState(() => { try { return sessionStorage.getItem("omw-care-setup-later") === "1"; } catch { return false; } });
+  const loadSetup = useCallback(() => api("/api/care/settings").then((value) => setSetup(setupProgress(value))).catch(() => {}), []);
+  useEffect(() => { loadSetup(); }, [loadSetup]);
 
   const load = useCallback(async () => {
     const paths = { alerts: "/api/care/alerts?status=open", drafts: "/api/care/replies?status=draft", messages: "/api/care/inbox?limit=100", settings: "/api/care/settings" };
@@ -61,6 +67,13 @@ export function CareInbox({ onOpenPatient }) {
   const counts = { alerts: stats.openAlerts, drafts: stats.drafts };
   return <main id="main" className="work-directory care-inbox">
     <header className="directory-heading"><div><h1>患者消息</h1><p>实时记录企业微信患者消息；AI 分诊、科普回复草稿、重要消息提醒与自动随访。所有操作也可以直接在对话中完成。</p></div></header>
+    {setup && !setup.essential && !setupLater && <section className="care-setup-banner" aria-label="企业微信接入">
+      <div><strong>{setup.count ? "企业微信还没接入完成" : "先接入企业微信，才能自动收集和回复患者消息"}</strong>
+        <span>已完成 {setup.count}/{setup.total} 项 · 约 10 分钟，按向导一步步在企业微信管理后台操作</span></div>
+      <button type="button" className="primary" onClick={() => setSetupOpen(true)}>{setup.count ? "继续设置" : "开始设置"}</button>
+      <button type="button" className="secondary" onClick={() => { setSetupLater(true); try { sessionStorage.setItem("omw-care-setup-later", "1"); } catch { /* storage unavailable */ } }}>稍后</button>
+    </section>}
+    {setupOpen && <CareSetup onClose={() => { setSetupOpen(false); loadSetup(); load(); }} onChanged={loadSetup} />}
     <section className="care-stats" aria-label="今日统计">
       {[["今日消息", stats.messagesToday], ["待处理", stats.pending], ["未处理提醒", stats.openAlerts, stats.urgentAlerts ? "urgent" : ""], ["今日自动回复", stats.autoRepliedToday], ["待发送草稿", stats.drafts], ["进行中随访", stats.activeCampaigns]].map(([label, value, tone]) =>
         <div key={label} className={`care-stat ${tone || ""}`}><strong>{value ?? "—"}</strong><span>{label}</span></div>)}
@@ -90,7 +103,7 @@ export function CareInbox({ onOpenPatient }) {
       onAssign={(m, patientId) => act(m.id + "assign", () => api(`/api/care/messages/${m.id}/assign`, "POST", { patientId }), "已关联患者，后续该客户的消息会自动归档到此患者。")}
       onProcess={(m) => act(m.id + "process", () => api(`/api/care/messages/${m.id}/process`, "POST", {}), "已重新分诊。")}
       onMark={(m) => act(m.id + "mark", () => api(`/api/care/messages/${m.id}/mark`, "POST", { status: "handled" }), "已标记处理。")} />}
-    {tab === "settings" && data.settings && <CareSettings key={JSON.stringify(data.settings)} settings={data.settings} busy={busy === "settings"}
+    {tab === "settings" && data.settings && <CareSettings key={JSON.stringify(data.settings)} settings={data.settings} busy={busy === "settings"} onSetup={() => setSetupOpen(true)}
       onSave={(value) => act("settings", () => api("/api/care/settings", "PUT", value), "设置已保存，新消息将按此处理。")} />}
     {patientSettings && <PatientCareSettings patient={patientSettings} onClose={() => setPatientSettings(null)} onSaved={() => { setPatientSettings(null); setNotice("患者自动回复设置已保存。"); load(); }} />}
     {sending && <Modal title="确认发送给患者" onClose={() => setSending(null)}>
@@ -215,7 +228,7 @@ function CampaignList({ campaigns, busy, onAction, onOpenPatient }) {
   </li>)}</ul>;
 }
 
-function CareSettings({ settings, busy, onSave }) {
+function CareSettings({ settings, busy, onSave, onSetup }) {
   const [form, setForm] = useState(() => ({
     autoReply: { mode: "draft", categories: [], disclaimer: true, ...settings.autoReply },
     alerts: { notifyUserIds: [], escalateAfterMinutes: 30, ...settings.alerts },
@@ -258,6 +271,7 @@ function CareSettings({ settings, busy, onSave }) {
     </fieldset>
     <fieldset disabled={busy}>
       <legend>企业微信连接</legend>
+      <p className="care-setup-entry"><span>第一次配置，或不知道去哪里找这些信息？</span><button type="button" className="secondary" onClick={onSetup}>打开接入向导</button></p>
       <p className="care-hint">建议用助理的企业微信账号对接患者。保存后立即生效，无需重启；可在企业微信管理后台「应用管理」「微信客服」中找到以下信息，并把本机出口 IP 加入各应用的可信 IP。</p>
       <label>企业 ID（CorpID）<input value={form.channels.corp.corpId} onChange={(e) => setChannel("corp", { corpId: e.target.value })} placeholder="ww开头" disabled={corp.from?.corpId === "options"} /></label>
       <label>客户联系 Secret<small className="care-hint">用于同步客户、客户群，生成需成员确认的群发任务</small><input type="password" autoComplete="off" value={form.channels.corp.corpSecret} onChange={(e) => setChannel("corp", { corpSecret: e.target.value })} placeholder={secretHint(corp.hasContactSecret, corp.from?.corpSecret)} /></label>
@@ -283,7 +297,7 @@ function CareSettings({ settings, busy, onSave }) {
       <label className="care-check"><input type="checkbox" checked={form.processing.enabled} onChange={(e) => set("processing", { enabled: e.target.checked })} /><span>自动处理新消息与到期随访<small>关闭后只记录消息，不分诊、不发送。</small></span></label>
       <label className="care-check"><input type="checkbox" checked={form.processing.modelConsent} onChange={(e) => set("processing", { modelConsent: e.target.checked })} /><span>允许把患者消息发送给已配置的模型做分诊与起草<small>发送内容不含姓名和电话；未开启时只做规则识别（红旗症状仍会提醒）。</small></span></label>
     </fieldset>
-    <footer><button type="submit" disabled={busy}>{busy ? "正在保存…" : "保存设置"}</button></footer>
+    <footer><button type="submit" className="primary" disabled={busy}>{busy ? "正在保存…" : "保存设置"}</button></footer>
   </form>;
 }
 

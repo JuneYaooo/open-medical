@@ -23,6 +23,7 @@ import {
   Stethoscope,
   X,
 } from "lucide-react";
+import { requestCareSetup, setupProgress } from "./care-setup";
 import { api, medicalEnabled } from "./agent-runtime";
 
 export const MEDICAL_WORKFLOWS = [
@@ -187,7 +188,7 @@ function SetupChecklist({ modelConfigured, onModelSettings, onView }) {
     let alive = true;
     const probe = (key, path, read) => api(path).then((value) => read(value)).catch(() => null).then((value) => { if (alive) setFacts((f) => ({ ...f, [key]: value })); });
     probe("knowledge", "/api/knowledge", (v) => Array.isArray(v?.documents) ? v.documents.length > 0 : null);
-    probe("wecom", "/api/wecom/status", (v) => typeof v?.configured === "boolean" ? v.configured : null);
+    probe("wecom", "/api/care/settings", (v) => Array.isArray(v?.channels?.list) ? setupProgress(v).essential : null);
     probe("autoReply", "/api/care/settings", (v) => typeof v?.autoReply?.mode === "string" ? { mode: v.autoReply.mode, saved: Boolean(v.updatedAt) } : null);
     return () => { alive = false; };
   }, []);
@@ -195,7 +196,7 @@ function SetupChecklist({ modelConfigured, onModelSettings, onView }) {
   const items = [
     { id: "model", label: "连接模型", done: modelConfigured, state: modelConfigured ? "已连接" : "未配置", action: "去连接", open: onModelSettings },
     { id: "knowledge", label: "导入医生知识库", done: facts.knowledge === true, state: facts.knowledge == null ? "未检测" : facts.knowledge ? "已有资料" : "暂无资料", action: "导入资料", open: () => onView?.("knowledge") },
-    { id: "wecom", label: "接入企业微信", done: facts.wecom === true, state: facts.wecom == null ? "未检测" : facts.wecom ? "已配置" : "未配置", action: "设置企业微信", open: () => onView?.("care") },
+    { id: "wecom", label: "接入企业微信", done: facts.wecom === true, state: facts.wecom == null ? "未检测" : facts.wecom ? "已接入" : "未完成", action: "打开接入向导", open: () => { requestCareSetup(); onView?.("care"); } },
     { id: "autoReply", label: "设定自动回复边界", done: Boolean(facts.autoReply?.saved), state: facts.autoReply == null ? "未检测" : `${modeLabel[facts.autoReply.mode] || facts.autoReply.mode}${facts.autoReply.saved ? "" : "（默认）"}`, action: "设置自动回复", open: () => onView?.("care") },
   ];
   const remaining = items.filter((item) => !item.done).length;

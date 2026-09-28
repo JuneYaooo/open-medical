@@ -105,13 +105,15 @@ export class CareChannels {
     }
     throw new AppError("CARE_CHANNEL", "未知发送渠道", 400);
   }
-  // Checks each configured credential against WeCom without sending anything.
-  async test() {
+  // Checks each configured credential against WeCom without sending anything;
+  // `only` limits the check to some of "contact", "kf", "app".
+  async test({ only } = {}) {
     const c = this.config(), results = [];
     const run = async (id, label, configured, probe) => {
+      if (only && !only.includes(id)) return;
       if (!configured) return results.push({ id, label, ok: null, detail: "未配置" });
       try { results.push({ id, label, ok: true, detail: await probe() }); }
-      catch (error) { results.push({ id, label, ok: false, detail: error.message }); }
+      catch (error) { results.push({ id, label, ok: false, detail: error.message, ...(error.errcode ? { errcode: error.errcode } : {}), ...(error.ip ? { ip: error.ip } : {}) }); }
     };
     await run("contact", "客户联系", Boolean(c.corpId && this.wecom?.corpSecret), async () => {
       const api = new WecomApi({ corpId: c.corpId, secret: this.wecom.corpSecret, fetch: this.fetch });
@@ -127,6 +129,26 @@ export class CareChannels {
     });
     await run("app", "提醒应用", this.appReady(), async () => { await this.client("app").token(); return "凭据可用（未发送测试消息）"; });
     return { results, testedAt: new Date(this.now()).toISOString() };
+  }
+  // Accounts the saved 微信客服 Secret may manage; open_kfid is not shown in
+  // the admin console, so setup picks it from this list.
+  async kfAccounts() {
+    const c = this.config();
+    check(c.corpId && c.kfSecret, "CARE_CHANNEL", "请先填写企业 ID 和微信客服 Secret", 409);
+    const body = await this.client("kf").listKfAccounts();
+    return { accounts: (body.account_list || []).map((a) => ({ openKfId: a.open_kfid, name: a.name || a.open_kfid })), selected: c.openKfId };
+  }
+  // The customer-service link is created once per account and reused, since
+  // every call to add_contact_way mints a new link.
+  async kfLink() {
+    check(this.kfReady(), "CARE_CHANNEL", "微信客服未配置", 409);
+    const c = this.config(), saved = this.vault.get(VAULT_KEY) || {};
+    if (saved.kfLink?.openKfId === c.openKfId && saved.kfLink.url) return { url: saved.kfLink.url, createdAt: saved.kfLink.createdAt };
+    const { url } = await this.client("kf").addKfContactWay({ openKfId: c.openKfId, scene: "omw" });
+    check(typeof url === "string" && url.startsWith("https://"), "WECOM_RESPONSE", "企业微信未返回客服链接", 502);
+    const kfLink = { openKfId: c.openKfId, url, createdAt: new Date(this.now()).toISOString() };
+    this.vault.set(VAULT_KEY, { ...(this.vault.get(VAULT_KEY) || {}), kfLink });
+    return { url, createdAt: kfLink.createdAt };
   }
   async notify(userIds, text) {
     if (!userIds.length || !this.appReady()) return { ok: false, detail: "未配置企业微信应用消息或提醒对象" };

@@ -17,9 +17,10 @@ function wecomFetch(log, syncPages = []) {
     const u = new URL(url);
     log.push({ path: u.pathname, body: init.body ? JSON.parse(init.body) : null });
     const reply = (value) => new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });
-    if (u.pathname.endsWith("/gettoken")) return reply(u.searchParams.get("corpsecret") === "badipsecret" ? { errcode: 60020 } : { errcode: 0, access_token: `tok-${u.searchParams.get("corpsecret")}`, expires_in: 7200 });
+    if (u.pathname.endsWith("/gettoken")) return reply(u.searchParams.get("corpsecret") === "badipsecret" ? { errcode: 60020, errmsg: "not allow to access from your ip, hint: [x], from ip: 203.0.113.7, more info at https://open.work.weixin.qq.com/devtool/query?e=60020" } : { errcode: 0, access_token: `tok-${u.searchParams.get("corpsecret")}`, expires_in: 7200 });
     if (u.pathname.endsWith("/get_follow_user_list")) return reply({ errcode: 0, follow_user: ["assistant1"] });
     if (u.pathname.endsWith("/kf/account/list")) return reply({ errcode: 0, account_list: [{ open_kfid: "wk1", name: "术后随访助手" }] });
+    if (u.pathname.endsWith("/kf/add_contact_way")) return reply({ errcode: 0, url: `https://work.weixin.qq.com/kfid/kfc${log.length}` });
     if (u.pathname.endsWith("/kf/send_msg")) return reply({ errcode: 0, msgid: `m${log.length}` });
     if (u.pathname.endsWith("/kf/sync_msg")) return reply({ errcode: 0, ...(syncPages.shift() || { msg_list: [], has_more: 0, next_cursor: "" }) });
     if (u.pathname.endsWith("/message/send")) return reply({ errcode: 0 });
@@ -332,7 +333,36 @@ test("WeCom credentials are set on the settings page, stay write-only, and the c
   await f.json("/api/care/settings", "PUT", { channels: { kf: { secret: "badipsecret" } } });
   tested = (await f.json("/api/care/settings/test", "POST", {})).data.results;
   assert.equal(tested.find((r) => r.id === "kf").ok, false);
-  assert.match(tested.find((r) => r.id === "kf").detail, /可信 IP/);
+  assert.match(tested.find((r) => r.id === "kf").detail, /可信 IP.*203\.0\.113\.7/);
+  assert.equal(tested.find((r) => r.id === "kf").ip, "203.0.113.7");
+  assert.equal(tested.find((r) => r.id === "kf").errcode, 60020);
+});
+
+test("the setup wizard lists 微信客服 accounts, tests one step at a time, sends a test alert and reuses the patient link", async (t) => {
+  const f = await setup(t);
+  assert.equal((await f.json("/api/care/settings/kf-accounts")).status, 409);
+  await f.json("/api/care/settings", "PUT", { channels: { kf: { secret: "kfsecret" } } });
+  const listed = (await f.json("/api/care/settings/kf-accounts")).data;
+  assert.deepEqual(listed.accounts, [{ openKfId: "wk1", name: "术后随访助手" }]);
+  await enableKf(f);
+  const only = (await f.json("/api/care/settings/test", "POST", { only: ["kf"] })).data;
+  assert.deepEqual(only.results.map((r) => r.id), ["kf"]);
+  assert.equal(only.results[0].ok, true);
+
+  const notified = (await f.json("/api/care/settings/test", "POST", { only: [], notify: true })).data;
+  assert.equal(notified.notify.ok, true);
+  assert.deepEqual(f.log.find((e) => e.path.endsWith("/message/send")).body.touser, "doctor1");
+
+  const link = (await f.json("/api/care/settings/kf-link", "POST", {})).data;
+  assert.match(link.url, /^https:\/\/work\.weixin\.qq\.com\/kfid\//);
+  assert.equal((await f.json("/api/care/settings/kf-link", "POST", {})).data.url, link.url);
+  assert.equal(f.log.filter((e) => e.path.endsWith("/kf/add_contact_way")).length, 1);
+  assert.equal(JSON.stringify((await f.json("/api/care/settings")).data).includes("kfsecret"), false);
+
+  assert.equal((await f.json("/api/care/settings")).data.channels.kfLastInboundAt, null);
+  f.syncPages.push({ msg_list: [{ msgid: "t1", external_userid: "wmNEW", origin: 3, send_time: Math.floor(Date.now() / 1000), msgtype: "text", text: { content: "测试" } }], has_more: 0, next_cursor: "c1" });
+  await f.json("/api/care/sync", "POST", {});
+  assert.ok((await f.json("/api/care/settings")).data.channels.kfLastInboundAt);
 });
 
 test("微信客服 is polled without callbacks, backs off on errors, keeps first-sync history untriaged and respects the 48h window", async (t) => {

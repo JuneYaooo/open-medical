@@ -11,7 +11,15 @@ const HINTS = {
   95004: "微信客服账号 open_kfid 不正确", 95007: "消息已过期或无效",
 };
 export const wecomHint = (errcode) => HINTS[errcode] || "";
-const rejected = (errcode) => new AppError("WECOM_API", `企业微信拒绝请求（错误码 ${errcode}${HINTS[errcode] ? `：${HINTS[errcode]}` : ""}）`, 502);
+// WeCom names the caller's public IP in 60020 errors ("from ip: 1.2.3.4"),
+// which is exactly what the admin must add to the trusted-IP list.
+const failure = (body, prefix) => {
+  const ip = body.errcode === 60020 ? String(body.errmsg || "").match(/from ip:\s*([0-9a-fA-F.:]+)/)?.[1] || "" : "";
+  const error = new AppError("WECOM_API", `${prefix}（错误码 ${body.errcode}${HINTS[body.errcode] ? `：${HINTS[body.errcode]}` : ""}${ip ? `，本机公网 IP 为 ${ip}` : ""}）`, 502);
+  error.errcode = body.errcode;
+  if (ip) error.ip = ip;
+  return error;
+};
 
 // Minimal WeCom REST client for one (corpId, secret) pair: cached access
 // token, no automatic retry of POSTs (a lost response must never resend).
@@ -38,11 +46,7 @@ export class WecomApi {
   async token() {
     if (this.cached && this.cached.expires > this.now()) return this.cached.value;
     const body = await this.json(`${BASE}/gettoken?corpid=${encodeURIComponent(this.corpId)}&corpsecret=${encodeURIComponent(this.secret)}`);
-    if (body.errcode !== 0 || !body.access_token) {
-      const error = new AppError("WECOM_API", `企业微信凭据无效（错误码 ${body.errcode}${HINTS[body.errcode] ? `：${HINTS[body.errcode]}` : ""}）`, 502);
-      error.errcode = body.errcode;
-      throw error;
-    }
+    if (body.errcode !== 0 || !body.access_token) throw failure(body, "企业微信凭据无效");
     this.cached = { value: body.access_token, expires: this.now() + (Math.max(60, Number(body.expires_in) || 7200) - 300) * 1000 };
     return this.cached.value;
   }
@@ -54,11 +58,7 @@ export class WecomApi {
       body: JSON.stringify(data),
     });
     if ([40014, 42001, 40001].includes(body.errcode)) this.cached = null;
-    if (body.errcode !== 0) {
-      const error = rejected(body.errcode);
-      error.errcode = body.errcode;
-      throw error;
-    }
+    if (body.errcode !== 0) throw failure(body, "企业微信拒绝请求");
     return body;
   }
   // 微信客服账号列表：用于核对 open_kfid 是否授权给了当前 Secret。
@@ -70,12 +70,12 @@ export class WecomApi {
     const query = new URLSearchParams({ access_token: token, ...params });
     const body = await this.json(`${BASE}${path}?${query}`);
     if ([40014, 42001, 40001].includes(body.errcode)) this.cached = null;
-    if (body.errcode !== 0) {
-      const error = rejected(body.errcode);
-      error.errcode = body.errcode;
-      throw error;
-    }
+    if (body.errcode !== 0) throw failure(body, "企业微信拒绝请求");
     return body;
+  }
+  // 微信客服：获取客服链接，患者在微信中打开即可发起咨询。
+  addKfContactWay({ openKfId, scene }) {
+    return this.post("/kf/add_contact_way", { open_kfid: openKfId, scene });
   }
   // 微信客服：拉取客户消息（回调只带 token，不带消息体）。
   syncKf({ cursor = "", token = "", openKfId, limit = 1000 }) {

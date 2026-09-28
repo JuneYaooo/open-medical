@@ -91,7 +91,8 @@ export class CareEngine {
   publicSettings() {
     const channels = this.channels.public();
     return { ...this.settings(), updatedAt: this.rawSettings().updatedAt || null,
-      channels: { corp: this.channels.wecom?.publicConfig() || null, kf: channels.kf, app: channels.app, list: channels.channels, notifier: channels.notifier, kfSync: this.kfStatus() } };
+      channels: { corp: this.channels.wecom?.publicConfig() || null, kf: channels.kf, app: channels.app, list: channels.channels, notifier: channels.notifier, kfSync: this.kfStatus(),
+        kfLastInboundAt: this.db.prepare("SELECT MAX(time) t FROM patient_messages WHERE channel='wecom-kf' AND direction='in'").get().t || null } };
   }
   saveSettings(input = {}) {
     check(input && typeof input === "object", "INVALID_INPUT", "设置必须是对象");
@@ -691,7 +692,19 @@ export class CareEngine {
       if (status !== "sent") this.createAlert({ patientId: c.patientId, level: "attention", key: `campaign:${c.id}:${step.id}:send`, reason: `随访「${c.name}」企业微信任务未发出：${detail}` });
     }
   }
-  testConnection() { return this.channels.test(); }
+  async testConnection(input = {}) {
+    const only = Array.isArray(input.only) ? input.only.filter((id) => ["contact", "kf", "app"].includes(id)) : undefined;
+    const result = await this.channels.test({ only });
+    if (input.notify) {
+      const userIds = this.settings().alerts.notifyUserIds;
+      check(userIds.length, "INVALID_INPUT", "请先填写接收提醒的成员 UserID", 400);
+      const sent = await this.channels.notify(userIds, "【患者消息提醒 · 测试】企业微信提醒已接通。患者出现红旗症状或重要消息时，你会在这里收到通知。");
+      result.notify = { ok: sent.ok, detail: sent.ok ? `已发送给 ${userIds.join("、")}，请在企业微信中查收` : sent.detail };
+    }
+    return result;
+  }
+  kfLink() { return this.channels.kfLink(); }
+  kfAccounts() { return this.channels.kfAccounts(); }
 
   // ---------- proposals (chat-initiated writes) ----------
   normalizeProposal(type, payload = {}) {
