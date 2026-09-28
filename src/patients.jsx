@@ -1,3 +1,4 @@
+import { CampaignPanel } from "./care-inbox";
 import { ChatFollowupsPanel } from "./chat-followups";
 import { WeComPanel } from "./wecom-panel";
 import { PatientDashboard } from "./patient-dashboard";
@@ -913,7 +914,9 @@ export function PatientsView({
                   </div>
                 </div>
               ))}
-              {!followups.length && <p className="muted">还没有随访计划。</p>}
+              {!followups.length && <p className="muted">还没有本机提醒计划。</p>}
+              <h3>自动随访（企业微信发送并收集回复）</h3>
+              <CampaignPanel key={`campaigns-${detail.id}`} patientId={detail.id} />
             </div>
           )}
         </>

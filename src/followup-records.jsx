@@ -257,7 +257,7 @@ export function FollowupRecords({
               </b>
               <small>
                 {record.kind === "manual-contact"
-                  ? "主动联系"
+                  ? { campaign: "自动随访收集", chat: "聊天随访归档" }[record.source?.kind] || "主动联系"
                   : `计划时间：${date(record.dueAt)}`}
               </small>
               {record.outcome ? (

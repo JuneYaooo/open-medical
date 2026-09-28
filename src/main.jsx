@@ -1,4 +1,6 @@
 import { DoctorAgenda } from "./doctor-agenda";
+import { CareInbox } from "./care-inbox";
+import { PendingTray, PENDING_REFRESH_EVENT } from "./pending-tray";
 import { AppSettingsView } from "./app-settings";
 import { readLocation, writeLocation, VIEW_LABELS } from "./navigation";
 import { conversationRunIds } from "../shared/patient-conversations.mjs";
@@ -39,6 +41,7 @@ import {
   PencilLine,
   CalendarClock,
   AtSign,
+  Inbox,
 } from "lucide-react";
 import {
   api,
@@ -1006,6 +1009,8 @@ function App() {
         },
         (event) => {
           started = true;
+          if (event.type === "tool.complete" && /^care_/.test(event.payload?.tool || ""))
+            window.dispatchEvent(new Event(PENDING_REFRESH_EVENT));
           if (
             event.type === "tool.complete" &&
             RETRIEVAL_TOOL.test(event.payload?.tool || "")
@@ -1290,6 +1295,7 @@ function App() {
     : null;
   return (
     <div className={`agent-app v6-shell mode-${view === "workspaces" ? workspaceDisplay : displayMode} ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
+      {medicalEnabled(config) && <PendingTray />}
       {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
       <a href="#main-content" className="skip-link">
         跳到工作区
@@ -1394,7 +1400,7 @@ function App() {
           {medical && <>
             <p className="business-nav-label">医疗工作</p>
             <nav className="business-nav" aria-label="主要业务">
-              {[["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={18}/>{label}</button>)}
+              {[["care", "患者消息", Inbox], ["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={18}/>{label}</button>)}
             </nav>
           </>}
           <nav className="business-nav resource-nav" aria-label="资料与工具">
@@ -1442,7 +1448,7 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "agenda" && medical ? (<main id="main" className="work-directory"><header className="directory-heading"><div><h1>今日待办</h1><p>处理患者消息、随访和待复核成果。</p></div></header><DoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
+          ) : view === "care" && medical ? (<CareInbox onOpenPatient={(id) => openPatient({ id, tab: "messages" })} />) : view === "agenda" && medical ? (<main id="main" className="work-directory"><header className="directory-heading"><div><h1>今日待办</h1><p>处理患者消息、随访和待复核成果。</p></div></header><DoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}

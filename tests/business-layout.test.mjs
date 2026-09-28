@@ -10,7 +10,7 @@ test('business shell keeps patient access, isolates care/assistance and persists
  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(f.origin);
  const nav=page.getByRole('navigation',{name:'主要业务'});await nav.waitFor();
- assert.deepEqual(await nav.getByRole('button').allTextContents(),['今日待办','患者','随访','临床试验']);
+ assert.deepEqual(await nav.getByRole('button').allTextContents(),['患者消息','今日待办','患者','随访','临床试验']);
  await nav.getByRole('button',{name:'患者',exact:true}).click();
  await page.locator('.patient-card',{hasText:'界面验收患者'}).click();
  const panel=page.getByRole('region',{name:'患者资料面板'});await panel.waitFor();

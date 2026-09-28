@@ -35,6 +35,9 @@ import {
 } from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
 import { WeComConnector } from "./wecom.mjs";
+import { CareEngine } from "./care/engine.mjs";
+import { careTools } from "./care/tools.mjs";
+import { careApi } from "./care/api.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
@@ -227,6 +230,7 @@ export function createServer(options = {}) {
     patients: () => patients,
     followups: () => followups,
     cases: () => cases,
+    care: () => care,
     copySourceMaterials: (sourceId, targetId, fileIds, sourceInput) => {
       const source = sessionBridge.get(sourceId);
       if (sourceInput) sessionBridge.addMaterial(targetId, { name: "建档时的对话输入.txt", text: sourceInput });
@@ -454,6 +458,7 @@ export function createServer(options = {}) {
       plugins: [
         ...knowledgeToolPlugins,
         ...localPlugins(pendingActionTools(pending, doctor)),
+        ...localPlugins(careTools(() => care, pending)),
       ],
       // 会话叠层：医疗核心工具经 runTool 分发这些插件（材料 sources、
       // readOnly 约定与旧医疗会话一致）。
@@ -461,6 +466,7 @@ export function createServer(options = {}) {
         ...knowledgeToolPlugins,
         ...localPlugins(researchToolPlugins(research)),
         ...localPlugins(pendingActionTools(pending, doctor)),
+        ...localPlugins(careTools(() => care, pending)),
       ],
       skills,
       doctor,
@@ -488,6 +494,7 @@ export function createServer(options = {}) {
       ...knowledgeToolPlugins,
       ...localPlugins(researchToolPlugins(research)),
       ...localPlugins(pendingActionTools(pending, doctor)),
+      ...localPlugins(careTools(() => care, pending)),
     ],
     contextBudget:
       options.runtimeOptions?.maxContextChars ??
@@ -553,7 +560,7 @@ export function createServer(options = {}) {
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
   const patientImporter = new PatientImporter(store, patients);
-  runtime.registerPlugins(pendingActionTools(pending, doctor));
+  runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending)]);
   const swapProvider = (next) => {
     provider = next;
     runtime.provider = provider;
@@ -562,7 +569,13 @@ export function createServer(options = {}) {
     workspaces.provider = provider;
     workspaces.agent.provider = provider;
   };
-  const wecom = new WeComConnector(store, patients, options.wecom);
+  const wecom = new WeComConnector(store, patients, { vault: models.vault, ...options.wecom });
+  const care = new CareEngine({
+    store, patients, followups, wecom, guidelines, patientBrief,
+    vault: models.vault,
+    provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null,
+    ...options.care,
+  });
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -760,7 +773,10 @@ export function createServer(options = {}) {
           401,
         );
         const b = await body(req);
-        return send(res, 201, patients.ingest(b.messages));
+        const ingested = patients.ingest(b.messages);
+        care.discover();
+        care.kick();
+        return send(res, 201, ingested);
       }
       if (path === "/api/bootstrap" && req.method === "GET")
         return send(res, 200, {
@@ -1254,6 +1270,7 @@ export function createServer(options = {}) {
             );
         }
       }
+      if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
       if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, { contacts: wecom.contacts() });
@@ -2043,12 +2060,15 @@ export function createServer(options = {}) {
   server.wechat = wechat;
   server.wecom = wecom;
   server.chatFollowups = chatFollowups;
+  server.care = care;
+  server.pendingActions = pending;
   server.once("listening", () => {
     scheduler.start();
     workspaces.scheduler.start();
     workspaces.recovery.start();
     followups.start();
     chatFollowups.start();
+    care.start();
   });
   server.shutdown = async () => {
     workspaces.stopping = true;
@@ -2057,6 +2077,7 @@ export function createServer(options = {}) {
     workspaces.recovery.stop();
     followups.stop();
     await chatFollowups.stop();
+    care.stop();
     for (const id of workspaces.active.keys()) workspaces.interrupt(id);
     for (const id of runtime.active.keys()) runtime.cancel(id);
     for (const id of workspaces.active.keys())
@@ -2075,6 +2096,7 @@ export function createServer(options = {}) {
     if (databasePath === ":memory:")
       { rmSync(vectorDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); rmSync(knowledgeRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
     await followups.drain();
+    await care.drain();
     sockets.close();
     store.close();
   };

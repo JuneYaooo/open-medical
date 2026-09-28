@@ -1,3 +1,4 @@
+import { CampaignPanel } from "./care-inbox";
 import { ChatFollowupsPanel } from "./chat-followups";
 import { Modal } from "./components";
 import { patientOptionLabel } from "./patient-labels";
@@ -30,7 +31,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [visibleUpcoming, setVisibleUpcoming] = useState(20);
   const [deleting, setDeleting] = useState(null);
-  const [section, setSection] = useState(() => new URLSearchParams(window.location.search).get("followupTab") === "chat" ? "chats" : "queue");
+  const [section, setSection] = useState(() => { const tab = new URLSearchParams(window.location.search).get("followupTab"); return { chat: "chats", auto: "auto" }[tab] || "queue"; });
   const [plans, setPlans] = useState([]);
   const [patients, setPatients] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -198,8 +199,10 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
           >
             计划与模板
           </button>
+          <button className={section === "auto" ? "active" : ""} onClick={() => setSection("auto")}>自动随访</button>
           <button className={section === "chats" ? "active" : ""} onClick={() => setSection("chats")}>聊天随访</button>
         </nav>
+        {section === "auto" && <section className="followups-section"><p className="muted">自动随访会按计划通过企业微信给患者发送问题，收集回复并写入「随访待办」中的随访记录；「计划与模板」只在本机提醒医生联系患者。</p><CampaignPanel onOpenPatient={onOpenPatient} /></section>}
         {section === "chats" && <ChatFollowupsPanel patients={patients} onSettings={onSettings} />}
         <div hidden={section !== "queue"}>
           <FollowupRecords

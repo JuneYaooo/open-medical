@@ -1,3 +1,4 @@
+import { presetFor } from '../shared/model-presets.mjs';
 import {openTool, openIntake} from "./navigation-ui.mjs";
 // Explicit live provider opt-in. All business data is synthetic and databases isolated.
 import test from 'node:test';
@@ -41,10 +42,11 @@ async function send(page,text){await page.getByRole('textbox',{name:'医疗工�
 test('live journey empty settings to real connection first task restart and retained encrypted settings',{skip:!enabled,timeout:300000},async t=>{
  const f=await start(t,{blank:true}),{page}=f,provider=createProvider();assert.ok(provider.apiKey,'Project model configuration required');
  await page.locator('button[title^="当前模型"]').first().click();
- const dialog=page.getByRole('dialog');await dialog.getByLabel('服务商 / 接口协议').selectOption(provider.provider);
- await dialog.getByLabel('接口地址',{exact:true}).fill(provider.baseUrl);await dialog.getByLabel('模型名称',{exact:true}).fill(provider.model);
+ const dialog=page.getByRole('dialog');const preset=presetFor(provider.provider,provider.baseUrl);await dialog.getByRole('combobox',{name:'服务商',exact:true}).selectOption(preset.id);
+ if(preset.id!=='custom')await dialog.getByText('高级选项',{exact:true}).click();
+ await dialog.getByLabel('接口地址',{exact:true}).fill(provider.baseUrl);if(preset.models.length)await dialog.getByRole('combobox',{name:'模型',exact:true}).selectOption('__custom__');await dialog.getByLabel('模型 ID',{exact:true}).fill(provider.model);
  await dialog.getByLabel(/^API Key/).fill(provider.apiKey);
- await dialog.getByRole('button',{name:'测试连接',exact:true}).click();await dialog.getByText(/已收到模型回复/).waitFor({timeout:40000});
+ await dialog.getByRole('button',{name:'测试连接',exact:true}).click();await dialog.getByText(/已连接/).waitFor({timeout:40000});
  assert.equal((await f.json('/api/model-settings')).model,'unconfigured','Test must not activate configuration');
  await dialog.getByRole('button',{name:'保存并启用',exact:true}).click();await dialog.getByText(/已保存并启用/).waitFor();
  assert.equal(await dialog.getByLabel(/^API Key/).inputValue(),'');await dialog.getByRole('button',{name:'关闭模型设置'}).click();

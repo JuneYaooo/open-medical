@@ -178,6 +178,39 @@ const dateLabel = (value) =>
     day: "numeric",
   });
 
+const SETUP_HIDDEN_KEY = "omw-setup-checklist-hidden";
+// 首次启动检查清单：各项独立探测，接口缺失或失败时显示「未检测」而不阻塞首页。
+function SetupChecklist({ modelConfigured, onModelSettings, onView }) {
+  const [facts, setFacts] = useState({});
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(SETUP_HIDDEN_KEY) === "1"; } catch { return false; } });
+  useEffect(() => {
+    let alive = true;
+    const probe = (key, path, read) => api(path).then((value) => read(value)).catch(() => null).then((value) => { if (alive) setFacts((f) => ({ ...f, [key]: value })); });
+    probe("knowledge", "/api/knowledge", (v) => Array.isArray(v?.documents) ? v.documents.length > 0 : null);
+    probe("wecom", "/api/wecom/status", (v) => typeof v?.configured === "boolean" ? v.configured : null);
+    probe("autoReply", "/api/care/settings", (v) => typeof v?.autoReply?.mode === "string" ? { mode: v.autoReply.mode, saved: Boolean(v.updatedAt) } : null);
+    return () => { alive = false; };
+  }, []);
+  const modeLabel = { off: "已关闭", draft: "草稿模式", auto: "自动回复" };
+  const items = [
+    { id: "model", label: "连接模型", done: modelConfigured, state: modelConfigured ? "已连接" : "未配置", action: "去连接", open: onModelSettings },
+    { id: "knowledge", label: "导入医生知识库", done: facts.knowledge === true, state: facts.knowledge == null ? "未检测" : facts.knowledge ? "已有资料" : "暂无资料", action: "导入资料", open: () => onView?.("knowledge") },
+    { id: "wecom", label: "接入企业微信", done: facts.wecom === true, state: facts.wecom == null ? "未检测" : facts.wecom ? "已配置" : "未配置", action: "设置企业微信", open: () => onView?.("care") },
+    { id: "autoReply", label: "设定自动回复边界", done: Boolean(facts.autoReply?.saved), state: facts.autoReply == null ? "未检测" : `${modeLabel[facts.autoReply.mode] || facts.autoReply.mode}${facts.autoReply.saved ? "" : "（默认）"}`, action: "设置自动回复", open: () => onView?.("care") },
+  ];
+  const remaining = items.filter((item) => !item.done).length;
+  if (!remaining) return null;
+  if (hidden) return <button type="button" className="setup-checklist-reopen" onClick={() => { setHidden(false); try { localStorage.removeItem(SETUP_HIDDEN_KEY); } catch { /* storage unavailable */ } }}>开始使用：还有 {remaining} 项未完成</button>;
+  return <section className="setup-checklist" aria-label="开始使用检查清单">
+    <header><strong>开始使用</strong><span>还有 {remaining} 项未完成 · 也可以直接在对话里让助手引导完成</span>
+      <button type="button" onClick={() => { setHidden(true); try { localStorage.setItem(SETUP_HIDDEN_KEY, "1"); } catch { /* storage unavailable */ } }}>收起</button></header>
+    <ol>{items.map((item) => <li key={item.id} className={item.done ? "done" : ""}>
+      <span aria-hidden="true">{item.done ? "✓" : "○"}</span><b>{item.label}</b><em>{item.state}</em>
+      {!item.done && item.open && <button type="button" onClick={item.open}>{item.action}</button>}
+    </li>)}</ol>
+  </section>;
+}
+
 export function WorkbenchHome({
   view,
   config,
@@ -200,6 +233,7 @@ export function WorkbenchHome({
   onDraftChange,
   attachmentError,
   onModelSettings,
+  onView,
   onAttach,
   uploading,
   attachedCount = 0,
@@ -725,6 +759,7 @@ export function WorkbenchHome({
             </div>}
           </section>
           {!config?.modelConfigured && <div className="agent-setup-note"><span>连接模型后可使用 AI 完成任务；本地资料整理仍可使用。</span><button onClick={onModelSettings}>配置模型</button></div>}
+          {config && <SetupChecklist modelConfigured={Boolean(config.modelConfigured)} onModelSettings={onModelSettings} onView={onView} />}
         </>
       ) : (
         <section className="hub-history">

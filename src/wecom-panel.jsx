@@ -27,7 +27,7 @@ export function WeComPanel({ patientId }) {
     <details><summary>接入配置与能力范围</summary>
       <p>客户联系接口不提供完整聊天记录。这里创建的任务，需要成员在企业微信确认发送；“已发送”以查询到的企业微信结果为准。</p>
       <p>配置企业 ID、具有客户联系权限的自建应用 Secret（加入“可调用应用”）、可信 IP；需要接收客户变更时，再配置公网 HTTPS 回调地址、Token 和 EncodingAESKey。</p>
-      <p>服务端启动环境变量：<code>MEDICAL_WECOM_CORP_ID</code>、<code>MEDICAL_WECOM_SECRET</code>、<code>MEDICAL_WECOM_CALLBACK_TOKEN</code>、<code>MEDICAL_WECOM_AES_KEY</code>。桌面版可写入应用配置目录的 model.env，配置后重启服务。</p>
+      <p>企业 ID、客户联系 Secret、微信客服和提醒应用统一在「患者消息 → 设置 → 企业微信连接」中填写，保存即生效，并可一键测试连接。</p>
       <p>回调路径：<code>/api/wecom/callback</code> · {state?.callbackConfigured ? '回调密钥已配置' : '回调尚未配置'}{state?.lastEventAt ? ` · 最近接收 ${new Date(state.lastEventAt).toLocaleString()}` : ''}</p>
       <p>桌面应用退出后不接收回调。需要全天运行时，应另行部署常驻服务；当前未接入会话内容存档。</p>
     </details>

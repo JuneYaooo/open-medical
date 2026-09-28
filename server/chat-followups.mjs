@@ -311,7 +311,7 @@ export class ChatFollowups {
       check(input.confirmed === true && d.revision === input.revision && d.status === 'draft', 'REVISION_CONFLICT', '请核对最新草稿后归档', 409);
       check(Number.isFinite(Date.parse(input.contactedAt)), 'CHAT_DATE', '请填写核实后的联系时间');
       const note = string(input.note, '随访记录', 4500);
-      const record = this.followups.recordContact(d.patientId,{ requestId: `chat_${d.id}`, title: `聊天随访 · ${d.title}`.slice(0,100), status: 'completed', contactMethod: d.channel === 'wecom' ? 'wecom' : 'wechat', contactedAt: input.contactedAt, note: `${note}\n\n来源：聊天随访草稿 ${d.id}；${d.messageIds.length} 条来源记录。` });
+      const record = this.followups.recordContact(d.patientId,{ requestId: `chat_${d.id}`, title: `聊天随访 · ${d.title}`.slice(0,100), status: 'completed', contactMethod: d.channel === 'wecom' ? 'wecom' : 'wechat', contactedAt: input.contactedAt, note: `${note}\n\n来源：聊天随访草稿 ${d.id}；${d.messageIds.length} 条来源记录。`, source: { kind: 'chat', draftId: d.id } });
       d.note = note; d.status = 'archived'; d.recordId = record.id; d.archivedAt = now(); d.revision++;
       this.db.prepare('UPDATE chat_drafts SET data=? WHERE id=?').run(JSON.stringify(d),id); return d;
     });

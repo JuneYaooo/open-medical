@@ -187,3 +187,27 @@ summary:focus-visible { outline:2px solid #ddd; outline-offset:3px; }
 .desk-background-status span:nth-child(2) { color:var(--desk-muted); font-size:11px; margin-right:auto; }@media(max-width:600px) {
 .desk-background-status { align-items:flex-start; flex-wrap:wrap; } .desk-background-status span:nth-child(2) { width:100%; }
 }
+
+/* model onboarding */
+.model-preset-note { margin:-4px 0 4px; }
+.model-settings-dialog label span a { color:var(--desk-accent, #2f6b4f); }
+.model-advanced { margin-top:4px; }
+.model-advanced > label, .model-advanced > .model-budget-fields { margin-top:10px; }
+.model-checks { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:6px; }
+.model-checks li { display:grid; grid-template-columns:20px 88px 1fr; align-items:baseline; gap:8px; padding:8px 12px; border:1px solid var(--desk-line); border-radius:8px; font-size:13px; }
+.model-checks li.ok span { color:#2f7a4f; }
+.model-checks li.failed span { color:#b3402f; }
+.model-checks li.failed { background:#fff6f3; }
+.model-checks em { font-style:normal; color:var(--desk-muted); font-size:12px; }
+.model-jev-section { margin-top:24px; padding-top:16px; border-top:1px solid var(--desk-line); }
+.model-jev-section > summary { cursor:pointer; font-size:13px; }
+.setup-checklist { margin-top:16px; padding:14px 16px; border:1px solid var(--desk-line, #dfe5dc); border-radius:12px; background:var(--desk-panel, #fbfcfa); }
+.setup-checklist header { display:flex; align-items:baseline; gap:10px; }
+.setup-checklist header span { flex:1; color:var(--desk-muted, #6b736d); font-size:12px; }
+.setup-checklist ol { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; }
+.setup-checklist li { display:grid; grid-template-columns:18px 1fr auto auto; align-items:center; gap:10px; font-size:13px; }
+.setup-checklist li.done { color:var(--desk-muted, #6b736d); }
+.setup-checklist li.done span { color:#2f7a4f; }
+.setup-checklist em { font-style:normal; color:var(--desk-muted, #6b736d); font-size:12px; }
+.setup-checklist button, .setup-checklist-reopen { font-size:12px; }
+.setup-checklist-reopen { margin-top:12px; }

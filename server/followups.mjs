@@ -11,6 +11,8 @@ import {
 // Durable per-patient follow-up queue. Same semantics as MedicalScheduler:
 // synchronous claim on the single database owner, missed intervals advance,
 // failed occurrences pause instead of replaying an uncertain request.
+const CONTACT_SOURCES = Object.freeze({ manual: "医生主动登记的联系", campaign: "随访计划自动收集", chat: "聊天随访归档" });
+
 export class FollowUpManager {
   constructor(
     store,
@@ -616,7 +618,11 @@ export class FollowUpManager {
         check(record.patientId === patientId && record.requestFingerprint === fingerprint, "CONFLICT", "该次联系已保存且内容不同，请刷新记录后追加更正", 409);
         return record;
       }
-      const record = { id, requestFingerprint: fingerprint, patientId, sessionId: patient.sessionId, title: input.title ? string(input.title, "联系主题", 100) : "主动联系记录", checklist: [], detail: "医生主动登记的联系", followUpId: null };
+      // Records written by the care engine or chat archiving carry their origin
+      // so they are not shown as contacts the doctor entered by hand.
+      const source = input.source?.kind ? { ...input.source } : { kind: "manual" };
+      check(Object.hasOwn(CONTACT_SOURCES, source.kind), "INVALID_INPUT", "联系来源无效");
+      const record = { id, requestFingerprint: fingerprint, patientId, sessionId: patient.sessionId, title: input.title ? string(input.title, "联系主题", 100) : "主动联系记录", checklist: [], detail: CONTACT_SOURCES[source.kind], source, followUpId: null };
       this.store.db.prepare("INSERT INTO reminders VALUES (?,?,?,?,?,?)").run(record.id, patientId, "manual-contact", this.now(), "pending", JSON.stringify(record));
       return this.completeReminder(record.id, input);
     });

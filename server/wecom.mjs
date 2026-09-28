@@ -18,17 +18,24 @@ const failure = error => error instanceof WecomApiError
   ? `企业微信拒绝请求（错误码 ${error.errcode}），请检查权限、可信 IP 或发送限制。`
   : '企业微信连接失败，请检查网络及配置。';
 
+const VAULT_KEY = 'wecom:corp:v1';
+const ENV = { corpId: 'MEDICAL_WECOM_CORP_ID', corpSecret: 'MEDICAL_WECOM_SECRET', callbackToken: 'MEDICAL_WECOM_CALLBACK_TOKEN', aesKey: 'MEDICAL_WECOM_AES_KEY' };
+const FORMATS = {
+  corpId: [/^[A-Za-z0-9]{6,64}$/, '企业 ID 格式无效（在企业微信管理后台「我的企业」底部）'],
+  corpSecret: [/^[A-Za-z0-9_-]{10,128}$/, '客户联系 Secret 格式无效'],
+  callbackToken: [/^[A-Za-z0-9]{1,32}$/, '回调 Token 须为 1–32 位英文或数字'],
+  aesKey: [/^[A-Za-z0-9]{43}$/, 'EncodingAESKey 须为 43 位英文或数字'],
+};
+
 export class WeComConnector {
   constructor(store, patients, options = {}) {
     this.db = store.db;
     this.patients = patients;
-    this.corpId = options.corpId ?? process.env.MEDICAL_WECOM_CORP_ID ?? '';
-    const corpSecret = options.corpSecret ?? process.env.MEDICAL_WECOM_SECRET ?? '';
-    this.callbackToken = options.callbackToken ?? process.env.MEDICAL_WECOM_CALLBACK_TOKEN ?? '';
-    this.aesKey = options.aesKey ?? process.env.MEDICAL_WECOM_AES_KEY ?? '';
+    this.options = options;
+    this.vault = options.vault || null;
+    this.env = options.env || process.env;
     this.tokens = new Map();
-    this.client = this.corpId && corpSecret ? new ExternalContact({ corpId: this.corpId, corpSecret,
-      retryTimes: 0, timeout: 15000, tokenStore: this.tokens, ...(options.fetch ? { fetch: options.fetch } : {}) }) : null;
+    this.configure();
     this.syncing = new Set();
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS wecom_contacts (corp TEXT NOT NULL, member TEXT NOT NULL, external TEXT NOT NULL, name TEXT NOT NULL, active INTEGER NOT NULL, updated TEXT NOT NULL, PRIMARY KEY(corp,member,external));
@@ -40,6 +47,44 @@ export class WeComConnector {
     for (const row of this.db.prepare("SELECT data FROM wecom_tasks WHERE corp=? AND json_extract(data,'$.status')='submitting'").all(this.corpId)) {
       const task = JSON.parse(row.data); task.status = 'unknown'; this.saveTask(task);
     }
+  }
+  // Each value comes from the settings page (encrypted vault) first, then the
+  // legacy desktop config file / environment. Explicit options win (tests).
+  source(key) {
+    if (this.options[key] !== undefined) return { value: this.options[key], from: 'options' };
+    const saved = this.vault?.get(VAULT_KEY) || {};
+    if (saved[key]) return { value: saved[key], from: 'settings' };
+    return this.env[ENV[key]] ? { value: this.env[ENV[key]], from: 'env' } : { value: '', from: 'none' };
+  }
+  configure() {
+    this.corpId = this.source('corpId').value;
+    const corpSecret = this.source('corpSecret').value;
+    this.callbackToken = this.source('callbackToken').value;
+    this.aesKey = this.source('aesKey').value;
+    this.corpSecret = corpSecret;
+    this.tokens.clear();
+    this.client = this.corpId && corpSecret ? new ExternalContact({ corpId: this.corpId, corpSecret,
+      retryTimes: 0, timeout: 15000, tokenStore: this.tokens, ...(this.options.fetch ? { fetch: this.options.fetch } : {}) }) : null;
+  }
+  // Secrets are write-only: blank keeps the stored value, null removes it.
+  saveConfig(input = {}) {
+    check(this.vault, 'WECOM_UNCONFIGURED', '本机凭据库不可用', 503);
+    const saved = { ...(this.vault.get(VAULT_KEY) || {}) };
+    for (const key of Object.keys(FORMATS)) {
+      if (input[key] === null) delete saved[key];
+      else if (typeof input[key] === 'string' && input[key].trim()) {
+        check(FORMATS[key][0].test(input[key].trim()), 'INVALID_INPUT', FORMATS[key][1]);
+        saved[key] = input[key].trim();
+      }
+    }
+    this.vault.set(VAULT_KEY, saved);
+    this.configure();
+    return this.publicConfig();
+  }
+  publicConfig() {
+    const from = Object.fromEntries(Object.keys(FORMATS).map(key => [key, this.source(key).from]));
+    return { corpId: this.corpId, hasContactSecret: Boolean(this.corpSecret), hasCallbackToken: Boolean(this.callbackToken), hasAesKey: Boolean(this.aesKey),
+      callbackConfigured: this.status().callbackConfigured, from };
   }
   status() {
     return { configured: Boolean(this.client), corpId: this.corpId,
@@ -175,6 +220,9 @@ export class WeComConnector {
     if (raw === undefined) return this.decode(query, query.get('echostr'));
     const event = xml(this.decode(query, xml(raw).Encrypt));
     check(event.ToUserName === this.corpId, 'WECOM_CORP', '事件企业不匹配', 401);
+    // 微信客服 callbacks only carry a sync token; the care engine pulls the
+    // messages. Failures must not make WeCom retry the callback.
+    if (event.Event === 'kf_msg_or_event') { try { this.onEvent?.(event); } catch { /* recorded by the handler */ } return 'success'; }
     // Customer-change notifications are not chat messages or clinical facts.
     if (event.Event !== 'change_external_contact') return 'success';
     const data = { event: event.Event, change: field(event.ChangeType, '变更类型'), external: field(event.ExternalUserID, '客户 ID'), member: field(event.UserID, '成员 ID'), time: field(event.CreateTime, '事件时间') };
@@ -183,6 +231,10 @@ export class WeComConnector {
       const inserted = this.db.prepare('INSERT OR IGNORE INTO wecom_events VALUES (?,?,?,?)').run(id, this.corpId, now(), JSON.stringify(data));
       if (inserted.changes && ['del_external_contact', 'del_follow_user'].includes(data.change)) {
         this.db.prepare('UPDATE wecom_contacts SET active=0 WHERE corp=? AND member=? AND external=?').run(this.corpId, data.member, data.external);
+      }
+      // A new customer appears right away; the next contact sync fills in the name.
+      if (inserted.changes && ['add_external_contact', 'add_half_external_contact', 'edit_external_contact'].includes(data.change)) {
+        this.db.prepare('INSERT INTO wecom_contacts VALUES (?,?,?,?,1,?) ON CONFLICT(corp,member,external) DO UPDATE SET active=1,updated=excluded.updated').run(this.corpId, data.member, data.external, data.external, now());
       }
     });
     return 'success';

@@ -13,7 +13,11 @@ const TYPES = [
   "patient-update",
   "followup-create",
   "case-save",
+  "care-message",
+  "care-campaign",
+  "care-settings",
 ];
+const isCare = (type) => type.startsWith("care-");
 
 export class PendingActions {
   // services are accessor functions (e.g. () => patients) so the registry
@@ -30,6 +34,9 @@ export class PendingActions {
   }
   get cases() {
     return this.services.cases();
+  }
+  get care() {
+    return this.services.care?.() || null;
   }
   row(id) {
     check(typeof id === "string" && id, "INVALID_INPUT", "提案编号无效");
@@ -72,6 +79,13 @@ export class PendingActions {
       baseRevision = patient.revision;
     }
     let normalized = payload;
+    if (isCare(type)) {
+      check(this.care, "CARE_UNAVAILABLE", "患者管理模块未启用", 503);
+      normalized = this.care.normalizeProposal(type, { ...payload, ...(patientId ? { patientId } : {}) });
+      // Care proposals reference the patient for display only; they never
+      // overwrite the clinical record, so no revision check applies.
+      if (normalized.patientId) resolvedPatientId = this.patients.row(normalized.patientId).id;
+    }
     if (type === "patient-update") {
       const fields = validateClinicalInput(payload);
       check(
@@ -135,7 +149,7 @@ export class PendingActions {
       summary: title,
       createdAt: time,
       updatedAt: time,
-      note: "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
+      note: isCare(type) ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
     };
   }
   list({ patientId, status = "pending" } = {}) {
@@ -181,7 +195,9 @@ export class PendingActions {
         "该提案已处理",
         409,
       );
-      if (action.patientId) {
+      if (action.patientId && isCare(action.type)) {
+        check(!this.patients.row(action.patientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案并重新核对提案。", 409);
+      } else if (action.patientId) {
         check(!this.patients.row(action.patientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案并重新核对提案。", 409);
         check(
           Number.isSafeInteger(action.baseRevision) && action.baseRevision >= 0,
@@ -197,7 +213,10 @@ export class PendingActions {
         );
       }
       let applied;
-      if (action.type === "patient-create") {
+      if (isCare(action.type)) {
+        check(this.care, "CARE_UNAVAILABLE", "患者管理模块未启用", 503);
+        applied = this.care.applyProposal(action);
+      } else if (action.type === "patient-create") {
         // The registry validates all supplied fields before creating any record.
         const patient = this.patients.create(action.payload);
         if (action.payload.sourceSessionId && this.services.copySourceMaterials)
@@ -489,7 +508,7 @@ export function pendingActionTools(pending, doctor = null) {
     {
       definition: definition(
         "followup_create_propose",
-        "提议为患者创建随访计划（单次或周期）。只创建待确认提案，医生确认后才生效。",
+        "提议为患者创建本机随访提醒（单次或周期），到期提醒医生本人联系患者，不会给患者发消息。若要定时给患者发问题并自动收集回复，用 care_campaign_propose。只创建待确认提案，医生确认后才生效。",
         {
           patientId: textDef,
           name: textDef,

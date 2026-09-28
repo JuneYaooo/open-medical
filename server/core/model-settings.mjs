@@ -45,11 +45,37 @@ export class ModelSettings {
   async test(config) {
     validateBudget(config);
     const start = Date.now();
-    try {
-      const p = createProvider({ ...config, timeoutMs: Math.min(config.timeoutMs, 30000), maxTokens: 256 });
+    const p = createProvider({ ...config, timeoutMs: Math.min(config.timeoutMs, 30000), maxTokens: 256 });
+    const run = async (id, fn) => {
+      const began = Date.now();
+      try { return { id, ok: true, message: await fn(), durationMs: Date.now() - began }; }
+      catch (error) { return { id, ok: false, message: error instanceof AppError ? error.message : '请求失败或超时', durationMs: Date.now() - began }; }
+    };
+    const text = await run('text', async () => {
       const result = await p.complete([{ role: 'user', content: 'Reply with OK.' }], [], { signal: AbortSignal.timeout(30000) });
       check(Boolean(result?.message?.content), 'MODEL_TEST', '模型未返回文本');
-      return { ok: true, durationMs: Date.now() - start, message: '已收到模型回复。此测试验证连接和文本生成，不代表工具调用已验收。' };
-    } catch { throw new AppError('MODEL_TEST', '连接测试失败。请检查接口地址、模型名称、密钥权限和网络；测试最长等待 30 秒。', 400); }
+      return '文本生成正常';
+    });
+    if (!text.ok) throw new AppError('MODEL_TEST', '连接测试失败。请检查接口地址、模型名称、密钥权限和网络；测试最长等待 30 秒。', 400);
+    // Tool calling and JSON output decide whether the model can drive the agent;
+    // failures are reported, not fatal, so text-only models remain usable.
+    const tools = await run('tools', async () => {
+      const tool = { type: 'function', function: { name: 'report_ready', description: 'Report readiness status.', parameters: { type: 'object', properties: { status: { type: 'string', enum: ['ready'] } }, required: ['status'], additionalProperties: false } } };
+      const result = await p.complete([{ role: 'user', content: 'Call the report_ready tool with status "ready". Do not answer in text.' }], [tool], { signal: AbortSignal.timeout(30000) });
+      check(result?.message?.tool_calls?.some((call) => call.function?.name === 'report_ready'), 'MODEL_TEST', '该模型不支持工具调用，Agent 能力将受限');
+      return '工具调用正常';
+    });
+    const json = await run('json', async () => {
+      const result = await p.complete([{ role: 'user', content: 'Return only a JSON object {"ok": true} with no other text.' }], [], { signal: AbortSignal.timeout(30000) });
+      const raw = String(result?.message?.content || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+      let value;
+      try { value = JSON.parse(raw); } catch { throw new AppError('MODEL_TEST', '未能输出有效 JSON，自动分诊等结构化功能可能不稳定'); }
+      check(value && typeof value === 'object' && !Array.isArray(value), 'MODEL_TEST', '未能输出 JSON 对象，自动分诊等结构化功能可能不稳定');
+      return 'JSON 输出正常';
+    });
+    const checks = [text, tools, json];
+    const failed = checks.filter((item) => !item.ok);
+    return { ok: true, durationMs: Date.now() - start, checks,
+      message: failed.length ? `已连接，但 ${failed.map((item) => item.message).join('；')}。` : '已连接：文本、工具调用、JSON 输出均正常，可用于 Agent 与自动分诊。' };
   }
 }

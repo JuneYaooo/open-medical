@@ -51,8 +51,9 @@ test('model settings UI rejects full-window output for both save and probe, then
   await page.locator(".app-navigation").waitFor();
   await page.locator('.model-badge').click();
   const dialog = page.getByRole('dialog', {name:'切换模型',exact:true});
-  await dialog.getByLabel('服务商 / 接口协议').selectOption('local');
-  await dialog.getByLabel('模型名称', {exact:true}).fill('budget-fixture');
+  await dialog.getByRole('combobox', {name:'服务商',exact:true}).selectOption('ollama');
+  await dialog.getByRole('combobox', {name:'模型',exact:true}).selectOption('__custom__');
+  await dialog.getByLabel('模型 ID', {exact:true}).fill('budget-fixture');
   await dialog.getByText('高级选项', {exact:true}).click();
   await dialog.getByLabel('最大输出 Token', {exact:true}).fill('131072');
   await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
@@ -71,8 +72,9 @@ test('model settings UI rejects full-window output for both save and probe, then
   await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
   await dialog.getByRole('status').filter({hasText:'已保存并启用'}).waitFor();
   assert.equal((await f.json('/api/model-settings')).data.contextWindow, null);
-  await dialog.getByLabel('服务商 / 接口协议').selectOption('deepseek');
-  await dialog.getByLabel('模型名称', {exact:true}).fill('deepseek-flash');
+  await dialog.getByRole('combobox', {name:'服务商',exact:true}).selectOption('deepseek');
+  await dialog.getByRole('combobox', {name:'模型',exact:true}).selectOption('__custom__');
+  await dialog.getByLabel('模型 ID', {exact:true}).fill('deepseek-flash');
   await dialog.getByLabel(/^API Key/).fill('synthetic-ui-test-key');
   await dialog.getByText(/当前生效：1,000,000 Token/).waitFor();
   await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
@@ -81,7 +83,7 @@ test('model settings UI rejects full-window output for both save and probe, then
   assert.equal(automatic.contextWindow, null);
   assert.equal(automatic.contextDefaults.contextWindow, 1000000);
   await dialog.getByLabel('上下文窗口 Token（留空自动选择）').fill('64000');
-  await dialog.getByLabel('模型名称', {exact:true}).fill('unknown-model');
+  await dialog.getByLabel('模型 ID', {exact:true}).fill('unknown-model');
   assert.equal(await dialog.getByLabel(/^上下文窗口 Token/).inputValue(), '');
   await dialog.getByText(/备用预算，模型规格待确认/).waitFor();
   assert.deepEqual(errors, []);
