@@ -164,6 +164,7 @@ export class TrialEligibilityJobs {
       updatedAt: new Date().toISOString(),
     };
     this.write(job);
+    this.store.audit(null, "trial.ai.started", { trialId, patientId, jobId: job.id, externalConsent: true });
     let handle;
     try {
       handle = this.workspaces.prepare(session.id, {
@@ -231,6 +232,7 @@ export class TrialEligibilityJobs {
         error: "已停止，已保存的逐项判断仍可查看。",
       });
       this.workspaces.cancel(job.sessionId);
+      this.store.audit(null, "trial.ai.cancelled", { trialId: job.trialId, patientId: job.patientId, jobId: job.id });
     }
     return this.public(this.get(id));
   }

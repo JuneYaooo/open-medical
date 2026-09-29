@@ -14,7 +14,8 @@ test("doctor agenda unifies actionable work without treating read/generated as c
   assert.equal(all.counts.risk, 1);
   assert.equal(all.counts.followup, 1);
   assert.equal(all.counts.messages, 2);
-  assert.equal(all.total, 4);
+  assert.equal(all.counts.tracking, 1, "the new potassium value is an unread result");
+  assert.equal(all.total, 5);
   assert.equal(all.items.length, 2);
   assert.equal(all.hasMore, true);
   assert.equal(all.items[0].kind, "risk");

@@ -41,6 +41,7 @@ function parse(file, id) {
   return {
     id,
     name: meta.name,
+    title: typeof meta.title === "string" ? meta.title : meta.name,
     description: meta.description,
     body: match[2],
     path: file,
@@ -76,6 +77,7 @@ export class SkillRegistry {
           result.push({
             id: skill.id,
             name: skill.name,
+            title: skill.title,
             description: skill.description,
           });
         } catch {

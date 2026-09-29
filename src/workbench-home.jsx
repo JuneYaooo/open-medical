@@ -22,6 +22,7 @@ import {
   Search,
   Stethoscope,
   X,
+  Sparkles,
 } from "lucide-react";
 import { requestCareSetup, setupProgress } from "./care-setup";
 import { api, medicalEnabled } from "./agent-runtime";
@@ -260,7 +261,16 @@ export function WorkbenchHome({
   const [pickedSkills, setPickedSkills] = useState(draftState.pickedSkills ?? []);
   useEffect(() => { onDraftChange?.({prompt, patientId, projectId, flowId, pickedSkills}); }, [prompt, patientId, projectId, flowId, pickedSkills]);
   const inputRef = useRef(null);
-  const selectedFlow = MEDICAL_WORKFLOWS.find((flow) => flow.id === flowId);
+  // The doctor's own templates (extension center) and learned ordering.
+  const [workbenchPrefs, setWorkbenchPrefs] = useState(null);
+  useEffect(() => {
+    if (!config || !medicalEnabled(config)) return;
+    api("/api/extensions/prefs").then(setWorkbenchPrefs).catch(() => {});
+  }, [config]);
+  const customFlows = (workbenchPrefs?.quickTasks || []).map((q) => ({ ...q, icon: Sparkles, category: "mine", output: "按你的专属技能" }));
+  const allFlows = [...customFlows, ...MEDICAL_WORKFLOWS];
+  const starterFlows = (workbenchPrefs?.starters || []).map((id) => allFlows.find((f) => f.id === id)).filter(Boolean);
+  const selectedFlow = allFlows.find((flow) => flow.id === flowId);
   const isFollowup = flowId === "followup";
   const isHome = view === "home";
   const skillOptions = config?.skills || [];
@@ -269,7 +279,7 @@ export function WorkbenchHome({
         .filter(
           (skill) =>
             !pickedSkills.includes(skill.id) &&
-            `${skill.name} ${skill.id} ${skill.description || ""}`
+            `${skill.title || skill.name} ${skill.name} ${skill.id} ${skill.description || ""}`
               .toLowerCase()
               .includes(skillMention.query.toLowerCase()),
         )
@@ -319,6 +329,9 @@ export function WorkbenchHome({
     setProjectId("");
     setFlowId(flow.id);
     setPrompt(flow.prompt);
+    // A custom template brings its skill along; usage lets the workbench learn what matters.
+    if (flow.skillId) setPickedSkills((prev) => prev.includes(flow.skillId) ? prev : [...prev, flow.skillId].slice(-3));
+    api("/api/extensions/usage", "POST", { flowId: flow.id }).catch(() => {});
     inputRef.current?.focus();
   };
   const pickSkill = (skill) => {
@@ -580,7 +593,7 @@ export function WorkbenchHome({
                     >
                       <AtSign size={14} />
                       <span>
-                        <b>{skill.name}</b>
+                        <b>{skill.title || skill.name}</b>
                         <small>{skill.description}</small>
                       </span>
                     </button>
@@ -597,10 +610,10 @@ export function WorkbenchHome({
                   return (
                     <span className="skill-chip" key={id}>
                       <AtSign size={11} />
-                      {skill?.name || id}
+                      {skill?.title || skill?.name || customFlows.find((f) => f.skillId === id)?.title || id}
                       <button
                         type="button"
-                        aria-label={`移除技能 ${skill?.name || id}`}
+                        aria-label={`移除技能 ${skill?.title || skill?.name || customFlows.find((f) => f.skillId === id)?.title || id}`}
                         onClick={() =>
                           setPickedSkills((prev) =>
                             prev.filter((item) => item !== id),
@@ -749,14 +762,15 @@ export function WorkbenchHome({
           </p>
           <section className="agent-starters" aria-label="任务灵感">
             <div className="agent-starter-row">
-              {[["timeline", "整理病历"], ["evidence", "准备循证检索"], ["patient-edu", "撰写患教材料"]].map(([id,label]) => <button key={id} aria-pressed={flowId === id} disabled={starting || uploading} onClick={() => chooseFlow(MEDICAL_WORKFLOWS.find(f => f.id === id))}>{label}</button>)}
+              {starterFlows.length ? starterFlows.map((flow) => <button key={flow.id} aria-pressed={flowId === flow.id} disabled={starting || uploading} onClick={() => chooseFlow(flow)}>{flow.title}</button>)
+                : [["timeline", "整理病历"], ["evidence", "准备循证检索"], ["patient-edu", "撰写患教材料"]].map(([id,label]) => <button key={id} aria-pressed={flowId === id} disabled={starting || uploading} onClick={() => chooseFlow(MEDICAL_WORKFLOWS.find(f => f.id === id))}>{label}</button>)}
               <button disabled={starting || uploading} onClick={() => { setFlowId(""); setPrompt("请分析我提供的数据，先检查字段、缺失值和数据质量，再根据研究问题建议统计方法，输出结果和适用条件。"); inputRef.current?.focus(); }}>分析数据</button>
               <button aria-expanded={showAllFlows} onClick={() => setShowAllFlows(!showAllFlows)}>{showAllFlows ? "收起模板" : "更多任务模板"}</button>
             </div>
             {showAllFlows && <div className="agent-template-library">
-              <div className="hub-section-head"><h2>从模板开始</h2><div className="hub-category">{[["clinical","临床与患者"],["research","科研与循证"]].map(([id,label]) => <button key={id} aria-pressed={category === id} onClick={() => setCategory(id)}>{label}</button>)}</div></div>
+              <div className="hub-section-head"><h2>从模板开始</h2><div className="hub-category">{[...(customFlows.length ? [["mine","我的模板"]] : []),["clinical","临床与患者"],["research","科研与循证"]].map(([id,label]) => <button key={id} aria-pressed={category === id} onClick={() => setCategory(id)}>{label}</button>)}</div></div>
               <p className="muted">选择后会填入任务要求，你可以修改再发送。</p>
-              <div className="agent-template-grid">{MEDICAL_WORKFLOWS.filter(f => f.category === category).map(flow => <button key={flow.id} disabled={starting || uploading} aria-pressed={flow.id === flowId} onClick={() => chooseFlow(flow)}><flow.icon size={18}/><span><b>{flow.title}</b><small>{flow.desc}</small></span></button>)}</div>
+              <div className="agent-template-grid">{allFlows.filter(f => f.category === category).map(flow => <button key={flow.id} disabled={starting || uploading} aria-pressed={flow.id === flowId} onClick={() => chooseFlow(flow)}><flow.icon size={18}/><span><b>{flow.title}</b><small>{flow.desc}</small></span></button>)}</div>
             </div>}
           </section>
           {!config?.modelConfigured && <div className="agent-setup-note"><span>连接模型后可使用 AI 完成任务；本地资料整理仍可使用。</span><button onClick={onModelSettings}>配置模型</button></div>}

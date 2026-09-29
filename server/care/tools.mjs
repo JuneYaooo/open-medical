@@ -14,6 +14,11 @@ export function careTools(getCare, pending) {
     if (!engine) throw new Error("患者管理模块未启用");
     return engine;
   };
+  const directory = () => {
+    const d = care().channels.wecom?.directory;
+    if (!d?.c.client) throw new Error("尚未配置企业微信客户联系，请在「患者消息 → 设置」或接入向导第 4 步填写客户联系 Secret");
+    return d;
+  };
   const summaryOf = (msg) => ({ id: msg.id, patientId: msg.patientId, patientName: msg.patientName, direction: msg.direction, time: msg.time, text: msg.text.slice(0, 500), attachments: msg.attachments.length, state: msg.state });
   const propose = (type, patientId, payload, summary) => ({
     ...pending.propose({ type, patientId, payload, summary }),
@@ -80,6 +85,38 @@ export function careTools(getCare, pending) {
         scope: { type: "string", enum: ["global", "patient"] }, patientId: text, changes: { type: "object" }, summary: text,
       }, ["scope", "changes"]),
       execute: ({ scope, patientId, changes, summary }) => propose("care-settings", scope === "patient" ? patientId : undefined, { scope, changes }, summary || (scope === "global" ? "修改患者管理设置" : "修改患者自动回复设置")),
+    },
+    {
+      definition: definition("wecom_customers", "查询助理企业微信里的客户（自动定期同步）。每位客户带备注、备注手机号、标签、所在客户群、已关联患者，以及未关联时系统推荐的患者和依据。state：bound/suggested/unmatched，可逗号分隔；query 按昵称/备注/手机号/标签/患者名搜索。", {
+        state: text, query: text, limit: { type: "integer" },
+      }),
+      execute: ({ state, query, limit }) => {
+        const value = directory().contacts({ status: state, query, limit: Math.min(limit || 30, 100) });
+        return { counts: value.counts, sync: value.status, customers: value.contacts.map((c) => ({ member: c.member, external: c.external, name: c.name, remark: c.remark, description: c.description, mobiles: c.mobiles, tags: c.tags, addedAt: c.addedAt, state: c.state,
+          patients: c.bindings.map((b) => ({ patientId: b.patientId, name: b.patientName, relationship: b.relationship })), suggestion: c.suggestion.candidates.length ? c.suggestion : undefined, groups: c.groups.map((g) => g.name) })) };
+      },
+    },
+    {
+      definition: definition("wecom_patient_contacts", "读取某患者关联的企业微信客户（本人/家属）、所在客户群，以及可能是该患者但尚未关联的客户。", { patientId: text }, ["patientId"]),
+      execute: ({ patientId }) => directory().patient(patientId),
+    },
+    {
+      definition: definition("wecom_groups", "列出助理的企业微信客户群（群名、群主、人数、群里已关联的患者）；传 chatId 返回该群成员明细与群发任务。", { chatId: text, query: text }),
+      execute: ({ chatId, query }) => chatId ? directory().group(chatId) : directory().groups({ query }),
+    },
+    {
+      definition: definition("wecom_sync", "立即同步企业微信客户与客户群（平时每 6 小时自动同步，一般不需要）。"),
+      execute: () => directory().sync(),
+    },
+    {
+      definition: definition("wecom_bind_propose", "提议把一位企业微信客户关联到患者档案（本人或家属）。只创建待确认提案，医生核实身份后确认。先用 wecom_customers 找到 member 与 external。", {
+        patientId: text, member: text, external: text, relationship: { type: "string", enum: ["self", "family"] }, reasons: { type: "array", items: text }, summary: text,
+      }, ["patientId", "member", "external", "relationship"]),
+      execute: ({ patientId, summary, ...payload }) => propose("care-bind", patientId, payload, summary || "关联企业微信客户到患者档案"),
+    },
+    {
+      definition: definition("wecom_group_message_propose", "提议向某个客户群群发一条消息（科普、通知等，勿含个人病情）。医生确认后生成企业微信群发任务，由群主在企业微信里点发送。", { chatId: text, text, summary: text }, ["chatId", "text"]),
+      execute: ({ chatId, text: body, summary }) => propose("care-group-message", undefined, { chatId, text: body }, summary || `客户群群发：${body.slice(0, 40)}`),
     },
   ];
 }

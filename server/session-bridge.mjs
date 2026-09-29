@@ -26,6 +26,21 @@ import {
 const hashText = (value) => createHash("sha256").update(value).digest("hex");
 const iso = () => new Date().toISOString();
 const sessionKind = (w) => w?.kind === "session";
+// Extraction steps a run performs on the way to its deliverable.
+const SUPPORTING = new Set(["clinical_timeline", "observations"]);
+// Drafts a doctor actually has to review: a run's intermediate extractions
+// are not counted once the run produced a final draft, and trial screening
+// drafts are reviewed on the trial page.
+function reviewItems(runs) {
+  const items = [];
+  for (const run of runs) {
+    if (run.draftsArchived) continue;
+    const drafts = run.artifacts.filter((a) => a.status === "draft" && a.type !== "trial_eligibility");
+    const final = drafts.filter((a) => !SUPPORTING.has(a.type));
+    for (const a of final.length ? final : drafts) items.push(a.title || "整理结果");
+  }
+  return items;
+}
 // 与旧引擎一致的运行方式别名（standard/creator→model，minimal/code→local）。
 const resolveMode = (mode) => {
   const requested = mode || "local";
@@ -423,6 +438,8 @@ export class SessionBridge {
       messageCount: projected.messages.length,
       reviewCount: projected.artifacts.filter((a) => a.status === "draft")
         .length,
+      background: w.runs.some((run) => run.policy?.workflow === "trial-eligibility"),
+      reviewItems: reviewItems(projected.runs),
       running: this.service.active.has(w.id) || w.intakeJob?.status === "running",
       lastRunStatus: w.runs.at(-1)?.status || null,
       lastRunError: w.runs.at(-1)?.error || null,
@@ -1011,6 +1028,7 @@ export class SessionBridge {
       }
       return a;
     });
+    try { const edited = this.findArtifact(id, artifactId); this.evolution?.recordEdit({ title: edited.title, type: edited.type, note: changedNotes[0] }); } catch { /* evolution signals are best effort */ }
     if (this.doctor && changedNotes.length)
       for (const note of changedNotes)
         this.doctor.recordSignal({

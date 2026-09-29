@@ -1,4 +1,5 @@
 import {TrialAIReview} from "./trial-ai-review";
+import { EnrollmentSelect, TrialCandidatesPanel } from "./trial-candidates";
 import {splitEligibility} from "../shared/trial-protocol.mjs";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
@@ -16,6 +17,25 @@ const blank = {
   inclusion: "",
   exclusion: "",
 };
+const OPEN_KEY = "omw-trial-open";
+// Lets the agenda open one trial's candidate list on arrival.
+export function requestTrial(id) { try { sessionStorage.setItem(OPEN_KEY, id); } catch { /* storage unavailable */ } }
+function takeTrialRequest() { try { const id = sessionStorage.getItem(OPEN_KEY); sessionStorage.removeItem(OPEN_KEY); return id; } catch { return null; } }
+
+function EnrollmentControl({ trialId, patientId }) {
+  const [enrollment, setEnrollment] = useState(null), [error, setError] = useState("");
+  const load = () => api(`/api/trials/${trialId}/enrollments/${patientId}`).then(setEnrollment).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, [trialId, patientId]);
+  if (!enrollment) return error ? <p className="form-error">{error}</p> : null;
+  return <div className="trial-enrollment" aria-label="入组状态">
+    <b>入组状态</b>
+    <EnrollmentSelect trialId={trialId} patientId={patientId} enrollment={enrollment} onChanged={() => { setError(""); load(); }} onError={setError} />
+    {enrollment.consentDate && <span className="muted">知情同意 {enrollment.consentDate}</span>}
+    {enrollment.history.length > 0 && <span className="muted">此前：{enrollment.history.slice(-3).map((h) => h.stage === "none" ? "未处理" : ({ shortlisted: "拟邀请", contacted: "已联系", consented: "已签同意", enrolled: "已入组", declined: "拒绝", ineligible: "不符合", withdrawn: "退出" })[h.stage]).join(" → ")}</span>}
+    {error && <p role="alert" className="form-error">{error}</p>}
+  </div>;
+}
+
 export function TrialScreeningView({ onOpenPatient }) {
   const [patientBrief, setPatientBrief] = useState(null);
   const [registryId, setRegistryId] = useState(""),
@@ -63,6 +83,8 @@ export function TrialScreeningView({ onOpenPatient }) {
     ]);
     setTrials(a.trials);
     setPatients(b.patients.filter((p) => !p.archived));
+    const wanted = takeTrialRequest();
+    if (wanted) { const t = a.trials.find((x) => x.id === wanted); if (t) setTrial(t); }
   };
   useEffect(() => {
     load().catch((e) => setError(e.message));
@@ -353,21 +375,9 @@ export function TrialScreeningView({ onOpenPatient }) {
             ← 试验方案列表
           </button>
           <h2>{trial.title}</h2>
-          <p>
-            {trial.registration || "注册号未记录"} · {trial.version} ·{" "}
-            {trial.recruitment}
-          </p>
-          <p>
-            {trial.site || "研究中心待核实"}
-            {trial.sourceUrl && (
-              <>
-                {" "}
-                ·{" "}
-                <a href={trial.sourceUrl} target="_blank" rel="noreferrer">
-                  核对来源
-                </a>
-              </>
-            )}
+          <p className="muted">
+            {[trial.registration || "注册号未记录", trial.version, trial.recruitment, trial.site || "研究中心待核实"].join(" · ")}
+            {trial.sourceUrl && <> · <a href={trial.sourceUrl} target="_blank" rel="noreferrer">核对来源</a></>}
           </p>
           <label>
             选择初筛患者
@@ -385,6 +395,11 @@ export function TrialScreeningView({ onOpenPatient }) {
               ))}
             </select>
           </label>
+          {!patientId && <TrialCandidatesPanel trial={trial} onScreen={setPatientId} onOpenPatient={onOpenPatient} />}
+          {patientId && <div className="trial-patient-bar">
+            <button className="text-button" disabled={busy} onClick={() => setPatientId("")}>← 返回候选患者</button>
+            <EnrollmentControl trialId={trial.id} patientId={patientId} />
+          </div>}
           {patient && !record && !error && (
             <p role="status">正在读取这位患者的初筛记录…</p>
           )}

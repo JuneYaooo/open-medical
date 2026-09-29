@@ -16,8 +16,15 @@ const TYPES = [
   "care-message",
   "care-campaign",
   "care-settings",
+  "care-bind",
+  "care-group-message",
+  "trial-batch",
+  "trial-enrollment",
+  "ext-change",
 ];
 const isCare = (type) => type.startsWith("care-");
+const isTrial = (type) => type.startsWith("trial-");
+const isExt = (type) => type.startsWith("ext-");
 
 export class PendingActions {
   // services are accessor functions (e.g. () => patients) so the registry
@@ -37,6 +44,12 @@ export class PendingActions {
   }
   get care() {
     return this.services.care?.() || null;
+  }
+  get trials() {
+    return this.services.trials?.() || null;
+  }
+  get extensions() {
+    return this.services.extensions?.() || null;
   }
   row(id) {
     check(typeof id === "string" && id, "INVALID_INPUT", "提案编号无效");
@@ -85,6 +98,15 @@ export class PendingActions {
       // Care proposals reference the patient for display only; they never
       // overwrite the clinical record, so no revision check applies.
       if (normalized.patientId) resolvedPatientId = this.patients.row(normalized.patientId).id;
+    }
+    if (isExt(type)) {
+      check(this.extensions, "EXTENSIONS_UNAVAILABLE", "扩展中心未启用", 503);
+      normalized = this.extensions.normalizeProposal(type, payload);
+    }
+    if (isTrial(type)) {
+      check(this.trials, "TRIAL_UNAVAILABLE", "临床试验模块未启用", 503);
+      normalized = this.trials.normalizeProposal(type, { ...payload, ...(patientId ? { patientId } : {}) });
+      if (normalized.patientId) resolvedPatientId = normalized.patientId;
     }
     if (type === "patient-update") {
       const fields = validateClinicalInput(payload);
@@ -195,7 +217,8 @@ export class PendingActions {
         "该提案已处理",
         409,
       );
-      if (action.patientId && isCare(action.type)) {
+      // Care and trial proposals never overwrite the chart, so no revision check applies.
+      if (action.patientId && (isCare(action.type) || isTrial(action.type))) {
         check(!this.patients.row(action.patientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案并重新核对提案。", 409);
       } else if (action.patientId) {
         check(!this.patients.row(action.patientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案并重新核对提案。", 409);
@@ -216,6 +239,12 @@ export class PendingActions {
       if (isCare(action.type)) {
         check(this.care, "CARE_UNAVAILABLE", "患者管理模块未启用", 503);
         applied = this.care.applyProposal(action);
+      } else if (isExt(action.type)) {
+        check(this.extensions, "EXTENSIONS_UNAVAILABLE", "扩展中心未启用", 503);
+        applied = this.extensions.applyProposal(action);
+      } else if (isTrial(action.type)) {
+        check(this.trials, "TRIAL_UNAVAILABLE", "临床试验模块未启用", 503);
+        applied = this.trials.applyProposal(action);
       } else if (action.type === "patient-create") {
         // The registry validates all supplied fields before creating any record.
         const patient = this.patients.create(action.payload);

@@ -10,7 +10,7 @@ import {
 } from "./store.mjs";
 
 const iso = (ms) => new Date(ms).toISOString();
-const CARE_PROPOSALS = ["care-message", "care-campaign", "care-settings"];
+const CARE_PROPOSALS = ["care-message", "care-campaign", "care-settings", "care-bind", "care-group-message"];
 const TERMINAL_STEPS = ["recorded", "no_reply", "failed", "skipped", "cancelled"];
 // Sent steps that can still receive replies. "unknown" may have been delivered.
 const OPEN_STEPS = ["sent", "awaiting_member", "unknown", "replied"];
@@ -45,7 +45,7 @@ function localDue(startDate, dayOffset, time) {
 // only classifies, drafts and summarizes.
 export class CareEngine {
   constructor({ store, patients, followups, wecom, vault, guidelines, patientBrief, provider = () => null,
-    fetch: fetchImpl = fetch, now = Date.now, intervalMs = 20000, kfPollMs = 60000, env = process.env } = {}) {
+    fetch: fetchImpl = fetch, now = Date.now, intervalMs = 20000, kfPollMs = 60000, directorySync = true, env = process.env } = {}) {
     this.store = store;
     this.db = store.db;
     this.patients = patients;
@@ -57,6 +57,8 @@ export class CareEngine {
     this.intervalMs = intervalMs;
     // Without a public callback URL the desktop polls 微信客服; null disables.
     this.kfPollMs = kfPollMs;
+    // Customers and groups of 客户联系 members are pulled every few hours.
+    this.directorySync = directorySync;
     this.kf = { lastSyncAt: null, lastError: null, nextAt: 0, failures: 0, running: null };
     this.channels = new CareChannels({ vault, wecom, env, fetch: fetchImpl, now });
     this.pendingWork = new Set();
@@ -102,6 +104,9 @@ export class CareEngine {
       if (c.corp) {
         check(this.channels.wecom, "WECOM_UNCONFIGURED", "企业微信连接不可用", 503);
         this.channels.wecom.saveConfig(c.corp);
+        // New credentials: pull customers and groups on the next tick.
+        this.channels.wecom.directory.setState({ lastSyncAt: null, lastAttemptAt: null });
+        this.kick();
       }
       this.channels.save({ openKfId: c.kf?.openKfId ?? c.openKfId, kfSecret: c.kf?.secret ?? c.kfSecret, agentId: c.app?.agentId ?? c.agentId, appSecret: c.app?.secret ?? c.appSecret });
     }
@@ -728,6 +733,19 @@ export class CareEngine {
       else validatePatientSettings(payload.changes, this.patientSettings(payload.patientId));
       return { scope: payload.scope, patientId: payload.scope === "patient" ? payload.patientId : null, changes: payload.changes };
     }
+    if (type === "care-bind") {
+      const wecom = this.channels.wecom;
+      check(wecom?.client, "WECOM_UNCONFIGURED", "尚未配置企业微信客户联系", 503);
+      const patientId = this.patients.row(identifier(payload.patientId)).id;
+      check(["self", "family"].includes(payload.relationship), "INVALID_INPUT", "relationship 须为 self/family");
+      const contact = wecom.directory.contactRows("AND member=? AND external=? AND active=1", string(payload.member, "成员 UserID", 200), string(payload.external, "客户 ID", 200))[0];
+      check(contact, "WECOM_CONTACT", "未找到该客户，请先同步客户列表");
+      return { patientId, member: contact.member, external: contact.external, relationship: payload.relationship, contactName: contact.displayName, reasons: Array.isArray(payload.reasons) ? payload.reasons.map(String).slice(0, 5) : [] };
+    }
+    if (type === "care-group-message") {
+      check(this.channels.wecom?.directory, "WECOM_UNCONFIGURED", "企业微信连接不可用", 503);
+      return this.channels.wecom.directory.normalizeGroupMessage(payload);
+    }
     check(false, "INVALID_INPUT", "未知的患者管理提案");
   }
   // Runs inside the PendingActions confirm transaction: synchronous only.
@@ -746,6 +764,18 @@ export class CareEngine {
     }
     if (action.type === "care-campaign") return this.createCampaign(p);
     if (action.type === "care-settings") return p.scope === "global" ? this.saveSettings(p.changes) : this.savePatientSettings(p.patientId, p.changes);
+    const directory = this.channels.wecom?.directory;
+    if (action.type === "care-bind") {
+      const binding = this.channels.wecom.bind({ ...p, confirmed: true });
+      // The remark write-back is a network call; it runs after the confirm commits.
+      this.track(Promise.resolve().then(() => directory.writeRemark(binding.id)).catch(() => {}));
+      return binding;
+    }
+    if (action.type === "care-group-message") {
+      const task = directory.groupDraft({ ...p, requestId: action.id });
+      this.track(Promise.resolve().then(() => directory.groupSubmit(task.id, { confirmed: true })).catch(() => {}));
+      return task;
+    }
   }
   static isProposal(type) { return CARE_PROPOSALS.includes(type); }
 
@@ -767,6 +797,7 @@ export class CareEngine {
         drafts: one("SELECT COUNT(*) n FROM care_replies WHERE status='draft'"),
         activeCampaigns: one("SELECT COUNT(*) n FROM care_campaigns WHERE status='active'"),
         pendingActions: one(`SELECT COUNT(*) n FROM pending_actions WHERE status='pending' AND type IN (${CARE_PROPOSALS.map(() => "?").join(",")})`, ...CARE_PROPOSALS),
+        contactMatches: this.channels.wecom?.client ? this.channels.wecom.directory.contacts({ status: "suggested", limit: 1 }).counts.suggested : 0,
       },
       channels: channels.channels,
       notifier: channels.notifier,
@@ -837,6 +868,8 @@ export class CareEngine {
   async runOnce() {
     const kfPull = this.pollKf();
     if (kfPull) await kfPull;
+    const directory = this.channels.wecom?.directory;
+    if (this.directorySync && directory?.due()) this.track(directory.sync().catch(() => {}));
     this.discover();
     const processing = this.settings().processing.enabled;
     if (processing) {
@@ -850,6 +883,7 @@ export class CareEngine {
         await this.sendReply(row.id, { auto: true });
       }
       await this.refreshMemberTasks();
+      await directory?.refreshAwaiting();
       await this.runCampaigns();
       await this.escalate();
     }

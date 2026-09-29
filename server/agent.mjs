@@ -7,6 +7,7 @@ import {TrialEligibilityJobs} from './medical/trial-eligibility-jobs.mjs';
 import { recognizeImage } from "./core/image-ocr.mjs";
 import { TrialRegistry } from "./medical/trial-registry.mjs";
 import { TrialScreening } from "./medical/trial-screening.mjs";
+import { TrialCandidates } from "./medical/trial-candidates.mjs";
 import { IntakeJobs } from "./medical/intake-jobs.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import http from "node:http";
@@ -37,6 +38,8 @@ import { FollowUpManager } from "./followups.mjs";
 import { WeComConnector } from "./wecom.mjs";
 import { CareEngine } from "./care/engine.mjs";
 import { careTools } from "./care/tools.mjs";
+import { trialTools } from "./medical/trial-tools.mjs";
+import { scheduleTools } from "./medical/schedule-tools.mjs";
 import { careApi } from "./care/api.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
@@ -46,6 +49,9 @@ import { searchIcd10 } from "./medical/icd10.mjs";
 import { PatientBrief } from "./medical/patient-brief.mjs";
 import { PatientImporter } from "./medical/patient-import.mjs";
 import { CareTasks } from "./medical/care-tasks.mjs";
+import { PatientSchedule } from "./medical/patient-schedule.mjs";
+import { Extensions } from "./medical/extensions.mjs";
+import { extensionTools } from "./medical/extension-tools.mjs";
 import { DoctorOverview } from "./medical/doctor-overview.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { onlineCaseTools } from "./medical/online-cases.mjs";
@@ -215,10 +221,14 @@ export function createServer(options = {}) {
   const models = new ModelSettings(store.db, vaultDir, initialProvider);
   const jev = new JevSettings(models.vault);
   let provider = models.provider();
+  // The doctor's own skills (extension center) are materialized here.
+  const userSkillsDir = options.userSkillsDir ||
+    (databasePath === ":memory:" ? mkdtempSync(join(tmpdir(), "omw-my-skills-")) : join(dirname(databasePath), "my-skills"));
   const skills =
     options.skills ||
     new SkillRegistry([
       resolve(ROOT, "../skills"),
+      userSkillsDir,
       ...(process.env.MEDICAL_SKILLS_DIR
         ? process.env.MEDICAL_SKILLS_DIR.split(",")
         : []),
@@ -231,6 +241,8 @@ export function createServer(options = {}) {
     followups: () => followups,
     cases: () => cases,
     care: () => care,
+    trials: () => trialCandidates,
+    extensions: () => extensions,
     copySourceMaterials: (sourceId, targetId, fileIds, sourceInput) => {
       const source = sessionBridge.get(sourceId);
       if (sourceInput) sessionBridge.addMaterial(targetId, { name: "建档时的对话输入.txt", text: sourceInput });
@@ -459,6 +471,9 @@ export function createServer(options = {}) {
         ...knowledgeToolPlugins,
         ...localPlugins(pendingActionTools(pending, doctor)),
         ...localPlugins(careTools(() => care, pending)),
+      ...localPlugins(trialTools(() => trialCandidates, pending)),
+      ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(extensionTools(() => extensions, pending)),
       ],
       // 会话叠层：医疗核心工具经 runTool 分发这些插件（材料 sources、
       // readOnly 约定与旧医疗会话一致）。
@@ -467,6 +482,9 @@ export function createServer(options = {}) {
         ...localPlugins(researchToolPlugins(research)),
         ...localPlugins(pendingActionTools(pending, doctor)),
         ...localPlugins(careTools(() => care, pending)),
+      ...localPlugins(trialTools(() => trialCandidates, pending)),
+      ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(extensionTools(() => extensions, pending)),
       ],
       skills,
       doctor,
@@ -495,6 +513,9 @@ export function createServer(options = {}) {
       ...localPlugins(researchToolPlugins(research)),
       ...localPlugins(pendingActionTools(pending, doctor)),
       ...localPlugins(careTools(() => care, pending)),
+      ...localPlugins(trialTools(() => trialCandidates, pending)),
+      ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(extensionTools(() => extensions, pending)),
     ],
     contextBudget:
       options.runtimeOptions?.maxContextChars ??
@@ -553,14 +574,25 @@ export function createServer(options = {}) {
     options.followupOptions,
   );
   const risks = new RiskEngine(store, followups);
-  const doctorOverview = new DoctorOverview(store, sessionBridge);
+  const schedule = new PatientSchedule(store, patients);
+  const doctorOverview = new DoctorOverview(store, sessionBridge, {
+    schedule,
+    extensions: () => extensions,
+    // Read lazily: the WeCom connector is created further below.
+    contactMatches: () => wecom.client ? wecom.directory.contacts({ status: "suggested", limit: 1 }).counts.suggested : 0,
+    trialWork: () => trialScreening.list().map((t) => {
+      const { counts } = trialCandidates.candidates(t.id);
+      return { id: t.id, title: t.title.slice(0, 40), awaitingReview: counts.awaitingReview };
+    }),
+  });
   const trialScreening = new TrialScreening(store, patients);
   const trialJobs = new TrialEligibilityJobs({store,patients,trials:trialScreening,bridge:sessionBridge,workspaces});
+  const trialCandidates = new TrialCandidates({ store, patients, trials: trialScreening, jobs: trialJobs });
   const trialRegistry = new TrialRegistry(options.trialRegistryOptions);
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
   const patientImporter = new PatientImporter(store, patients);
-  runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending)]);
+  runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending), ...trialTools(() => trialCandidates, pending), ...scheduleTools(() => schedule), ...extensionTools(() => extensions, pending)]);
   const swapProvider = (next) => {
     provider = next;
     runtime.provider = provider;
@@ -576,6 +608,8 @@ export function createServer(options = {}) {
     provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null,
     ...options.care,
   });
+  const extensions = new Extensions({ store, patients, schedule, skillsDir: userSkillsDir, care: () => care, sessions: sessionBridge });
+  sessionBridge.evolution = extensions;
   const wechat = new WeChatMacBridge({
     patients,
     enabled: ["1", "on", "true"].includes(
@@ -949,7 +983,8 @@ export function createServer(options = {}) {
       )
         return;
       if (path === "/api/sessions" && req.method === "GET")
-        return send(res, 200, { sessions: sessionBridge.list() });
+        // Per-patient trial screening runs are background work shown on the trial page.
+        return send(res, 200, { sessions: sessionBridge.list().filter((session) => url.searchParams.get("all") === "1" || !session.background) });
       if (path === "/api/sessions" && req.method === "POST") {
         const b = await body(req);
         // 显式 id 仅用于既有测试/迁移场景（旧引擎）；首页新建会话统一
@@ -1273,10 +1308,20 @@ export function createServer(options = {}) {
       if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
-      if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, { contacts: wecom.contacts() });
+      if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, wecom.directory.contacts({ status: url.searchParams.get("status") || undefined, query: url.searchParams.get("q") || undefined }));
+      if (path === "/api/wecom/directory" && req.method === "GET") return send(res, 200, wecom.directory.status());
+      if (path === "/api/wecom/directory/sync" && req.method === "POST") return send(res, 200, await track(wecom.directory.sync()));
+      if (path === "/api/wecom/groups" && req.method === "GET") return send(res, 200, wecom.directory.groups({ query: url.searchParams.get("q") || undefined }));
+      if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "groups" && parts.length === 4 && req.method === "GET") return send(res, 200, wecom.directory.group(decodeURIComponent(parts[3])));
+      if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "patients" && parts.length === 4 && req.method === "GET") return send(res, 200, wecom.directory.patient(parts[3]));
+      if (path === "/api/wecom/group-tasks" && req.method === "POST") return send(res, 201, wecom.directory.groupDraft(await body(req)));
+      if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "group-tasks" && parts.length === 5 && req.method === "POST") {
+        if (parts[4] === "submit") return send(res, 200, await track(wecom.directory.groupSubmit(parts[3], await body(req))));
+        if (parts[4] === "refresh") return send(res, 200, await track(wecom.directory.groupRefresh(parts[3])));
+      }
       if (path === "/api/wecom/sync" && req.method === "POST") return send(res, 200, await track(wecom.sync(await body(req))));
       if (path === "/api/wecom/bindings" && req.method === "GET") return send(res, 200, { bindings: wecom.bindings(url.searchParams.get("patientId")) });
-      if (path === "/api/wecom/bindings" && req.method === "POST") return send(res, 201, wecom.bind(await body(req)));
+      if (path === "/api/wecom/bindings" && req.method === "POST") return send(res, 201, await track(wecom.directory.link(await body(req))));
       if (parts[0] === "api" && parts[1] === "wecom" && parts[2] === "bindings" && parts.length === 4 && req.method === "DELETE") return send(res, 200, wecom.unbind(parts[3]));
       if (path === "/api/wecom/tasks" && req.method === "GET") return send(res, 200, { tasks: wecom.tasks(url.searchParams.get("patientId")) });
       if (path === "/api/wecom/tasks" && req.method === "POST") return send(res, 201, wecom.draft(await body(req)));
@@ -1574,8 +1619,29 @@ export function createServer(options = {}) {
         req.method === "POST"
       )
         return send(res, 200, followups.ackReminder(identifier(parts[2])));
+      if (parts[0] === "api" && parts[1] === "extensions") {
+        if (parts.length === 2 && req.method === "GET") return send(res, 200, extensions.overview());
+        if (parts.length === 2 && req.method === "POST") { const b = await body(req); return send(res, 201, extensions.save({ kind: b.kind, spec: b.spec, source: { via: "manual" } })); }
+        if (parts.length === 3 && parts[2] === "preview" && req.method === "POST") { const b = await body(req); return send(res, 200, extensions.preview(b.kind, b.spec)); }
+        if (parts.length === 3 && parts[2] === "prefs" && req.method === "GET") return send(res, 200, extensions.prefs());
+        if (parts.length === 3 && parts[2] === "usage" && req.method === "POST") return send(res, 200, extensions.recordUsage((await body(req)).flowId));
+        if (parts.length === 4 && parts[2] === "items" && req.method === "POST") return send(res, 200, extensions.resolveItem(parts[3], (await body(req)).status));
+        if (parts.length === 4 && parts[2] === "suggestions" && req.method === "POST") return send(res, 200, extensions.resolveSuggestion(parts[3], (await body(req)).status));
+        if (parts.length === 5 && parts[2] === "changes" && parts[4] === "undo" && req.method === "POST") return send(res, 200, extensions.undoChange(parts[3]));
+        if (parts.length === 3 && req.method === "GET") return send(res, 200, extensions.detail(parts[2]));
+        if (parts.length === 3 && req.method === "PUT") { const b = await body(req); const ext = extensions.row(parts[2]); return send(res, 200, extensions.save({ id: ext.id, kind: ext.kind, spec: b.spec, source: { via: "manual" } })); }
+        if (parts.length === 4 && parts[3] === "status" && req.method === "POST") return send(res, 200, extensions.setStatus(parts[2], (await body(req)).status));
+        if (parts.length === 4 && parts[3] === "rollback" && req.method === "POST") return send(res, 200, extensions.rollback(parts[2], (await body(req)).version));
+      }
+      if (parts[0] === "api" && parts[1] === "appointments" && parts.length === 3 && req.method === "PATCH") return send(res, 200, schedule.update(parts[2], await body(req)));
       if (parts[0] === "api" && parts[1] === "patients" && parts[2]) {
         const pid = identifier(parts[2]);
+        if (parts[3] === "appointments" && parts.length === 4) {
+          if (req.method === "GET") return send(res, 200, schedule.appointments(pid, { status: url.searchParams.get("status") || undefined }));
+          if (req.method === "POST") return send(res, 201, schedule.create(pid, await body(req)));
+        }
+        if (parts[3] === "labs" && parts.length === 5 && parts[4] === "new" && req.method === "GET") return send(res, 200, { labs: schedule.newLabs(pid) });
+        if (parts[3] === "labs" && parts.length === 5 && parts[4] === "reviewed" && req.method === "POST") return send(res, 200, schedule.markLabsReviewed(pid, (await body(req)).keys));
         if (parts[3] === "care-tasks") {
           if (parts.length === 4 && req.method === "GET") return send(res, 200, careTasks.list(pid, {
             status: url.searchParams.get("status") || "active", offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 20),
@@ -1718,6 +1784,17 @@ export function createServer(options = {}) {
           return send(res,200,trialJobs.cancel(job.id));
         }
         if (parts.length === 4 && parts[2] === "registry" && req.method === "GET") return send(res,200,await trialRegistry.lookup(parts[3]));
+        if (parts.length === 4 && parts[3] === "candidates" && req.method === "GET") return send(res,200,trialCandidates.candidates(parts[2], { stage: url.searchParams.get("stage") || undefined, status: url.searchParams.get("status") || undefined }));
+        if (parts.length === 4 && parts[3] === "batches" && req.method === "POST") return send(res,202,trialCandidates.startBatch(parts[2], await body(req)));
+        if (parts.length === 6 && parts[3] === "batches" && parts[5] === "cancel" && req.method === "POST") {
+          const batch = trialCandidates.getBatch(parts[4]);
+          check(batch.trialId === parts[2], "NOT_FOUND", "批量初筛不存在", 404);
+          return send(res,200,trialCandidates.cancelBatch(batch.id));
+        }
+        if (parts.length === 5 && parts[3] === "enrollments") {
+          if (req.method === "GET") return send(res,200,trialCandidates.enrollment(identifier(parts[2]), identifier(parts[4])));
+          if (req.method === "PUT") return send(res,200,trialCandidates.setEnrollment(parts[2], parts[4], await body(req)));
+        }
         if (parts.length === 2 && req.method === "GET") return send(res,200,{trials:trialScreening.list()});
         if (parts.length === 2 && req.method === "POST") return send(res,201,trialScreening.create(await body(req)));
         if (parts.length === 3 && req.method === "GET") return send(res,200,trialScreening.get(identifier(parts[2])));
@@ -2059,6 +2136,9 @@ export function createServer(options = {}) {
   server.cases = cases;
   server.wechat = wechat;
   server.wecom = wecom;
+  server.trialCandidates = trialCandidates;
+  server.schedule = schedule;
+  server.extensions = extensions;
   server.chatFollowups = chatFollowups;
   server.care = care;
   server.pendingActions = pending;
@@ -2069,6 +2149,7 @@ export function createServer(options = {}) {
     followups.start();
     chatFollowups.start();
     care.start();
+    extensions.start();
   });
   server.shutdown = async () => {
     workspaces.stopping = true;
@@ -2078,11 +2159,14 @@ export function createServer(options = {}) {
     followups.stop();
     await chatFollowups.stop();
     care.stop();
+    extensions.stop();
+    if (databasePath === ":memory:" && !options.userSkillsDir) rmSync(userSkillsDir, { recursive: true, force: true });
     for (const id of workspaces.active.keys()) workspaces.interrupt(id);
     for (const id of runtime.active.keys()) runtime.cancel(id);
     for (const id of workspaces.active.keys())
       if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
     await intakeJobs.stop();
+    await trialCandidates.stop();
     await trialJobs.stop();
     await knowledgeOrganizer.stop();
     for (const ws of sockets.clients) ws.terminate();

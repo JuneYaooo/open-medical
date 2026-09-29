@@ -362,3 +362,40 @@ fieldset.trial-form {
  .knowledge-map-layout { grid-template-columns:1fr; }
  .knowledge-map-evidence { border-left:0; border-top:1px solid #dfe6dd; max-height:none; }
 }
+
+/* 临床试验：候选患者与入组 */
+.trial-funnel { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin:12px 0; }
+.trial-funnel > div { border:1px solid var(--line,#e2e2e0); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; }
+.trial-funnel strong { font-size:20px; }
+.trial-funnel span { color:var(--muted,#68786e); font-size:13px; }
+.trial-batch { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; justify-content:flex-end; margin:8px 0; }
+.trial-batch[role=status] { justify-content:flex-start; background:#f6f8f3; border-radius:10px; padding:10px 14px; }
+.trial-batch progress { flex:1; min-width:160px; }
+.trial-filters { margin:8px 0; }
+.trial-table { width:100%; border-collapse:collapse; font-size:14px; }
+.trial-table th { text-align:left; font-weight:600; color:var(--muted,#68786e); font-size:13px; padding:8px; border-bottom:1px solid var(--line,#e2e2e0); }
+.trial-table td { vertical-align:top; padding:10px 8px; border-bottom:1px solid var(--line,#eee); }
+.trial-table td small { display:block; color:var(--muted,#68786e); font-size:12px; margin-top:2px; }
+.trial-table td small.warn, .trial-batch-list small.warn { color:#a4461f; }
+.trial-table td .text-button { padding:0; font-weight:600; }
+.trial-table td:last-child { min-width:150px; }
+.trial-next { display:block; margin-bottom:6px; font-weight:600; }
+.trial-pill { display:inline-block; font-size:12px; border-radius:10px; padding:1px 8px; background:#eef2ec; }
+.trial-pill.ok { background:#dcebdf; color:#245c46; }
+.trial-pill.bad { background:#f6e3dc; color:#a4461f; }
+.trial-pill.muted { color:var(--muted,#68786e); }
+.trial-stage { border:1px solid var(--line,#ddd); border-radius:6px; padding:5px 8px; font:inherit; font-size:13px; background:#fff; }
+.trial-stage.stage-enrolled, .trial-stage.stage-consented { border-color:#9db5a5; background:#eef5ef; }
+.trial-patient-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; }
+.trial-enrollment { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.trial-batch-dialog ul.trial-batch-list { list-style:none; margin:10px 0; padding:0; max-height:320px; overflow:auto; border:1px solid var(--line,#eee); border-radius:8px; }
+.trial-batch-list li { border-bottom:1px solid var(--line,#f0f0f0); }
+.trial-batch-list label { display:flex; gap:10px; align-items:flex-start; padding:8px 12px; cursor:pointer; }
+.trial-batch-list small { margin-left:8px; color:var(--muted,#68786e); }
+.trial-consent-check { display:flex; gap:8px; align-items:flex-start; margin:10px 0; font-size:14px; line-height:1.6; }
+.trial-consent-check input { margin-top:4px; }
+.trial-consent label { display:flex; flex-direction:column; gap:6px; margin:10px 0; }
+.trial-consent input { border:1px solid var(--line,#ddd); border-radius:6px; padding:8px; font:inherit; }
+@media (max-width: 900px) { .trial-table thead { display:none; } .trial-table tr { display:block; border-bottom:1px solid var(--line,#e2e2e0); padding:8px 0; } .trial-table td { display:block; border:0; padding:4px 0; } }
+.trial-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; }
+.trial-toolbar .trial-filters { margin:0; }

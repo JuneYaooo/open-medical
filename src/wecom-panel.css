@@ -16,3 +16,12 @@
 .wecom-panel button { border:1px solid var(--line,#ddd); border-radius:7px; padding:8px 12px; background:var(--surface,#fff); color:inherit; font:inherit; cursor:pointer; }
 .wecom-panel button:hover:not(:disabled) { background:var(--hover,#f2f5f2); }
 .wecom-panel button:disabled { cursor:default; opacity:.5; }
+article.wecom-binding { display:block; }
+.wecom-binding .care-contact-facts { margin:6px 0 0; }
+.wecom-suggestions { margin-top:8px; padding:4px 14px; background:#f6f8f3; border-radius:10px; }
+.wecom-suggestions > p { margin:10px 0 0; }
+.wecom-actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.wecom-panel button.primary { background:var(--accent,#2f6f55); border-color:var(--accent,#2f6f55); color:#fff; }
+.wecom-panel button.primary:hover:not(:disabled) { background:var(--accent-deep,#245c46); }
+.wecom-panel .wecom-search { margin-top:14px; }
+.wecom-panel .error { color:#a4461f; }

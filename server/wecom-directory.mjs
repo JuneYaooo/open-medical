@@ -1,3 +1,4 @@
+import { WecomApiError } from 'wecom';
 import { AppError, check, identifier, string } from './errors.mjs';
 import { sqliteTransaction } from './sqlite-transaction.mjs';
 
@@ -138,10 +139,10 @@ export class WecomDirectory {
   }
   bindingsByContact() {
     const map = new Map();
-    for (const b of this.db.prepare('SELECT b.id,b.member,b.external,b.patient_id,b.relationship,b.verified_at,p.data FROM wecom_bindings b JOIN patients p ON p.id=b.patient_id WHERE b.corp=?').all(this.corpId)) {
-      const key = `${b.member}\u0001${b.external}`, p = JSON.parse(b.data);
+    for (const b of this.db.prepare("SELECT b.id,b.member,b.external,b.patient_id,b.relationship,b.verified_at,json_extract(p.data,'$.name') name,json_extract(p.data,'$.patientNumber') number FROM wecom_bindings b JOIN patients p ON p.id=b.patient_id WHERE b.corp=?").all(this.corpId)) {
+      const key = `${b.member}\u0001${b.external}`;
       if (!map.has(key)) map.set(key, []);
-      map.get(key).push({ id: b.id, patientId: b.patient_id, patientName: p.name, patientNumber: p.patientNumber || '', relationship: b.relationship, verifiedAt: b.verified_at });
+      map.get(key).push({ id: b.id, external: b.external, patientId: b.patient_id, patientName: b.name, patientNumber: b.number || '', relationship: b.relationship, verifiedAt: b.verified_at });
     }
     return map;
   }
@@ -158,8 +159,8 @@ export class WecomDirectory {
       const reasons = []; let score = 0;
       const add = (points, reason) => { score += points; reasons.push(reason); };
       if (kfOwners.get(contact.external) === p.id) add(5, '同一微信用户已在微信客服中关联到该患者');
-      const phone = digits(p.phone);
-      if (phone.length >= 7 && (contact.mobiles || []).some(m => digits(m) === phone || digits(m).endsWith(phone.slice(-8)) && phone.length >= 8)) add(4, '备注手机号与档案电话一致');
+      const phone = digits(p.phone).slice(-8);
+      if (phone.length >= 7 && (contact.mobiles || []).some(m => digits(m).slice(-8) === phone)) add(4, '备注手机号与档案电话一致');
       if (p.patientNumber && p.patientNumber.length >= 3 && remark.includes(p.patientNumber)) add(4, '备注中含患者编号');
       if (p.name && p.name.length >= 2 && remark.includes(p.name)) add(2, '备注含患者姓名');
       else if (p.name && contact.name === p.name) add(1, '微信昵称与患者姓名相同');
@@ -206,9 +207,8 @@ export class WecomDirectory {
   patientsByExternal() {
     const map = new Map();
     for (const list of this.bindingsByContact().values()) for (const b of list) {
-      const row = this.db.prepare('SELECT external FROM wecom_bindings WHERE id=?').get(b.id);
-      if (!map.has(row.external)) map.set(row.external, []);
-      if (!map.get(row.external).some(x => x.patientId === b.patientId)) map.get(row.external).push({ patientId: b.patientId, patientName: b.patientName, relationship: b.relationship });
+      if (!map.has(b.external)) map.set(b.external, []);
+      if (!map.get(b.external).some(x => x.patientId === b.patientId)) map.get(b.external).push({ patientId: b.patientId, patientName: b.patientName, relationship: b.relationship });
     }
     return map;
   }
@@ -248,6 +248,13 @@ export class WecomDirectory {
     }
     suggestions.sort((a, b) => b.score - a.score);
     return { configured: Boolean(this.c.client), status: this.status(), linked, suggestions: suggestions.slice(0, 5) };
+  }
+
+  // Binding after the doctor confirmed; the remark write-back is best effort.
+  async link(input) {
+    const binding = this.c.bind(input);
+    const remarkWriteBack = input.writeRemark === false ? null : await this.writeRemark(binding.id);
+    return { ...binding, remarkWriteBack };
   }
 
   // ---------- remark write-back ----------
@@ -315,7 +322,7 @@ export class WecomDirectory {
       task.status = result.msgid ? 'awaiting_member' : 'unknown';
       task.detail = task.msgid ? `已创建群发任务，等待群主 ${task.owner} 在企业微信确认发送。` : '响应缺少任务编号，请到企业微信核实，勿重复提交。';
     } catch (error) {
-      task.status = error?.constructor?.name === 'WecomApiError' || Number.isInteger(error?.errcode) ? 'rejected' : 'unknown';
+      task.status = error instanceof WecomApiError ? 'rejected' : 'unknown';
       task.detail = this.c.apiFailure(error) + (task.status === 'unknown' ? ' 结果待核实，请勿重复提交。' : '');
     }
     return this.saveTask(task);

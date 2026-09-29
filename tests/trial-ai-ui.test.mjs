@@ -92,6 +92,8 @@ test(
       .getByRole("button", { name: "打开初筛" })
       .click();
     await page.getByLabel("选择初筛患者", { exact: true }).selectOption(p.id);
+    assert.equal(await page.getByRole("button", { name: "开始自动初筛", exact: true }).isDisabled(), true);
+    await page.getByLabel(/同意把该患者的病历资料交给当前配置的模型分析/).check();
     await page
       .getByRole("button", { name: "开始自动初筛", exact: true })
       .click();

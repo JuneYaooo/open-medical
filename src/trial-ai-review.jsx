@@ -11,7 +11,8 @@ export function TrialAIReview({ trial, patientId, onAdopt }) {
   const [job, setJob] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [filter, setFilter] = useState("attention");
+    [filter, setFilter] = useState("attention"),
+    [consent, setConsent] = useState(false);
   const base = `/api/trials/${trial.id}/screenings/${patientId}/ai`;
   useEffect(() => {
     let live = true,
@@ -66,7 +67,7 @@ export function TrialAIReview({ trial, patientId, onAdopt }) {
         </div>
         <button
           className="primary"
-          disabled={busy || job?.status === "running"}
+          disabled={busy || !consent || job?.status === "running"}
           onClick={() =>
             action(() => api(base, "POST", { externalConsent: true }))
           }
@@ -74,9 +75,10 @@ export function TrialAIReview({ trial, patientId, onAdopt }) {
           {job ? "重新自动初筛" : "开始自动初筛"}
         </button>
       </div>
-      <small className="muted">
-        所选患者资料将交由当前配置模型处理。可离开此页，处理与结果保存在本机。
-      </small>
+      <label className="trial-consent-check">
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+        <span>同意把该患者的病历资料交给当前配置的模型分析（档案快照不含姓名和电话，上传的病历文件按原样发送）。开始后可离开此页，结果保存在本机。</span>
+      </label>
       {error && (
         <p role="alert" className="form-error">
           {error}

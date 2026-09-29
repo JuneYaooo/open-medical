@@ -25,6 +25,7 @@ import { PatientProposalModal } from "./patient-proposal";
 import { PatientIntakeModal } from "./patient-intake";
 import { PatientImportModal } from "./patient-import";
 import { CareTasksPanel } from "./care-tasks";
+import { AppointmentsPanel, NewLabsNotice } from "./appointments";
 
 const RECORD_TABS = [["overview", "概览"], ["diagnoses", "诊断与病史"], ["medications", "用药与过敏"], ["labs", "检验趋势"], ["visits", "就诊经过"], ["sources", "原始资料"]];
 const isRecordTab = tab => RECORD_TABS.some(([id]) => id === tab) || tab === "clinical";
@@ -617,12 +618,14 @@ export function PatientsView({
           <nav className="tab-row patient-area-tabs" aria-label="患者工作内容">
             <button className={isRecordTab(tab) ? "active" : ""} onClick={() => setTab("overview")}>患者档案</button>
             <button className={tab === "assistance" ? "active" : ""} onClick={() => setTab("assistance")}>诊疗辅助</button>
-            <button className={["messages", "followups", "tracking"].includes(tab) ? "active" : ""} onClick={() => setTab("messages")}>沟通与随访</button>
+            <button className={["messages", "followups", "tracking", "appointments"].includes(tab) ? "active" : ""} onClick={() => setTab("messages")}>沟通与随访</button>
           </nav>
           {tab !== "assistance" && <nav className="tab-row patient-section-tabs" aria-label="患者栏目">
-            {(isRecordTab(tab) ? RECORD_TABS : [["messages", `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`], ["followups", "随访计划"], ["tracking", "检查与转诊"]]).map(([id, label]) => <button key={id} aria-current={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "page" : undefined} className={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+            {(isRecordTab(tab) ? RECORD_TABS : [["messages", `消息记录${detail.counts.unprocessedMessages ? ` · ${detail.counts.unprocessedMessages} 未处理` : ""}`], ["appointments", "复诊预约"], ["followups", "随访计划"], ["tracking", "检查与转诊"]]).map(([id, label]) => <button key={id} aria-current={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "page" : undefined} className={(tab === id || (tab === "clinical" && id === "diagnoses")) ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
           </nav>}
           {tab === "tracking" && <CareTasksPanel key={detail.id} patient={detail} onChanged={onChanged} />}
+          {tab === "appointments" && <AppointmentsPanel key={detail.id} patient={detail} />}
+          {(tab === "overview" || tab === "labs") && <NewLabsNotice key={`${detail.id}-${detail.revision}`} patientId={detail.id} onOpenLabs={tab === "labs" ? null : () => setTab("labs")} />}
           {isRecordTab(tab) && <div className="detail-panel"><PatientDashboard key={`${detail.id}-${tab}`} patient={detail} session={session} view={tab === "clinical" ? "diagnoses" : tab} onClinical={setTab} onChanged={refreshPatient} onError={setError} onOpenWorkspace={onOpenWorkspace}/></div>}
           {tab === "assistance" && <ClinicalAssistance key={detail.id} patient={detail} session={session} onNavigate={setTab} onOpenTask={onOpenWorkspace}/>}
           {tab === "overview" && (

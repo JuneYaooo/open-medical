@@ -109,3 +109,57 @@
 .care-setup-steps button.bad span { background:#c46a3d; color:#fff; }
 .care-setup-steps button small { color:var(--muted,#68786e); font-size:12px; font-weight:400; }
 .care-setup-start { align-self:flex-start; }
+
+/* 客户与群 */
+.care-contacts-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; margin-bottom:12px; }
+.care-contacts-bar .care-tabs { margin:0; }
+.care-tabs em.muted { background:#e3e9e1; color:#3d5347; }
+.care-search { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border,#d9e3da); border-radius:8px; padding:0 10px; background:#fff; min-width:260px; }
+.care-search input { border:0; outline:0; padding:8px 0; font:inherit; background:transparent; flex:1; }
+.care-contact-facts { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; margin:0; color:var(--muted,#68786e); font-size:13px; }
+.care-suggest { background:#f6f8f3; border-radius:8px; padding:8px 12px; }
+.care-suggest p { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; }
+.care-suggest small { color:var(--muted,#68786e); }
+.care-contacts button.link, .care-suggest button.link { background:none; border:0; padding:0; color:var(--accent-deep,#245c46); font:inherit; font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.care-card > header button.link { font-weight:500; }
+.care-picker { border:1px solid var(--border,#d9e3da); border-radius:7px; padding:7px 10px; font:inherit; background:#fff; max-width:260px; }
+.care-card > footer button { display:inline-flex; align-items:center; gap:4px; }
+.care-card > header strong { display:inline-flex; align-items:center; gap:4px; }
+.care-group-detail { border-top:1px dashed #d8e1d7; padding-top:8px; }
+.care-group-tasks { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.care-group-tasks li { background:#f6f8f5; border-radius:6px; padding:8px 12px; font-size:13px; }
+.care-group-tasks p { margin:4px 0; white-space:pre-wrap; }
+.care-confirm textarea { width:100%; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:10px 12px; font:inherit; line-height:1.7; }
+@media (max-width: 720px) { .care-search { min-width:0; width:100%; } }
+.care-contacts-bar .care-tabs button { padding:4px 12px; font-size:14px; border-radius:16px; }
+.care-contacts-bar .care-search { min-width:300px; }
+
+/* 复诊预约与新检验结果 */
+.appointment-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 14px; padding:12px 14px; background:#f6f8f5; border-radius:10px; margin:10px 0; }
+.appointment-form label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+.appointment-form input { border:1px solid #d8e1d7; border-radius:6px; padding:7px 9px; font:inherit; background:#fff; }
+.appointment-form .toolbar-actions { grid-column:1 / -1; justify-content:flex-end; }
+.care-tracking-card.overdue { border-left:4px solid #ba963d; }
+.new-labs { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; background:#fbf6e9; border:1px solid #ecdcae; border-radius:10px; padding:10px 14px; margin:0 0 12px; }
+.new-labs > div { flex:1; min-width:240px; display:flex; flex-direction:column; gap:2px; }
+.new-labs span { font-size:13px; color:var(--muted,#68786e); }
+
+/* 我的工作台（扩展中心） */
+.ext-center h2 { margin:0 0 6px; }
+.ext-block { margin:18px 0; }
+.ext-block h3 { display:flex; align-items:center; gap:6px; font-size:15px; margin:0 0 8px; }
+.ext-block h3 small { color:var(--muted,#68786e); font-weight:400; }
+.ext-card, .ext-suggestion { border:1px solid var(--border,#d8e1d7); border-radius:10px; padding:12px 14px; margin:8px 0; background:#fff; }
+.ext-card.disabled { opacity:.65; }
+.ext-card header { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; }
+.ext-card header small { color:var(--muted,#68786e); }
+.ext-card p { margin:6px 0; }
+.ext-status { font-size:12px; border-radius:10px; padding:1px 8px; background:#dcebdf; color:#245c46; }
+.ext-status.disabled { background:#eee; color:#666; }
+.ext-suggestion { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 16px; background:#f6f8f3; }
+.ext-suggestion p { margin:4px 0 0; }
+.ext-change { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:4px 0; font-size:14px; }
+.ext-examples { display:flex; flex-wrap:wrap; gap:8px; }
+.ext-versions { margin:8px 0 0; padding-left:18px; font-size:13px; }
+.ext-versions li { margin:6px 0; }
+.ext-versions small { display:block; color:var(--muted,#68786e); }

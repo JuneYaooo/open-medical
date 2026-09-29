@@ -4,6 +4,7 @@ import { decrypt, getSignature } from '@wecom/crypto';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { AppError, check, identifier, string } from './errors.mjs';
 import { sqliteTransaction } from './sqlite-transaction.mjs';
+import { WecomDirectory } from './wecom-directory.mjs';
 
 const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, processEntities: false });
 function xml(text) {
@@ -47,6 +48,7 @@ export class WeComConnector {
     for (const row of this.db.prepare("SELECT data FROM wecom_tasks WHERE corp=? AND json_extract(data,'$.status')='submitting'").all(this.corpId)) {
       const task = JSON.parse(row.data); task.status = 'unknown'; this.saveTask(task);
     }
+    this.directory = new WecomDirectory(this, { now: options.now });
   }
   // Each value comes from the settings page (encrypted vault) first, then the
   // legacy desktop config file / environment. Explicit options win (tests).
@@ -126,7 +128,7 @@ export class WeComConnector {
       } while (cursor);
       sqliteTransaction(this.db, () => {
         this.db.prepare('UPDATE wecom_contacts SET active=0 WHERE corp=? AND member=?').run(this.corpId, member);
-        const put = this.db.prepare('INSERT INTO wecom_contacts VALUES (?,?,?,?,1,?) ON CONFLICT(corp,member,external) DO UPDATE SET name=excluded.name,active=1,updated=excluded.updated');
+        const put = this.db.prepare('INSERT INTO wecom_contacts(corp,member,external,name,active,updated) VALUES (?,?,?,?,1,?) ON CONFLICT(corp,member,external) DO UPDATE SET name=excluded.name,active=1,updated=excluded.updated');
         for (const [external, name] of records) put.run(this.corpId, member, external, name, now());
       });
       return { count: records.size, contacts: this.contacts() };
@@ -234,9 +236,10 @@ export class WeComConnector {
       }
       // A new customer appears right away; the next contact sync fills in the name.
       if (inserted.changes && ['add_external_contact', 'add_half_external_contact', 'edit_external_contact'].includes(data.change)) {
-        this.db.prepare('INSERT INTO wecom_contacts VALUES (?,?,?,?,1,?) ON CONFLICT(corp,member,external) DO UPDATE SET active=1,updated=excluded.updated').run(this.corpId, data.member, data.external, data.external, now());
+        this.db.prepare('INSERT INTO wecom_contacts(corp,member,external,name,active,updated) VALUES (?,?,?,?,1,?) ON CONFLICT(corp,member,external) DO UPDATE SET active=1,updated=excluded.updated').run(this.corpId, data.member, data.external, data.external, now());
       }
     });
+    if (data.change !== 'del_follow_user') this.directory.setState({ lastSyncAt: null, lastAttemptAt: null });
     return 'success';
   }
 }

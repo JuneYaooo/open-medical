@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Bell, Inbox, Loader2, MessageSquare, RefreshCw, Send, Settings2, Stethoscope, UserCog } from "lucide-react";
+import { AlertTriangle, Bell, Contact, Inbox, Loader2, MessageSquare, RefreshCw, Send, Settings2, Stethoscope, UserCog } from "lucide-react";
 import { api } from "./agent-runtime";
 import { Modal } from "./components";
+import { CareContacts } from "./care-contacts";
 import { CareSetup, setupProgress, takeCareSetupRequest } from "./care-setup";
 import "./care.css";
 
-const TABS = [["alerts", "提醒", Bell], ["drafts", "待回复草稿", MessageSquare], ["messages", "全部消息", Inbox], ["settings", "设置", Settings2]];
+const TABS = [["alerts", "提醒", Bell], ["drafts", "待回复草稿", MessageSquare], ["messages", "全部消息", Inbox], ["contacts", "客户与群", Contact], ["settings", "设置", Settings2]];
 const LEVEL = { urgent: "紧急", attention: "需关注", routine: "常规" };
 const CATEGORY = { emergency: "急症", clinical: "病情", medication: "用药", report: "报告", education: "科普", admin: "行政", followup_reply: "随访回复", chitchat: "寒暄", other: "其他" };
 const STATUS = { pending: "待分诊", unassigned: "未关联患者", auto_replied: "已自动回复", drafted: "已生成草稿", alerted: "已提醒医生", recorded: "已记录", handled: "已处理", skipped: "已跳过", failed: "处理失败" };
@@ -16,11 +17,18 @@ const MODES = [["off", "关闭", "只记录、分诊和提醒，不生成回复"
 const fmt = (value) => value ? new Date(value).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 
 function Empty({ children }) {
-  return <div className="care-empty"><p>{children}</p><p className="care-hint">消息来源：企业微信微信客服回调、会话存档采集器，或通过 <code>/api/ingest/messages</code> 导入。也可以在对话中问「今天有哪些患者消息需要我处理？」。</p></div>;
+  return <div className="care-empty"><p>{children}</p><p className="care-hint">患者通过微信客服链接发来的消息会自动出现在这里（链接在接入向导最后一步生成）。也可以在对话中问「今天有哪些患者消息需要我处理？」。</p></div>;
+}
+
+const TAB_KEY = "omw-care-tab";
+// Lets the agenda open 患者消息 on a given tab.
+export function requestCareTab(tab) { try { sessionStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ } }
+function takeCareTab() {
+  try { const tab = sessionStorage.getItem(TAB_KEY); sessionStorage.removeItem(TAB_KEY); return TABS.some(([id]) => id === tab) ? tab : "alerts"; } catch { return "alerts"; }
 }
 
 export function CareInbox({ onOpenPatient }) {
-  const [tab, setTab] = useState("alerts");
+  const [tab, setTab] = useState(takeCareTab);
   const [overview, setOverview] = useState(null);
   const [data, setData] = useState({});
   const [error, setError] = useState("");
@@ -38,9 +46,9 @@ export function CareInbox({ onOpenPatient }) {
   const load = useCallback(async () => {
     const paths = { alerts: "/api/care/alerts?status=open", drafts: "/api/care/replies?status=draft", messages: "/api/care/inbox?limit=100", settings: "/api/care/settings" };
     try {
-      const [ov, value] = await Promise.all([api("/api/care/overview"), api(paths[tab])]);
+      const [ov, value] = await Promise.all([api("/api/care/overview"), paths[tab] ? api(paths[tab]) : null]);
       setOverview(ov);
-      setData((d) => ({ ...d, [tab]: value }));
+      if (value) setData((d) => ({ ...d, [tab]: value }));
       setError("");
     } catch (e) { setError(e.message); }
   }, [tab]);
@@ -64,9 +72,9 @@ export function CareInbox({ onOpenPatient }) {
   }
 
   const stats = overview?.stats || {};
-  const counts = { alerts: stats.openAlerts, drafts: stats.drafts };
+  const counts = { alerts: stats.openAlerts, drafts: stats.drafts, contacts: stats.contactMatches };
   return <main id="main" className="work-directory care-inbox">
-    <header className="directory-heading"><div><h1>患者消息</h1><p>实时记录企业微信患者消息；AI 分诊、科普回复草稿、重要消息提醒与自动随访。所有操作也可以直接在对话中完成。</p></div></header>
+    <header className="directory-heading"><div><h1>患者消息</h1><p>自动收集企业微信患者消息并分诊；科普问题起草或自动回复，重要消息提醒医生；管理助理微信里的客户与客户群。所有操作也可以直接在对话中完成。</p></div></header>
     {setup && !setup.essential && !setupLater && <section className="care-setup-banner" aria-label="企业微信接入">
       <div><strong>{setup.count ? "企业微信还没接入完成" : "先接入企业微信，才能自动收集和回复患者消息"}</strong>
         <span>已完成 {setup.count}/{setup.total} 项 · 约 10 分钟，按向导一步步在企业微信管理后台操作</span></div>
@@ -91,7 +99,7 @@ export function CareInbox({ onOpenPatient }) {
     </nav>
     {error && <p role="alert" className="care-error">{error}</p>}
     {notice && <p role="status" className="care-notice">{notice}</p>}
-    {!data[tab] && !error && <p role="status" className="care-loading"><Loader2 size={16} className="spin" />正在读取…</p>}
+    {!data[tab] && tab !== "contacts" && !error && <p role="status" className="care-loading"><Loader2 size={16} className="spin" />正在读取…</p>}
     {tab === "alerts" && data.alerts && <AlertList alerts={data.alerts.alerts || []} busy={busy} onOpenPatient={onOpenPatient}
       onAction={(a, action) => act(a.id + action, () => api(`/api/care/alerts/${a.id}/${action}`, "POST", {}), action === "resolve" ? "提醒已标记解决。" : "提醒已确认。")} />}
     {tab === "drafts" && data.drafts && <DraftList replies={data.drafts.replies || []} busy={busy} onOpenPatient={onOpenPatient}
@@ -103,6 +111,7 @@ export function CareInbox({ onOpenPatient }) {
       onAssign={(m, patientId) => act(m.id + "assign", () => api(`/api/care/messages/${m.id}/assign`, "POST", { patientId }), "已关联患者，后续该客户的消息会自动归档到此患者。")}
       onProcess={(m) => act(m.id + "process", () => api(`/api/care/messages/${m.id}/process`, "POST", {}), "已重新分诊。")}
       onMark={(m) => act(m.id + "mark", () => api(`/api/care/messages/${m.id}/mark`, "POST", { status: "handled" }), "已标记处理。")} />}
+    {tab === "contacts" && <CareContacts onOpenPatient={onOpenPatient} onSetup={() => setSetupOpen(true)} />}
     {tab === "settings" && data.settings && <CareSettings key={JSON.stringify(data.settings)} settings={data.settings} busy={busy === "settings"} onSetup={() => setSetupOpen(true)}
       onSave={(value) => act("settings", () => api("/api/care/settings", "PUT", value), "设置已保存，新消息将按此处理。")} />}
     {patientSettings && <PatientCareSettings patient={patientSettings} onClose={() => setPatientSettings(null)} onSaved={() => { setPatientSettings(null); setNotice("患者自动回复设置已保存。"); load(); }} />}

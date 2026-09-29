@@ -623,7 +623,7 @@ function App() {
         .filter(
           (skill) =>
             !pickedSkills.includes(skill.id) &&
-            `${skill.name} ${skill.id} ${skill.description || ""}`
+            `${skill.title || skill.name} ${skill.name} ${skill.id} ${skill.description || ""}`
               .toLowerCase()
               .includes(mention.query.toLowerCase()),
         )
@@ -1428,7 +1428,7 @@ function App() {
                 </div> : <div className="loading-state" role="status">
                   <Loader2 className="spin" />正在连接本地运行时…
                 </div>}
-              </main>) : view === "settings" && config ? <AppSettingsView config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} /> : view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
+              </main>) : view === "settings" && config ? <AppSettingsView config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} onAsk={(prompt)=>{setHomeDraft({prompt});setHomeKey((k)=>k+1);navigate("home");}} /> : view === "projects" && config ? <ProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <ToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <TaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
             <WorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}
@@ -1448,7 +1448,7 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "care" && medical ? (<CareInbox onOpenPatient={(id) => openPatient({ id, tab: "messages" })} />) : view === "agenda" && medical ? (<main id="main" className="work-directory"><header className="directory-heading"><div><h1>今日待办</h1><p>处理患者消息、随访和待复核成果。</p></div></header><DoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
+          ) : view === "care" && medical ? (<CareInbox onOpenPatient={(id) => openPatient({ id, tab: "messages" })} />) : view === "agenda" && medical ? (<main id="main" className="work-directory"><header className="directory-heading"><div><h1>今日待办</h1><p>今天需要联系、复诊、核对结果的患者，以及高危风险提醒。</p></div></header><DoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}
@@ -1911,7 +1911,7 @@ function App() {
                           >
                             <AtSign size={12} />
                             <span>
-                              <b>{skill.name}</b>
+                              <b>{skill.title || skill.name}</b>
                               <small>{skill.description}</small>
                             </span>
                           </button>
@@ -1961,10 +1961,10 @@ function App() {
                         return (
                           <span className="skill-chip" key={id}>
                             <AtSign size={11} />
-                            {skill?.name || id}
+                            {skill?.title || skill?.name || id}
                             <button
                               type="button"
-                              aria-label={`移除技能 ${skill?.name || id}`}
+                              aria-label={`移除技能 ${skill?.title || skill?.name || id}`}
                               onClick={() =>
                                 setPickedSkills((prev) =>
                                   prev.filter((x) => x !== id),
