@@ -73,6 +73,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
         <CheckCheck size={24} />
         <div><b>{query ? "没有匹配的待办" : !data.patientCount ? "从第一位患者开始" : kind === "all" ? "今天没有需要处理的患者事项" : "当前分类没有待处理事项"}</b>
           <p>{query ? "试试姓名、患者编号或任务关键词。" : !data.patientCount ? "建档后导入材料，整理、复核和随访会围绕同一位患者接续。" : "已完成的记录仍保留在患者档案中。你也可以直接交办新任务。"}</p></div>
+        {data.patientCount > 0 && !query && <div className="toolbar-actions"><button className="text-button" onClick={() => { requestSettingsTab("workbench"); onView?.("settings"); }}>设置我的提醒规则</button></div>}
         {!data.patientCount && !query && <div className="toolbar-actions"><button className="secondary" onClick={() => onPatient({ create: true })}><UserPlus size={15} />新建患者</button><button className="text-button" onClick={() => onPatient({ import: true })}>导入已有患者</button></div>}
       </div>}
       <div className="agenda-items">{data?.items.map((item) => {

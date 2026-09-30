@@ -65,3 +65,11 @@
   .v6-shell .app-navigation.open, .v6-shell .inspector.open { top: 108px; }
   .v6-shell .nav-scrim { inset: 108px 0 0; }
 }
+.hub-customize { margin-top: 16px; padding: 12px 16px; border: 1px dashed #b9cbb9; border-radius: 12px; background: #f6f9f4; display: grid; gap: 10px; }
+.hub-customize > div:first-child { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+.hub-customize > div:first-child svg { color: #3f7a5a; }
+.hub-customize > div:first-child span { color: var(--muted, #68736f); font-size: 12px; }
+.hub-customize-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hub-customize-actions button:not(.text-button) { border: 1px solid var(--border); border-radius: 7px; background: #fff; padding: 7px 11px; font-size: 12px; color: var(--ink); }
+.hub-customize-actions button:not(.text-button):hover { background: #e7efe3; border-color: #a3bba6; }
+.hub-customize-actions .text-button { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-left: auto; }

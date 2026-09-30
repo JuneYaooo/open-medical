@@ -1,4 +1,5 @@
 import { patientOptionLabel } from "./patient-labels";
+import { EXAMPLES as CUSTOMIZE_EXAMPLES, requestSettingsTab } from "./extension-center";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -773,6 +774,11 @@ export function WorkbenchHome({
               <div className="agent-template-grid">{allFlows.filter(f => f.category === category).map(flow => <button key={flow.id} disabled={starting || uploading} aria-pressed={flow.id === flowId} onClick={() => chooseFlow(flow)}><flow.icon size={18}/><span><b>{flow.title}</b><small>{flow.desc}</small></span></button>)}</div>
             </div>}
           </section>
+          {medicalEnabled(config) && <section className="hub-customize" aria-label="定制我的工作台">
+            <div><Sparkles size={15} /><b>按你的习惯定制</b><span>{customFlows.length ? `已有 ${customFlows.length} 个专属模板，` : ""}说出医院模板或提醒要求，确认后就会长进工作台。</span></div>
+            <div className="hub-customize-actions">{CUSTOMIZE_EXAMPLES.slice(0, 3).map(([label, text]) => <button key={label} disabled={starting || uploading} onClick={() => { setFlowId(""); setPrompt(text); inputRef.current?.focus(); }}>{label}</button>)}
+              <button className="text-button" onClick={() => { requestSettingsTab("workbench"); onView?.("settings"); }}>管理我的工作台<ArrowRight size={13} /></button></div>
+          </section>}
           {!config?.modelConfigured && <div className="agent-setup-note"><span>连接模型后可使用 AI 完成任务；本地资料整理仍可使用。</span><button onClick={onModelSettings}>配置模型</button></div>}
           {config && <SetupChecklist modelConfigured={Boolean(config.modelConfigured)} onModelSettings={onModelSettings} onView={onView} />}
         </>
