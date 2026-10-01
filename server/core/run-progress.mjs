@@ -89,14 +89,20 @@ export class RunProgress {
     let key;
     try { key = signature(call); } catch { key = hash([call.function.name, call.function.arguments]); }
     if (output?.error || ["failed", "cancelled"].includes(output?.status)) {
-      const failureKey = hash([key, output.code || output.status || output.error]);
+      // Changing payload text does not resolve the same schema rejection.
+      const argumentFailure = output.code === "INVALID_TOOL_ARGS";
+      const failureKey = argumentFailure
+        ? hash([call.function.name, output.code, output.error])
+        : hash([key, output.code || output.status || output.error]);
       const old = this.state.failures.find((entry) => entry.key === failureKey);
-      const entry = { key: failureKey, count: (old?.count || 0) + (this.failureKeys.has(failureKey) ? 0 : 1) };
+      const entry = { key: failureKey, count: (old?.count || 0) + (this.failureKeys.has(failureKey) ? 0 : 1),
+        ...(argumentFailure ? { argumentTool: call.function.name } : {}) };
       this.failureKeys.add(failureKey);
       this.state.failures = [...this.state.failures.filter((item) => item.key !== failureKey), entry].slice(-LIMIT);
       this.failures = Math.max(this.failures, entry.count);
       return { repeated: entry.count > 1, failure: true };
     }
+    this.state.failures = this.state.failures.filter((entry) => entry.argumentTool !== call.function.name);
     const spec = tool?.observation;
     const observedContent = spec?.content === "$json" ? stable(output) : output?.[spec?.content];
     if (!spec || typeof output?.[spec.revision] !== "string" || typeof observedContent !== "string") {

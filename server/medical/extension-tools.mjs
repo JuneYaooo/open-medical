@@ -7,10 +7,42 @@ const definition = (name, description, properties = {}, required = []) => ({
   function: { name, description, parameters: { type: "object", properties, required, additionalProperties: false } },
 });
 const text = { type: "string" };
+const object = (properties, required = []) => ({ type: "object", properties, required, additionalProperties: false });
+const boundedText = (maxLength) => ({ type: "string", minLength: 1, maxLength });
 const SPEC = {
   type: "object",
+  additionalProperties: false,
+  required: ["name"],
+  properties: {
+    name: boundedText(60),
+    description: boundedText(600),
+    body: boundedText(20000),
+    template: { type: "string", maxLength: 20000 },
+    appliesTo: {
+      description: "适用文书名称数组，例如 [\"出院小结草稿\"]；兼容单个名称字符串。",
+      anyOf: [{ type: "array", items: boundedText(40), maxItems: 10 }, boundedText(40)],
+    },
+    quickTask: object({ title: boundedText(30), desc: { type: "string", maxLength: 80 }, prompt: boundedText(2000) }, ["prompt"]),
+    trigger: object({
+      type: { type: "string", enum: ["daily", "weekly", "lab", "appointment"] },
+      time: { type: "string", pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+      weekday: { type: "integer", minimum: 1, maximum: 7 },
+      item: boundedText(40), daysBefore: { type: "integer", minimum: 0, maximum: 14 },
+    }, ["type"]),
+    condition: object({
+      diagnosis: boundedText(60), tag: boundedText(60), group: boundedText(60),
+      gender: { type: "string", enum: ["male", "female"] },
+      ageMin: { type: "integer", minimum: 0, maximum: 130 },
+      ageMax: { type: "integer", minimum: 0, maximum: 130 },
+      lab: object({ item: boundedText(40), op: { type: "string", enum: ["gt", "gte", "lt", "lte", "eq"] }, value: { type: "number" } }, ["item", "op", "value"]),
+    }),
+    action: object({
+      type: { type: "string", enum: ["agenda", "draft_message", "report"] },
+      title: boundedText(60), detail: { type: "string", maxLength: 200 }, text: boundedText(1000),
+    }, ["type"]),
+  },
   description: [
-    "skill：{name, description（何时使用）, body（步骤、结构、措辞要求，Markdown）, template?（医院/科室模板原文）, appliesTo?（适用文书名，如「出院小结草稿」）, quickTask?{title, desc, prompt}（出现在首页快捷任务）}。",
+    "skill 必填 name、description、body：{name, description（何时使用）, body（步骤、结构、措辞要求，Markdown）, template?（医院/科室模板原文）, appliesTo?（适用文书名称数组，如 [\"出院小结草稿\"]）, quickTask?{title, desc, prompt}（出现在首页快捷任务）}。",
     "automation：{name, trigger, condition, action}。",
     "trigger：{type:'daily', time:'08:00'} | {type:'weekly', weekday:1–7, time} | {type:'lab', item?} 新检验结果 | {type:'appointment', daysBefore:0–14}。",
     "condition（可省略=所有患者）：{diagnosis?, tag?, group?, gender?:'male'|'female', ageMin?, ageMax?, lab?:{item, op:'gt'|'gte'|'lt'|'lte'|'eq', value}}。",

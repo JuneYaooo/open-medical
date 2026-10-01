@@ -15,6 +15,38 @@ function archives() {
   const values = new Map();
   return { values, save: async (value) => { const id = `archive-${values.size}`; values.set(id, structuredClone(value)); return { id }; } };
 }
+test("changing invalid arguments cannot evade schema failure recovery, including after resume", async () => {
+  let progress = new RunProgress();
+  const failure = { code: "INVALID_TOOL_ARGS", error: "工具参数无效：arguments.spec" };
+  let status;
+  for (let round = 0; round < 6; round++) {
+    progress.beginRound();
+    await progress.record(call(`changed-${round}`), failure, tool);
+    status = progress.endRound();
+    if (round === 1) assert.equal(status.warning, true);
+    progress = new RunProgress(progress.snapshot());
+  }
+  assert.equal(status.stopped, true);
+  progress.beginRound();
+  await progress.record(call("fixed"), { ok: true }, {});
+  progress.endRound();
+  progress.beginRound();
+  await progress.record(call("new-mistake"), failure, tool);
+  assert.equal(progress.endRound().repeatedFailures, 1);
+});
+
+test("runtime stops repeated schema failures with changing payloads before executing the tool", async () => {
+  let rounds = 0, executions = 0;
+  const registry = new ToolRegistry([{ definition: { type: "function", function: {
+    name: "read_file", parameters: { type: "object", properties: { path: { type: "integer" } }, required: ["path"], additionalProperties: false },
+  } }, permission: "filesystem.read", execute() { executions++; } }]);
+  const runtime = new AgentRuntime({ maxRounds: 20, provider: { model: "fixture", async complete() {
+    return { message: { role: "assistant", tool_calls: [call(`invalid-${++rounds}`)] } };
+  } } });
+  await assert.rejects(runtime.run({ messages: [], registry, permissions }), { code: "AGENT_NO_PROGRESS" });
+  assert.equal(rounds, 6);
+  assert.equal(executions, 0);
+});
 test("versioned observations retain full archives, ranges and exact versions across resume", async () => {
   const data = archives();
   let progress = new RunProgress();

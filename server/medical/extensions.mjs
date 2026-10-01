@@ -75,12 +75,14 @@ export class Extensions {
     check(KINDS.includes(kind), "INVALID_INPUT", "扩展类型须为 skill 或 automation");
     check(spec && typeof spec === "object", "INVALID_INPUT", "扩展内容必须是对象");
     if (kind === "skill") {
+      const appliesTo = typeof spec.appliesTo === "string" ? [spec.appliesTo] : spec.appliesTo ?? [];
+      check(Array.isArray(appliesTo), "INVALID_INPUT", "适用文书须为名称数组或单个名称");
       const value = {
         name: string(spec.name, "技能名称", 60),
         description: string(spec.description, "何时使用（description）", 600),
         body: string(spec.body, "技能说明", 20000),
         template: text(spec.template, "模板", 20000),
-        appliesTo: Array.isArray(spec.appliesTo) ? spec.appliesTo.map((x) => string(x, "适用文书", 40)).slice(0, 10) : [],
+        appliesTo: appliesTo.map((x) => string(x, "适用文书", 40)).slice(0, 10),
         quickTask: spec.quickTask ? { title: string(spec.quickTask.title || spec.name, "快捷任务名称", 30), desc: text(spec.quickTask.desc, "快捷任务说明", 80), prompt: string(spec.quickTask.prompt, "快捷任务提示", 2000) } : null,
       };
       return { ...value, summary: `技能「${value.name}」：${value.description.slice(0, 80)}` };
@@ -368,7 +370,7 @@ export class Extensions {
       const data = JSON.parse(s.data);
       this.suggest(`doc_edit:${s.key}:${Math.floor(s.count / EDIT_SUGGEST)}`, {
         type: "create_skill", title: `为「${s.key}」建立你的专属写法`, evidence: `你已修改过 ${s.count} 次「${s.key}」${data.notes?.length ? `，修改依据包括：${data.notes.slice(-3).join("；")}` : ""}`,
-        prompt: `我经常修改AI生成的「${s.key}」。${data.notes?.length ? `我最近的修改依据：${data.notes.join("；")}。` : ""}请先问清我希望的结构、必写内容和措辞习惯（也可以让我上传医院模板），然后用 extension_propose 建立一个适用于「${s.key}」的技能（appliesTo 填「${s.key}」，并设为快捷任务），给我预览后再提交。`,
+        prompt: `我经常修改AI生成的「${s.key}」。${data.notes?.length ? `我最近的修改依据：${data.notes.join("；")}。` : ""}请先问清我希望的结构、必写内容和措辞习惯（也可以让我上传医院模板），然后用 extension_propose 建立一个适用于「${s.key}」的技能（appliesTo 填 ${JSON.stringify([s.key])}，并设为快捷任务），给我预览后再提交。`,
       });
     }
     // 3. Rules whose to-dos are mostly ignored → propose to adjust or stop.

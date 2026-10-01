@@ -3,21 +3,71 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixture } from "./helpers.mjs";
+import { ToolRegistry } from "../server/core/tool-registry.mjs";
+import { PermissionEngine } from "../server/core/permissions.mjs";
 import { extensionTools } from "../server/medical/extension-tools.mjs";
 
 const local = (offset = 0) => { const d = new Date(Date.now() + offset * 86400000); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
-const setup = async (t) => {
-  const f = await fixture(t, { followupOptions: { autoStart: false } });
-  const tools = Object.fromEntries(extensionTools(() => f.server.extensions, f.server.pendingActions).map((x) => [x.definition.function.name, x.execute]));
+const setup = async (t, options = {}) => {
+  const f = await fixture(t, { followupOptions: { autoStart: false }, ...options });
+  const definitions = extensionTools(() => f.server.extensions, f.server.pendingActions);
+  const registry = new ToolRegistry(definitions);
+  const permissions = new PermissionEngine({ profile: "standard" });
+  const tools = Object.fromEntries(definitions.map((x) => [x.definition.function.name, (args) => registry.execute(x.definition.function.name, args, {}, permissions)]));
   const confirm = async (proposal) => { const r = await f.json(`/api/pending-actions/${proposal.id}/confirm`, "POST", {}); assert.equal(r.status, 200, JSON.stringify(r.data)); return r.data.applied; };
   return { ...f, ext: f.server.extensions, tools, confirm };
 };
 const skillSpec = { name: "出院小结（本院格式）", description: "写出院小结时使用", body: "先写出院诊断，再写住院经过。", template: "一、入院情况\n二、出院带药", appliesTo: ["出院小结草稿"],
   quickTask: { title: "本院出院小结", prompt: "按本院格式写出院小结" } };
 
+test("desktop chat route previews and proposes a skill that becomes a home task after confirmation", async (t) => {
+  let round = 0, proposal;
+  const f = await setup(t, { provider: { provider: "stub", model: "stub", apiKey: "stub", async complete(messages) {
+    round++;
+    if (round > 1) {
+      const result = JSON.parse(messages.findLast((m) => m.role === "tool").content);
+      assert.equal(result.error, undefined);
+      if (round === 2) assert.match(result.skill, /二、出院带药/);
+      else proposal = result;
+    }
+    if (round <= 2) return { message: { role: "assistant", tool_calls: [{ id: `extension-${round}`, type: "function", function: {
+      name: round === 1 ? "extension_preview" : "extension_propose",
+      arguments: JSON.stringify({ kind: "skill", spec: { ...skillSpec, appliesTo: "出院小结草稿" } }),
+    } }] } };
+    return { message: { role: "assistant", content: "已生成技能与快捷任务提案，请确认。" } };
+  } } });
+  const session = await f.session("模板技能测试");
+  const response = await f.chat(session.id, "按模板建立技能并放入首页快捷任务", { mode: "model", externalConsent: true });
+  assert.equal(response.status, 200);
+  assert.ok(proposal?.id, response.text);
+  assert.equal(f.ext.list().length, 0);
+  const saved = await f.confirm(proposal);
+  assert.equal(saved.template, skillSpec.template);
+  assert.deepEqual(saved.appliesTo, ["出院小结草稿"]);
+  assert.equal((await f.json("/api/extensions/prefs")).data.quickTasks[0].skillId, saved.id);
+});
+
+test("registered extension tools preserve legacy appliesTo and reject invalid payloads before side effects", async (t) => {
+  const f = await setup(t);
+  const spec = { ...skillSpec, appliesTo: "出院小结草稿" };
+  const preview = await f.tools.extension_preview({ kind: "skill", spec });
+  assert.match(preview.skill, /二、出院带药/);
+  assert.equal(f.ext.list().length, 0);
+  const proposal = await f.tools.extension_propose({ kind: "skill", spec });
+  assert.equal(f.ext.list().length, 0);
+  const saved = await f.confirm(proposal);
+  assert.deepEqual(saved.appliesTo, ["出院小结草稿"]);
+  assert.equal(saved.template, skillSpec.template);
+  assert.equal((await f.json("/api/extensions/prefs")).data.quickTasks[0].prompt, skillSpec.quickTask.prompt);
+  for (const bad of [JSON.stringify(spec), { ...spec, unexpected: true }, { ...spec, quickTask: { prompt: 4 } }, { ...spec, appliesTo: [4] }]) {
+    await assert.rejects(f.tools.extension_propose({ kind: "skill", spec: bad }), { code: "INVALID_TOOL_ARGS" });
+  }
+  assert.equal(f.ext.list().length, 1);
+});
+
 test("a chat-authored skill becomes a real skill with versions, rollback and disable", async (t) => {
   const f = await setup(t);
-  const proposal = f.tools.extension_propose({ kind: "skill", spec: skillSpec, reason: "医院要求" });
+  const proposal = await f.tools.extension_propose({ kind: "skill", spec: skillSpec, reason: "医院要求" });
   assert.match(proposal.preview.skill, /二、出院带药/);
   assert.equal(f.ext.list().length, 0, "nothing changes before confirmation");
   const skill = await f.confirm(proposal);
@@ -33,11 +83,11 @@ test("a chat-authored skill becomes a real skill with versions, rollback and dis
   const v3 = (await f.json(`/api/extensions/${skill.id}/rollback`, "POST", { version: 1 })).data;
   assert.equal(v3.version, 3); assert.equal(v3.body, skillSpec.body); assert.equal(v3.source.via, "rollback");
   assert.equal((await f.json(`/api/extensions/${skill.id}`)).data.versions.length, 3);
-  f.tools.extension_toggle({ id: skill.id, enabled: false });
+  await f.tools.extension_toggle({ id: skill.id, enabled: false });
   assert.equal(existsSync(file), false);
   assert.equal((await f.json("/api/skills")).data.skills.some((s) => s.id === skill.id), false);
   assert.equal((await f.json("/api/extensions/prefs")).data.quickTasks.length, 0);
-  f.tools.extension_toggle({ id: skill.id, enabled: true });
+  await f.tools.extension_toggle({ id: skill.id, enabled: true });
   assert.equal(existsSync(file), true);
 });
 
@@ -47,10 +97,10 @@ test("a lab-threshold rule previews on real data, fires only for new results and
   await f.json("/api/patients", "POST", { name: "对照乙", labs: [{ item: "糖化血红蛋白", value: 9.9, unit: "%", date: local(-3) }] });
   const spec = { name: "HbA1c 控制不佳", trigger: { type: "lab", item: "糖化血红蛋白" }, condition: { diagnosis: "糖尿病", lab: { item: "糖化血红蛋白", op: "gt", value: 8 } },
     action: { type: "agenda", title: "HbA1c {数值}，考虑调整方案", detail: "{日期} 结果" } };
-  const preview = f.tools.extension_preview({ kind: "automation", spec });
+  const preview = await f.tools.extension_preview({ kind: "automation", spec });
   assert.equal(preview.count, 1); assert.deepEqual(preview.samples, ["糖友甲：HbA1c 9.2%，考虑调整方案"]);
-  assert.throws(() => f.tools.extension_preview({ kind: "automation", spec: { ...spec, trigger: { type: "hourly" } } }), /触发方式/);
-  const rule = await f.confirm(f.tools.extension_propose({ kind: "automation", spec }));
+  await assert.rejects(() => f.tools.extension_preview({ kind: "automation", spec: { ...spec, trigger: { type: "hourly" } } }), /arguments.spec.trigger.type/);
+  const rule = await f.confirm(await f.tools.extension_propose({ kind: "automation", spec }));
   await f.ext.tick();
   assert.equal(f.ext.openItems().length, 0, "results that existed before the rule do not fire");
   const cur = (await f.json(`/api/patients/${p.id}`)).data;
@@ -102,7 +152,7 @@ test("evolution: frequent quick tasks move up automatically (undoable); repeated
   assert.equal(suggestion.title, "为「出院小结草稿」建立你的专属写法");
   assert.match(suggestion.prompt, /补充出院带药用法[\s\S]*extension_propose/);
   // Answering the suggestion through chat closes it.
-  await f.confirm(f.tools.extension_propose({ kind: "skill", spec: skillSpec, suggestionId: suggestion.id }));
+  await f.confirm(await f.tools.extension_propose({ kind: "skill", spec: skillSpec, suggestionId: suggestion.id }));
   assert.equal(f.ext.suggestions().length, 0);
   assert.equal(f.ext.list()[0].source.via, "evolution");
 
