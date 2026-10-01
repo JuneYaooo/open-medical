@@ -727,8 +727,10 @@ export class CareEngine {
     }
     if (type === "care-settings") {
       check(["global", "patient"].includes(payload.scope), "INVALID_INPUT", "scope 须为 global/patient");
-      check(payload.changes && typeof payload.changes === "object", "INVALID_INPUT", "changes 必须是对象");
+      check(payload.changes && typeof payload.changes === "object" && !Array.isArray(payload.changes), "INVALID_INPUT", "changes 必须是对象");
       check(!payload.changes.channels, "INVALID_INPUT", "渠道密钥只能在设置页面填写");
+      const fields = payload.scope === "global" ? ["autoReply", "alerts", "redFlags", "processing"] : ["consent", "autoReplyMode", "channel", "kfExternalUserId"];
+      check(Object.keys(payload.changes).length > 0 && Object.keys(payload.changes).every(key => fields.includes(key)), "INVALID_INPUT", "设置字段与 scope 不匹配，或没有提供修改内容");
       if (payload.scope === "global") validateSettings(payload.changes, this.settings());
       else validatePatientSettings(payload.changes, this.patientSettings(payload.patientId));
       return { scope: payload.scope, patientId: payload.scope === "patient" ? payload.patientId : null, changes: payload.changes };
@@ -903,4 +905,3 @@ export class CareEngine {
   }
   async drain() { await Promise.allSettled([...this.pendingWork, this.ticking]); }
 }
-

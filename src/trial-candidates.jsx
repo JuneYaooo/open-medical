@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./agent-runtime";
 import { Modal } from "./components";
+import { localCalendarDate as today } from "../shared/calendar-date.mjs";
 
 export const STAGES = { none: "未处理", shortlisted: "拟邀请", contacted: "已联系", consented: "已签知情同意", enrolled: "已入组", declined: "患者拒绝", ineligible: "不符合", withdrawn: "已退出" };
 const FLOW = ["shortlisted", "contacted", "consented", "enrolled"];
@@ -8,7 +9,6 @@ const CLOSED = ["declined", "ineligible", "withdrawn"];
 const PREFILTER = { likely: ["可能符合", "ok"], possible: ["部分相关", ""], unclear: ["资料不足", "muted"], mismatch: ["预筛不符", "bad"] };
 const AI = { running: "初筛中", completed: "已完成", failed: "未完成", cancelled: "已停止", interrupted: "已中断" };
 const FILTERS = [["todo", "待处理"], ["flow", "入组流程"], ["all", "全部"], ["closed", "已结束"]];
-const today = () => new Date().toISOString().slice(0, 10);
 const date = (value) => value ? new Date(value).toLocaleDateString("zh-CN") : "";
 
 function limitsText(l) {

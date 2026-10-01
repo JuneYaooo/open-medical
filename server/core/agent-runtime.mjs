@@ -86,7 +86,7 @@ export class AgentRuntime {
     // (有硬上限,防止验证-重试循环吃掉无界预算)。
     let deliveryRetries = 0;
     // N6:本运行已真实执行的工具调用数(总预算约束)。
-    let executedToolCalls = 0;
+    let executedToolCalls = progress.state.executedToolCalls || 0;
     for (let round = 0; round < this.maxRounds; round++) {
       signal.throwIfAborted();
       pausedTools = progress.beginRound();
@@ -470,10 +470,6 @@ export class AgentRuntime {
           emit("tool.failed", { tool: call.function.name, call_id: call.id, error: output.error });
           continue;
         }
-        // Write intent before any hook or tool side effect. Recovery never replays
-        // an intent whose result was not durably recorded.
-        await checkpoint(structuredClone(messages), { pendingToolCall: call.id });
-        emit("tool.start", { tool: call.function.name, call_id: call.id });
         // N6:总预算真实执行——超出后调用不执行,以结构化错误回给模型。
         if (executedToolCalls >= this.maxTotalToolCalls) {
           const output = {
@@ -482,9 +478,15 @@ export class AgentRuntime {
           };
           messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
           await onTrace({ type: "tool.result", call, output, durationMs: 0 });
+          await checkpoint(structuredClone(messages));
           emit("tool.failed", { tool: call.function.name, call_id: call.id, error: output.error });
           continue;
         }
+        // Reserve the attempt durably before hooks or tool effects. A restart
+        // must not reset the budget or reuse a slot with an unknown outcome.
+        progress.state.executedToolCalls = ++executedToolCalls;
+        await checkpoint(structuredClone(messages), { pendingToolCall: call.id });
+        emit("tool.start", { tool: call.function.name, call_id: call.id });
         const toolStarted = Date.now();
         let output, toolEvent;
         try {
@@ -496,7 +498,6 @@ export class AgentRuntime {
             signal,
             context: roundContext,
           });
-          executedToolCalls += 1;
           output = await registry.execute(
             call.function.name,
             args,

@@ -174,7 +174,7 @@ export class PendingActions {
       note: isCare(type) ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
     };
   }
-  list({ patientId, status = "pending" } = {}) {
+  list({ patientId, status = "pending", type, sourceSessionId, limit = 100, offset = 0 } = {}) {
     check(
       ["pending", "applied", "rejected", undefined].includes(status),
       "INVALID_INPUT",
@@ -182,6 +182,12 @@ export class PendingActions {
     );
     const where = [];
     const args = [];
+    check(Number.isSafeInteger(limit) && limit >= 1 && limit <= 100 && Number.isSafeInteger(offset) && offset >= 0, "INVALID_INPUT", "提案分页参数无效");
+    if (type !== undefined) { check(TYPES.includes(type), "INVALID_INPUT", "提案类型无效"); where.push("type=?"); args.push(type); }
+    if (sourceSessionId !== undefined) {
+      where.push("json_extract(payload,'$.sourceSessionId')=?");
+      args.push(string(sourceSessionId, "来源会话", 200));
+    }
     if (status) {
       where.push("status=?");
       args.push(status);
@@ -193,9 +199,9 @@ export class PendingActions {
     return this.store.db
       .prepare(
         `SELECT id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at FROM pending_actions
-         ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC LIMIT 100`,
+         ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`,
       )
-      .all(...args)
+      .all(...args, limit, offset)
       .map((row) => ({
         id: row.id,
         type: row.type,
@@ -209,7 +215,8 @@ export class PendingActions {
       }));
   }
   confirm(id) {
-    return sqliteTransaction(this.store.db, () => {
+    let writtenSkill;
+    try { return sqliteTransaction(this.store.db, () => {
       const action = this.row(id);
       check(
         action.status === "pending",
@@ -242,10 +249,13 @@ export class PendingActions {
       } else if (isExt(action.type)) {
         check(this.extensions, "EXTENSIONS_UNAVAILABLE", "扩展中心未启用", 503);
         applied = this.extensions.applyProposal(action);
+        if (applied?.kind === "skill") writtenSkill = applied.id;
       } else if (isTrial(action.type)) {
         check(this.trials, "TRIAL_UNAVAILABLE", "临床试验模块未启用", 503);
         applied = this.trials.applyProposal(action);
       } else if (action.type === "patient-create") {
+        if (action.payload.sourceSessionId) check(!this.list({ type: "patient-create", sourceSessionId: action.payload.sourceSessionId, status: "applied", limit: 1 }).length,
+          "ALREADY_CREATED", "该资料任务已完成建档，请到已有患者档案查看。", 409);
         // The registry validates all supplied fields before creating any record.
         const patient = this.patients.create(action.payload);
         if (action.payload.sourceSessionId && this.services.copySourceMaterials)
@@ -282,7 +292,10 @@ export class PendingActions {
         409,
       );
       return { ok: true, action: this.row(id), applied };
-    });
+    }); } catch (error) {
+      if (writtenSkill) this.extensions.restoreSkill(writtenSkill);
+      throw error;
+    }
   }
   reject(id) {
     const action = this.row(id);

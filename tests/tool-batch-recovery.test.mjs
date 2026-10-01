@@ -14,6 +14,26 @@ function fixture(provider) {
   return { runtime: new AgentRuntime({ provider, maxRounds: 3 }), registry,
     permissions: new PermissionEngine({ profile: "standard" }), effects: () => effects };
 }
+test("tool budget survives a checkpoint and rejected attempts do not become pending effects", async () => {
+  let state, pending, effects = 0;
+  const registry = new ToolRegistry([{ definition: { type: "function", function: {
+    name: "read", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+  permission: "filesystem.read", execute: () => { effects++; return { ok: true }; } }]);
+  const permissions = new PermissionEngine({ profile: "standard" });
+  const provider = { model: "fixture", async complete(messages) {
+    if (!messages.some(m => m.role === "tool")) return { message: { role: "assistant", tool_calls: calls(1) } };
+    return { message: { role: "assistant", content: "done" } };
+  } };
+  const runtime = new AgentRuntime({ provider, maxRounds: 2, maxTotalToolCalls: 1 });
+  const onCheckpoint = (_messages, value) => { state = value.runtimeState; pending = value.pendingToolCall; };
+  await runtime.run({ messages: [], registry, permissions, onCheckpoint });
+  assert.equal(effects, 1);
+  assert.equal(state.executedToolCalls, 1);
+  const result = await runtime.run({ messages: [], registry, permissions, runtimeState: state, onCheckpoint });
+  assert.equal(effects, 1);
+  assert.equal(pending, undefined);
+  assert.ok(result.messages.some(m => m.role === "tool" && JSON.parse(m.content).code === "TOOL_BUDGET_EXHAUSTED"));
+});
 test("oversized tool batch executes nothing, preserves complete protocol and allows bounded retry", async () => {
   let rounds = 0;
   const f = fixture({ model: "fixture", async complete(messages) {

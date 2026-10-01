@@ -13,7 +13,7 @@ export class IntakeJobs {
     return this.get(id);
   }
   get(id) { return this.bridge.requireSessionWorkspace(id).intakeJob || null; }
-  drafts(id) { return this.pending.list().filter(a => a.type === 'patient-create' && a.payload.sourceSessionId === id); }
+  drafts(id) { return this.pending.list({ type: 'patient-create', sourceSessionId: id }); }
   start(id, { correction = '', externalConsent } = {}) {
     const w = this.bridge.requireSessionWorkspace(id);
     check(externalConsent === true, 'CONSENT_REQUIRED', '请确认使用当前模型处理资料');
@@ -21,7 +21,7 @@ export class IntakeJobs {
     check(!this.active.has(id) && !this.bridge.service.active.has(id), 'RUN_ACTIVE', '该建档任务正在后台处理', 409);
     check(!w.patientId, 'PATIENT_SESSION', '请为新患者创建独立的建档任务', 409);
     check(w.materials?.length, 'NO_MATERIALS', '没有可解析的资料');
-    check(!this.pending.list({status:'applied'}).some(a => a.type === 'patient-create' && a.payload.sourceSessionId === id), 'ALREADY_CREATED', '该任务已完成建档', 409);
+    check(!this.pending.list({status:'applied', type:'patient-create', sourceSessionId:id, limit:1}).length, 'ALREADY_CREATED', '该任务已完成建档', 409);
     const control = new AbortController();
     const entry = { control, promise: null };
     this.active.set(id, entry);

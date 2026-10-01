@@ -1,3 +1,5 @@
+import { AUTO_CATEGORIES } from "./triage.mjs";
+
 // Chat tools for patient care. Reads and low-risk bookkeeping run
 // directly; anything that reaches a patient or changes automation policy
 // only files a pending action the doctor confirms in the UI.
@@ -7,6 +9,17 @@ const definition = (name, description, properties = {}, required = []) => ({
 });
 const text = { type: "string" };
 const channel = { type: "string", enum: ["wecom-kf", "wecom-contact", "manual"], description: "可省略，系统按患者可达渠道自动选择" };
+const object = (properties) => ({ type: "object", properties, additionalProperties: false });
+const modes = { type: "string", enum: ["off", "draft", "auto"] };
+const settingsChanges = object({
+  autoReply: object({ mode: modes, categories: { type: "array", items: { type: "string", enum: AUTO_CATEGORIES } }, disclaimer: { type: "boolean" } }),
+  alerts: object({ notifyUserIds: { type: "array", items: text, maxItems: 20 }, escalateAfterMinutes: { type: "integer", minimum: 5, maximum: 1440 } }),
+  redFlags: object({ extra: { type: "array", items: { type: "string", minLength: 2, maxLength: 20 }, maxItems: 50 } }),
+  processing: object({ enabled: { type: "boolean" }, modelConsent: { type: "boolean" } }),
+  consent: { type: "boolean" }, autoReplyMode: { type: "string", enum: ["inherit", ...modes.enum] },
+  channel: { anyOf: [channel, { type: "null" }] },
+  kfExternalUserId: { anyOf: [{ type: "string", pattern: "^[A-Za-z0-9_-]{1,128}$" }, { type: "null" }] },
+});
 
 export function careTools(getCare, pending) {
   const care = () => {
@@ -82,7 +95,7 @@ export function careTools(getCare, pending) {
     },
     {
       definition: definition("care_settings_propose", "提议修改自动回复/提醒设置。scope=global 时 changes 可含 autoReply{mode,categories,disclaimer}、alerts{notifyUserIds,escalateAfterMinutes}、redFlags{extra}、processing{enabled,modelConsent}；scope=patient 时 changes 可含 consent、autoReplyMode(inherit/off/draft/auto)、channel、kfExternalUserId。渠道密钥只能在设置页填写。医生确认后才生效。", {
-        scope: { type: "string", enum: ["global", "patient"] }, patientId: text, changes: { type: "object" }, summary: text,
+        scope: { type: "string", enum: ["global", "patient"] }, patientId: text, changes: settingsChanges, summary: text,
       }, ["scope", "changes"]),
       execute: ({ scope, patientId, changes, summary }) => propose("care-settings", scope === "patient" ? patientId : undefined, { scope, changes }, summary || (scope === "global" ? "修改患者管理设置" : "修改患者自动回复设置")),
     },

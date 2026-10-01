@@ -8,6 +8,18 @@ import { importMaterial, MATERIAL_ACCEPT } from "./import-material";
 const labels = { diagnoses: "诊断与问题", medications: "用药", allergies: "过敏记录", labs: "检验", visits: "就诊经历" };
 const describe = (item) => typeof item === "string" ? item : [item.date, item.name || item.item || item.reason, item.value, item.unit, item.dose, item.frequency, ({ active: "正在使用", stopped: "已停用", unknown: "待核对" })[item.status], item.note, item.source && `来源：${item.source}`].filter(v => v !== undefined && v !== "").join(" · ");
 
+async function intakeActions(status = "pending", sourceSessionId) {
+  const actions = [];
+  let offset = 0;
+  do {
+    const query = new URLSearchParams({ status, type: "patient-create", offset: String(offset) });
+    if (sourceSessionId) query.set("sourceSessionId", sourceSessionId);
+    const page = await api(`/api/pending-actions?${query}`);
+    actions.push(...page.actions); offset = page.nextOffset;
+  } while (offset != null);
+  return { actions };
+}
+
 export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspace, configured }) {
   const chooser = useRef(null);
   const sessionId = useRef(null);
@@ -45,7 +57,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
     setListing(true); setListError("");
     try {
       const [sessions, applied, pending] = await Promise.all([
-        api("/api/sessions"), api("/api/pending-actions?status=applied"), api("/api/pending-actions"),
+        api("/api/sessions"), intakeActions("applied"), intakeActions(),
       ]);
       const complete = new Set(applied.actions.filter(a => a.type === "patient-create").map(a => a.payload.sourceSessionId));
       const unfinished = sessions.sessions.filter(item => item.title === "上传资料建档" && !item.patientId && !complete.has(item.id) && (item.intake?.fileCount || item.intake?.issueCount))
@@ -75,7 +87,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
     inFlight.current = true; setRestoring(true); setError("");
     try {
       const [saved, pending, applied, sessions] = await Promise.all([
-        api(`/api/sessions/${id}`), api("/api/pending-actions"), api("/api/pending-actions?status=applied"), api("/api/sessions"),
+        api(`/api/sessions/${id}`), intakeActions("pending", id), intakeActions("applied", id), api("/api/sessions"),
       ]);
       if (!mounted.current) return;
       if (applied.actions.some(a => a.type === "patient-create" && a.payload.sourceSessionId === id)) throw new Error("该任务已完成建档，请到患者档案查看。");
@@ -95,7 +107,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
     finally { inFlight.current = false; if (mounted.current) { setRestoring(false); setBusy(false); } }
   };
   const loadProposal = async () => {
-    const result = await api("/api/pending-actions");
+    const result = await intakeActions("pending", sessionId.current);
     const found = result.actions.filter(a => a.status === "pending" && a.type === "patient-create" && a.payload.sourceSessionId === sessionId.current);
     if (found.length > 1) throw new Error("资料中生成了多个建档草稿，请打开工作区逐一核对患者归属。");
     setProposal(found[0] || null);

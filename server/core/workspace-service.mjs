@@ -2323,7 +2323,12 @@ export class WorkspaceService {
           }
         },
         onCheckpoint: checkpoint,
-        runtimeState: resumed?.runtimeState,
+        runtimeState: resumed?.runtimeState ? {
+          ...resumed.runtimeState,
+          // Explicit continuation creates a new run with a fresh budget;
+          // automatic restart continues the original run and its spent slots.
+          ...(!handle.recovering ? { executedToolCalls: 0 } : {}),
+        } : undefined,
         takeInput,
         onTrace: (data) => this.store.trace(id, run.id, data),
         onToolResult: (output, call) => {

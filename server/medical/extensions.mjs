@@ -112,7 +112,8 @@ export class Extensions {
     return { ...value, summary: describe(value) };
   }
   save({ id, kind, spec, source = { via: "manual" } }) {
-    return sqliteTransaction(this.db, () => {
+    let writtenId;
+    try { return sqliteTransaction(this.db, () => {
       const existing = id ? this.row(id) : null;
       if (existing) check(existing.kind === kind, "INVALID_INPUT", "不能改变扩展类型");
       const value = this.normalize(kind, spec);
@@ -123,21 +124,29 @@ export class Extensions {
       else this.db.prepare("INSERT INTO extensions VALUES (?,?,?,?)").run(extId, kind, "active", JSON.stringify(data));
       this.db.prepare("INSERT INTO extension_versions VALUES (?,?,?,?,?)").run(extId, version, JSON.stringify(value), JSON.stringify(source), at);
       const ext = this.row(extId);
-      if (kind === "skill" && ext.status === "active") this.writeSkill(ext);
+      if (kind === "skill" && ext.status === "active") { writtenId = ext.id; this.writeSkill(ext); }
       if (kind === "automation" && !existing) this.baseline(ext);
       this.store.audit(null, existing ? "extension.updated" : "extension.created", { id: extId, kind, version, via: source.via });
       return ext;
-    });
+    }); } catch (error) {
+      if (writtenId) this.restoreSkill(writtenId);
+      throw error;
+    }
   }
   setStatus(id, status) {
     check(["active", "disabled"].includes(status), "INVALID_INPUT", "状态须为 active/disabled");
     const ext = this.row(id);
+    try { return sqliteTransaction(this.db, () => {
     this.db.prepare("UPDATE extensions SET status=? WHERE id=?").run(status, ext.id);
     if (ext.kind === "skill") status === "active" ? this.writeSkill({ ...ext, status }) : this.removeSkill(ext.id);
     // Re-enabling must not replay everything that happened while it was off.
     if (ext.kind === "automation" && status === "active" && ext.status !== "active") this.baseline(ext);
     this.store.audit(null, "extension.status", { id: ext.id, status });
     return this.row(ext.id);
+    }); } catch (error) {
+      if (ext.kind === "skill") this.restoreSkill(ext.id);
+      throw error;
+    }
   }
   rollback(id, version) {
     const ext = this.row(id);
@@ -157,6 +166,14 @@ export class Extensions {
     writeFileSync(join(dir, "SKILL.md"), this.skillFile(ext));
   }
   removeSkill(id) { rmSync(join(this.skillsDir, id), { recursive: true, force: true }); }
+  // Disk files are a projection of committed extension state. Restore after
+  // an audit/write failure or a caller's confirmation transaction rolls back.
+  restoreSkill(id) {
+    const row = this.db.prepare("SELECT id FROM extensions WHERE id=?").get(id);
+    const ext = row ? this.row(id) : null;
+    if (ext?.kind === "skill" && ext.status === "active") this.writeSkill(ext);
+    else this.removeSkill(id);
+  }
   quickTasks() {
     return this.list({ kind: "skill" }).filter((e) => e.status === "active" && e.quickTask)
       .map((e) => ({ id: `ext:${e.id}`, skillId: e.id, title: e.quickTask.title, desc: e.quickTask.desc || e.description.slice(0, 40), prompt: e.quickTask.prompt, custom: true }));
@@ -420,6 +437,8 @@ export class Extensions {
   }
   applyProposal(action) {
     const p = action.payload;
+    if (p.id) check(Number.isSafeInteger(p.previousVersion) && this.row(p.id).version === p.previousVersion,
+      "ACTION_CONFLICT", "扩展在提案生成后已变化，请读取最新版本并重新生成提案。", 409);
     const ext = this.save({ id: p.id, kind: p.kind, spec: p.spec, source: { via: p.suggestionId ? "evolution" : "chat", proposalId: action.id, reason: p.reason } });
     if (p.suggestionId) try { this.resolveSuggestion(p.suggestionId, "accepted"); } catch { /* already handled */ }
     return ext;

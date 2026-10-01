@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
+import { localCalendarDate } from "../shared/calendar-date.mjs";
 import { Download, Plus, X, Loader2, Search } from "lucide-react";
 
 const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
@@ -70,7 +71,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
     if (
       !(await saveDiagnoses([
         ...draft.diagnoses,
-        { code, name, date: new Date().toISOString().slice(0, 10) },
+        { code, name, date: localCalendarDate() },
       ]))
     )
       return;

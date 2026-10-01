@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { check } from "../errors.mjs";
+import { localCalendarDate } from "../../shared/calendar-date.mjs";
 
 // Jobs and their evidence are durable; a model draft never overwrites physician review.
 export class TrialEligibilityJobs {
@@ -157,7 +158,7 @@ export class TrialEligibilityJobs {
       materialVersion: this.materialVersion(patient),
       protocol,
       sessionId: session.id,
-      screeningDate: new Date().toISOString().slice(0, 10),
+      screeningDate: localCalendarDate(),
       status: "running",
       checks: [],
       createdAt: new Date().toISOString(),

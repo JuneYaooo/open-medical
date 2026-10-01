@@ -4,6 +4,7 @@ import { fixture } from "./helpers.mjs";
 import { detectRedFlags, screenOutbound, SAFETY_REPLY, AI_DISCLAIMER } from "../server/care/red-flags.mjs";
 import { normalizeTriage } from "../server/care/triage.mjs";
 import { careTools } from "../server/care/tools.mjs";
+import { localCalendarDate } from "../shared/calendar-date.mjs";
 
 function fakeProvider(respond) {
   const calls = [];
@@ -154,7 +155,7 @@ test("chat proposals need confirmation; campaigns send, collect replies and writ
       : { category: "followup_reply", level: "routine", canAutoReply: false, reply: "", sourceIds: [], reason: "随访回复" },
   });
   await f.json("/api/care/settings", "PUT", { processing: { modelConsent: true } });
-  const today = new Date(clock.now).toISOString().slice(0, 10);
+  const today = localCalendarDate(clock.now);
   const created = (await f.json("/api/care/campaigns", "POST", { patientId: f.patient.id, name: "术后随访", startDate: today, steps: [{ dayOffset: 0, time: "00:00", text: "术后第一天，伤口怎么样？", questions: ["有没有发热？"] }] })).data;
   assert.equal(created.steps[0].status, "scheduled");
   await f.care.tick();

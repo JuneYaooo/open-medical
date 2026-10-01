@@ -1,0 +1,56 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { fixture } from "./helpers.mjs";
+import { PermissionEngine } from "../server/core/permissions.mjs";
+import { IntakeJobs } from "../server/medical/intake-jobs.mjs";
+
+test("care settings pass the real registry and only change after confirmation", async (t) => {
+  const f = await fixture(t);
+  const session = await f.session("设置回归");
+  const registry = f.server.workspaces.registry(session.id);
+  const permissions = new PermissionEngine({ profile: "standard" });
+  const execute = (args) => registry.execute("care_settings_propose", args, {}, permissions);
+  const before = f.server.care.settings().alerts.escalateAfterMinutes;
+  const proposal = await execute({ scope: "global", changes: { alerts: { escalateAfterMinutes: 15 }, autoReply: { categories: ["education", "followup_reply"] } } });
+  assert.equal(f.server.care.settings().alerts.escalateAfterMinutes, before);
+  assert.equal((await f.json(`/api/pending-actions/${proposal.id}/confirm`, "POST", {})).status, 200);
+  assert.equal(f.server.care.settings().alerts.escalateAfterMinutes, 15);
+  const patient = (await f.json("/api/patients", "POST", { name: "设置患者" })).data;
+  const patientProposal = await execute({ scope: "patient", patientId: patient.id, changes: { consent: false, autoReplyMode: "off", channel: null } });
+  assert.equal((await f.json(`/api/pending-actions/${patientProposal.id}/confirm`, "POST", {})).status, 200);
+  assert.equal(f.server.care.patientSettings(patient.id).autoReplyMode, "off");
+  await assert.rejects(execute({ scope: "global", changes: { channels: { secret: "not-allowed" } } }), { code: "INVALID_TOOL_ARGS" });
+  await assert.rejects(execute({ scope: "global", changes: { consent: true } }), { code: "INVALID_INPUT" });
+  await assert.rejects(execute({ scope: "global", changes: { alerts: { escalateAfterMinutes: 1 } } }), { code: "INVALID_TOOL_ARGS" });
+});
+
+test("intake draft lookup and duplicate prevention survive more than 100 newer proposals", async (t) => {
+  const f = await fixture(t);
+  const source = await f.session("上传资料建档");
+  await f.json(`/api/sessions/${source.id}/files`, "POST", { name: "case.txt", text: "隔离测试资料" });
+  const pending = f.server.pendingActions;
+  const payload = { name: "原患者", sourceSessionId: source.id };
+  const draft = pending.propose({ type: "patient-create", payload, summary: "原任务" });
+  for (let i = 0; i < 105; i++) pending.propose({ type: "patient-create", payload: { name: `其他任务${i}`, sourceSessionId: `unrelated-${i}` }, summary: "其他任务" });
+  f.server.store.db.prepare("UPDATE pending_actions SET updated_at='2000-01-01' WHERE id=?").run(draft.id);
+  const jobs = new IntakeJobs(f.server.sessionBridge, pending);
+  assert.deepEqual(jobs.drafts(source.id).map(a => a.id), [draft.id]);
+  const first = (await f.json("/api/pending-actions?type=patient-create")).data;
+  assert.equal(first.actions.length, 100);
+  const second = (await f.json(`/api/pending-actions?type=patient-create&offset=${first.nextOffset}`)).data;
+  assert.equal(second.actions.length, 6);
+  assert.ok(second.actions.some(a => a.id === draft.id));
+  const saved = pending.confirm(draft.id);
+  f.server.store.db.prepare("UPDATE pending_actions SET status='applied'").run();
+  f.server.store.db.prepare("UPDATE pending_actions SET updated_at='2000-01-01' WHERE id=?").run(draft.id);
+  assert.throws(() => jobs.start(source.id, { externalConsent: true }), { code: "ALREADY_CREATED" });
+  const duplicate = pending.propose({ type: "patient-create", payload: { ...payload, name: "模型另写了一个名字" }, summary: "重复提案" });
+  const rejected = await f.json(`/api/pending-actions/${duplicate.id}/confirm`, "POST", {});
+  assert.equal(rejected.status, 409);
+  assert.equal(rejected.data.code, "ALREADY_CREATED");
+  assert.equal((await f.json("/api/patients")).data.patients.length, 1);
+  assert.equal(pending.row(duplicate.id).status, "pending");
+  const filtered = (await f.json(`/api/pending-actions?type=patient-create&status=applied&sourceSessionId=${source.id}`)).data;
+  assert.deepEqual(filtered.actions.map(a => a.id), [saved.action.id]);
+  assert.equal((await f.json("/api/pending-actions?offset=-1")).status, 400);
+});

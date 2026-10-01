@@ -20,6 +20,53 @@ const setup = async (t, options = {}) => {
 const skillSpec = { name: "出院小结（本院格式）", description: "写出院小结时使用", body: "先写出院诊断，再写住院经过。", template: "一、入院情况\n二、出院带药", appliesTo: ["出院小结草稿"],
   quickTask: { title: "本院出院小结", prompt: "按本院格式写出院小结" } };
 
+test("stale extension proposals cannot overwrite a newer edit or rollback", async (t) => {
+  const f = await setup(t);
+  const original = f.ext.save({ kind: "skill", spec: skillSpec });
+  const proposal = await f.tools.extension_propose({ id: original.id, kind: "skill", spec: { ...skillSpec, body: "旧提案正文" } });
+  f.ext.save({ id: original.id, kind: "skill", spec: { ...skillSpec, body: "医生刚修改的正文" } });
+  const response = await f.json(`/api/pending-actions/${proposal.id}/confirm`, "POST", {});
+  assert.equal(response.status, 409);
+  assert.equal(response.data.code, "ACTION_CONFLICT");
+  assert.equal(f.ext.row(original.id).body, "医生刚修改的正文");
+  assert.equal(f.server.pendingActions.row(proposal.id).status, "pending");
+  const fresh = await f.tools.extension_propose({ id: original.id, kind: "skill", spec: { ...skillSpec, body: "最新提案" } });
+  assert.equal((await f.confirm(fresh)).body, "最新提案");
+});
+
+test("failed extension audit restores the on-disk skill and database version", async (t) => {
+  const f = await setup(t);
+  const original = f.ext.save({ kind: "skill", spec: skillSpec });
+  const file = join(f.ext.skillsDir, original.id, "SKILL.md");
+  const before = readFileSync(file, "utf8");
+  const audit = f.server.store.audit;
+  f.server.store.audit = () => { throw new Error("synthetic audit failure"); };
+  try {
+    assert.throws(() => f.ext.save({ id: original.id, kind: "skill", spec: { ...skillSpec, body: "不能生效的版本" } }), /synthetic audit failure/);
+    assert.equal(f.ext.row(original.id).version, original.version);
+    assert.equal(readFileSync(file, "utf8"), before);
+    assert.throws(() => f.ext.setStatus(original.id, "disabled"), /synthetic audit failure/);
+    assert.equal(f.ext.row(original.id).status, "active");
+    assert.equal(readFileSync(file, "utf8"), before);
+  } finally { f.server.store.audit = audit; }
+});
+
+test("failed confirmation removes a new skill file along with the rolled-back proposal effect", async (t) => {
+  const f = await setup(t);
+  const proposal = await f.tools.extension_propose({ kind: "skill", spec: skillSpec });
+  let written;
+  const writeSkill = f.ext.writeSkill.bind(f.ext);
+  f.ext.writeSkill = ext => { written = ext.id; return writeSkill(ext); };
+  f.server.store.db.exec("CREATE TEMP TRIGGER fail_ext_confirmation BEFORE UPDATE OF status ON pending_actions WHEN NEW.status='applied' BEGIN SELECT RAISE(ABORT,'synthetic confirmation failure'); END");
+  assert.throws(() => f.server.pendingActions.confirm(proposal.id), /synthetic confirmation failure/);
+  assert.equal(f.server.pendingActions.row(proposal.id).status, "pending");
+  assert.equal(f.ext.list().length, 0);
+  assert.ok(written);
+  assert.equal(existsSync(join(f.ext.skillsDir, written, "SKILL.md")), false);
+  f.server.store.db.exec("DROP TRIGGER fail_ext_confirmation");
+  assert.ok((await f.confirm(proposal)).id);
+});
+
 test("desktop chat route previews and proposes a skill that becomes a home task after confirmation", async (t) => {
   let round = 0, proposal;
   const f = await setup(t, { provider: { provider: "stub", model: "stub", apiKey: "stub", async complete(messages) {

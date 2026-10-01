@@ -1408,16 +1408,23 @@ export function createServer(options = {}) {
         return send(res, 200, medicationSafetyCheck(await body(req)));
       if (path === "/api/adr-assess" && req.method === "POST")
         return send(res, 200, assessAdverseReaction(await body(req)));
-      if (path === "/api/pending-actions" && req.method === "GET")
+      if (path === "/api/pending-actions" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? 100), offset = Number(url.searchParams.get("offset") ?? 0);
+        const actions = pending.list({
+          patientId: url.searchParams.get("patientId") || undefined,
+          status: url.searchParams.get("status") || undefined,
+          type: url.searchParams.get("type") || undefined,
+          sourceSessionId: url.searchParams.get("sourceSessionId") ?? undefined,
+          limit, offset,
+        });
         return send(res, 200, {
-          actions: pending.list({
-            patientId: url.searchParams.get("patientId") || undefined,
-            status: url.searchParams.get("status") || undefined,
-          }),
+          actions,
+          nextOffset: actions.length === limit ? offset + limit : null,
           counts: pending.counts({
             patientId: url.searchParams.get("patientId") || undefined,
           }),
         });
+      }
       if (
         parts[0] === "api" &&
         parts[1] === "pending-actions" &&

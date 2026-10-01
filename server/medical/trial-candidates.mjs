@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { check, identifier, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
+import { isCalendarDate, localCalendarDate } from "../../shared/calendar-date.mjs";
 
 // Trial-wide work on top of per-patient screening: a deterministic
 // pre-filter, queued AI screening for many patients, the candidate list and
@@ -97,8 +98,8 @@ export class TrialCandidates {
     const note = input.note ? string(input.note, "备注", 1000) : "";
     let consentDate = current.consentDate;
     if (input.stage === "consented") {
-      check(/^\d{4}-\d{2}-\d{2}$/.test(input.consentDate || ""), "CONSENT_REQUIRED", "请填写知情同意书签署日期（YYYY-MM-DD）");
-      check(input.consentDate <= this.iso().slice(0, 10), "INVALID_INPUT", "签署日期不能晚于今天");
+      check(isCalendarDate(input.consentDate), "CONSENT_REQUIRED", "请填写有效的知情同意书签署日期（YYYY-MM-DD）");
+      check(input.consentDate <= localCalendarDate(this.now()), "INVALID_INPUT", "签署日期不能晚于今天");
       consentDate = input.consentDate;
     }
     if (input.stage === "enrolled") {

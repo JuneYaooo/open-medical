@@ -1,9 +1,10 @@
 import { check, string } from "../errors.mjs";
+import { localCalendarDate } from "../../shared/calendar-date.mjs";
 
 export const KNOWLEDGE_STATES = ["unreviewed", "reviewed", "retired"];
 export function knowledgeMetadata(doc, now = Date.now()) {
   const status = doc.reviewStatus || "unreviewed";
-  const due = Boolean(doc.reviewDueDate && doc.reviewDueDate < new Date(now).toISOString().slice(0, 10));
+  const due = Boolean(doc.reviewDueDate && doc.reviewDueDate < localCalendarDate(now));
   return { sourceUrl: doc.sourceUrl || "", edition: doc.edition || "", reviewStatus: status,
     reviewedAt: doc.reviewedAt || null, reviewDueDate: doc.reviewDueDate || "", reviewNote: doc.reviewNote || "",
     reviewDue: due, statusLabel: status === "retired" ? "已停用" : status === "reviewed" ? due ? "来源已核对 · 到期需复核" : "来源已核对" : "来源待核对" };
