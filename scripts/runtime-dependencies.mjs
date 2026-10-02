@@ -1,5 +1,5 @@
-import {execFileSync} from "node:child_process";
-import { cp, mkdir, readFile, readdir } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { existsSync, constants } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
@@ -24,7 +24,15 @@ export const runtimeDependencies = [
   "@lancedb/lancedb",
   "apache-arrow",
 ];
-export async function bundleRuntimeDependencies(root, target) {
+export async function bundleRuntimeDependencies(
+  root,
+  target,
+  { dependencies = runtimeDependencies, clean = false } = {},
+) {
+  if (root === target)
+    throw new Error("Runtime bundle target must differ from source");
+  if (clean)
+    await rm(join(target, "node_modules"), { recursive: true, force: true });
   const copied = new Set();
   const locate = (name, from) => {
     let cursor = from;
@@ -45,15 +53,21 @@ export async function bundleRuntimeDependencies(root, target) {
     if (process.platform === "darwin") {
       // Node's COPYFILE_FICLONE may fall back to full copies on macOS. cp -c
       // uses clonefile directly and preserves symlinks like fs.cp's default.
-      await mkdir(destination, {recursive:true});
-      for (const entry of await readdir(source)) if (entry !== "node_modules")
-        execFileSync("/bin/cp",["-cR",join(source,entry),join(destination,entry)]);
-    } else await cp(source, destination, {
-      recursive: true,
-      // Copy-on-write on supporting filesystems; normal-copy fallback elsewhere.
-      mode: constants.COPYFILE_FICLONE,
-      filter: (path) => path !== join(source, "node_modules"),
-    });
+      await mkdir(destination, { recursive: true });
+      for (const entry of await readdir(source))
+        if (entry !== "node_modules")
+          execFileSync("/bin/cp", [
+            "-cR",
+            join(source, entry),
+            join(destination, entry),
+          ]);
+    } else
+      await cp(source, destination, {
+        recursive: true,
+        // Copy-on-write on supporting filesystems; normal-copy fallback elsewhere.
+        mode: constants.COPYFILE_FICLONE,
+        filter: (path) => path !== join(source, "node_modules"),
+      });
     const pkg = JSON.parse(
       await readFile(join(source, "package.json"), "utf8"),
     );
@@ -69,6 +83,6 @@ export async function bundleRuntimeDependencies(root, target) {
       if (present) await copy(dependency, source);
     }
   };
-  for (const name of runtimeDependencies) await copy(name);
+  for (const name of dependencies) await copy(name);
   return [...copied].map((path) => relative(root, path));
 }

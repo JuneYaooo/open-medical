@@ -61,8 +61,7 @@ export class MaterialLibrary {
   async remove(fileId) {
     if (!this.vectorStore) return;
     try {
-      // upsertDoc deletes by doc_id before adding; an empty re-add is not
-      // possible, so delete through the same table path with a no-op row.
+      // Empty rows remove the document without creating a missing table.
       const model = this.embedder?.model;
       if (!model) return;
       await this.vectorStore.upsertDoc(fileId, model, []);
