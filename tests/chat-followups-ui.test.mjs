@@ -21,8 +21,8 @@ test('chat settings -> family binding -> source review -> AI draft -> archive th
  await page.getByRole('button',{name:'验证并连接企业服务',exact:true}).click();await page.getByText('企业服务验证通过，可以关联患者会话。',{exact:true}).waitFor();
  await page.reload();await page.getByRole('button',{name:'随访连接',exact:true}).click();await page.getByRole('button',{name:'企业微信存档',exact:true}).click();await page.getByRole('button',{name:'更换连接',exact:true}).click();await page.getByRole('button',{name:'管理员配置',exact:true}).click();assert.equal(await page.getByLabel('采集器连接密钥',{exact:true}).inputValue(),'');
  await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'随访',exact:true}).click();await page.getByRole('button',{name:'聊天随访',exact:true}).click();await page.getByLabel('选择患者',{exact:true}).selectOption(patient.id);
- await page.getByRole('button',{name:'关联会话',exact:true}).click();const form=page.locator('.chat-binding-form');await form.getByLabel('渠道',{exact:true}).selectOption('wecom');await form.getByLabel('与患者的关系').selectOption('family');await form.getByLabel('会话名称').fill('合成企微家属');await form.getByLabel('联系人称呼').fill('合成家属');await form.getByText('高级：手动填写会话与发送者 ID',{exact:true}).click();await form.getByLabel('存档会话 ID').fill('private:doctor:family');await form.getByLabel('联系人发送者 ID').fill('family');await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();
- await page.getByRole('button',{name:'同步企微增量'}).click();const card=page.locator('.chat-draft').first();await card.waitFor();await card.locator('summary').click();assert.match(await card.locator('pre').innerText(),/家属转述/);
+ await page.getByRole('button',{name:'关联会话',exact:true}).click();const form=page.locator('.chat-binding-form');await form.getByLabel('渠道',{exact:true}).selectOption('wecom');await form.getByLabel('与患者的关系').selectOption('family');await form.getByLabel('会话名称').fill('合成企微家属');await form.getByLabel('联系人称呼').fill('合成家属');await form.getByText('高级：手动填写会话与发送者 ID',{exact:true}).click();await form.getByLabel('会话 ID',{exact:true}).fill('private:doctor:family');await form.getByLabel('联系人发送者 ID').fill('family');await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();
+ await page.getByRole('button',{name:'同步会话增量'}).click();const card=page.locator('.chat-draft').first();await card.waitFor();await card.locator('summary').click();assert.match(await card.locator('pre').innerText(),/家属转述/);
  assert.equal(await card.getByRole('button',{name:'AI 整理草稿'}).isDisabled(),true);await card.getByLabel('允许将本次原文发送给已配置的模型，生成待复核草稿').check();await card.getByRole('button',{name:'AI 整理草稿'}).click();await page.waitForFunction(()=>document.querySelector('.chat-draft textarea')?.value.includes('具体时间待确认'));
  await card.getByLabel('随访草稿',{exact:true}).fill('已核对家属反馈：预约复查，具体时间待确认。');await card.getByLabel('已核对患者归属、发言人、时间和记录内容，确认登记为已完成联系').check();await card.getByRole('button',{name:'确认归档到随访记录'}).click();await card.getByText(/已归档/).waitFor();
  assert.equal(server.store.db.prepare("SELECT COUNT(*) n FROM reminders WHERE json_extract(data,'$.outcome.contactMethod')='wecom'").get().n,1);
@@ -87,4 +87,27 @@ test('failed Mac permission check explains stale grants and exposes only fixed d
  assert.deepEqual(await page.evaluate(()=>window.permissionActions),['accessibility','screen','reveal']);
  assert.equal(await page.getByRole('button',{name:'确认账号并验证连接',exact:true}).count(),0);
  server.chatFollowups.wechat.status=async()=>({ready:true,message:'测试权限已恢复'});await page.getByRole('button',{name:'重新检测权限',exact:true}).click();await page.getByLabel('已核对的微信号').waitFor();
+});
+
+test('wx-cli setup, session selection, review draft and plugin lifecycle through browser',{skip},async t=>{
+ const {page,origin,patient,server}=await setup(t);
+ const s=server.chatFollowups;
+ s.registry.get('wx-cli').client={
+  status:async c=>({ready:c.accountId==='wxid_synthetic',message:'合成 wx-cli 账号已核验'}),
+  conversations:async()=>({conversations:[{id:'wxid_family',title:'合成微信家属',lastMessageAt:'2026-09-25T00:00:00Z'}],partial:false}),
+  read:async()=>({messages:[{id:'wx-ui',conversationId:'wxid_family',senderId:'wxid_family',type:'text',text:'合成微信消息：已预约复查',direction:'in',sentAt:'2026-09-25T00:00:00Z'}],nextCursor:'1',hasMore:false}),
+ };
+ await page.goto(origin+'/?view=settings&settingsTab=followup');await page.getByRole('button',{name:'微信 · wx-cli',exact:true}).click();
+ await page.getByLabel('账号 ID（current_account.wxid）').fill('wxid_synthetic');await page.getByRole('button',{name:'验证并启用连接',exact:true}).click();await page.getByText('合成 wx-cli 账号已核验',{exact:true}).waitFor();
+ await page.getByRole('link',{name:'去关联患者会话 →'}).click();await page.getByLabel('选择患者',{exact:true}).selectOption(patient.id);await page.getByRole('button',{name:'关联会话',exact:true}).click();
+ const form=page.locator('.chat-binding-form');await form.getByLabel('渠道',{exact:true}).selectOption('wx-cli');await form.getByRole('button',{name:'读取可关联会话'}).click();await form.getByLabel('选择服务会话').selectOption('wxid_family');assert.equal(await form.getByLabel('会话名称',{exact:true}).inputValue(),'合成微信家属');
+ await form.getByLabel('联系人称呼',{exact:true}).fill('合成家属');await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();await page.getByRole('button',{name:'同步会话增量'}).click();await page.locator('.chat-draft').waitFor();
+ assert.equal(s.list(patient.id).drafts.length,1);
+ await page.goto(origin+'/?view=settings&settingsTab=followup');await page.getByText('管理连接插件',{exact:true}).click();await page.getByLabel('插件清单（JSON）').fill(JSON.stringify({manifestVersion:1,id:'ui-connector',name:'测试系统连接',protocol:'archive-v1'}));await page.getByRole('button',{name:'安装连接插件'}).click();await page.getByRole('button',{name:'测试系统连接',exact:true}).waitFor();
+ await page.reload();await page.getByRole('button',{name:'测试系统连接',exact:true}).click();await page.getByRole('heading',{name:'测试系统连接',exact:true}).waitFor();
+ await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
+ await page.getByText('管理连接插件',{exact:true}).click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'移除插件',exact:true}).click();await page.getByRole('button',{name:'测试系统连接',exact:true}).waitFor({state:'hidden'});
+ assert.equal(s.registry.entries.has('ui-connector'),false);
+ await page.getByRole('button',{name:'微信 · wx-cli',exact:true}).click();await page.getByRole('heading',{name:'微信 · wx-cli',exact:true}).waitFor();
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
 });

@@ -6,7 +6,7 @@
 .chat-tabs button[aria-pressed=true] { background:#e6eee3; color:#245c46; border-color:#9db5a5; }
 .chat-connection-form, .chat-binding-form { display:flex; flex-direction:column; gap:16px; }
 .chat-connection-form>label, .chat-binding-form label:not(.chat-check), .chat-draft>label:not(.chat-check), .chat-region-fields label { display:flex; flex-direction:column; gap:8px; }
-.chat-settings input:not([type=checkbox]), .chat-followups input:not([type=checkbox]), .chat-followups select, .chat-followups textarea { width:100%; min-width:0; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:10px 12px; color:inherit; background:#fff; font:inherit; }
+.chat-settings textarea, .chat-settings input:not([type=checkbox]), .chat-followups input:not([type=checkbox]), .chat-followups select, .chat-followups textarea { width:100%; min-width:0; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:10px 12px; color:inherit; background:#fff; font:inherit; }
 .chat-settings .chat-check, .chat-followups .chat-check { display:flex; flex-direction:row; align-items:flex-start; gap:10px; font-weight:400; line-height:1.65; }
 .chat-check input { flex:none; margin-top:6px; }
 .chat-check small { display:block; color:#68786e; }

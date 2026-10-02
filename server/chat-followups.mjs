@@ -5,19 +5,21 @@ import { CredentialVault } from './core/oauth.mjs';
 import { check, string, identifier, AppError } from './errors.mjs';
 import { sqliteTransaction } from './sqlite-transaction.mjs';
 import { WecomArchiveClient, collectorUrl } from './chat-connectors/wecom-archive.mjs';
+import { ChatConnectorRegistry } from './chat-connectors/registry.mjs';
 import { WechatReader, validateRegion } from './chat-connectors/wechat-reader.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const channels = ['wechat', 'wecom'];
 const json = row => row ? JSON.parse(row.data) : null;
 const now = () => new Date().toISOString();
 export class ChatFollowups {
-  constructor({ store, patients, followups, directory, provider, wechat, archive }) {
+  constructor({ store, patients, followups, directory, provider, wechat, archive, wxcli, plugins = [] }) {
     Object.assign(this, { store, db: store.db, patients, followups, provider });
     this.vault = new CredentialVault(this.db, directory);
     this.wechat = wechat || new WechatReader(); this.archive = archive || new WecomArchiveClient();
+    this.registry = new ChatConnectorRegistry({ wechat: this.wechat, archive: this.archive, wxcli, plugins });
     this.pendingAI = new Map(); this.stopped = false; this.ticking = false; this.active = new Map(); this.probes = new Map(); this.imports = new Map(); this.previews = new Map(); this.timer = null;
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS chat_connector_plugins (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS chat_connections (channel TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS chat_bindings (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE, channel TEXT NOT NULL, account TEXT NOT NULL, conversation TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, channel TEXT NOT NULL, account TEXT NOT NULL, conversation TEXT NOT NULL, source_id TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(channel,account,source_id));
@@ -25,18 +27,44 @@ export class ChatFollowups {
       CREATE TRIGGER IF NOT EXISTS chat_patient_cleanup AFTER DELETE ON chat_bindings BEGIN DELETE FROM chat_messages WHERE channel=OLD.channel AND account=OLD.account AND conversation=OLD.conversation AND NOT EXISTS (SELECT 1 FROM chat_bindings b WHERE b.channel=OLD.channel AND b.account=OLD.account AND b.conversation=OLD.conversation); END;
       CREATE TABLE IF NOT EXISTS chat_allocations (binding_id TEXT NOT NULL REFERENCES chat_bindings(id) ON DELETE CASCADE, message_id TEXT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE, draft_id TEXT NOT NULL REFERENCES chat_drafts(id) ON DELETE CASCADE, PRIMARY KEY(binding_id,message_id));
     `);
+    for (const row of this.db.prepare('SELECT data FROM chat_connector_plugins ORDER BY rowid').all()) this.registry.install(JSON.parse(row.data));
   }
-  channel(value) { check(channels.includes(value), 'CHAT_CHANNEL', '未知随访连接'); return value; }
+  channel(value) { this.registry.get(value); return value; }
+  connector(channel) { return this.registry.get(channel).client; }
+  installPlugin(input) {
+    const manifest = this.registry.manifest(input);
+    check(!this.registry.entries.has(manifest.id), 'CHAT_PLUGIN', '插件 ID 已存在');
+    const previous = json(this.db.prepare('SELECT data FROM chat_connections WHERE channel=?').get(manifest.id));
+    check(!previous?.protocol || previous.protocol === manifest.protocol, 'CHAT_PLUGIN', '此插件 ID 已用于另一协议，请使用新的 ID');
+    this.registry.install(manifest);
+    try { this.db.prepare('INSERT INTO chat_connector_plugins VALUES (?,?)').run(manifest.id, JSON.stringify(manifest)); }
+    catch (e) { this.registry.entries.delete(manifest.id); throw e; }
+    return this.publicConfig(manifest.id);
+  }
+  resetCursor(channel, input) {
+    const c = this.ready(channel);
+    check(channel !== 'wechat' && input.confirmed === true && input.revision === c.revision, 'REVISION_CONFLICT', '请确认重新扫描已关联会话的历史记录', 409);
+    this.cancel(channel); c.cursor = '0'; c.revision++; c.nextRun = 0; this.write(c);
+    return this.publicConfig(channel);
+  }
+  removePlugin(id) {
+    check(!this.registry.get(id).builtin, 'CHAT_PLUGIN', '内置插件可停用，不能移除');
+    this.cancel(id); const c = this.config(id); c.enabled = false; c.autoUntil = ''; c.revision++;
+    sqliteTransaction(this.db, () => { this.write(c); this.vault.set(`chat:${id}`, {}); this.db.prepare('DELETE FROM chat_connector_plugins WHERE id=?').run(id); });
+    this.probes.delete(id); this.registry.entries.delete(id);
+    return { removed: true };
+  }
+
   config(channel) {
     this.channel(channel);
-    return json(this.db.prepare('SELECT data FROM chat_connections WHERE channel=?').get(channel)) || { channel, enabled: false, accountId: '', endpoint: '', revision: 0, cursor: '0', intervalMinutes: 15, autoUntil: '', nextRun: 0 };
+    return json(this.db.prepare('SELECT data FROM chat_connections WHERE channel=?').get(channel)) || { channel, protocol: this.registry.get(channel).protocol, enabled: false, accountId: '', endpoint: this.registry.describe(channel).defaultEndpoint, revision: 0, cursor: '0', intervalMinutes: 15, autoUntil: '', nextRun: 0 };
   }
   account(c) { return hash([c.channel, c.accountId, c.endpoint || '']); }
   secret(c) { return { ...c, token: this.vault.get(`chat:${c.channel}`).token || '' }; }
   write(c) { this.db.prepare('INSERT INTO chat_connections VALUES (?,?) ON CONFLICT(channel) DO UPDATE SET data=excluded.data').run(c.channel, JSON.stringify(c)); }
-  publicConfig(channel) { const c = this.config(channel); return { ...c, hasToken: Boolean(this.secret(c).token), status: this.probes.get(channel) || { ready: false, message: c.enabled ? '配置已保存，尚未测试连接' : '连接未启用' }, availableBindings: channel === 'wechat' ? this.db.prepare('SELECT data FROM chat_bindings WHERE channel=? AND account=?').all(channel,this.account(c)).map(json).filter(b=>!b.disabled && b.calibration).map(b=>({id:b.id,title:b.title,patientName:this.patients.get(b.patientId).name})) : [], running: this.active.has(channel), platform: process.platform }; }
+  publicConfig(channel) { const c = this.config(channel); return { ...c, plugin: this.registry.describe(channel), hasToken: Boolean(this.secret(c).token), status: this.probes.get(channel) || { ready: false, message: c.enabled ? '配置已保存，尚未测试连接' : '连接未启用' }, availableBindings: channel === 'wechat' ? this.db.prepare('SELECT data FROM chat_bindings WHERE channel=? AND account=?').all(channel,this.account(c)).map(json).filter(b=>!b.disabled && b.calibration).map(b=>({id:b.id,title:b.title,patientName:this.patients.get(b.patientId).name})) : [], running: this.active.has(channel), platform: process.platform }; }
   modelIdentity() { const p = this.provider(); return p ? hash([p.constructor?.name,p.baseUrl,p.model,p.apiKey]) : ''; }
-  settings() { return { connections: channels.map(c => this.publicConfig(c)) }; }
+  settings() { return { connections: this.registry.ids().map(c => this.publicConfig(c)) }; }
   save(channel, input) {
     const previous = this.config(channel);
     check(input.revision === previous.revision, 'REVISION_CONFLICT', '连接配置已变化，请刷新', 409);
@@ -47,7 +75,7 @@ export class ChatFollowups {
       c.autoBindingId = c.autoUntil ? input.autoBindingId : '';
       if(c.autoUntil) { const b=this.binding(c.autoBindingId); check(b.channel==='wechat' && b.calibration && b.account===this.account(c),'CHAT_BINDING','请选择一个已校准的微信会话进行定时读取',409); }
     }
-    if (channel === 'wecom') c.endpoint = collectorUrl(string(input.endpoint, '采集器地址', 500));
+    if (channel !== 'wechat') c.endpoint = collectorUrl(string(input.endpoint, '采集器地址', 500));
     c.autoSummarize = Boolean(c.autoUntil && input.autoSummarize);
     if (c.autoSummarize) check(input.modelConsent === true && this.provider(), 'CHAT_MODEL_CONSENT', '自动整理需要明确授权当前模型服务，并配置可用模型', 412);
     c.modelFingerprint = c.autoSummarize ? this.modelIdentity() : '';
@@ -55,7 +83,10 @@ export class ChatFollowups {
     const changed = this.account(c) !== this.account(previous);
     if (changed || !previous.autoUntil || Date.parse(previous.autoUntil) <= Date.now()) c.autoSince = now();
     const token = input.token === undefined || input.token === '' ? (changed ? '' : this.secret(previous).token) : string(input.token, '连接密钥', 4096);
-    if (channel === 'wecom') check(token && !/[\r\n]/.test(token), 'CHAT_CONFIG', '请填写有效的采集器连接密钥');
+    if (channel !== 'wechat') {
+      const local = ['127.0.0.1','localhost','[::1]'].includes(new URL(c.endpoint).hostname);
+      check(!/[\r\n]/.test(token) && (token || (this.registry.get(channel).protocol === 'wx-cli' && local)), 'CHAT_CONFIG', '请填写有效的连接密钥；只有本机 wx-cli 可以留空');
+    }
     c.revision++; c.nextRun = 0; c.lastError = ''; c.lastSyncAt = changed ? '' : c.lastSyncAt; c.cursor = changed ? '0' : c.cursor;
     this.cancel(channel); if (changed || token !== this.secret(previous).token || !c.enabled) this.probes.delete(channel);
     sqliteTransaction(this.db, () => { this.vault.set(`chat:${channel}`, { token }); this.write(c); });
@@ -64,7 +95,7 @@ export class ChatFollowups {
   ready(channel) { const c = this.config(channel); check(c.enabled, 'CHAT_DISABLED', '请先在设置中启用此连接', 409); return c; }
   async test(channel) {
     const c = this.config(channel); let result;
-    try { result = channel === 'wechat' ? await this.wechat.status() : await this.archive.status(this.secret(c)); }
+    try { result = await this.connector(channel).status(this.secret(c)); }
     catch (e) { result = { ready: false, message: e instanceof AppError ? e.message : '连接检查失败，请检查客户端与权限' }; }
     if (this.config(channel).revision === c.revision) this.probes.set(channel, { ...result, checkedAt: now() });
     return result;
@@ -83,8 +114,8 @@ export class ChatFollowups {
     return this.publicConfig(channel);
   }
   patient(id) { const p = this.patients.get(identifier(id)); check(!p.archived, 'PATIENT_ARCHIVED', '请先恢复患者档案', 409); return p; }
-  bindings(patientId) { return this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? ORDER BY rowid DESC').all(patientId).map(json).filter(b => !b.disabled).map(b => ({ ...b, currentAccount: b.mode === 'import' || b.account === this.account(this.config(b.channel)) })); }
-  binding(id) { const b = json(this.db.prepare('SELECT data FROM chat_bindings WHERE id=?').get(identifier(id))); check(b && !b.disabled, 'NOT_FOUND', '会话关联不存在或已解除', 404); this.patient(b.patientId); check(b.mode === 'import' || b.account === this.account(this.config(b.channel)), 'CHAT_ACCOUNT', '当前账号与关联不一致，请重新核验', 409); return b; }
+  bindings(patientId) { return this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? ORDER BY rowid DESC').all(patientId).map(json).filter(b => !b.disabled).map(b => ({ ...b, currentAccount: b.mode === 'import' || (this.registry.entries.has(b.channel) && b.account === this.account(this.config(b.channel))) })); }
+  binding(id) { const b = json(this.db.prepare('SELECT data FROM chat_bindings WHERE id=?').get(identifier(id))); check(b && !b.disabled, 'NOT_FOUND', '会话关联不存在或已解除', 404); this.patient(b.patientId); check(b.mode === 'import' || (this.registry.entries.has(b.channel) && b.account === this.account(this.config(b.channel))), 'CHAT_ACCOUNT', '当前账号与关联不一致，请重新核验', 409); return b; }
   async preview(input) {
     check(!this.active.has('wechat'), 'CHAT_BUSY', '微信正在读取，请稍后重试', 409);
     const controller = new AbortController(), job = {controller,promise:null};
@@ -140,10 +171,11 @@ export class ChatFollowups {
     this.imports.delete(input.previewId);
     return {...outcome,message:'所选文本已导入待复核草稿；附件仅记录文件名，未解析内容'};
   }
-  async conversations() {
-    const c = this.ready('wecom');
-    const result = await this.archive.conversations(this.secret(c));
-    check(this.config('wecom').revision === c.revision, 'CHAT_ACCOUNT', '连接已变化，请重新读取', 409);
+  async conversations(channel = 'wecom') {
+    const c = this.ready(channel);
+    check(this.registry.describe(channel).capabilities.conversations, 'CHAT_PLUGIN', '此插件使用窗口校准');
+    const result = await this.connector(channel).conversations(this.secret(c));
+    check(this.config(channel).revision === c.revision, 'CHAT_ACCOUNT', '连接已变化，请重新读取', 409);
     return result;
   }
   async bind(input) {
@@ -160,14 +192,17 @@ export class ChatFollowups {
       const observed = await this.wechat.title(p, titleRegion);
       check(observed === title, 'CHAT_IDENTITY', '选择区域识别的会话名称与填写不一致，请调整标题区域', 409);
       conversationId = `title:${title}`; calibration = { titleRegion, messageRegion, aspect: p.width / p.height };
-    } else conversationId = string(input.conversationId, '存档会话 ID', 300);
+    } else {
+      conversationId = string(input.conversationId, '会话 ID', 300);
+      if (this.registry.get(c.channel).protocol === 'wx-cli' && conversationId.endsWith('@chatroom') && !conversationId.startsWith('room:')) conversationId = `room:${conversationId}`;
+    }
     check(this.config(c.channel).revision === c.revision, 'CHAT_ACCOUNT', '配置已变化，请重新核验', 409);
     const account = this.account(c);
     check(!this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? AND channel=? AND account=? AND conversation=?').all(input.patientId,c.channel,account,conversationId).map(json).some(b => !b.disabled), 'CHAT_BINDING', '此患者已经关联该会话', 409);
     const b = { id: randomUUID(), patientId: input.patientId, channel: c.channel, account, conversationId, title, speakerName, relationship: input.relationship, senderId: typeof input.senderId === 'string' ? input.senderId.slice(0,200) : '', calibration, verifiedAt: now() };
     sqliteTransaction(this.db, () => {
       this.db.prepare('INSERT INTO chat_bindings VALUES (?,?,?,?,?,?)').run(b.id,b.patientId,b.channel,b.account,b.conversationId,JSON.stringify(b));
-      if (c.channel === 'wecom') { const saved = this.config('wecom'); saved.cursor = '0'; this.write(saved); }
+      if (c.channel !== 'wechat') { const saved = this.config(c.channel); saved.cursor = '0'; this.write(saved); }
     });
     return b;
   }
@@ -185,7 +220,7 @@ export class ChatFollowups {
     return { bindings, drafts, offset, total: this.db.prepare('SELECT COUNT(*) n FROM chat_drafts WHERE patient_id=?').get(patientId).n, inbox, connections: this.settings().connections };
   }
   cancel(channel) { this.active.get(channel)?.controller.abort(); for (const job of this.pendingAI.values()) if (job.channel === channel) job.controller.abort(); return { cancelled: this.active.has(channel) }; }
-  assertCurrent(c, signal) { check(!signal.aborted && this.config(c.channel).revision === c.revision && this.config(c.channel).enabled, 'CHAT_CANCELLED', '同步已取消或连接已更改', 409); }
+  assertCurrent(c, signal) { check(!signal.aborted && this.registry.entries.has(c.channel) && this.config(c.channel).revision === c.revision && this.config(c.channel).enabled, 'CHAT_CANCELLED', '同步已取消或连接已更改', 409); }
   async sync(channel, input = {}) {
     const c = this.ready(channel); check(!this.active.has(channel), 'CHAT_BUSY', '此连接正在同步', 409);
     check(input.consent === true, 'CHAT_CONSENT', '请确认读取已关联会话', 412);
@@ -212,7 +247,9 @@ export class ChatFollowups {
         for (let page = 0; page < 10; page++) {
           const conversations = this.db.prepare("SELECT DISTINCT conversation FROM chat_bindings WHERE channel=? AND account=? AND COALESCE(json_extract(data,'$.disabled'),0)=0").all(c.channel,this.account(c)).map(b => b.conversation);
           check(conversations.length, 'CHAT_BINDING', '请先关联至少一个会话', 409);
-          const result = await this.archive.read({ ...this.secret(c), conversations },cursor,signal);
+          const result = await this.connector(c.channel).read({ ...this.secret(c), conversations },cursor,signal);
+          check(Array.isArray(result?.messages) && result.messages.length <= 100 && typeof result.nextCursor === 'string' && result.nextCursor.length <= 200000 && typeof result.hasMore === 'boolean' && (!result.hasMore || result.nextCursor !== cursor), 'CHAT_PROTOCOL', '连接插件返回了无效的分页结果', 502);
+          for (const m of result.messages) check(m && typeof m.id === 'string' && m.id.length > 0 && m.id.length <= 200 && typeof m.conversationId === 'string' && typeof m.text === 'string' && m.text.length <= 20000 && typeof m.senderId === 'string' && ['in','out','unknown'].includes(m.direction) && typeof m.type === 'string' && (m.sentAt === null || (typeof m.sentAt === 'string' && Number.isFinite(Date.parse(m.sentAt)))), 'CHAT_PROTOCOL', '连接插件返回了无效消息或未授权会话', 502);
           this.assertCurrent(c,signal);
           const outcome = sqliteTransaction(this.db, () => {
             const value = this.ingest(c,result.messages);
@@ -225,7 +262,7 @@ export class ChatFollowups {
       this.assertCurrent(c,signal); const saved = this.config(c.channel); saved.lastSyncAt = now(); saved.lastError = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved);
       return { added, drafts, hasMore, partial: c.channel === 'wechat', message: c.channel === 'wechat' ? '已读取可见聊天区域，发送者和消息时间需复核；不代表完整历史' : hasMore ? '已同步本批消息，仍有后续页，请继续同步' : '本次增量同步完成' };
     } catch (e) {
-      if (this.config(c.channel).revision === c.revision) { const saved = this.config(c.channel); saved.lastError = e instanceof AppError ? e.message : '同步失败，请检查连接后重试'; if (c.channel === 'wechat') saved.autoUntil = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved); }
+      if (this.registry.entries.has(c.channel) && this.config(c.channel).revision === c.revision) { const saved = this.config(c.channel); saved.lastError = e instanceof AppError ? e.message : '同步失败，请检查连接后重试'; if (c.channel === 'wechat') saved.autoUntil = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved); }
       throw e instanceof AppError ? e : new AppError('CHAT_SYNC', '同步失败，请检查客户端、采集器与权限', 502);
     }
   }
@@ -257,7 +294,7 @@ export class ChatFollowups {
       for (const { b,messages } of groups.values()) {
         let batch = [], size = 0;
         for (const m of messages) {
-          if (batch.length && size + m.text.length > 14000) { this.createDraft(b,batch); drafts++; batch = []; size = 0; }
+          if (batch.length && (size + m.text.length > 14000 || batch.length >= 100)) { this.createDraft(b,batch); drafts++; batch = []; size = 0; }
           batch.push(m); size += m.text.length;
         }
         if (batch.length) { this.createDraft(b,batch); drafts++; }
@@ -268,7 +305,7 @@ export class ChatFollowups {
   createDraft(b, messages) {
     check(messages.length && messages.length <= 100, 'CHAT_MESSAGES', '请选择 1–100 条消息');
     const sourceText = messages.map(m => `[${m.sentAt || '发送时间未识别'} · ${m.direction === 'out' ? '医生侧' : m.direction === 'in' && b.senderId && b.senderId === m.senderId ? `${b.speakerName}（${b.relationship === 'family' ? '家属转述' : '本人'}）` : '发言人待核验'} · ${m.type}]\n${m.gap ? '【与上次画面无可靠连续重叠，可能存在遗漏或重复，需复核】\n' : ''}${m.text || '非文本消息，尚未解析'}`).join('\n\n');
-    const d = { id: randomUUID(), patientId: b.patientId, bindingId: b.id, title: b.title, channel: b.channel, relationship: b.relationship, sourceText, messageIds: messages.map(m => m.id), note: '', status: 'draft', revision: 0, createdAt: now(), kind: 'source-review' };
+    const d = { id: randomUUID(), patientId: b.patientId, bindingId: b.id, title: b.title, channel: b.channel, protocol: this.registry.entries.get(b.channel)?.protocol, relationship: b.relationship, sourceText, messageIds: messages.map(m => m.id), note: '', status: 'draft', revision: 0, createdAt: now(), kind: 'source-review' };
     this.db.prepare('INSERT INTO chat_drafts VALUES (?,?,?,?)').run(d.id,b.patientId,b.id,JSON.stringify(d));
     for (const m of messages) this.db.prepare('INSERT INTO chat_allocations VALUES (?,?,?)').run(b.id,m.id,d.id);
     return d;
@@ -311,7 +348,7 @@ export class ChatFollowups {
       check(input.confirmed === true && d.revision === input.revision && d.status === 'draft', 'REVISION_CONFLICT', '请核对最新草稿后归档', 409);
       check(Number.isFinite(Date.parse(input.contactedAt)), 'CHAT_DATE', '请填写核实后的联系时间');
       const note = string(input.note, '随访记录', 4500);
-      const record = this.followups.recordContact(d.patientId,{ requestId: `chat_${d.id}`, title: `聊天随访 · ${d.title}`.slice(0,100), status: 'completed', contactMethod: d.channel === 'wecom' ? 'wecom' : 'wechat', contactedAt: input.contactedAt, note: `${note}\n\n来源：聊天随访草稿 ${d.id}；${d.messageIds.length} 条来源记录。`, source: { kind: 'chat', draftId: d.id } });
+      const record = this.followups.recordContact(d.patientId,{ requestId: `chat_${d.id}`, title: `聊天随访 · ${d.title}`.slice(0,100), status: 'completed', contactMethod: d.channel === 'wecom' ? 'wecom' : d.protocol === 'wx-cli' || d.channel === 'wechat' ? 'wechat' : 'other', contactedAt: input.contactedAt, note: `${note}\n\n来源：聊天随访草稿 ${d.id}；${d.messageIds.length} 条来源记录。`, source: { kind: 'chat', draftId: d.id } });
       d.note = note; d.status = 'archived'; d.recordId = record.id; d.archivedAt = now(); d.revision++;
       this.db.prepare('UPDATE chat_drafts SET data=? WHERE id=?').run(JSON.stringify(d),id); return d;
     });
@@ -320,11 +357,12 @@ export class ChatFollowups {
   async tick() {
     if (this.stopped || this.ticking) return;
     this.ticking = true;
-    try { for (const channel of channels) {
+    try { for (const channel of this.registry.ids()) {
       if (this.stopped) break;
+      if (!this.registry.entries.has(channel)) continue;
       const c = this.config(channel);
       if (!c.enabled || !c.autoUntil || Date.parse(c.autoUntil) <= Date.now() || c.nextRun > Date.now() || this.active.has(channel)) continue;
-      if (channel === 'wecom') await this.sync(channel,{ consent:true }).catch(() => {});
+      if (channel !== 'wechat') await this.sync(channel,{ consent:true }).catch(() => {});
       else {
         // Old multi-chat schedules require a fresh choice; never search or rotate chats.
         if (!c.autoBindingId) { c.autoUntil=''; c.lastError='请选择一个已校准会话后重新开启定时读取'; this.write(c); continue; }
@@ -343,5 +381,5 @@ export class ChatFollowups {
       catch { if (!this.stopped) { const saved = this.config(c.channel); saved.lastError = '部分草稿自动整理失败，请在随访中检查或手动重试'; this.write(saved); } }
     }
   }
-  async stop() { this.stopped = true; clearInterval(this.timer); for (const c of channels) this.cancel(c); await Promise.allSettled([...this.active.values(),...this.pendingAI.values()].map(j => j.promise)); this.previews.clear(); this.imports.clear(); }
+  async stop() { this.stopped = true; clearInterval(this.timer); for (const c of this.registry.ids()) this.cancel(c); await Promise.allSettled([...this.active.values(),...this.pendingAI.values()].map(j => j.promise)); this.previews.clear(); this.imports.clear(); }
 }

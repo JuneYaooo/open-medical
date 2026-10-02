@@ -1,0 +1,6 @@
+{
+  "manifestVersion": 1,
+  "id": "clinic-messages",
+  "name": "诊所消息系统",
+  "protocol": "archive-v1"
+}
