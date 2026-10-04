@@ -127,7 +127,12 @@ export class CareChannels {
       check(account, "WECOM_API", `凭据可用，但账号 ${c.openKfId} 不在该 Secret 可管理的客服账号中`, 502);
       return `可用；客服账号「${account.name || c.openKfId}」`;
     });
-    await run("app", "提醒应用", this.appReady(), async () => { await this.client("app").token(); return "凭据可用（未发送测试消息）"; });
+    // agent/get only succeeds with the Secret of that same app, so a Secret
+    // from another app (e.g. 微信客服) or a wrong AgentId fails here.
+    await run("app", "提醒应用", this.appReady(), async () => {
+      const agent = await this.client("app").getAgent(c.agentId);
+      return `可用；应用「${agent.name || c.agentId}」（未发送测试消息）`;
+    });
     return { results, testedAt: new Date(this.now()).toISOString() };
   }
   // Accounts the saved 微信客服 Secret may manage; open_kfid is not shown in
@@ -150,13 +155,19 @@ export class CareChannels {
     this.vault.set(VAULT_KEY, { ...(this.vault.get(VAULT_KEY) || {}), kfLink });
     return { url, createdAt: kfLink.createdAt };
   }
+  // ok means at least one member got it; `missed` lists members WeCom
+  // accepted the call for but did not deliver to (wrong UserID, outside the
+  // app's visible range, or no license).
   async notify(userIds, text) {
-    if (!userIds.length || !this.appReady()) return { ok: false, detail: "未配置企业微信应用消息或提醒对象" };
+    if (!userIds.length || !this.appReady()) return { ok: false, delivered: [], missed: [], detail: "未配置企业微信应用消息或提醒对象" };
     try {
-      await this.client("app").sendAppText({ agentId: this.config().agentId, userIds, text: text.slice(0, 1500) });
-      return { ok: true };
+      const body = await this.client("app").sendAppText({ agentId: this.config().agentId, userIds, text: text.slice(0, 1500) });
+      const rejected = new Set([body.invaliduser, body.unlicenseduser].flatMap((v) => String(v || "").split("|")).filter(Boolean));
+      const missed = userIds.filter((u) => rejected.has(u)), delivered = userIds.filter((u) => !rejected.has(u));
+      const detail = missed.length ? `企业微信未送达 ${missed.join("、")}：UserID 不存在、不在应用可见范围内或未分配许可` : "";
+      return { ok: delivered.length > 0, delivered, missed, detail };
     } catch (error) {
-      return { ok: false, detail: error.message };
+      return { ok: false, delivered: [], missed: [...userIds], detail: error.message };
     }
   }
 }

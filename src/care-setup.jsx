@@ -102,6 +102,9 @@ export function CareSetup({ onClose, onChanged }) {
   const id = STEPS[step][0];
   const next = () => { setError(""); setStep((s) => Math.min(STEPS.length - 1, s + 1)); };
   const secretPlaceholder = (has) => has ? "已保存，留空不修改" : "粘贴 Secret";
+  // Editing the reminder app invalidates its earlier test, so the primary
+  // button goes back to "保存并测试" instead of skipping the save.
+  const setApp = (changes) => { set(changes); setResults((r) => ({ ...r, app: null, notify: null })); };
 
   return <Modal title="企业微信接入向导" onClose={onClose} wide>
     <div className="care-setup">
@@ -157,10 +160,10 @@ export function CareSetup({ onClose, onChanged }) {
             "在「通讯录」打开医生的成员详情，复制「账号」，即 UserID",
           ]} />
           <div className="care-setup-row">
-            <label>AgentId<input value={form.agentId} onChange={(e) => set({ agentId: e.target.value.trim() })} placeholder="1000002" /></label>
-            <label>应用 Secret<input type="password" autoComplete="off" value={form.appSecret} onChange={(e) => set({ appSecret: e.target.value.trim() })} placeholder={secretPlaceholder(c.app?.hasSecret)} /></label>
+            <label>AgentId<input value={form.agentId} onChange={(e) => setApp({ agentId: e.target.value.trim() })} placeholder="1000002" /></label>
+            <label>应用 Secret<input type="password" autoComplete="off" value={form.appSecret} onChange={(e) => setApp({ appSecret: e.target.value.trim() })} placeholder={secretPlaceholder(c.app?.hasSecret)} /></label>
           </div>
-          <label>接收提醒的成员 UserID（多个用逗号分隔）<input value={form.notifyUserIds} onChange={(e) => set({ notifyUserIds: e.target.value })} placeholder="zhangyisheng" /></label>
+          <label>接收提醒的成员 UserID（多个用逗号分隔）<input value={form.notifyUserIds} onChange={(e) => setApp({ notifyUserIds: e.target.value })} placeholder="zhangyisheng" /></label>
           <Result result={results.app} />
           {results.notify && <Result result={results.notify} />}
           <footer>

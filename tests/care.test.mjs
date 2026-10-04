@@ -24,7 +24,14 @@ function wecomFetch(log, syncPages = []) {
     if (u.pathname.endsWith("/kf/add_contact_way")) return reply({ errcode: 0, url: `https://work.weixin.qq.com/kfid/kfc${log.length}` });
     if (u.pathname.endsWith("/kf/send_msg")) return reply({ errcode: 0, msgid: `m${log.length}` });
     if (u.pathname.endsWith("/kf/sync_msg")) return reply({ errcode: 0, ...(syncPages.shift() || { msg_list: [], has_more: 0, next_cursor: "" }) });
-    if (u.pathname.endsWith("/message/send")) return reply({ errcode: 0 });
+    // Like WeCom: agent/get only answers with that app's own Secret, and
+    // message/send succeeds while listing members it could not reach.
+    if (u.pathname.endsWith("/agent/get")) return reply(u.searchParams.get("access_token") === "tok-appsecret" && u.searchParams.get("agentid") === "1000002"
+      ? { errcode: 0, agentid: 1000002, name: "患者消息提醒" } : { errcode: 301002, errmsg: "api forbidden" });
+    if (u.pathname.endsWith("/message/send")) {
+      const ghosts = JSON.parse(init.body).touser.split("|").filter((x) => x.startsWith("ghost"));
+      return reply({ errcode: 0, ...(ghosts.length ? { invaliduser: ghosts.join("|") } : {}) });
+    }
     return reply({ errcode: 404 });
   };
 }
@@ -364,6 +371,58 @@ test("the setup wizard lists 微信客服 accounts, tests one step at a time, se
   f.syncPages.push({ msg_list: [{ msgid: "t1", external_userid: "wmNEW", origin: 3, send_time: Math.floor(Date.now() / 1000), msgtype: "text", text: { content: "测试" } }], has_more: 0, next_cursor: "c1" });
   await f.json("/api/care/sync", "POST", {});
   assert.ok((await f.json("/api/care/settings")).data.channels.kfLastInboundAt);
+});
+
+test("the reminder app test checks AgentId against its Secret, and members WeCom silently skipped are reported", async (t) => {
+  const f = await setup(t);
+  await enableKf(f);
+  const app = async () => (await f.json("/api/care/settings/test", "POST", { only: ["app"] })).data.results[0];
+  assert.equal((await app()).ok, true);
+  assert.match((await app()).detail, /患者消息提醒/);
+  // A Secret from another app still yields a token, but not this app's details.
+  await f.json("/api/care/settings", "PUT", { channels: { app: { secret: "kfsecret" } } });
+  assert.equal((await app()).ok, false);
+  assert.match((await app()).detail, /不属于同一个应用/);
+  await f.json("/api/care/settings", "PUT", { channels: { app: { agentId: "1000009", secret: "appsecret" } } });
+  assert.equal((await app()).ok, false);
+  await f.json("/api/care/settings", "PUT", { channels: { app: { agentId: "1000002" } } });
+
+  await f.json("/api/care/settings", "PUT", { alerts: { notifyUserIds: ["doctor1", "ghost1"] } });
+  const partly = (await f.json("/api/care/settings/test", "POST", { only: [], notify: true })).data.notify;
+  assert.equal(partly.ok, false);
+  assert.match(partly.detail, /已发送给 doctor1.*未送达 ghost1/);
+  await f.json("/api/care/settings", "PUT", { alerts: { notifyUserIds: ["ghost2"] } });
+  const none = (await f.json("/api/care/settings/test", "POST", { only: [], notify: true })).data.notify;
+  assert.equal(none.ok, false);
+  assert.doesNotMatch(none.detail, /已发送给/);
+  // Real alerts record the miss too.
+  const entry = await f.care.notifyAlert(f.care.createAlert({ patientId: f.patient.id, level: "urgent", reason: "测试" }).id);
+  assert.equal(entry.ok, false);
+  assert.match(entry.detail, /ghost2/);
+});
+
+test("switching the 微信客服 account restarts the sync cursor and keeps the new account's backlog as history", async (t) => {
+  const f = await setup(t);
+  await enableKf(f);
+  const now = Math.floor(Date.now() / 1000);
+  f.syncPages.push({ msg_list: [], has_more: 0, next_cursor: "c-wk1" });
+  await f.json("/api/care/sync", "POST", {});
+  assert.equal(f.care.internal().kfCursor, "c-wk1");
+  // Saving unrelated settings keeps the cursor.
+  await f.json("/api/care/settings", "PUT", { channels: { kf: { openKfId: "wk1" } }, autoReply: { mode: "draft" } });
+  assert.equal(f.care.internal().kfCursor, "c-wk1");
+
+  await f.json("/api/care/settings", "PUT", { channels: { kf: { openKfId: "wk2" } } });
+  assert.equal(f.care.internal().kfCursor, "");
+  await f.json(`/api/care/patients/${f.patient.id}/settings`, "PUT", { kfExternalUserId: "wmB" });
+  f.syncPages.push({ msg_list: [{ msgid: "b1", external_userid: "wmB", origin: 3, send_time: now - 3600, msgtype: "text", text: { content: "新账号的旧消息" } }], has_more: 0, next_cursor: "c-wk2" });
+  await f.json("/api/care/sync", "POST", {});
+  const pull = f.log.filter((e) => e.path.endsWith("/kf/sync_msg")).at(-1).body;
+  assert.equal(pull.cursor, "");
+  assert.equal(pull.open_kfid, "wk2");
+  assert.equal(f.care.internal().kfCursor, "c-wk2");
+  const thread = (await f.json(`/api/care/patients/${f.patient.id}`)).data.messages;
+  assert.equal(thread.find((m) => m.text === "新账号的旧消息").state.status, "recorded", "an hour-old backlog message is not triaged");
 });
 
 test("微信客服 is polled without callbacks, backs off on errors, keeps first-sync history untriaged and respects the 48h window", async (t) => {

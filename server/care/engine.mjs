@@ -99,6 +99,8 @@ export class CareEngine {
   saveSettings(input = {}) {
     check(input && typeof input === "object", "INVALID_INPUT", "设置必须是对象");
     const next = validateSettings(input, this.settings());
+    const kfAccount = () => { const c = this.channels.config(); return `${c.corpId}:${c.openKfId}`; };
+    const accountBefore = kfAccount();
     if (input.channels) {
       const c = input.channels;
       if (c.corp) {
@@ -109,6 +111,12 @@ export class CareEngine {
         this.kick();
       }
       this.channels.save({ openKfId: c.kf?.openKfId ?? c.openKfId, kfSecret: c.kf?.secret ?? c.kfSecret, agentId: c.app?.agentId ?? c.agentId, appSecret: c.app?.secret ?? c.appSecret });
+      // The sync cursor belongs to one 微信客服 account. A different account
+      // starts from scratch, and its backlog is kept as history, not triaged.
+      if (kfAccount() !== accountBefore) {
+        this.setInternal({ kfCursor: "", kfSince: null });
+        Object.assign(this.kf, { lastError: null, failures: 0, nextAt: 0 });
+      }
     }
     const raw = this.rawSettings();
     this.db.prepare("UPDATE care_settings SET data=? WHERE id=1").run(JSON.stringify({ ...next, state: raw.state, updatedAt: iso(this.now()) }));
@@ -646,9 +654,12 @@ export class CareEngine {
     // Messages from before the first sync are kept as history, not triaged.
     if (!this.internal().kfSince) this.setInternal({ kfSince: iso(this.now()) });
     const historyBefore = Date.parse(this.internal().kfSince) - 10 * 60000;
-    const openKfId = this.channels.config().openKfId;
+    const { corpId, openKfId } = this.channels.config();
     for (let page = 0; page < 20; page++) {
       const body = await this.channels.client("kf").syncKf({ cursor, token, openKfId });
+      // The account was switched mid-pull: this cursor is no longer ours.
+      const now = this.channels.config();
+      if (now.corpId !== corpId || now.openKfId !== openKfId) break;
       for (const m of body.msg_list || []) {
         if (![3, 5].includes(Number(m.origin)) || !m.external_userid) continue;
         const media = m[m.msgtype]?.media_id ? [{ type: m.msgtype, mediaId: m[m.msgtype].media_id, name: m.file?.file_name || "" }] : [];
@@ -704,7 +715,9 @@ export class CareEngine {
       const userIds = this.settings().alerts.notifyUserIds;
       check(userIds.length, "INVALID_INPUT", "请先填写接收提醒的成员 UserID", 400);
       const sent = await this.channels.notify(userIds, "【患者消息提醒 · 测试】企业微信提醒已接通。患者出现红旗症状或重要消息时，你会在这里收到通知。");
-      result.notify = { ok: sent.ok, detail: sent.ok ? `已发送给 ${userIds.join("、")}，请在企业微信中查收` : sent.detail };
+      const ok = sent.ok && !sent.missed.length;
+      result.notify = { ok, detail: ok ? `已发送给 ${userIds.join("、")}，请在企业微信中查收`
+        : sent.delivered?.length ? `已发送给 ${sent.delivered.join("、")}；${sent.detail}` : sent.detail };
     }
     return result;
   }

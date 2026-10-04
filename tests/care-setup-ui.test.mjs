@@ -18,6 +18,7 @@ function wecomFetch(log) {
     if (u.pathname.endsWith("/kf/account/list")) return reply({ errcode: 0, account_list: [{ open_kfid: "wk1", name: "术后随访助手" }] });
     if (u.pathname.endsWith("/kf/add_contact_way")) return reply({ errcode: 0, url: "https://work.weixin.qq.com/kfid/kfc123" });
     if (u.pathname.endsWith("/kf/sync_msg")) return reply({ errcode: 0, msg_list: [], has_more: 0, next_cursor: "" });
+    if (u.pathname.endsWith("/agent/get")) return reply(u.searchParams.get("agentid") === "1000002" ? { errcode: 0, agentid: 1000002, name: "患者消息提醒" } : { errcode: 301002, errmsg: "api forbidden" });
     if (u.pathname.endsWith("/message/send")) return reply({ errcode: 0 });
     return reply({ errcode: 404 });
   };
@@ -62,6 +63,12 @@ test("the WeCom setup wizard walks a new user from nothing to a working 微信�
   await dialog.getByRole("button", { name: "给医生发一条测试提醒" }).click();
   await dialog.getByText(/已发送给 doctor1/).waitFor();
   assert.ok(log.some((e) => e.path?.endsWith("/message/send")));
+  // Editing after a passed test must be saved and re-tested, not skipped.
+  await dialog.getByLabel(/接收提醒的成员 UserID/).fill("doctor1,doctor2");
+  assert.equal(await dialog.getByRole("button", { name: "下一步" }).count(), 0);
+  await dialog.getByRole("button", { name: "保存并测试" }).click();
+  await dialog.getByRole("button", { name: "下一步" }).waitFor();
+  assert.deepEqual((await f.json("/api/care/settings")).data.alerts.notifyUserIds, ["doctor1", "doctor2"]);
   await dialog.getByRole("button", { name: "下一步" }).click();
 
   await dialog.getByRole("heading", { name: /第 4 步/ }).waitFor();
@@ -77,6 +84,6 @@ test("the WeCom setup wizard walks a new user from nothing to a working 微信�
   const saved = (await f.json("/api/care/settings")).data;
   assert.equal(saved.channels.kf.openKfId, "wk1");
   assert.equal(saved.processing.modelConsent, true);
-  assert.deepEqual(saved.alerts.notifyUserIds, ["doctor1"]);
+  assert.deepEqual(saved.alerts.notifyUserIds, ["doctor1", "doctor2"]);
   assert.deepEqual(errors, []);
 });

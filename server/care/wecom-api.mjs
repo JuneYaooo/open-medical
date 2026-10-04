@@ -9,6 +9,8 @@ const HINTS = {
   60020: "本机公网 IP 不在应用的「企业可信 IP」中",
   95000: "微信客服账号不存在或未授权给该 Secret", 95001: "已超过 48 小时会话窗口，需患者先发消息", 95002: "48 小时内最多回复 5 条，需患者再次发消息",
   95004: "微信客服账号 open_kfid 不正确", 95007: "消息已过期或无效",
+  81013: "接收提醒的成员都无效：UserID 不存在或不在应用的可见范围内",
+  301002: "AgentId 与应用 Secret 不属于同一个应用",
 };
 export const wecomHint = (errcode) => HINTS[errcode] || "";
 // WeCom names the caller's public IP in 60020 errors ("from ip: 1.2.3.4"),
@@ -84,7 +86,12 @@ export class WecomApi {
   sendKf({ externalUserId, openKfId, text }) {
     return this.post("/kf/send_msg", { touser: externalUserId, open_kfid: openKfId, msgtype: "text", text: { content: text } });
   }
-  // 自建应用消息：用于提醒成员（医生/助理）。
+  // 自建应用详情：核对 AgentId 与 Secret 属于同一个应用。
+  getAgent(agentId) {
+    return this.get("/agent/get", { agentid: String(agentId) });
+  }
+  // 自建应用消息：用于提醒成员（医生/助理）。errcode 为 0 时仍可能有
+  // 成员没收到，他们会列在 invaliduser / unlicenseduser 里。
   sendAppText({ agentId, userIds, text }) {
     return this.post("/message/send", { touser: userIds.join("|"), msgtype: "text", agentid: Number(agentId), text: { content: text } });
   }
