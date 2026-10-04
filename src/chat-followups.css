@@ -32,6 +32,10 @@
 .chat-region { position:absolute; border:2px solid #307450; background:#30745020; pointer-events:none; box-sizing:border-box; }
 .chat-region.messages { border-color:#4268a4; background:#4268a425; }
 .chat-region.selection { border-style:dashed; border-color:#b17c1d; background:#b17c1d20; }
+.chat-region.input-point { width:14px; height:14px; border:2px solid #a4453c; border-radius:50%; background:#a4453c40; transform:translate(-50%,-50%); }
+.chat-reply { margin-top:10px; }
+.chat-reply>summary { cursor:pointer; font-weight:600; }
+.chat-reply[open] { display:flex; flex-direction:column; gap:10px; padding:12px; border-top:1px solid #e3e0da; }
 .chat-region-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
 .chat-calibration fieldset { border:1px solid #d8e1d7; margin-top:12px; }
 @media(max-width:700px) { .chat-form-grid { grid-template-columns:1fr; } .chat-region-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .chat-draft,.chat-binding-form { padding:16px; } }

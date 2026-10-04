@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync} from 'node:fs';
+import {join} from 'node:path';
 import {chromium} from 'playwright-core';
 import {fixture} from './helpers.mjs';
-const chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const chrome=process.platform==='win32'
+ ? ['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',join(process.env.LOCALAPPDATA||'','Google/Chrome/Application/chrome.exe')].find(existsSync)
+ : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const skip=!existsSync(chrome)||!existsSync('dist/index.html');
 const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 async function setup(t){

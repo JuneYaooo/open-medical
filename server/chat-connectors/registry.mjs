@@ -118,7 +118,7 @@ export class ChatConnectorRegistry {
       capabilities: {
         conversations: e.protocol !== "desktop",
         history: e.protocol !== "desktop",
-        send: false,
+        send: e.protocol === "desktop",
       },
     };
   }

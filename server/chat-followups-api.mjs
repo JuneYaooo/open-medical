@@ -21,6 +21,7 @@ export async function chatFollowupsApi(service, req, url, { body, send }) {
   if (p[2] === 'preview' && p.length === 3 && req.method === 'POST') return reply(await service.preview(await body()));
   if (p[2] === 'bindings' && p.length === 3 && req.method === 'POST') return reply(await service.bind(await body()),201);
   if (p[2] === 'bindings' && p.length === 4 && req.method === 'DELETE') return reply(service.unbind(p[3]));
+  if (p[2] === 'bindings' && p.length === 5 && p[4] === 'send' && req.method === 'POST') return reply(await service.sendToBinding({ bindingId: p[3], ...(await body()) }), 201);
   if (p[2] === 'assign' && p.length === 3 && req.method === 'POST') return reply(service.assign(await body()),201);
   if (p[2] === 'drafts' && p.length === 5) {
     if (p[4] === 'sources' && req.method === 'GET') return reply(service.evidence(p[3]));

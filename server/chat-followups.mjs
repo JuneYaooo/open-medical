@@ -187,11 +187,25 @@ export class ChatFollowups {
     if (c.channel === 'wechat') {
       const p = this.previews.get(input.previewId);
       check(p && p.expires > Date.now() && p.revision === c.revision, 'CHAT_PREVIEW', '窗口预览已失效，请重新读取', 409);
-      const titleRegion = validateRegion(input.titleRegion), messageRegion = validateRegion(input.messageRegion);
-      check(messageRegion.y >= titleRegion.y + titleRegion.height, 'CHAT_REGION', '消息区域必须在会话标题下方');
-      const observed = await this.wechat.title(p, titleRegion);
-      check(observed === title, 'CHAT_IDENTITY', '选择区域识别的会话名称与填写不一致，请调整标题区域', 409);
-      conversationId = `title:${title}`; calibration = { titleRegion, messageRegion, aspect: p.width / p.height };
+      const messageRegion = validateRegion(input.messageRegion);
+      let titleRegion = null;
+      if (input.titleRegion) {
+        titleRegion = validateRegion(input.titleRegion);
+        check(messageRegion.y >= titleRegion.y + titleRegion.height, 'CHAT_REGION', '消息区域必须在会话标题下方');
+        const observed = await this.wechat.title(p, titleRegion);
+        check(observed === title, 'CHAT_IDENTITY', '选择区域识别的会话名称与填写不一致，请调整标题区域', 409);
+      } else {
+        // Windows 紧凑模式顶栏不显示会话名称：跳过标题 OCR。身份核验由读取与回复时的
+        // 「窗口比例 + 双帧稳定 + 与最近画面连续」承担；标题以人工填写为准。
+        check(this.wechat.platform === 'win32', 'CHAT_REGION', '请选择有效的标题区域');
+      }
+      conversationId = `title:${title}`;
+      calibration = { titleRegion, messageRegion, aspect: p.width / p.height };
+      if (input.inputPoint && Number.isFinite(input.inputPoint.x) && Number.isFinite(input.inputPoint.y)) {
+        const { x, y } = input.inputPoint;
+        check(x > 0 && x < 1 && y > 0 && y < 1, 'CHAT_REGION', '输入框位置无效');
+        calibration.inputPoint = { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
+      }
     } else {
       conversationId = string(input.conversationId, '会话 ID', 300);
       if (this.registry.get(c.channel).protocol === 'wx-cli' && conversationId.endsWith('@chatroom') && !conversationId.startsWith('room:')) conversationId = `room:${conversationId}`;
@@ -207,6 +221,40 @@ export class ChatFollowups {
     return b;
   }
   unbind(id) { const b = json(this.db.prepare('SELECT data FROM chat_bindings WHERE id=?').get(identifier(id))); check(b, 'NOT_FOUND', '会话关联不存在', 404); this.patient(b.patientId); this.cancel(b.channel); b.disabled = true; b.disabledAt = now(); this.db.prepare('UPDATE chat_bindings SET data=? WHERE id=?').run(JSON.stringify(b),id); return { removed: true }; }
+  // 桌面微信回复:人工核对草稿后发出。要求该会话 1 小时内读取过(发送核验需要画面基准),
+  // 发送成功后把发出的消息按 direction=out 记入来源,不生成草稿。
+  async sendToBinding(input) {
+    const c = this.ready('wechat');
+    check(input.consent === true, 'CHAT_CONSENT', '请确认发送前已核对会话与内容', 412);
+    check(!this.active.has('wechat'), 'CHAT_BUSY', '微信正在读取或发送，请稍后重试', 409);
+    const b = this.binding(input.bindingId);
+    check(b.channel === 'wechat' && b.mode !== 'import' && b.calibration, 'CHAT_CHANNEL', '此会话不支持桌面回复', 409);
+    const row = this.db.prepare('SELECT data FROM chat_messages WHERE channel=? AND account=? AND conversation=? ORDER BY rowid DESC LIMIT 1').get('wechat', this.account(c), b.conversationId);
+    const recent = row ? json(row) : null;
+    check(recent && recent.evidence?.coverage === 'visible-window' && Date.parse(recent.observedAt) > Date.now() - 3600000, 'CHAT_SEND_FRESH', '请先「读取已打开的会话」再回复：发送核验需要 1 小时内的画面基准', 409);
+    const controller = new AbortController(); const job = { controller, promise: null };
+    this.active.set('wechat', job);
+    job.promise = this.runSend(c, b, input, recent, controller.signal);
+    try { return await job.promise; } finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
+  }
+  async runSend(c, b, input, recent, signal) {
+    try {
+      const text = string(input.text, '回复内容', 2000);
+      const result = await this.wechat.send(b, text, signal, { recentText: recent.frameText || recent.text || '' });
+      this.assertCurrent(c, signal); this.binding(b.id);
+      const sourceId = hash(['verified-send', b.conversationId, result.fingerprint, randomUUID()]);
+      const account = this.account(c);
+      const m = { sourceId, conversationId: b.conversationId, senderId: '', direction: 'out', type: 'text', text, sentAt: now(), observedAt: now(), partial: false, title: b.title, evidence: { coverage: 'verified-send', inputRatio: result.evidence.inputRatio, sentRatio: result.evidence.sentRatio } };
+      const id = hash([c.channel, account, m.sourceId]);
+      sqliteTransaction(this.db, () => {
+        this.db.prepare('INSERT INTO chat_messages VALUES (?,?,?,?,?,?)').run(id, c.channel, account, b.conversationId, m.sourceId, JSON.stringify({ ...m, id, account, channel: c.channel }));
+      });
+      return { sent: true, messageId: id, coverage: 'verified-send', message: '已发送并在微信窗口内核验到消息内容；发出记录已保存' };
+    } catch (e) {
+      if (this.registry.entries.has('wechat') && this.config('wechat').revision === c.revision) { const saved = this.config('wechat'); saved.lastError = e instanceof AppError ? e.message : '发送失败'; this.write(saved); }
+      throw e instanceof AppError ? e : new AppError('CHAT_SEND', '发送失败，请检查微信窗口后重试', 502);
+    }
+  }
   list(patientId, offset = 0) {
     offset = Number(offset); check(Number.isSafeInteger(offset) && offset >= 0, 'CHAT_PAGE', '分页参数无效');
     this.patient(patientId);
