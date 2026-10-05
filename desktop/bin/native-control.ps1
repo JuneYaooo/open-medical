@@ -97,13 +97,23 @@ function Send-Chord([string]$name) {
 function Focus-Window($hwnd) {
   $h = [IntPtr]$hwnd
   if ([NativeControl]::IsIconic($h)) { [void][NativeControl]::ShowWindow($h, 9) }
-  $fgThread = 0
-  [void][NativeControl]::GetWindowThreadProcessId([NativeControl]::GetForegroundWindow(), [ref]$fgThread)
-  $thisThread = [NativeControl]::GetCurrentThreadId()
-  $attached = [NativeControl]::AttachThreadInput($thisThread, $fgThread, $true)
-  [void][NativeControl]::SetForegroundWindow($h)
-  if ($attached) { [void][NativeControl]::AttachThreadInput($thisThread, $fgThread, $false) }
-  Start-Sleep -Milliseconds 150
+  # 最多重试 3 次;返回是否真的成为前台,调用方据此拒绝盲打按键。
+  $ok = $false
+  foreach ($i in 1..3) {
+    $fgThread = 0
+    [void][NativeControl]::GetWindowThreadProcessId([NativeControl]::GetForegroundWindow(), [ref]$fgThread)
+    $thisThread = [NativeControl]::GetCurrentThreadId()
+    $attached = [NativeControl]::AttachThreadInput($thisThread, $fgThread, $true)
+    [void][NativeControl]::SetForegroundWindow($h)
+    if ($attached) { [void][NativeControl]::AttachThreadInput($thisThread, $fgThread, $false) }
+    Start-Sleep -Milliseconds 200
+    if ([NativeControl]::GetForegroundWindow() -eq $h) { $ok = $true; break }
+    [void][NativeControl]::ShowWindow($h, 6)  # SW_MINIMIZE 再还原,触发前台切换
+    Start-Sleep -Milliseconds 150
+    [void][NativeControl]::ShowWindow($h, 9)  # SW_RESTORE
+    Start-Sleep -Milliseconds 250
+  }
+  return $ok
 }
 
 switch ($cmd.action) {
@@ -127,8 +137,8 @@ switch ($cmd.action) {
     $names = @([string]$cmd.app -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $win = Select-WechatWindow $names
     if (-not $win) { & $fail '未找到微信窗口' }
-    Focus-Window $win.hwnd
-    [Console]::Out.Write((@{ focused = $true; windowId = $win.hwnd } | ConvertTo-Json -Compress))
+    $ok = Focus-Window $win.hwnd
+    [Console]::Out.Write((@{ focused = $ok; windowId = $win.hwnd } | ConvertTo-Json -Compress))
   }
   'click' {
     [void][NativeControl]::SetCursorPos([int]$cmd.x, [int]$cmd.y)
