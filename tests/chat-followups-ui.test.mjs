@@ -81,15 +81,20 @@ test('native export import is usable before desktop connection setup and require
  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
 });
 
-test('failed Mac permission check explains stale grants and exposes only fixed desktop recovery actions',{skip},async t=>{
- const {page,origin,server}=await setup(t);server.chatFollowups.wechat.status=async()=>({ready:false,message:'辅助功能权限未生效'});
+test('failed permission check explains platform recovery actions and exposes only fixed desktop recovery paths',{skip},async t=>{
+ const {page,origin,server}=await setup(t);server.chatFollowups.wechat.status=async()=>({ready:false,message:process.platform==='darwin'?'辅助功能权限未生效':'未找到微信窗口'});
  await page.addInitScript(()=>{window.permissionActions=[];window.omwDesktop={openPermissionSettings:async k=>window.permissionActions.push(k),showInstalledApp:async()=>window.permissionActions.push('reveal')};});
  await page.goto(origin+'/?view=settings&settingsTab=followup');await page.getByRole('button',{name:'检查微信与权限',exact:true}).click();
- await page.getByRole('region',{name:'恢复 Mac 微信读取权限'}).waitFor();
- await page.getByRole('button',{name:'打开辅助功能设置',exact:true}).click();await page.getByRole('button',{name:'打开录屏设置',exact:true}).click();await page.getByRole('button',{name:'在访达中显示当前安装包',exact:true}).click();
- assert.deepEqual(await page.evaluate(()=>window.permissionActions),['accessibility','screen','reveal']);
+ if(process.platform==='darwin'){
+  await page.getByRole('region',{name:'恢复 Mac 微信读取权限'}).waitFor();
+  await page.getByRole('button',{name:'打开辅助功能设置',exact:true}).click();await page.getByRole('button',{name:'打开录屏设置',exact:true}).click();await page.getByRole('button',{name:'在访达中显示当前安装包',exact:true}).click();
+  assert.deepEqual(await page.evaluate(()=>window.permissionActions),['accessibility','screen','reveal']);
+ }else{
+  await page.getByRole('region',{name:'恢复 Windows 微信读取'}).waitFor();
+  await page.getByRole('button',{name:'重新检测',exact:true}).click();
+ }
  assert.equal(await page.getByRole('button',{name:'确认账号并验证连接',exact:true}).count(),0);
- server.chatFollowups.wechat.status=async()=>({ready:true,message:'测试权限已恢复'});await page.getByRole('button',{name:'重新检测权限',exact:true}).click();await page.getByLabel('已核对的微信号').waitFor();
+ server.chatFollowups.wechat.status=async()=>({ready:true,message:'测试权限已恢复'});await page.getByRole('button',{name:process.platform==='darwin'?'重新检测权限':'重新检测',exact:true}).click();await page.getByLabel('已核对的微信号').waitFor();
 });
 
 test('wx-cli setup, session selection, review draft and plugin lifecycle through browser',{skip},async t=>{
