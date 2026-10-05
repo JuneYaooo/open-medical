@@ -63,8 +63,10 @@ function Get-WindowList {
 function Select-WechatWindow($names) {
   $wanted = @($names | ForEach-Object { $_.ToLower() } | Where-Object { $_ })
   $exclude = '(聊天记录|朋友圈|小程序面板|登录|Log ?[Ii]n)'
+  # WeChatAppEx 是微信内置浏览器/小程序运行时,绝不是聊天主窗口。
   $candidates = @(Get-WindowList | Where-Object {
-    ($wanted -contains $_.process.ToLower() -or $_.title -in @('微信', 'WeChat')) -and $_.title -notmatch $exclude
+    ($wanted -contains $_.process.ToLower() -or ($_.process -eq 'Weixin' -and $_.title -in @('微信', 'WeChat'))) -and
+    $_.process -ne 'WeChatAppEx' -and $_.title -notmatch $exclude
   })
   $main = $candidates | Where-Object { $_.title -eq '微信' -or $_.title -eq 'WeChat' } | Select-Object -First 1
   if ($main) { return $main }
@@ -117,6 +119,108 @@ function Focus-Window($hwnd) {
 }
 
 switch ($cmd.action) {
+  'find-avatar' {
+    # 在消息区左侧竖带内自底向上找最近的头像块:逐行统计彩色像素占比(背景/白底气泡不饱和),
+    # 取最低的连续彩色块(高度占全图 3%–12%),返回其归一化区域与 8x8 平均哈希。
+    Add-Type -AssemblyName System.Drawing
+    $bytes = [Convert]::FromBase64String([string]$cmd.image)
+    $msIn = New-Object System.IO.MemoryStream (,$bytes)
+    $src = [System.Drawing.Image]::FromStream($msIn)
+    $band = $cmd.band
+    $bx = [int]([double]$band.x * $src.Width); $by = [int]([double]$band.y * $src.Height)
+    $bw = [int]([double]$band.width * $src.Width); $bh = [int]([double]$band.height * $src.Height)
+    if ($bw -le 0 -or $bh -le 0 -or $bx -lt 0 -or $by -lt 0 -or $bx + $bw -gt $src.Width -or $by + $bh -gt $src.Height) { $src.Dispose(); $msIn.Dispose(); & $fail '头像竖带超出截图范围' }
+    $crop = New-Object System.Drawing.Bitmap($bw, $bh)
+    $g = [System.Drawing.Graphics]::FromImage($crop)
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $bw, $bh)), $bx, $by, $bw, $bh, [System.Drawing.GraphicsUnit]::Pixel)
+    $g.Dispose(); $src.Dispose(); $msIn.Dispose()
+    $step = [Math]::Max(1, [int]($bw / 24))
+    $rowCount = [int[]]::new($bh)
+    for ($yy = 0; $yy -lt $bh; $yy++) {
+      $colorful = 0; $sampled = 0
+      for ($xx = 0; $xx -lt $bw; $xx += $step) {
+        $p = $crop.GetPixel($xx, $yy); $sampled++
+        $mx = [Math]::Max($p.R, [Math]::Max($p.G, $p.B)); $mn = [Math]::Min($p.R, [Math]::Min($p.G, $p.B))
+        if ($mx - $mn -gt 28 -or $mx -lt 90) { $colorful++ }
+      }
+      $rowCount[$yy] = $colorful
+    }
+    $minBlock = [int]([double]$bh * 0.12)
+    $found = $null
+    $yy = $bh - 1
+    while ($yy -ge 0) {
+      if ($rowCount[$yy] -gt ($step * 0.5)) {
+        $top = $yy
+        while ($top -gt 0 -and $rowCount[$top - 1] -gt ($step * 0.5)) { $top-- }
+        $blockH = $yy - $top + 1
+        if ($blockH -ge 8 -and $blockH -le [Math]::Max(16, [int]($bh * 0.25))) {
+          $found = @{ top = $top; height = $blockH }; break
+        }
+        $yy = $top - 1
+      } else { $yy-- }
+    }
+    if (-not $found) { $crop.Dispose(); [Console]::Out.Write((@{ found = $false } | ConvertTo-Json -Compress)); exit 0 }
+    $small = New-Object System.Drawing.Bitmap(8, 8)
+    $g2 = [System.Drawing.Graphics]::FromImage($small)
+    $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g2.DrawImage($crop, (New-Object System.Drawing.Rectangle(0, 0, 8, 8)), 0, [int]$found.top, [int]$bw, [int]$found.height, [System.Drawing.GraphicsUnit]::Pixel)
+    $g2.Dispose()
+    $crop.Dispose()
+    $vals = New-Object 'System.Collections.Generic.List[Double]'
+    for ($vyy = 0; $vyy -lt 8; $vyy++) { for ($vxx = 0; $vxx -lt 8; $vxx++) {
+      $p = $small.GetPixel($vxx, $vyy)
+      $vals.Add(0.299 * $p.R + 0.587 * $p.G + 0.114 * $p.B)
+    } }
+    $small.Dispose()
+    $avg = ($vals | Measure-Object -Average).Average
+    $bits = -join ($vals | ForEach-Object { if ($_ -ge $avg) { '1' } else { '0' } })
+    $hex = -join (0..15 | ForEach-Object { [Convert]::ToString([Convert]::ToUInt16($bits.Substring($_ * 4, 4), 2), 16) })
+    [Console]::Out.Write((@{
+      found = $true
+      region = @{
+        x = [Math]::Round([double]$band.x, 6); y = [Math]::Round([double]$band.y + [double]$found.top / $bh * [double]$band.height, 6)
+        width = [Math]::Round([double]$band.width, 6); height = [Math]::Round([double]$found.height / $bh * [double]$band.height, 6)
+      }
+      hash = $hex
+    } | ConvertTo-Json -Compress))
+  }
+  'hash' {
+    # 对截图的指定归一化区域做 8x8 平均哈希(头像指纹):裁剪 → 灰度 → 与均值比较得 64 位。
+    Add-Type -AssemblyName System.Drawing
+    $bytes = [Convert]::FromBase64String([string]$cmd.image)
+    $msIn = New-Object System.IO.MemoryStream (,$bytes)
+    $src = [System.Drawing.Image]::FromStream($msIn)
+    $r = $cmd.region
+    $cx = [int]([double]$r.x * $src.Width); $cy = [int]([double]$r.y * $src.Height)
+    $cw = [int]([double]$r.width * $src.Width); $ch = [int]([double]$r.height * $src.Height)
+    if ($cw -le 0 -or $ch -le 0 -or $cx -lt 0 -or $cy -lt 0 -or $cx + $cw -gt $src.Width -or $cy + $ch -gt $src.Height) { $src.Dispose(); $msIn.Dispose(); & $fail '头像区域超出截图范围' }
+    $crop = New-Object System.Drawing.Bitmap($cw, $ch)
+    $g = [System.Drawing.Graphics]::FromImage($crop)
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $cw, $ch)), $cx, $cy, $cw, $ch, [System.Drawing.GraphicsUnit]::Pixel)
+    $g.Dispose(); $src.Dispose(); $msIn.Dispose()
+    $small = New-Object System.Drawing.Bitmap(8, 8)
+    $g2 = [System.Drawing.Graphics]::FromImage($small)
+    $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g2.DrawImage($crop, 0, 0, 8, 8)
+    $g2.Dispose(); $crop.Dispose()
+    $vals = New-Object 'System.Collections.Generic.List[Double]'
+    for ($yy = 0; $yy -lt 8; $yy++) { for ($xx = 0; $xx -lt 8; $xx++) {
+      $p = $small.GetPixel($xx, $yy)
+      $vals.Add(0.299 * $p.R + 0.587 * $p.G + 0.114 * $p.B)
+    } }
+    $small.Dispose()
+    $avg = ($vals | Measure-Object -Average).Average
+    $bits = -join ($vals | ForEach-Object { if ($_ -ge $avg) { '1' } else { '0' } })
+    $hex = -join (0..15 | ForEach-Object { [Convert]::ToString([Convert]::ToUInt16($bits.Substring($_ * 4, 4), 2), 16) })
+    [Console]::Out.Write((@{ hash = $hex } | ConvertTo-Json -Compress))
+  }
+  'list' {
+    $names = @([string]$cmd.app -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $wanted = @($names | ForEach-Object { $_.ToLower() })
+    $exclude = '(聊天记录|朋友圈|小程序面板|登录|Log ?[Ii]n)'
+    $all = @(Get-WindowList | Where-Object { ($wanted -contains $_.process.ToLower() -or $_.title -in @('微信', 'WeChat')) -and $_.title -notmatch $exclude })
+    [Console]::Out.Write((@{ windows = $all } | ConvertTo-Json -Compress -Depth 5))
+  }
   'status' {
     $names = @([string]$cmd.app -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $win = Select-WechatWindow $names
