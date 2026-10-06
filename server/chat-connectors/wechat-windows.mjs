@@ -188,3 +188,26 @@ export function matchRatio(needleText, haystackText) {
   const haystack = flattenForMatch(haystackText);
   return lcsLength(needle, haystack) / needle.length;
 }
+
+// 两个 16 位十六进制 aHash 的汉明距(0–64):≤8 视为同一头像。
+export function hashDistance(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length)
+    return 64;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) {
+      d += x & 1;
+      x >>= 1;
+    }
+  }
+  return d;
+}
+
+// OCR 行文本的宽松归一(去空白、小写),用于顶栏/列表行名字比对。
+export function flatName(text) {
+  return String(text).toLowerCase().replace(/\s+/g, "");
+}
+
+export const AVATAR_BAND = { x: 0.16, y: 0.12, width: 0.13, height: 0.68 };
+export const AVATAR_MATCH_DISTANCE = 8;

@@ -92,7 +92,7 @@ test("stale read window blocks desktop reply", async (t) => {
     consent: true,
   });
   assert.equal(reply.status, 409);
-  assert.match(reply.data.error, /1 小时/);
+  assert.match(reply.data.error, /画面基准|读取已打开的会话/);
 });
 
 test("send failures surface lastError and never record a sent message", async (t) => {
@@ -147,4 +147,88 @@ test("registry reports send capability for desktop only", async (t) => {
   assert.equal(capabilities.wechat, true);
   assert.equal(capabilities["wx-cli"], false);
   assert.equal(capabilities.wecom, false);
+});
+
+const locatingReader = () => {
+  const reader = wechatReader();
+  const calls = { locate: [], avatar: 0 };
+  reader.findAvatar = async () => {
+    calls.avatar++;
+    return { found: true, hash: "f1e0e1e1e1e1e1e1", region: { x: 0.16, y: 0.49, width: 0.13, height: 0.057 } };
+  };
+  reader.locate = async (name, avatarHash) => {
+    calls.locate.push({ name, avatarHash });
+    if (!calls.locateOk) {
+      const { AppError } = await import("../server/errors.mjs");
+      throw new AppError("CHAT_LOCATE", "会话列表中未找到「" + name + "」", 409);
+    }
+    return { snapshot: { image: "c3ludGhldGlj", width: 1000, height: 800, lines: [] }, navigated: true, nameVisible: true };
+  };
+  reader.calls = calls;
+  return reader;
+};
+
+async function connectedByName(t, reader) {
+  const f = await fixture(t, { chatFollowups: { wechat: reader } });
+  await f.json("/api/chat-followups/connections/wechat", "POST", {
+    enabled: true,
+    accountId: "synthetic-account",
+    revision: 0,
+  });
+  const p = (await f.json("/api/patients", "POST", { name: "按名关联患者" })).data;
+  const preview = (
+    await f.json("/api/chat-followups/preview", "POST", { consent: true, title: "June", locateName: "June" })
+  ).data;
+  assert.equal(preview.avatar.hash, "f1e0e1e1e1e1e1e1");
+  const binding = (
+    await f.json("/api/chat-followups/bindings", "POST", {
+      channel: "wechat",
+      patientId: p.id,
+      title: "June",
+      speakerName: "June",
+      relationship: "self",
+      confirmed: true,
+      previewId: preview.id,
+      inputPoint: { x: 0.5, y: 0.85 },
+    })
+  ).data;
+  assert.equal(binding.calibration.titleRegion, null);
+  assert.equal(binding.calibration.avatarHash, "f1e0e1e1e1e1e1e1");
+  assert.equal(binding.calibration.messageRegion.x, 0.17);
+  assert.equal(binding.calibration.inputPoint.y, 0.85);
+  return { ...f, p, binding, reader };
+}
+
+test("name-based bind stores avatar fingerprint and autoLocate reply navigates without a fresh read", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  const f = await connectedByName(t, reader);
+  const reply = await f.json(`/api/chat-followups/bindings/${f.binding.id}/send`, "POST", {
+    text: "自动定位回复",
+    consent: true,
+    autoLocate: true,
+  });
+  assert.equal(reply.status, 201, JSON.stringify(reply.data));
+  assert.equal(reply.data.coverage, "verified-send");
+  assert.deepEqual(reader.calls.locate.map((c) => c.name), ["June", "June"]);
+  assert.equal(reader.calls.locate[0].avatarHash, null, "预览阶段尚无头像指纹");
+  assert.equal(reader.calls.locate[1].avatarHash, "f1e0e1e1e1e1e1e1", "发送时应携带关联时存下的头像指纹");
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.inbox.filter((m) => m.direction === "out").length, 1);
+});
+
+test("autoLocate reply aborts with the locate error and records no message", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  const f = await connectedByName(t, reader);
+  reader.calls.locateOk = false;
+  const reply = await f.json(`/api/chat-followups/bindings/${f.binding.id}/send`, "POST", {
+    text: "不应发出",
+    consent: true,
+    autoLocate: true,
+  });
+  assert.equal(reply.status, 409);
+  assert.match(reply.data.error, /未找到/);
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.inbox.filter((m) => m.direction === "out").length, 0);
 });

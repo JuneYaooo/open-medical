@@ -124,20 +124,26 @@ export class ChatFollowups {
   }
   async capturePreview(input,signal) {
     const c = this.ready('wechat'); check(input.consent === true, 'CHAT_CONSENT', '请确认读取当前微信窗口', 412);
+    // 按备注名自动定位(Windows):导航到目标会话后再截取预览。
+    if (input.locateName && this.wechat.platform === 'win32') await this.wechat.locate(string(input.locateName, '微信备注名', 150), null, signal);
     this.expirePreviews();
     while (this.previews.size >= 3) this.previews.delete(this.previews.keys().next().value);
     const snapshot = await this.wechat.capture(signal);
     this.assertCurrent(c,signal);
     check(this.config('wechat').revision === c.revision, 'CHAT_ACCOUNT', '配置已变化，请重新读取', 409);
-    const id = randomUUID(); this.previews.set(id, { ...snapshot, revision: c.revision, expires: Date.now() + 300000 });
-    let suggestedTitleRegion = null;
+    let suggestedTitleRegion = null, avatar = null;
     const title = typeof input.title === 'string' ? input.title.trim() : '';
     const candidates = (snapshot.lines || []).filter(l => title && l.text.trim() === title && l.confidence >= .85 && l.box?.y < .2 && l.box?.x > .2);
     if (candidates.length === 1) {
       const b = candidates[0].box, x = Math.max(0,b.x-.008), y = Math.max(0,b.y-.006);
       try { suggestedTitleRegion = validateRegion({x,y,width:Math.min(1-x,b.width+.016),height:Math.min(1-y,b.height+.012)}); } catch { /* Manual calibration remains available. */ }
     }
-    return { id, image: snapshot.image, width: snapshot.width, height: snapshot.height, suggestedTitleRegion, expiresAt: new Date(Date.now() + 300000).toISOString() };
+    if (this.wechat.platform === 'win32' && typeof this.wechat.findAvatar === 'function') {
+      const fingerprint = await this.wechat.findAvatar(snapshot, signal);
+      if (fingerprint.found) avatar = { hash: fingerprint.hash, region: fingerprint.region, at: now() };
+    }
+    const id = randomUUID(); this.previews.set(id, { ...snapshot, revision: c.revision, expires: Date.now() + 300000, avatar });
+    return { id, image: snapshot.image, width: snapshot.width, height: snapshot.height, suggestedTitleRegion, avatar, expiresAt: new Date(Date.now() + 300000).toISOString() };
   }
   expirePreviews() { for (const [id,p] of this.previews) if (p.expires < Date.now()) this.previews.delete(id); }
   async previewImport(input) {
@@ -187,24 +193,41 @@ export class ChatFollowups {
     if (c.channel === 'wechat') {
       const p = this.previews.get(input.previewId);
       check(p && p.expires > Date.now() && p.revision === c.revision, 'CHAT_PREVIEW', '窗口预览已失效，请重新读取', 409);
-      const messageRegion = validateRegion(input.messageRegion);
-      let titleRegion = null;
-      if (input.titleRegion) {
-        titleRegion = validateRegion(input.titleRegion);
-        check(messageRegion.y >= titleRegion.y + titleRegion.height, 'CHAT_REGION', '消息区域必须在会话标题下方');
-        const observed = await this.wechat.title(p, titleRegion);
-        check(observed === title, 'CHAT_IDENTITY', '选择区域识别的会话名称与填写不一致，请调整标题区域', 409);
+      const autoCalibrate = this.wechat.platform === 'win32' && !input.messageRegion && p.avatar;
+      if (autoCalibrate) {
+        // 按名字关联:默认区域(实测紧凑布局)+ 预览时的头像指纹,无需手动框选。
+        conversationId = `title:${title}`;
+        calibration = {
+          titleRegion: null,
+          messageRegion: { x: .17, y: .12, width: .82, height: .64 },
+          aspect: p.width / p.height,
+          inputPoint: input.inputPoint && Number.isFinite(input.inputPoint.x) && Number.isFinite(input.inputPoint.y)
+            ? { x: Math.round(input.inputPoint.x * 10000) / 10000, y: Math.round(input.inputPoint.y * 10000) / 10000 }
+            : { x: .5, y: .85 },
+          avatarHash: p.avatar.hash,
+          avatarBand: { x: .16, y: .12, width: .13, height: .68 },
+          avatarConfirmed: input.confirmed === true,
+        };
       } else {
-        // Windows 紧凑模式顶栏不显示会话名称：跳过标题 OCR。身份核验由读取与回复时的
-        // 「窗口比例 + 双帧稳定 + 与最近画面连续」承担；标题以人工填写为准。
-        check(this.wechat.platform === 'win32', 'CHAT_REGION', '请选择有效的标题区域');
-      }
-      conversationId = `title:${title}`;
-      calibration = { titleRegion, messageRegion, aspect: p.width / p.height };
-      if (input.inputPoint && Number.isFinite(input.inputPoint.x) && Number.isFinite(input.inputPoint.y)) {
-        const { x, y } = input.inputPoint;
-        check(x > 0 && x < 1 && y > 0 && y < 1, 'CHAT_REGION', '输入框位置无效');
-        calibration.inputPoint = { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
+        const messageRegion = validateRegion(input.messageRegion);
+        let titleRegion = null;
+        if (input.titleRegion) {
+          titleRegion = validateRegion(input.titleRegion);
+          check(messageRegion.y >= titleRegion.y + titleRegion.height, 'CHAT_REGION', '消息区域必须在会话标题下方');
+          const observed = await this.wechat.title(p, titleRegion);
+          check(observed === title, 'CHAT_IDENTITY', '选择区域识别的会话名称与填写不一致，请调整标题区域', 409);
+        } else {
+          // Windows 紧凑模式顶栏不显示会话名称：跳过标题 OCR。身份核验由读取与回复时的
+          // 「窗口比例 + 双帧稳定 + 头像指纹/画面连续」承担；标题以人工填写为准。
+          check(this.wechat.platform === 'win32', 'CHAT_REGION', '请选择有效的标题区域');
+        }
+        conversationId = `title:${title}`;
+        calibration = { titleRegion, messageRegion, aspect: p.width / p.height };
+        if (input.inputPoint && Number.isFinite(input.inputPoint.x) && Number.isFinite(input.inputPoint.y)) {
+          const { x, y } = input.inputPoint;
+          check(x > 0 && x < 1 && y > 0 && y < 1, 'CHAT_REGION', '输入框位置无效');
+          calibration.inputPoint = { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
+        }
       }
     } else {
       conversationId = string(input.conversationId, '会话 ID', 300);
@@ -229,18 +252,25 @@ export class ChatFollowups {
     check(!this.active.has('wechat'), 'CHAT_BUSY', '微信正在读取或发送，请稍后重试', 409);
     const b = this.binding(input.bindingId);
     check(b.channel === 'wechat' && b.mode !== 'import' && b.calibration, 'CHAT_CHANNEL', '此会话不支持桌面回复', 409);
+    const autoLocate = input.autoLocate === true && typeof this.wechat.locate === 'function';
     const row = this.db.prepare('SELECT data FROM chat_messages WHERE channel=? AND account=? AND conversation=? ORDER BY rowid DESC LIMIT 1').get('wechat', this.account(c), b.conversationId);
     const recent = row ? json(row) : null;
-    check(recent && recent.evidence?.coverage === 'visible-window' && Date.parse(recent.observedAt) > Date.now() - 3600000, 'CHAT_SEND_FRESH', '请先「读取已打开的会话」再回复：发送核验需要 1 小时内的画面基准', 409);
+    // 自动定位路径:导航 + 头像指纹核验承担身份,不依赖 1 小时内的读取基准。
+    if (!autoLocate) {
+      check(recent && recent.evidence?.coverage === 'visible-window' && Date.parse(recent.observedAt) > Date.now() - 3600000, 'CHAT_SEND_FRESH', '请先「读取已打开的会话」或改用「自动定位」再回复：发送核验需要画面基准', 409);
+    }
     const controller = new AbortController(); const job = { controller, promise: null };
     this.active.set('wechat', job);
-    job.promise = this.runSend(c, b, input, recent, controller.signal);
+    job.promise = this.runSend(c, b, input, recent, controller.signal, autoLocate);
     try { return await job.promise; } finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
   }
-  async runSend(c, b, input, recent, signal) {
+  async runSend(c, b, input, recent, signal, autoLocate) {
     try {
       const text = string(input.text, '回复内容', 2000);
-      const result = await this.wechat.send(b, text, signal, { recentText: recent.frameText || recent.text || '' });
+      if (autoLocate) await this.wechat.locate(b.title, b.calibration.avatarHash, signal);
+      const options = {};
+      if (!autoLocate) options.recentText = recent.frameText || recent.text || '';
+      const result = await this.wechat.send(b, text, signal, options);
       this.assertCurrent(c, signal); this.binding(b.id);
       const sourceId = hash(['verified-send', b.conversationId, result.fingerprint, randomUUID()]);
       const account = this.account(c);

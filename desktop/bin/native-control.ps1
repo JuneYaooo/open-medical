@@ -202,7 +202,7 @@ switch ($cmd.action) {
     $g2 = [System.Drawing.Graphics]::FromImage($small)
     $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g2.DrawImage($crop, 0, 0, 8, 8)
-    $g2.Dispose(); $crop.Dispose()
+    $g2.Dispose()
     $vals = New-Object 'System.Collections.Generic.List[Double]'
     for ($yy = 0; $yy -lt 8; $yy++) { for ($xx = 0; $xx -lt 8; $xx++) {
       $p = $small.GetPixel($xx, $yy)
@@ -212,7 +212,15 @@ switch ($cmd.action) {
     $avg = ($vals | Measure-Object -Average).Average
     $bits = -join ($vals | ForEach-Object { if ($_ -ge $avg) { '1' } else { '0' } })
     $hex = -join (0..15 | ForEach-Object { [Convert]::ToString([Convert]::ToUInt16($bits.Substring($_ * 4, 4), 2), 16) })
-    [Console]::Out.Write((@{ hash = $hex } | ConvertTo-Json -Compress))
+    # 近纯白区域(如空输入框)的 aHash 是退化的:补充深色像素计数作为「画面是否变化」的信号。
+    $darkStep = [Math]::Max(1, [int]($cw / 64))
+    $dark = 0
+    for ($dy = 0; $dy -lt $ch; $dy += 2) { for ($dx = 0; $dx -lt $cw; $dx += $darkStep) {
+      $dp = $crop.GetPixel($dx, $dy)
+      if ((0.299 * $dp.R + 0.587 * $dp.G + 0.114 * $dp.B) -lt 128) { $dark++ }
+    } }
+    $crop.Dispose()
+    [Console]::Out.Write((@{ hash = $hex; dark = $dark } | ConvertTo-Json -Compress))
   }
   'list' {
     $names = @([string]$cmd.app -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })

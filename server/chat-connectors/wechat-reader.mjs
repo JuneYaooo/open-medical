@@ -13,6 +13,10 @@ import {
   verifyOcrContains,
   matchRatio,
   ocrLinesText,
+  flatName,
+  hashDistance,
+  AVATAR_BAND,
+  AVATAR_MATCH_DISTANCE,
 } from './wechat-windows.mjs';
 import { check } from '../errors.mjs';
 const exec = promisify(execFile), bundle = 'com.tencent.xinWeChat';
@@ -125,9 +129,48 @@ export class WechatReader {
     check(verifiedText.lines.every(l=>l.confidence>=.5) && verifiedText.lines.map(l=>l.text).join('\n')===text,'CHAT_WINDOW','读取期间聊天内容发生变化，请待画面稳定后重试',409);
     return { text,fingerprint:createHash('sha256').update(text).digest('hex'),evidence:{image:result.image,lines:result.lines,observedTitle:binding.title,coverage:'visible-window'} };
   }
+  // 头像:在消息区左竖带找最近的头像块并计算指纹;绑定存指纹,之后每次定位/发送重比对。
+  async findAvatar(snapshot, signal, band) {
+    const bytes = Buffer.from(snapshot.image, 'base64');
+    const result = await this.invoke({ action:'find-avatar', image: bytes.toString('base64'), band: band || AVATAR_BAND }, signal);
+    return result && result.found ? result : { found: false };
+  }
+  avatarMatches(fingerprint, storedHash) {
+    return Boolean(fingerprint?.found && storedHash && hashDistance(fingerprint.hash, storedHash) <= AVATAR_MATCH_DISTANCE);
+  }
+  // 按备注名定位会话(Windows):当前顶栏名字即命中则不动;否则在会话列表中找
+  // 唯一精确同名行并点击;导航后核验顶栏名字或头像指纹,任一通过才算定位成功。
+  async locate(name, avatarHash, signal) {
+    check(typeof name === 'string' && name.trim(), 'CHAT_LOCATE', '请填写微信备注名');
+    return this.exclusive(async () => {
+      cancelled(signal);
+      const snapshot = await this.captureFrame(signal);
+      const header = snapshot.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
+      if (header.some(l => flatName(l.text) === flatName(name))) return { snapshot, navigated: false, nameVisible: true };
+      const rows = snapshot.lines.filter(l => flatName(l.text) === flatName(name) && l.box.y > .08 && l.box.y < .92 && l.box.x > .12 && l.box.x < .6);
+      check(rows.length === 1, 'CHAT_LOCATE', rows.length
+        ? `会话列表中有 ${rows.length} 个「${name}」，无法自动选择；请在微信中人工打开该会话后重试`
+        : `会话列表中未找到「${name}」；请在微信中人工打开该会话（或将其置顶）后重试`, 409);
+      const b = snapshot.bounds, row = rows[0];
+      await this.invoke({ action:'click', x: Math.round(b.X + (row.box.x + row.box.width/2)*b.Width), y: Math.round(b.Y + (row.box.y + row.box.height/2)*b.Height) }, signal);
+      await wait(1100, signal);
+      const after = await this.captureFrame(signal);
+      cancelled(signal);
+      const afterHeader = after.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
+      const nameOk = afterHeader.some(l => flatName(l.text) === flatName(name));
+      let avatarOk = false;
+      if (avatarHash) {
+        const fingerprint = await this.findAvatar(after, signal);
+        avatarOk = this.avatarMatches(fingerprint, avatarHash);
+      }
+      check(nameOk || avatarOk, 'CHAT_LOCATE', `已点击「${name}」但未能核验会话身份，请在微信中人工确认当前会话后重试`, 409);
+      return { snapshot: after, navigated: true, nameVisible: nameOk };
+    });
+  }
   // 回复(已验证发送)：点击输入框 → 粘贴 → OCR 核验输入区 → 发送 → OCR 核验会话区。
-  // options.recentText 为该会话最近一次读取的画面文本:发送前核对当前画面与之连续,
-  // 防止把回复发进另一个会话。任一核验失败即中止；失败意味着不报告成功。
+  // options.avatarHash 提供时,发送前用头像指纹核验当前会话身份;
+  // options.recentText 提供时,额外核对当前画面与最近读取画面连续。
+  // 任一核验失败即中止；失败意味着不报告成功。
   async send(binding, text, signal, options = {}) {
     check(typeof text === 'string' && text.trim().length > 0 && text.length <= 2000,'CHAT_SEND','回复内容需为 1–2000 字');
     return this.exclusive(async () => {
@@ -135,6 +178,11 @@ export class WechatReader {
       const snapshot = await this.captureFrame(signal);
       await this.verifyIdentity(snapshot,binding,signal);
       const c = binding.calibration;
+      if (c.avatarHash) {
+        const fingerprint = await this.findAvatar(snapshot, signal, c.avatarBand);
+        check(this.avatarMatches(fingerprint, c.avatarHash),'CHAT_IDENTITY',`当前会话头像与关联时不一致，未发送。请确认微信中打开的是「${binding.title}」。`,409);
+        cancelled(signal);
+      }
       if (options.recentText) {
         const area = await this.ocr(Buffer.from(snapshot.image,'base64'),signal,{region:validateRegion(c.messageRegion)});
         const ratio = matchRatio(options.recentText, ocrLinesText(area.lines));
@@ -151,13 +199,23 @@ export class WechatReader {
       await wait(150, signal);
       await this.invoke({ action:'key', key:'Delete' }, signal);
       await wait(150, signal);
+      const inputBand = { x:0, y:Math.max(0,point.y-.19), width:1, height:.97-Math.max(0,point.y-.19) };
+      // 清空后先截基准帧:深色像素对比必须以「清空后的输入框」为起点,否则残留文本会抵消变化量。
+      await wait(150, signal);
+      const preFrame = await this.captureWindow(snapshot.windowId, signal);
+      const preBand = await this.invoke({ action:'hash', image: preFrame.toString('base64'), region: inputBand }, signal);
+      await this.invoke({ action:'click', x: Math.round(b.X + point.x*b.Width), y: Math.round(b.Y + point.y*b.Height) }, signal);
+      await wait(200, signal);
       await this.invoke({ action:'paste', text }, signal);
       await wait(700, signal);
       cancelled(signal);
       const pastedFrame = await this.captureWindow(snapshot.windowId, signal);
-      const pasted = await this.ocr(pastedFrame, signal, { region:{ x:0, y:Math.max(0,point.y-.19), width:1, height:.97-Math.max(0,point.y-.19) }, scale:3 });
-      const inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.6 });
-      check(inputCheck.ok,'CHAT_SEND_VERIFY',`输入框内容未通过核验(匹配率 ${inputCheck.ratio})，已取消发送；请手动检查微信输入框。`,409);
+      const pastedBand = await this.invoke({ action:'hash', image: pastedFrame.toString('base64'), region: inputBand }, signal);
+      const pasted = await this.ocr(pastedFrame, signal, { region: inputBand, scale:3 });
+      const inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.5 });
+      // 双信号:输入带深色像素显著增加(粘贴真正落进输入框)+ OCR 容差匹配(内容大致是待发文本)。
+      const landed = pastedBand.dark > preBand.dark + 200;
+      check(landed && inputCheck.ok,'CHAT_SEND_VERIFY',`输入框内容未通过核验(画面变化 ${landed?'有':'无'}，匹配率 ${inputCheck.ratio})，已取消发送；请手动检查微信输入框。`,409);
       cancelled(signal);
       await this.invoke({ action:'key', key:'Return' }, signal);
       await wait(900, signal);
