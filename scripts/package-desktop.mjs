@@ -21,6 +21,12 @@ const targetPlatform =
 const targetArch = arg("arch") || process.env.TARGET_ARCH || process.arch;
 const stage = await mkdtemp(join(tmpdir(), "open-medical-package-"));
 try {
+  // 前端必须与源码同步:每次打包都重新构建 dist,杜绝"改了界面忘了构建"的陈旧包。
+  execFileSync(
+    process.execPath,
+    [join(root, "node_modules/vite/bin/vite.js"), "build", "--configLoader", "runner"],
+    { stdio: "inherit", cwd: root },
+  );
   // Icons are deterministic; regenerate rather than trusting a stale build/.
   execFileSync(process.execPath, [join(root, "scripts/build-icons.mjs")], {
     stdio: "inherit",
