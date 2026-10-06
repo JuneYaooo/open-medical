@@ -91,7 +91,25 @@ export class DeepSeekProvider {
     combined.throwIfAborted();
     const payload = {
       model,
-      messages,
+      // 内部消息用 Responses 风格的 input_text/input_image;chat/completions
+      // 需要 text/image_url,发送前转换(多模态模型如 deepseek-v4-flash-vision-exp 依赖此路径)。
+      messages: messages.map((message) =>
+        Array.isArray(message.content)
+          ? {
+              ...message,
+              content: message.content.map((part) => {
+                if (part?.type === "input_text")
+                  return { type: "text", text: part.text };
+                if (part?.type === "input_image")
+                  return {
+                    type: "image_url",
+                    image_url: { url: part.image_url },
+                  };
+                return part;
+              }),
+            }
+          : message,
+      ),
       ...(tools?.length ? { tools } : {}),
       stream: true,
       stream_options: { include_usage: true },
@@ -450,6 +468,26 @@ export class ResponsesProvider extends OpenAIProvider {
 }
 
 function anthropicMessages(messages) {
+  // 内部 input_text/input_image → Anthropic 的 text/image(base64)块。
+  const anthropicContent = (content) =>
+    Array.isArray(content)
+      ? content.map((part) => {
+          if (part?.type === "input_text")
+            return { type: "text", text: part.text };
+          if (part?.type === "input_image") {
+            const match = String(part.image_url).match(
+              /^data:([^;]+);base64,(.*)$/s,
+            );
+            return match
+              ? {
+                  type: "image",
+                  source: { type: "base64", media_type: match[1], data: match[2] },
+                }
+              : { type: "text", text: "[图片无法解码，已跳过]" };
+          }
+          return part;
+        })
+      : content;
   const system = messages.filter((m) => ["system", "developer"].includes(m.role))
     .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content)).join("\n\n");
   const out = [];
@@ -487,7 +525,7 @@ function anthropicMessages(messages) {
     }
     out.push({
       role: message.role === "assistant" ? "assistant" : "user",
-      content: message.content || "",
+      content: anthropicContent(message.content) || "",
     });
   }
   return { system, messages: out };

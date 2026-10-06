@@ -3,7 +3,7 @@
 // 因此旧配置无需迁移；presetFor 从已保存的协议与地址反推预设。
 export const MODEL_PRESETS = Object.freeze([
   { id: 'deepseek', label: 'DeepSeek', provider: 'deepseek', baseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'], keyUrl: 'https://platform.deepseek.com/api_keys', note: '国内直连，支持工具调用，性价比高。' },
+    models: ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'], keyUrl: 'https://platform.deepseek.com/api_keys', note: '国内直连，支持工具调用，性价比高。带 vision-exp 的模型可读图片（勾选“此模型支持图片”）。' },
   { id: 'qwen', label: '通义千问 · 阿里云百炼', provider: 'openai-compatible', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     models: ['qwen-plus', 'qwen-max', 'qwen3-max', 'qwen-turbo'], keyUrl: 'https://bailian.console.aliyun.com/', note: '兼容 OpenAI 接口，支持工具调用。' },
   { id: 'kimi', label: 'Kimi · 月之暗面', provider: 'openai-compatible', baseUrl: 'https://api.moonshot.cn/v1',
