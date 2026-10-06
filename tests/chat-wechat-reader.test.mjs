@@ -59,3 +59,71 @@ test('listNames returns deduped left-list candidates and ignores noise and out-o
  const result=await r.listNames(new AbortController().signal);
  assert.deepEqual(result.names,['June','李雷']);
 });
+test('desktop bindings verify avatar or header name before ingesting the message area',async()=>{
+ const avatarBinding={title:'合成家属',calibration:{messageRegion,aspect:1.25,avatarHash:'f1e0e1e1e1e1e1e1'}};
+ // 头像未命中且顶栏无同名:拒读,且绝不点击或输入(读错会话比拒绝读取严重)。
+ const refused=reader();
+ await assert.rejects(refused.r.read(avatarBinding),e=>e.code==='CHAT_IDENTITY');
+ assert.equal(refused.calls.some(c=>['click','key','type'].includes(c.action)),false);
+ // 顶栏精确同名(头像带被卡片占满的视口)也放行。
+ const named=reader();
+ const baseOcr=named.r.ocr;
+ named.r.ocr=async(b,s,o)=>o?.region?baseOcr(b,s,o):{width:1000,height:800,lines:[{text:'合成家属',confidence:.95,box:{x:.3,y:.05,width:.2,height:.05}}]};
+ assert.equal((await named.r.read(avatarBinding)).text,'合成消息');
+ // 头像指纹命中同样放行。
+ const withAvatar=reader();
+ const baseInvoke=withAvatar.r.invoke;
+ withAvatar.r.invoke=async i=>i.action==='find-avatar'?{found:true,hash:'f1e0e1e1e1e1e1e1',region:{x:.16,y:.5,width:.13,height:.05}}:baseInvoke(i);
+ await assert.doesNotReject(withAvatar.r.read(avatarBinding));
+});
+test('locate retries identity verification on fresh frames but clicks only once',async()=>{
+ const make=(recover=true)=>{
+  let frames=0;const calls=[];
+  const r=new WechatReader({platform:'win32',
+   invoke:async i=>{calls.push(i.action);
+    if(i.action==='status')return{apps:[{id:'微信'}]};
+    if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+    if(i.action==='find-avatar')return{found:false};
+    return{ok:true};},
+   captureWindow:async()=>Buffer.from('frame'),
+   ocr:async()=>{frames++;const header=frames===1?null:(frames===2||!recover)?'其他人':'June';
+    return {width:548,height:794,lines:header?[{text:header,confidence:.95,box:{x:.3,y:.06,width:.15,height:.05}}]:[{text:'June',confidence:.95,box:{x:.15,y:.3,width:.12,height:.04}}]};}});
+  r.status=async()=>({ready:true,message:'ok'});
+  return {r,calls,get frames(){return frames;}};
+ };
+ const ok=make();
+ const result=await ok.r.locate('June',null,new AbortController().signal);
+ assert.equal(result.navigated,true);
+ assert.equal(result.nameVisible,true);
+ assert.equal(ok.calls.filter(a=>a==='click').length,1,'切聊动画期间只点击一次');
+ assert.ok(ok.frames>=3,'用点击后的新帧重试核验');
+ const stuck=make(false);
+ await assert.rejects(stuck.r.locate('June',null,new AbortController().signal),e=>e.code==='CHAT_LOCATE');
+ assert.equal(stuck.calls.filter(a=>a==='click').length,1,'核验失败也不重复点击');
+});
+test('avatar scanning scrolls the message area up, retries and restores the position',async()=>{
+ const make=(platform,foundOnScan)=>{
+  const wheels=[];let scans=0;
+  const r=new WechatReader({platform,
+   invoke:async i=>{
+    if(i.action==='find-avatar'){scans++;return scans>=(foundOnScan?3:99)?{found:true,hash:'f1e0e1e1e1e1e1e1',region:{x:.16,y:.3,width:.13,height:.05}}:{found:false};}
+    if(i.action==='wheel'){wheels.push(i.ticks);return{wheeled:true};}
+    return{ok:true};},
+   captureWindow:async()=>Buffer.from(`frame-${scans}`),
+   ocr:async()=>({width:548,height:794,lines:[]})});
+  return {r,wheels};
+ };
+ const snapshot={image:Buffer.from('x').toString('base64'),width:548,height:794,lines:[],bounds:{X:20,Y:30,Width:548,Height:794},windowId:7};
+ const scanned=make('win32',true);
+ const found=await scanned.r.findAvatarScanning(snapshot,null,new AbortController().signal);
+ assert.equal(found.found,true);
+ assert.deepEqual(scanned.wheels,[3,3,-6],'上滚两拍找到头像后等量滚回原位');
+ const direct=make('win32',false);
+ const first=await direct.r.findAvatarScanning(snapshot,null,new AbortController().signal);
+ assert.equal(first.found,false,'滚动上限内仍找不到就如实返回未找到');
+ assert.equal(direct.wheels.at(-1),-12,'失败路径也要滚回原位');
+ const mac=make('darwin',true);
+ const out=await mac.r.findAvatarScanning(snapshot,null,new AbortController().signal);
+ assert.equal(out.found,false);
+ assert.deepEqual(mac.wheels,[],'非 Windows 不滚动');
+});

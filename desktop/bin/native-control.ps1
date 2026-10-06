@@ -213,7 +213,8 @@ switch ($cmd.action) {
     $bits = -join ($vals | ForEach-Object { if ($_ -ge $avg) { '1' } else { '0' } })
     $hex = -join (0..15 | ForEach-Object { [Convert]::ToString([Convert]::ToUInt16($bits.Substring($_ * 4, 4), 2), 16) })
     # 近纯白区域(如空输入框)的 aHash 是退化的:补充深色像素计数作为「画面是否变化」的信号。
-    $darkStep = [Math]::Max(1, [int]($cw / 64))
+    # 采样步长要细(每 2 列):窗口小、笔画细时,粗采样会把真实粘贴的信号漏成近似噪声。
+    $darkStep = 2
     $dark = 0
     for ($dy = 0; $dy -lt $ch; $dy += 2) { for ($dx = 0; $dx -lt $cw; $dx += $darkStep) {
       $dp = $crop.GetPixel($dx, $dy)
@@ -259,6 +260,23 @@ switch ($cmd.action) {
     Start-Sleep -Milliseconds 40
     [NativeControl]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
     [Console]::Out.Write((@{ clicked = $true } | ConvertTo-Json -Compress))
+  }
+  'wheel' {
+    # 在指定屏幕坐标滚动滚轮:ticks>0 向上(查看更早的消息),ticks<0 向下。只滚动,不点击、不输入。
+    # mouse_event 的 dwData 是 UInt32,负增量要按 32 位补码转过去。
+    [void][NativeControl]::SetCursorPos([int]$cmd.x, [int]$cmd.y)
+    Start-Sleep -Milliseconds 60
+    $ticks = 0
+    if (-not [int]::TryParse([string]$cmd.ticks, [ref]$ticks)) { $ticks = 0 }
+    $ticks = [Math]::Min(12, [Math]::Max(-12, $ticks))
+    if ($ticks -ne 0) {
+      $delta = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int](120 * $ticks)), 0)
+      for ($i = 0; $i -lt [Math]::Abs($ticks); $i++) {
+        [NativeControl]::mouse_event(0x0800, 0, 0, $delta, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 60
+      }
+    }
+    [Console]::Out.Write((@{ wheeled = $true; ticks = $ticks } | ConvertTo-Json -Compress))
   }
   'paste' {
     [System.Windows.Forms.Clipboard]::SetText([string]$cmd.text, [System.Windows.Forms.TextDataFormat]::UnicodeText)

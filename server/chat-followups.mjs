@@ -139,7 +139,11 @@ export class ChatFollowups {
       try { suggestedTitleRegion = validateRegion({x,y,width:Math.min(1-x,b.width+.016),height:Math.min(1-y,b.height+.012)}); } catch { /* Manual calibration remains available. */ }
     }
     if (this.wechat.platform === 'win32' && typeof this.wechat.findAvatar === 'function') {
-      const fingerprint = await this.wechat.findAvatar(snapshot, signal);
+      // 视口左头像列被卡片/纯出向消息占满时,滚动重试再抓,避免这类画面被迫转手动框选。
+      const grab = typeof this.wechat.findAvatarScanning === 'function'
+        ? this.wechat.findAvatarScanning(snapshot, signal)
+        : this.wechat.findAvatar(snapshot, signal);
+      const fingerprint = await grab;
       if (fingerprint.found) avatar = { hash: fingerprint.hash, region: fingerprint.region, at: now() };
     }
     const id = randomUUID(); this.previews.set(id, { ...snapshot, revision: c.revision, expires: Date.now() + 300000, avatar });
@@ -311,7 +315,10 @@ export class ChatFollowups {
   async runRefreshAvatar(c, b, signal) {
     try {
       const located = await this.wechat.locate(b.title, null, signal);
-      const fingerprint = await this.wechat.findAvatar(located.snapshot, signal, b.calibration.avatarBand);
+      const grab = this.wechat.platform === 'win32' && typeof this.wechat.findAvatarScanning === 'function'
+        ? this.wechat.findAvatarScanning(located.snapshot, signal, b.calibration.avatarBand)
+        : this.wechat.findAvatar(located.snapshot, signal, b.calibration.avatarBand);
+      const fingerprint = await grab;
       check(fingerprint.found, 'CHAT_LOCATE', '已定位会话但未能抓取头像，请确认微信窗口显示正常后重试', 409);
       this.assertCurrent(c, signal); this.binding(b.id);
       const changed = fingerprint.hash !== b.calibration.avatarHash;
@@ -351,6 +358,11 @@ export class ChatFollowups {
     try {
       if (c.channel === 'wechat') {
         const b = this.binding(input.bindingId); check(b.channel === 'wechat' && b.mode !== 'import', 'CHAT_CHANNEL', '会话不属于微信');
+        // 自动定位(可选,Windows):与回复共用「精确同名行点击 + 顶栏名/头像核验」,
+        // 免除「先在微信中手动打开会话」;定位失败即中止,不会盲目读取当前窗口。
+        if (input.autoLocate === true && this.wechat.platform === 'win32' && typeof this.wechat.locate === 'function') {
+          await this.wechat.locate(b.title, b.calibration?.avatarHash || null, signal);
+        }
         const result = await this.wechat.read(b, signal);
         check(result && typeof result.text === 'string' && result.text.trim() && result.text.length <= 20000, 'CHAT_CAPTURE', '未读到可用的聊天内容', 422);
         this.assertCurrent(c,signal); this.binding(b.id);

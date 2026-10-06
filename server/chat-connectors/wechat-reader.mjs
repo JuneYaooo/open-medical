@@ -110,6 +110,13 @@ export class WechatReader {
     cancelled(signal);
     const snapshot = await this.captureFrame(signal);
     await this.verifyIdentity(snapshot,binding,signal);
+    // 存了头像指纹的绑定,读取前核验当前会话身份(头像或顶栏精确同名),
+    // 避免微信停在别的会话时把别人的聊天录进这个患者的档案。
+    if (binding.calibration.avatarHash) {
+      const confirmedBy = await this.confirmAvatar(snapshot,binding,signal);
+      check(confirmedBy,'CHAT_IDENTITY',`当前会话与「${binding.title}」不一致（头像与顶栏名都未匹配），未读取。请先在微信中打开「${binding.title}」，或改用「读取前自动定位」。`,409);
+      cancelled(signal);
+    }
     const result=await this.ocr(Buffer.from(snapshot.image,'base64'),signal,{region:validateRegion(binding.calibration.messageRegion),includeImage:true});
     cancelled(signal);
     check(result.lines.length && result.lines.every(l=>l.confidence>=.5),'CHAT_OCR','聊天区域文字不清晰，请调整窗口后重试',409);
@@ -135,8 +142,39 @@ export class WechatReader {
     const result = await this.invoke({ action:'find-avatar', image: bytes.toString('base64'), band: band || AVATAR_BAND }, signal);
     return result && result.found ? result : { found: false };
   }
+  // 视口内抓不到头像(最新消息是卡片或纯出向文本,左头像列为空)时,在消息区向上滚动
+  // 重试找较早的入向消息头像,结束后滚回原位。只用于关联预览、重抓指纹这类以「取得
+  // 头像指纹」为目的的调用;读取与发送的画面核验不用它,避免移动作为基准的画面。
+  async findAvatarScanning(snapshot, signal, band) {
+    const first = await this.findAvatar(snapshot, signal, band);
+    if (first.found || this.platform !== 'win32') return first;
+    const b = snapshot.bounds;
+    const x = Math.round(b.X + .55 * b.Width), y = Math.round(b.Y + .4 * b.Height);
+    let result = first, up = 0;
+    for (let i = 0; i < 4 && !result.found; i++) {
+      await this.invoke({ action:'wheel', x, y, ticks: 3 }, signal);
+      up += 3;
+      await wait(450, signal);
+      const frame = await this.captureWindow(snapshot.windowId, signal);
+      result = await this.findAvatar({ ...snapshot, image: frame.toString('base64') }, signal, band);
+    }
+    if (up) {
+      await this.invoke({ action:'wheel', x, y, ticks: -up }, signal);
+      await wait(300, signal);
+    }
+    return result;
+  }
   avatarMatches(fingerprint, storedHash) {
     return Boolean(fingerprint?.found && storedHash && hashDistance(fingerprint.hash, storedHash) <= AVATAR_MATCH_DISTANCE);
+  }
+  // 会话身份双信号:头像指纹一致,或顶栏名字精确匹配。头像带被卡片、纯出向消息占满时
+  // (该视口左列没有头像),顶栏精确同名仍能确认会话;两者都不过才算身份核验失败。
+  async confirmAvatar(snapshot, binding, signal) {
+    const fingerprint = await this.findAvatar(snapshot, signal, binding.calibration.avatarBand);
+    if (this.avatarMatches(fingerprint, binding.calibration.avatarHash)) return 'avatar';
+    const header = snapshot.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
+    if (header.some(l => flatName(l.text) === flatName(binding.title))) return 'name';
+    return null;
   }
   // 会话列表候选(Windows 紧凑单栏布局):列表视图下行名从窗口左侧约 12% 处开始;
   // 聊天视图下的消息文本约从 32% 起,正好落在带外,顶栏名字由 y 下界排除。
@@ -174,14 +212,16 @@ export class WechatReader {
       const b = snapshot.bounds, row = rows[0];
       await this.invoke({ action:'click', x: Math.round(b.X + (row.box.x + row.box.width/2)*b.Width), y: Math.round(b.Y + (row.box.y + row.box.height/2)*b.Height) }, signal);
       await wait(1100, signal);
-      const after = await this.captureFrame(signal);
-      cancelled(signal);
-      const afterHeader = after.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
-      const nameOk = afterHeader.some(l => flatName(l.text) === flatName(name));
-      let avatarOk = false;
-      if (avatarHash) {
-        const fingerprint = await this.findAvatar(after, signal);
-        avatarOk = this.avatarMatches(fingerprint, avatarHash);
+      // 切聊动画与 OCR 抖动会让单帧核验偶发失败:重试只重复只读的截屏核验,不重复点击。
+      let after = null, nameOk = false, avatarOk = false;
+      for (let attempt = 0; attempt < 3 && !nameOk && !avatarOk; attempt++) {
+        if (attempt) await wait(700, signal);
+        after = await this.captureFrame(signal);
+        cancelled(signal);
+        const afterHeader = after.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
+        nameOk = afterHeader.some(l => flatName(l.text) === flatName(name));
+        avatarOk = false;
+        if (!nameOk && avatarHash) avatarOk = this.avatarMatches(await this.findAvatar(after, signal), avatarHash);
       }
       check(nameOk || avatarOk, 'CHAT_LOCATE', `已点击「${name}」但未能核验会话身份，请在微信中人工确认当前会话后重试`, 409);
       return { snapshot: after, navigated: true, nameVisible: nameOk };
@@ -199,8 +239,8 @@ export class WechatReader {
       await this.verifyIdentity(snapshot,binding,signal);
       const c = binding.calibration;
       if (c.avatarHash) {
-        const fingerprint = await this.findAvatar(snapshot, signal, c.avatarBand);
-        check(this.avatarMatches(fingerprint, c.avatarHash),'CHAT_IDENTITY',`当前会话头像与关联时不一致，未发送。请确认微信中打开的是「${binding.title}」。`,409);
+        const confirmedBy = await this.confirmAvatar(snapshot,binding,signal);
+        check(confirmedBy,'CHAT_IDENTITY',`当前会话与关联「${binding.title}」不一致（头像与顶栏名都未匹配），未发送。请确认微信中打开的是「${binding.title}」。`,409);
         cancelled(signal);
       }
       if (options.recentText) {
@@ -219,7 +259,9 @@ export class WechatReader {
       await wait(150, signal);
       await this.invoke({ action:'key', key:'Delete' }, signal);
       await wait(150, signal);
-      const inputBand = { x:0, y:Math.max(0,point.y-.19), width:1, height:.97-Math.max(0,point.y-.19) };
+      // 输入带只框输入框自身与其下工具栏,不含会话气泡:框体长高会盖掉气泡的深色像素,
+      // 把带拉太高反而抵消粘贴带来的增量(真机实测整带 delta 只有 183,曾被阈值 200 误拒)。
+      const inputBand = { x:0, y:Math.max(0,point.y-.10), width:1, height:.97-Math.max(0,point.y-.10) };
       // 清空后先截基准帧:深色像素对比必须以「清空后的输入框」为起点,否则残留文本会抵消变化量。
       await wait(150, signal);
       const preFrame = await this.captureWindow(snapshot.windowId, signal);
@@ -234,7 +276,8 @@ export class WechatReader {
       const pasted = await this.ocr(pastedFrame, signal, { region: inputBand, scale:3 });
       const inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.5 });
       // 双信号:输入带深色像素显著增加(粘贴真正落进输入框)+ OCR 容差匹配(内容大致是待发文本)。
-      const landed = pastedBand.dark > preBand.dark + 200;
+      // 阈值相对细采样校准:真实粘贴 ≥ 数百,粘贴落空时两帧几乎逐像素一致(≈0)。
+      const landed = pastedBand.dark > preBand.dark + 120;
       check(landed && inputCheck.ok,'CHAT_SEND_VERIFY',`输入框内容未通过核验(画面变化 ${landed?'有':'无'}，匹配率 ${inputCheck.ratio})，已取消发送；请手动检查微信输入框。`,409);
       cancelled(signal);
       await this.invoke({ action:'key', key:'Return' }, signal);

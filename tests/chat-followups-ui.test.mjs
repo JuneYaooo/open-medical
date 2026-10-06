@@ -35,7 +35,11 @@ test('wechat calibration and exact patient association are reachable without env
  const {page,origin,patient}=await setup(t);await page.goto(origin+'/?view=settings&settingsTab=followup');await connectWechat(page);
  await page.getByRole('link',{name:'去关联患者会话 →',exact:true}).click();await page.getByLabel('选择患者',{exact:true}).selectOption(patient.id);await page.getByRole('button',{name:'关联会话',exact:true}).click();const form=page.locator('.chat-binding-form');await form.getByLabel('微信备注名',{exact:true}).fill('合成微信家属');await form.getByLabel('联系人称呼').fill('合成家属');await form.getByLabel('与患者的关系').selectOption('family');await form.getByRole('button',{name:/读取当前微信窗口/}).click();await form.getByText('用数值调整区域（百分比）',{exact:true}).click();
  for(const [legend,values] of [['标题',[40,2,30,6]],['聊天内容',[40,12,58,60]]]){const group=form.getByRole('group',{name:legend,exact:true});for(const [i,label] of ['左侧','顶部','宽度','高度'].entries())await group.getByLabel(label,{exact:true}).fill(String(values[i]));}
- await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();await page.getByRole('button',{name:'读取已打开的会话'}).click();await page.locator('.chat-draft').waitFor();await page.locator('.chat-draft summary').click();assert.match(await page.locator('.chat-draft pre').innerText(),/发言人待核验/);
+ await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();
+ const autoRead=page.getByLabel('读取前自动定位',{exact:true});await autoRead.waitFor();
+ assert.equal(await autoRead.isChecked(),true,'Windows 微信绑定默认勾选读取前自动定位');
+ await page.getByRole('button',{name:'自动定位并读取会话'}).click();await page.locator('.chat-draft').waitFor();await page.locator('.chat-draft summary').click();assert.match(await page.locator('.chat-draft pre').innerText(),/发言人待核验/);
+ await autoRead.uncheck();assert.equal(await page.getByRole('button',{name:'读取已打开的会话'}).count(),1,'取消勾选回到手动打开语义');
 });
 test('automatic model permission is separate, expires and can be stopped from settings',{skip},async t=>{
  const {page,origin,server}=await setup(t);await page.goto(origin+'/?view=settings&settingsTab=followup');
