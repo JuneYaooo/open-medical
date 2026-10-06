@@ -4,7 +4,7 @@ import { api } from './agent-runtime';
 const when=value=>value?new Date(value).toLocaleString():'尚未同步';
 
 function WindowsWechatHelp({onRecheck,busy}) {
- return <section className="chat-permission-help" aria-label="恢复 Windows 微信读取"><h3>无法检测到微信</h3><p>请打开并登录微信桌面版后重新检测。回复功能使用窗口自动化与系统 OCR，不会自动搜索或切换会话。</p>
+ return <section className="chat-permission-help" aria-label="恢复 Windows 微信读取"><h3>无法检测到微信</h3><p>请打开并登录微信桌面版后重新检测。定位与回复只按备注名精确匹配并核验头像，不会在微信中搜索或盲发。</p>
   <ol><li>确认微信已启动并完成登录（首次登录请在手机上确认）。</li><li>在系统「时间和语言 → 语言」中安装中文文本识别（OCR）组件。</li><li>若提示缺少桌面控制组件，请更新工作台安装包。</li></ol>
   <div className="toolbar-actions"><button type="button" disabled={busy} onClick={onRecheck}>{busy?'正在检查…':'重新检测'}</button></div>
  </section>;
@@ -27,7 +27,7 @@ export function ConnectionForm({initial,onSaved}) {
    {usable?<div className="chat-setup-next"><h3>下一步：关联患者或家属</h3><p>选择患者，核对聊天对象。同步后的内容先进入待复核草稿。</p><a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联患者会话 →</a></div>:<p className="muted">先重新检查连接，通过后再关联会话。已保存配置不代表当前服务可用。</p>}
    {usable&&<AutomaticSettings key={`${saved.channel}:${saved.revision}`} initial={saved} onSaved={value=>{accept(value);setNotice(value.autoUntil?'自动同步设置已保存':'自动同步已停止');}}/>}
   </section>:<>
-   {wechat?<section className="chat-setup-detect"><h3>先检查本机微信</h3><p>{onMac?'打开并登录 Mac 微信，再检查客户端、辅助功能与录屏权限。':'打开并登录微信桌面版；读取与回复使用窗口自动化和系统本地 OCR，不会自动搜索或切换会话。'}这一步不会读取聊天内容。</p><button disabled={busy} onClick={test}>{busy?'正在检查…':'检查微信与权限'}</button>{check&&<p role="status">{check.message}</p>}
+   {wechat?<section className="chat-setup-detect"><h3>先检查本机微信</h3><p>{onMac?'打开并登录 Mac 微信，再检查客户端、辅助功能与录屏权限。':'打开并登录微信桌面版；读取与回复使用窗口自动化和系统本地 OCR，定位只按备注名精确匹配并核验头像，不会在微信中搜索。'}这一步不会读取聊天内容。</p><button disabled={busy} onClick={test}>{busy?'正在检查…':'检查微信与权限'}</button>{check&&<p role="status">{check.message}</p>}
     {check&&!check.ready&&(onMac?<MacPermissionHelp onRecheck={test} busy={busy}/>:<WindowsWechatHelp onRecheck={test} busy={busy}/>)}
    </section>:<section className="chat-setup-detect"><h3>{saved.accountId?'重新连接企业服务':'尚未配置企业服务'}</h3><p>医生使用已配置的企业连接，无需管理 SDK 或密钥。请由管理员完成一次接入，再关联患者会话。</p><button type="button" aria-expanded={admin} onClick={()=>setAdmin(v=>!v)}>{admin?'收起管理员配置':'管理员配置'}</button></section>}
    {(wechat?check?.ready:admin)&&<form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(async()=>{const value=await api(`/api/chat-followups/connections/${saved.channel}/connect`,'POST',{...form,revision:saved.revision,accountConfirmed:confirmed});accept(value);setCheck(value.status);if(value.enabled){setEditing(false);setNotice(wechat?'权限检查通过，账号核验声明已保存。请继续关联患者会话。':'企业服务验证通过，可以关联患者会话。');}else setNotice('配置已保存，但连接验证未通过，尚未启用。请按提示修正后重试。');});}}>

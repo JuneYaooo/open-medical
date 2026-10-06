@@ -52,7 +52,7 @@ export class WechatReader {
       let result;
       try { result = await this.invoke({ action:'status' }); } catch { return { ready:false,message:'Windows 桌面控制组件不可用，请更新安装包后重试' }; }
       const running = Array.isArray(result.apps) && result.apps.length > 0;
-      return { ready:running, message:running ? '已找到微信窗口；请在微信中手动打开要读取或回复的会话' : '请打开并登录微信', coverage:'visible-window', navigation:'manual', loginVerified:false };
+      return { ready:running, message:running ? '已找到微信窗口；读取前请手动打开会话，关联与回复支持按备注名自动定位并核验头像' : '请打开并登录微信', coverage:'visible-window', navigation:'manual', loginVerified:false };
     }
     if (this.platform !== 'darwin') return { ready:false,message:'此安装版的微信读取支持 macOS 与 Windows' };
     if (this.ocr === recognizeImage && !localOcrAvailable()) return { ready:false,message:'缺少本地文字识别组件，请更新桌面安装包' };
@@ -137,6 +137,26 @@ export class WechatReader {
   }
   avatarMatches(fingerprint, storedHash) {
     return Boolean(fingerprint?.found && storedHash && hashDistance(fingerprint.hash, storedHash) <= AVATAR_MATCH_DISTANCE);
+  }
+  // 会话列表候选(Windows 紧凑单栏布局):列表视图下行名从窗口左侧约 12% 处开始;
+  // 聊天视图下的消息文本约从 32% 起,正好落在带外,顶栏名字由 y 下界排除。
+  // 只读当前画面,不导航;仅作输入提示,关联仍走 locate 精确匹配 + 人工确认。
+  async listNames(signal) {
+    return this.exclusive(async () => {
+      const snapshot = await this.captureFrame(signal);
+      const noise = /^[\d\s:：.。/]+$|^(今天|昨天|前天)(的?)?(上午|中午|下午|晚上)?$/;
+      const seen = new Set();
+      const rows = snapshot.lines
+        .filter(l => l.confidence >= .8 && !noise.test(l.text.trim()) && l.text.trim().length >= 2
+          && l.box.y > .1 && l.box.y < .92 && l.box.x > .11 && l.box.x < .3)
+        .sort((a,b) => a.box.y - b.box.y);
+      const names = [];
+      for (const row of rows) {
+        const key = flatName(row.text);
+        if (!seen.has(key)) { seen.add(key); names.push(row.text.trim()); }
+      }
+      return { names: names.slice(0, 30) };
+    });
   }
   // 按备注名定位会话(Windows):当前顶栏名字即命中则不动;否则在会话列表中找
   // 唯一精确同名行并点击;导航后核验顶栏名字或头像指纹,任一通过才算定位成功。

@@ -232,3 +232,69 @@ test("autoLocate reply aborts with the locate error and records no message", asy
   const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
   assert.equal(state.inbox.filter((m) => m.direction === "out").length, 0);
 });
+
+test("contacts endpoint lists visible conversation candidates on Windows only", async (t) => {
+  const reader = locatingReader();
+  reader.listNames = async () => ({ names: ["June", "李雷"] });
+  const f = await fixture(t, { chatFollowups: { wechat: reader } });
+  const disabled = await f.json("/api/chat-followups/contacts", "POST", { consent: true });
+  assert.equal(disabled.status, 409);
+  await f.json("/api/chat-followups/connections/wechat", "POST", {
+    enabled: true,
+    accountId: "synthetic-account",
+    revision: 0,
+  });
+  const noConsent = await f.json("/api/chat-followups/contacts", "POST", { consent: false });
+  assert.equal(noConsent.status, 412);
+  const ok = await f.json("/api/chat-followups/contacts", "POST", { consent: true });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.data.names, ["June", "李雷"]);
+  const mac = wechatReader();
+  mac.platform = "darwin";
+  const f2 = await fixture(t, { chatFollowups: { wechat: mac } });
+  await f2.json("/api/chat-followups/connections/wechat", "POST", {
+    enabled: true,
+    accountId: "synthetic-account",
+    revision: 0,
+  });
+  const refused = await f2.json("/api/chat-followups/contacts", "POST", { consent: true });
+  assert.equal(refused.status, 409);
+  assert.match(refused.data.error, /Windows/);
+});
+
+test("refresh avatar re-locates by name and stores the new fingerprint without unbinding", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  const f = await connectedByName(t, reader);
+  reader.findAvatar = async () => ({
+    found: true,
+    hash: "0e11e1e1e1e1e102",
+    region: { x: 0.16, y: 0.49, width: 0.13, height: 0.057 },
+  });
+  const noConsent = await f.json(`/api/chat-followups/bindings/${f.binding.id}/avatar`, "POST", { consent: false });
+  assert.equal(noConsent.status, 412);
+  const ok = await f.json(`/api/chat-followups/bindings/${f.binding.id}/avatar`, "POST", { consent: true });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.data.updated, true);
+  assert.equal(ok.data.changed, true);
+  assert.deepEqual(reader.calls.locate.map((c) => c.avatarHash), [null, null], "重抓按备注名定位，不携带旧指纹");
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.bindings.find((b) => b.id === f.binding.id).calibration.avatarHash, "0e11e1e1e1e1e102");
+});
+
+test("refresh avatar keeps the old fingerprint when locate or capture fails", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  const f = await connectedByName(t, reader);
+  reader.calls.locateOk = false;
+  const locateFail = await f.json(`/api/chat-followups/bindings/${f.binding.id}/avatar`, "POST", { consent: true });
+  assert.equal(locateFail.status, 409);
+  assert.match(locateFail.data.error, /未找到/);
+  reader.calls.locateOk = true;
+  reader.findAvatar = async () => ({ found: false });
+  const noAvatar = await f.json(`/api/chat-followups/bindings/${f.binding.id}/avatar`, "POST", { consent: true });
+  assert.equal(noAvatar.status, 409);
+  assert.match(noAvatar.data.error, /未能抓取头像/);
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.bindings.find((b) => b.id === f.binding.id).calibration.avatarHash, "f1e0e1e1e1e1e1e1");
+});

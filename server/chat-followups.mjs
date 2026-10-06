@@ -146,6 +146,17 @@ export class ChatFollowups {
     return { id, image: snapshot.image, width: snapshot.width, height: snapshot.height, suggestedTitleRegion, avatar, expiresAt: new Date(Date.now() + 300000).toISOString() };
   }
   expirePreviews() { for (const [id,p] of this.previews) if (p.expires < Date.now()) this.previews.delete(id); }
+  // 绑定表单的输入辅助:读取当前微信窗口可见的会话列表行名作为候选。只读画面不导航;
+  // 候选仅用于点选填入备注名,关联仍需 preview + locate + 人工确认。
+  async wechatContacts(input) {
+    check(!this.active.has('wechat'), 'CHAT_BUSY', '微信正在读取，请稍后重试', 409);
+    this.ready('wechat');
+    check(input.consent === true, 'CHAT_CONSENT', '请确认读取微信会话列表', 412);
+    check(this.wechat.platform === 'win32' && typeof this.wechat.listNames === 'function', 'CHAT_LOCATE', '会话列表候选仅支持 Windows 微信', 409);
+    const controller = new AbortController(), job = {controller,promise:null};
+    this.active.set('wechat',job); job.promise = this.wechat.listNames(controller.signal);
+    try { return await job.promise; } finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
+  }
   async previewImport(input) {
     this.patient(input.patientId);
     check(input.consent===true,'CHAT_CONSENT','请确认在本机读取所选导出文件',412);
@@ -283,6 +294,33 @@ export class ChatFollowups {
     } catch (e) {
       if (this.registry.entries.has('wechat') && this.config('wechat').revision === c.revision) { const saved = this.config('wechat'); saved.lastError = e instanceof AppError ? e.message : '发送失败'; this.write(saved); }
       throw e instanceof AppError ? e : new AppError('CHAT_SEND', '发送失败，请检查微信窗口后重试', 502);
+    }
+  }
+  // 头像指纹过期(患者换头像等)的轻量恢复:按备注名重新定位(顶栏名字核验)后重抓,
+  // 免解除重绑。定位或抓取失败即中止,旧指纹保持不变。
+  async refreshAvatar(input) {
+    check(!this.active.has('wechat'), 'CHAT_BUSY', '微信正在读取或发送，请稍后重试', 409);
+    const c = this.ready('wechat');
+    check(input.consent === true, 'CHAT_CONSENT', '请确认读取微信窗口以重新抓取头像', 412);
+    const b = this.binding(input.bindingId);
+    check(b.channel === 'wechat' && b.mode !== 'import' && b.calibration, 'CHAT_CHANNEL', '此会话不支持头像核验', 409);
+    const controller = new AbortController(), job = {controller,promise:null};
+    this.active.set('wechat',job); job.promise = this.runRefreshAvatar(c, b, controller.signal);
+    try { return await job.promise; } finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
+  }
+  async runRefreshAvatar(c, b, signal) {
+    try {
+      const located = await this.wechat.locate(b.title, null, signal);
+      const fingerprint = await this.wechat.findAvatar(located.snapshot, signal, b.calibration.avatarBand);
+      check(fingerprint.found, 'CHAT_LOCATE', '已定位会话但未能抓取头像，请确认微信窗口显示正常后重试', 409);
+      this.assertCurrent(c, signal); this.binding(b.id);
+      const changed = fingerprint.hash !== b.calibration.avatarHash;
+      const updated = { ...b, calibration: { ...b.calibration, avatarHash: fingerprint.hash, aspect: located.snapshot.width / located.snapshot.height }, verifiedAt: now() };
+      this.db.prepare('UPDATE chat_bindings SET data=? WHERE id=?').run(JSON.stringify(updated), b.id);
+      return { updated: true, changed, message: changed ? '已重新抓取头像指纹，之后回复与定时读取使用新指纹' : '头像指纹未变化，无需重新关联' };
+    } catch (e) {
+      if (this.registry.entries.has('wechat') && this.config('wechat').revision === c.revision) { const saved = this.config('wechat'); saved.lastError = e instanceof AppError ? e.message : '重新抓取头像失败'; this.write(saved); }
+      throw e instanceof AppError ? e : new AppError('CHAT_SEND', '重新抓取头像失败，请检查微信窗口后重试', 502);
     }
   }
   list(patientId, offset = 0) {

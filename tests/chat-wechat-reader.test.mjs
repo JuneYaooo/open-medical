@@ -44,3 +44,18 @@ test('concurrent preview cannot interrupt a read and cancellation releases the l
 test('similar titles containing different spaces are never treated as identical',async()=>{
  await assert.rejects(reader({title:'合成 家属'}).r.read(binding),e=>e.code==='CHAT_IDENTITY');
 });
+test('listNames returns deduped left-list candidates and ignores noise and out-of-band lines',async()=>{
+ const {r}=reader();
+ const invoke=r.ocr;
+ r.ocr=async(bytes,_signal,options)=>options?.region?invoke(bytes,_signal,options):{width:1000,height:800,lines:[
+  {text:'June',confidence:.95,box:{x:.13,y:.15,width:.04,height:.03}},
+  {text:'June',confidence:.9,box:{x:.13,y:.22,width:.04,height:.03}},
+  {text:'李雷',confidence:.9,box:{x:.13,y:.29,width:.04,height:.03}},
+  {text:'10:32',confidence:.95,box:{x:.13,y:.36,width:.04,height:.03}},
+  {text:'聊天区消息',confidence:.95,box:{x:.4,y:.5,width:.2,height:.03}},
+  {text:'A',confidence:.95,box:{x:.13,y:.43,width:.02,height:.03}},
+  {text:'低置信行',confidence:.5,box:{x:.13,y:.5,width:.04,height:.03}},
+ ]};
+ const result=await r.listNames(new AbortController().signal);
+ assert.deepEqual(result.names,['June','李雷']);
+});
