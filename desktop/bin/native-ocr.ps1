@@ -30,11 +30,12 @@ if (-not $req.image) { & $fail '缺少图片数据' }
 $bytes = [Convert]::FromBase64String($req.image)
 if ($bytes.Length -gt 4MB) { & $fail '图片超过 4MB' }
 
-# PNG 尺寸直接读 IHDR,避免完整解码两遍。
-if ($bytes.Length -lt 24 -or $bytes[0] -ne 0x89 -or $bytes[1] -ne 0x50) { & $fail '仅支持 PNG 窗口截图' }
-$width = [int](([uint32]$bytes[16] -shl 24) -bor ([uint32]$bytes[17] -shl 16) -bor ([uint32]$bytes[18] -shl 8) -bor [uint32]$bytes[19])
-$height = [int](([uint32]$bytes[20] -shl 24) -bor ([uint32]$bytes[21] -shl 16) -bor ([uint32]$bytes[22] -shl 8) -bor [uint32]$bytes[23])
-if ($width -le 0 -or $height -le 0) { & $fail '图片尺寸无效' }
+# 用 GDI+ 探测尺寸,支持 PNG/JPEG 等常见格式(微信截图为 PNG,用户上传多为 JPEG)。
+Add-Type -AssemblyName System.Drawing
+$msProbe = New-Object System.IO.MemoryStream (,$bytes)
+try { $probe = [System.Drawing.Image]::FromStream($msProbe); $width = $probe.Width; $height = $probe.Height; $probe.Dispose() } catch { $width = 0; $height = 0 }
+$msProbe.Dispose()
+if ($width -le 0 -or $height -le 0) { & $fail '无法解码图片，请使用 PNG/JPEG 格式' }
 
 $engine = $null
 foreach ($tag in @('zh-Hans-CN', 'zh-Hant-CN', 'en-US')) {

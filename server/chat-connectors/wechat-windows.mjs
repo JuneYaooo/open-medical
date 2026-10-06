@@ -1,20 +1,17 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { AppError } from "../errors.mjs";
+
+// Windows 本地 OCR 已提升为 core/windows-ocr.mjs(资料建档等场景共用);此处保持兼容导出。
+export {
+  recognizeWindowsImage,
+  windowsOcrAvailable as windowsWechatAvailable,
+} from "../core/windows-ocr.mjs";
 
 const controlScript = resolve(
   import.meta.dirname,
   "../../desktop/bin/native-control.ps1",
 );
-const ocrScript = resolve(
-  import.meta.dirname,
-  "../../desktop/bin/native-ocr.ps1",
-);
-export const windowsWechatAvailable = () =>
-  process.platform === "win32" &&
-  existsSync(controlScript) &&
-  existsSync(ocrScript);
 
 const MAX_STDOUT = 24_000_000;
 
@@ -103,26 +100,6 @@ export class WindowsWechatControl {
     );
     return Buffer.from(result.image, "base64");
   }
-}
-
-export async function recognizeWindowsImage(data, signal, options = {}) {
-  const result = await runScript(
-    ocrScript,
-    {
-      image: data.toString("base64"),
-      region: options.region,
-      scale: options.scale,
-    },
-    45000,
-    signal,
-  );
-  return {
-    width: result.width,
-    height: result.height,
-    lines: result.lines,
-    // 与 macOS OCR 一致:includeImage 时回传截图作为采集证据。
-    image: options.includeImage ? data.toString("base64") : undefined,
-  };
 }
 
 const FLAT_NOISE =
