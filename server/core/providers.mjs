@@ -507,6 +507,7 @@ export class AnthropicProvider {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.model = model;
+    this.vision = true; // Claude 3+ 全系支持图片输入;模型设置里可显式关闭。
     this.timeoutMs = timeoutMs;
     this.maxTokens = maxTokens;
     if (contextWindow !== undefined) check(Number.isInteger(contextWindow) && contextWindow >= 512 && contextWindow <= 10000000, "PROVIDER_CONFIG", "模型上下文窗口须为 512–10000000 token");
@@ -726,13 +727,8 @@ export class AnthropicProvider {
   }
 }
 
-export function createProvider({
-  provider = process.env.AI_PROVIDER ||
-    process.env.MODEL_PROVIDER ||
-    "deepseek",
-  ...options
-} = {}) {
-  const kind = provider.toLowerCase();
+function createProviderByKind(provider, options = {}) {
+  const kind = provider;
   if (kind === "openai-responses" || kind === "responses")
     return new ResponsesProvider({
       apiKey:
@@ -839,4 +835,22 @@ export function createProvider({
     contextWindows: options.contextWindows,
     fetchImpl: options.fetchImpl,
   });
+}
+
+// 用户在模型设置里声明的图片能力优先于各协议类的默认值:
+// 显式 vision:true 让 openai-compatible/anthropic 等接入的多模态模型
+// 可以直接读取图片资料;显式 false 关闭该能力。
+export function createProvider(options = {}) {
+  const provider = createProviderByKind(
+    String(
+      options.provider ??
+        process.env.AI_PROVIDER ??
+        process.env.MODEL_PROVIDER ??
+        "deepseek",
+    ).toLowerCase(),
+    options,
+  );
+  if (options && Object.hasOwn(options, "vision"))
+    provider.vision = options.vision === true;
+  return provider;
 }

@@ -12,7 +12,7 @@ export function ModelSettings({ onClose, onSaved }) {
   function update(changes) { setForm((f) => ({ ...f, ...changes })); setStatus(''); setError(''); setChecks(null); }
   function choosePreset(id) {
     const preset = presetById(id);
-    update({ preset: id, provider: preset.provider, baseUrl: preset.baseUrl, model: preset.models[0] || '', contextWindow: null, apiKey: '', hasKey: false });
+    update({ preset: id, provider: preset.provider, baseUrl: preset.baseUrl, model: preset.models[0] || '', contextWindow: null, apiKey: '', hasKey: false, vision: ['openai-responses', 'anthropic'].includes(preset.provider) });
   }
   async function submit(test) {
     setBusy(true); setError(''); setStatus(''); setChecks(null);
@@ -37,6 +37,7 @@ export function ModelSettings({ onClose, onSaved }) {
           {preset.models.length > 0 && <label>模型<select value={customModel ? CUSTOM_MODEL : form.model} onChange={(e) => update({ model: e.target.value === CUSTOM_MODEL ? '' : e.target.value, contextWindow: null })}>{preset.models.map((m) => <option value={m} key={m}>{m}</option>)}<option value={CUSTOM_MODEL}>自定义…</option></select></label>}
           {customModel && <label>模型 ID<input required value={form.model} onChange={(e) => update({ model:e.target.value, contextWindow:null })} placeholder="填写服务商提供的模型 ID" /></label>}
           <label>API Key <span>{form.hasKey ? '已保存 · 留空保留现有密钥' : form.provider === 'local' ? '本地服务可不填写' : '必填'}{preset.keyUrl && <> · <a href={preset.keyUrl} target="_blank" rel="noreferrer">获取 Key</a></>}</span><input type="password" autoComplete="new-password" value={form.apiKey} onChange={(e) => update({ apiKey:e.target.value })} placeholder={form.hasKey ? '••••••••（已保存）' : '粘贴 API Key'} required={!form.hasKey && form.provider !== 'local'} /></label>
+          <label className="model-check"><input type="checkbox" checked={form.vision === true} onChange={(e) => update({ vision: e.target.checked })}/>此模型支持图片（多模态/视觉）——勾选后，上传的图片资料会直接交给它读取，不再仅依赖本机 OCR</label>
           <details className="model-advanced" open={preset.id === 'custom' || undefined}><summary>高级选项</summary>
             <label>接口地址<input type="url" required value={form.baseUrl} onChange={(e) => update({ baseUrl:e.target.value, contextWindow:null, apiKey:'', hasKey:false })} placeholder="https://your-provider.example/v1" /></label>
             <ModelBudgetFields form={form} onChange={update} />

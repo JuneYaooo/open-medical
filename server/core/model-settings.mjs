@@ -21,7 +21,7 @@ export class ModelSettings {
   provider() { return this.saved.provider ? createProvider(this.saved) : this.initial; }
   public() {
     const p = this.provider();
-    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, contextWindow: p.contextWindow ?? null, contextDefaults: resolveModelContext(p), maxTokens: p.maxTokens || 8192 };
+    return { provider: this.saved.provider || (p.local ? 'local' : p.provider), baseUrl: p.baseUrl || '', model: p.model || '', hasKey: Boolean(p.apiKey), vision: p.vision === true, source: this.saved.provider ? 'saved' : 'environment', timeoutMs: p.timeoutMs || 90000, contextWindow: p.contextWindow ?? null, contextDefaults: resolveModelContext(p), maxTokens: p.maxTokens || 8192 };
   }
   candidate(body) {
     check(kinds.includes(body.provider), 'MODEL_SETTINGS', '请选择支持的模型协议');
@@ -38,6 +38,8 @@ export class ModelSettings {
     const config = { provider: body.provider, baseUrl, model: body.model.trim(), apiKey: apiKey || '', timeoutMs: Number(body.timeoutMs ?? 90000), maxTokens: Number(body.maxTokens ?? 8192) };
     if (body.contextWindow != null) config.contextWindow = Number(body.contextWindow);
     else if (body.contextWindow === undefined && body.provider === previous.provider && baseUrl === previous.baseUrl.replace(/\/$/, '') && body.model.trim() === previous.model && existing.contextWindow) config.contextWindow = existing.contextWindow;
+    // 图片能力由用户声明:勾选后图片资料可直接交给该模型读取;未勾选则走本机 OCR。
+    config.vision = body.vision === true || (!Object.hasOwn(body, 'vision') && previous.vision === true && body.provider === previous.provider && body.model.trim() === previous.model);
     validateBudget(config);
     return config;
   }
