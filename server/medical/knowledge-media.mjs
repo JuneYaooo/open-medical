@@ -2,11 +2,8 @@ import { existsSync } from "node:fs";
 import { readFile, unlink } from "node:fs/promises";
 import { resolve, join, extname } from "node:path";
 import { spawn } from "node:child_process";
-import { localOcrAvailable, recognizeImage } from "../core/image-ocr.mjs";
-import {
-  recognizeWindowsImage,
-  windowsOcrAvailable,
-} from "../core/windows-ocr.mjs";
+import { recognizeImage } from "../core/image-ocr.mjs";
+import { imageTextWithFallback } from "../core/image-text.mjs";
 import { extractOfficeText } from "../../shared/office-text.mjs";
 import { check } from "../errors.mjs";
 
@@ -140,46 +137,9 @@ export async function extractDocument(path, name, signal, options = {}) {
         kind: "text",
       },
     ];
-  // 图片文字读取的回退链:macOS 本地 OCR → Windows 本地 OCR(Windows.Media.Ocr)
-  // → 视觉模型转录(analyzeImage 由调用方按当前模型能力注入)。全都没有才报错,
-  // 并说明可执行的操作。
-  async function imageText(bytes) {
-    const ocrNote =
-      "\n[本段由本地 OCR 识别，不解读 CT/病理等医学图像；表格顺序、数值、小数点、单位与患者身份均需对照原图核对]";
-    if (localOcrAvailable()) {
-      const result = await recognizeImage(bytes, signal);
-      return {
-        kind: "ocr",
-        text:
-          result.lines
-            .map((l) => l.text + (l.confidence < 0.7 ? " [文字识别待核对]" : ""))
-            .join("\n") + ocrNote,
-      };
-    }
-    if (windowsOcrAvailable()) {
-      try {
-        const result = await recognizeWindowsImage(bytes, signal, { scale: 2 });
-        const text = result.lines
-          .map((l) => l.text + (l.confidence < 0.7 ? " [文字识别待核对]" : ""))
-          .join("\n");
-        if (text.trim()) return { kind: "ocr", text: text + "\n" + ocrNote };
-        // Windows OCR 读不出文字时交给视觉模型(若可用),不再直接失败。
-      } catch (error) {
-        signal?.throwIfAborted();
-        if (error?.code !== "WINDOWS_OCR") throw error;
-        // 识别组件级失败同样交给视觉模型兜底。
-      }
-    }
-    check(
-      typeof options.analyzeImage === "function",
-      "OCR_UNAVAILABLE",
-      "图片无法在本机读取文字：此平台没有本地 OCR，当前模型也不支持图片。请把模型切换为多模态（视觉）模型后重试，或将资料转为 PDF/TXT 上传",
-      503,
-    );
-    return { kind: "vision", text: await options.analyzeImage(bytes, signal) };
-  }
+  // 图片文字读取走共享回退链(见 core/image-text.mjs)。
   if ([".jpg", ".jpeg", ".png", ".webp"].includes(ext)) {
-    const result = await imageText(bytes);
+    const result = await imageTextWithFallback(bytes, signal, options.analyzeImage);
     return [{ text: result.text, kind: result.kind }];
   }
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);

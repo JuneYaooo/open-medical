@@ -7,7 +7,7 @@ import { assessmentQuestion } from "./medical/assessment-tools.mjs";
 // 会话的 API 形状，并按会话类别双轨分派——新建会话走 WorkspaceService
 // （通用内核 + 医疗叠层），既有 sessions 表会话继续走 MedicalRuntime。
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
-import { recognizeImage } from "./core/image-ocr.mjs";
+import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
@@ -297,29 +297,35 @@ export class SessionBridge {
       ? [{ artifactId: file.extraction.artifactId }]
       : file.extraction?.pageImages || [];
     if (!images.length || file.extraction?.ocr?.status === "ready") return file;
+    // 回退链:macOS 本地 OCR → Windows 本地 OCR → 当前配置的视觉模型(若支持图片)。
+    const analyzeImage = visionTranscriber(this.service.provider);
     const pages = [];
+    let kind = "ocr";
     for (const image of images) {
       signal?.throwIfAborted();
       const original = this.service.artifacts.read(id, image.artifactId);
-      const result = await recognizeImage(original.data, signal);
-      check(result.lines?.some(line => line.text?.trim()), "OCR_EMPTY", "未识别出文字，请换清晰图片；医学影像需由医生或视觉模型另行核对", 422);
-      pages.push({ page: image.page, lines: result.lines });
+      const result = await imageTextWithFallback(original.data, signal, analyzeImage);
+      if (result.kind === "vision") kind = "vision";
+      const lines = result.text.split("\n").filter(Boolean).map(text => ({ text, confidence: 1 }));
+      check(lines.some(line => line.text?.trim()), "OCR_EMPTY", "未识别出文字，请换清晰图片；医学影像需由医生或视觉模型另行核对", 422);
+      pages.push({ page: image.page, lines });
     }
     signal?.throwIfAborted();
     check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
-    const text = pages.map(page => `[${file.name}${page.page ? ` 第 ${page.page} 页` : ""} · 本地文字识别]
+    const sourceLabel = kind === "vision" ? "视觉模型转录" : "本地文字识别";
+    const text = pages.map(page => `[${file.name}${page.page ? ` 第 ${page.page} 页` : ""} · ${sourceLabel}]
 ` + page.lines.map(line => `${line.text}${line.confidence < 0.7 ? " [识别置信度低，请核对原图]" : ""}`).join("\n")).join("\n\n");
     let prepared;
     this.service.store.update(id, current => {
       const target = current.materials.find(item => item.id === fileId);
       check(target, "NOT_FOUND", "材料已移除", 404);
       // Preserve original artifact ownership and hash; OCR is a derived, cached view.
-      target.extraction.ocr = { status: "ready", method: "local-ocr", pages: pages.length, lines: pages.reduce((n, page) => n + page.lines.length, 0), completedAt: iso() };
+      target.extraction.ocr = { status: "ready", method: kind === "vision" ? "vision" : "local-ocr", pages: pages.length, lines: pages.reduce((n, page) => n + page.lines.length, 0), completedAt: iso() };
       target.extraction.originalText = file.extraction.originalText || file.text;
       target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text + "\n[文字识别结果需核对原图；不能据此解读 CT 或病理图像。]";
       prepared = target;
     });
-    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length });
+    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind });
     return prepared;
   }
   removeMaterial(id, fileId) {
