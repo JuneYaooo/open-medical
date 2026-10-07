@@ -101,6 +101,30 @@ test('locate retries identity verification on fresh frames but clicks only once'
  await assert.rejects(stuck.r.locate('June',null,new AbortController().signal),e=>e.code==='CHAT_LOCATE');
  assert.equal(stuck.calls.filter(a=>a==='click').length,1,'核验失败也不重复点击');
 });
+test('locate tolerates the back-arrow glyph OCR-merged into the header line',async()=>{
+ const r=new WechatReader({platform:'win32',
+  invoke:async i=>{
+   if(i.action==='status')return{apps:[{id:'微信'}]};
+   if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+   return{ok:true};},
+  captureWindow:async()=>Buffer.from('frame'),
+  ocr:async()=>({width:548,height:794,lines:[{text:'〈 June',confidence:.95,box:{x:.21,y:.08,width:.13,height:.05}}]})});
+ r.status=async()=>({ready:true,message:'ok'});
+ const result=await r.locate('June',null,new AbortController().signal);
+ assert.equal(result.navigated,false,'顶栏命中(剥离箭头装饰后同名)即不点击');
+});
+test('header identity never treats another name or a suffix as the bound conversation',async()=>{
+ const avatarBinding={title:'June',calibration:{messageRegion,aspect:1.25,avatarHash:'f1e0e1e1e1e1e1e1'}};
+ const withHeader=header=>{
+  const h=reader();
+  h.r.ocr=async(b,s,o)=>o?.region?{lines:[{text:'合成消息',confidence:.9}],image:'c3ludGhldGlj'}:{width:1000,height:800,lines:[{text:header,confidence:.95,box:{x:.21,y:.08,width:.13,height:.05}}]};
+  return h.r;
+ };
+ await assert.rejects(withHeader('〈 June2').read(avatarBinding),e=>e.code==='CHAT_IDENTITY','带后缀的相似名字不算同一会话');
+ await assert.rejects(withHeader('其他人').read(avatarBinding),e=>e.code==='CHAT_IDENTITY');
+ await assert.doesNotReject(withHeader('〈 June').read(avatarBinding),'箭头粘连的顶栏名剥掉装饰后应命中');
+ await assert.doesNotReject(withHeader('June').read(avatarBinding));
+});
 test('avatar scanning scrolls the message area up, retries and restores the position',async()=>{
  const make=(platform,foundOnScan)=>{
   const wheels=[];let scans=0;

@@ -186,5 +186,27 @@ export function flatName(text) {
   return String(text).toLowerCase().replace(/\s+/g, "");
 }
 
+// 顶栏名字的 OCR 分行不稳定:返回箭头、窗口饰件常被并进同一行("〈 June")。
+// 比对前剥掉两端不属于文字的字符(箭头/括号/标点/图标误读),再精确相等;
+// 两边同规则剥离,备注名本身带符号时依然成立,也不会把「June2」误当「June」。
+export function flatHeaderName(text) {
+  return flatName(text)
+    .replace(/^[^a-z0-9\u4e00-\u9fff]+/, "")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+$/, "");
+}
+
+// 顶栏(y<.13、x .1–.7)是否显示指定会话名,供定位早退与身份核验共用。
+export function headerNameHit(lines, name) {
+  const needle = flatHeaderName(name);
+  if (!needle) return false;
+  return lines.some(
+    (l) =>
+      l.box.y < .13 &&
+      l.box.x > .1 &&
+      l.box.x < .7 &&
+      flatHeaderName(l.text) === needle,
+  );
+}
+
 export const AVATAR_BAND = { x: 0.16, y: 0.12, width: 0.13, height: 0.68 };
 export const AVATAR_MATCH_DISTANCE = 8;

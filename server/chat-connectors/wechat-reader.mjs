@@ -14,6 +14,7 @@ import {
   matchRatio,
   ocrLinesText,
   flatName,
+  headerNameHit,
   hashDistance,
   AVATAR_BAND,
   AVATAR_MATCH_DISTANCE,
@@ -172,8 +173,7 @@ export class WechatReader {
   async confirmAvatar(snapshot, binding, signal) {
     const fingerprint = await this.findAvatar(snapshot, signal, binding.calibration.avatarBand);
     if (this.avatarMatches(fingerprint, binding.calibration.avatarHash)) return 'avatar';
-    const header = snapshot.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
-    if (header.some(l => flatName(l.text) === flatName(binding.title))) return 'name';
+    if (headerNameHit(snapshot.lines, binding.title)) return 'name';
     return null;
   }
   // 会话列表候选(Windows 紧凑单栏布局):列表视图下行名从窗口左侧约 12% 处开始;
@@ -203,8 +203,7 @@ export class WechatReader {
     return this.exclusive(async () => {
       cancelled(signal);
       const snapshot = await this.captureFrame(signal);
-      const header = snapshot.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
-      if (header.some(l => flatName(l.text) === flatName(name))) return { snapshot, navigated: false, nameVisible: true };
+      if (headerNameHit(snapshot.lines, name)) return { snapshot, navigated: false, nameVisible: true };
       const rows = snapshot.lines.filter(l => flatName(l.text) === flatName(name) && l.box.y > .08 && l.box.y < .92 && l.box.x > .12 && l.box.x < .6);
       check(rows.length === 1, 'CHAT_LOCATE', rows.length
         ? `会话列表中有 ${rows.length} 个「${name}」，无法自动选择；请在微信中人工打开该会话后重试`
@@ -218,8 +217,7 @@ export class WechatReader {
         if (attempt) await wait(700, signal);
         after = await this.captureFrame(signal);
         cancelled(signal);
-        const afterHeader = after.lines.filter(l => l.box.y < .13 && l.box.x > .1 && l.box.x < .7);
-        nameOk = afterHeader.some(l => flatName(l.text) === flatName(name));
+        nameOk = headerNameHit(after.lines, name);
         avatarOk = false;
         if (!nameOk && avatarHash) avatarOk = this.avatarMatches(await this.findAvatar(after, signal), avatarHash);
       }
