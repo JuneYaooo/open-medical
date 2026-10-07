@@ -125,6 +125,59 @@ test('header identity never treats another name or a suffix as the bound convers
  await assert.doesNotReject(withHeader('〈 June').read(avatarBinding),'箭头粘连的顶栏名剥掉装饰后应命中');
  await assert.doesNotReject(withHeader('June').read(avatarBinding));
 });
+test('send verifies ultra-short texts by the paste-clear-repaste behavior chain when OCR cannot read them',async()=>{
+ // 真机校准:系统 OCR 把「你好」读成「亻子」,任何倍率/紧裁剪/二值化都救不回,匹配率恒 0。
+ let frames=0,darkIdx=0;const calls=[];
+ const darks=[100,500,400,400,105,430,104,590];
+ const r=new WechatReader({platform:'win32',
+  invoke:async i=>{calls.push(i.action==='key'?`key:${i.key}`:i.action);
+   if(i.action==='status')return{apps:[{id:'微信'}]};
+   if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+   if(i.action==='hash')return{dark:darks[Math.min(darkIdx++,darks.length-1)],hash:'0'.repeat(16)};
+   return{ok:true};},
+  captureWindow:async()=>Buffer.from(`frame-${++frames}`),
+  ocr:async()=>({width:548,height:794,lines:[{text:'亻 子',confidence:.9}]})});
+ r.status=async()=>({ready:true,message:'ok'});
+ const binding={title:'June',calibration:{messageRegion,aspect:548/794,inputPoint:{x:.5,y:.85}}};
+ const out=await r.send(binding,'你好',new AbortController().signal);
+ assert.equal(out.evidence.mode,'behavioral');
+ assert.equal(out.evidence.coverage,'verified-send');
+ assert.equal(calls.filter(a=>a==='paste').length,2,'行为链会清空后二次粘贴');
+ assert.deepEqual(calls.filter(a=>String(a).startsWith('key:')),['key:ctrl+a','key:Delete','key:ctrl+a','key:Delete','key:Return'],'Return 只按一次,且在核验通过之后');
+});
+test('send aborts when the short-text behavior chain does not collapse back to baseline',async()=>{
+ let frames=0,darkIdx=0;const calls=[];
+ const darks=[100,500,400,400,380];
+ const r=new WechatReader({platform:'win32',
+  invoke:async i=>{calls.push(i.action);
+   if(i.action==='status')return{apps:[{id:'微信'}]};
+   if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+   if(i.action==='hash')return{dark:darks[Math.min(darkIdx++,darks.length-1)],hash:'0'.repeat(16)};
+   return{ok:true};},
+  captureWindow:async()=>Buffer.from(`frame-${++frames}`),
+  ocr:async()=>({width:548,height:794,lines:[{text:'亻 子',confidence:.9}]})});
+ r.status=async()=>({ready:true,message:'ok'});
+ const binding={title:'June',calibration:{messageRegion,aspect:548/794,inputPoint:{x:.5,y:.85}}};
+ await assert.rejects(r.send(binding,'你好',new AbortController().signal),e=>e.code==='CHAT_SEND_VERIFY'&&/行为核验/.test(e.message));
+ assert.equal(calls.includes('Return')||calls.includes('key:Return'),false,'核验不过绝不按 Return');
+});
+test('send uses the plain OCR path and pastes once when the text is readable',async()=>{
+ let frames=0,darkIdx=0;const calls=[];
+ const r=new WechatReader({platform:'win32',
+  invoke:async i=>{calls.push(i.action);
+   if(i.action==='status')return{apps:[{id:'微信'}]};
+   if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+   if(i.action==='hash')return{dark:(darkIdx++===0?100:400),hash:'0'.repeat(16)};
+   return{ok:true};},
+  captureWindow:async()=>Buffer.from(`frame-${++frames}`),
+  ocr:async()=>({width:548,height:794,lines:[{text:'血压偏高，请按时服药并记录晨起心率',confidence:.95}]})});
+ r.status=async()=>({ready:true,message:'ok'});
+ const binding={title:'June',calibration:{messageRegion,aspect:548/794,inputPoint:{x:.5,y:.85}}};
+ const out=await r.send(binding,'血压偏高，请按时服药并记录晨起心率',new AbortController().signal);
+ assert.equal(out.evidence.mode,'ocr');
+ assert.equal(calls.filter(a=>a==='paste').length,1,'OCR 可读时不走行为链');
+ assert.equal(calls.filter(a=>a==='key').length,3,'ctrl+a、Delete、Return 各一次');
+});
 test('avatar scanning scrolls the message area up, retries and restores the position',async()=>{
  const make=(platform,foundOnScan)=>{
   const wheels=[];let scans=0;

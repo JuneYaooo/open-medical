@@ -14,6 +14,7 @@ import {
   matchRatio,
   ocrLinesText,
   flatName,
+  flattenForMatch,
   headerNameHit,
   hashDistance,
   AVATAR_BAND,
@@ -264,19 +265,54 @@ export class WechatReader {
       await wait(150, signal);
       const preFrame = await this.captureWindow(snapshot.windowId, signal);
       const preBand = await this.invoke({ action:'hash', image: preFrame.toString('base64'), region: inputBand }, signal);
+      // 消息区基准:发送后若内容过短无法 OCR 核验,用「消息区画面变化」作辅助已发证据。
+      const msgPre = await this.invoke({ action:'hash', image: preFrame.toString('base64'), region: validateRegion(c.messageRegion) }, signal);
       await this.invoke({ action:'click', x: Math.round(b.X + point.x*b.Width), y: Math.round(b.Y + point.y*b.Height) }, signal);
       await wait(200, signal);
       await this.invoke({ action:'paste', text }, signal);
       await wait(700, signal);
       cancelled(signal);
-      const pastedFrame = await this.captureWindow(snapshot.windowId, signal);
-      const pastedBand = await this.invoke({ action:'hash', image: pastedFrame.toString('base64'), region: inputBand }, signal);
-      const pasted = await this.ocr(pastedFrame, signal, { region: inputBand, scale:3 });
-      const inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.5 });
+      let pastedFrame = await this.captureWindow(snapshot.windowId, signal);
+      let pastedBand = await this.invoke({ action:'hash', image: pastedFrame.toString('base64'), region: inputBand }, signal);
+      let pasted = await this.ocr(pastedFrame, signal, { region: inputBand, scale:3 });
+      let inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.5 });
       // 双信号:输入带深色像素显著增加(粘贴真正落进输入框)+ OCR 容差匹配(内容大致是待发文本)。
       // 阈值相对细采样校准:真实粘贴 ≥ 数百,粘贴落空时两帧几乎逐像素一致(≈0)。
-      const landed = pastedBand.dark > preBand.dark + 120;
-      check(landed && inputCheck.ok,'CHAT_SEND_VERIFY',`输入框内容未通过核验(画面变化 ${landed?'有':'无'}，匹配率 ${inputCheck.ratio})，已取消发送；请手动检查微信输入框。`,409);
+      let landed = pastedBand.dark > preBand.dark + 120;
+      if (landed && !inputCheck.ok) {
+        // 渲染时差会让单帧 OCR 偶发漏读:等待后重采一帧再核一次。
+        await wait(600, signal);
+        cancelled(signal);
+        pastedFrame = await this.captureWindow(snapshot.windowId, signal);
+        pastedBand = await this.invoke({ action:'hash', image: pastedFrame.toString('base64'), region: inputBand }, signal);
+        pasted = await this.ocr(pastedFrame, signal, { region: inputBand, scale:3 });
+        inputCheck = verifyOcrContains(text, pasted.lines, { minRatio:.5 });
+        landed = pastedBand.dark > preBand.dark + 120;
+      }
+      // 超短中文(如「你好」)在系统 OCR 下是形近字重灾区(真机:你好→亻子,任何倍率/紧裁剪/
+      // 二值化都读不出),OCR 路线对它天然失效。改用行为链证明「出现在带内的就是输入框里
+      // 随我们粘贴出现的内容」:清空应回落到基准,再次粘贴应再次出现。
+      let behavioral = false;
+      if (!inputCheck.ok && landed && flattenForMatch(text).length <= 8) {
+        await this.invoke({ action:'key', key:'ctrl+a' }, signal);
+        await wait(150, signal);
+        await this.invoke({ action:'key', key:'Delete' }, signal);
+        await wait(300, signal);
+        const clearedFrame = await this.captureWindow(snapshot.windowId, signal);
+        const clearedBand = await this.invoke({ action:'hash', image: clearedFrame.toString('base64'), region: inputBand }, signal);
+        await this.invoke({ action:'click', x: Math.round(b.X + point.x*b.Width), y: Math.round(b.Y + point.y*b.Height) }, signal);
+        await wait(200, signal);
+        await this.invoke({ action:'paste', text }, signal);
+        await wait(700, signal);
+        cancelled(signal);
+        const againFrame = await this.captureWindow(snapshot.windowId, signal);
+        const againBand = await this.invoke({ action:'hash', image: againFrame.toString('base64'), region: inputBand }, signal);
+        const collapsed = Math.abs(clearedBand.dark - preBand.dark) <= 60;
+        const reappeared = againBand.dark > preBand.dark + 120;
+        check(collapsed && reappeared,'CHAT_SEND_VERIFY',`输入框内容过短无法用 OCR 核验，行为核验也未通过(清空回落:${collapsed?'正常':'异常'}，再次粘贴:${reappeared?'正常':'异常'})，已取消发送；请手动检查微信输入框。`,409);
+        behavioral = true;
+      }
+      check((inputCheck.ok && landed) || behavioral,'CHAT_SEND_VERIFY',`输入框内容未通过核验(画面变化 ${landed?'有':'无'}，匹配率 ${inputCheck.ratio})，已取消发送；请手动检查微信输入框。`,409);
       cancelled(signal);
       await this.invoke({ action:'key', key:'Return' }, signal);
       await wait(900, signal);
@@ -284,8 +320,15 @@ export class WechatReader {
       const sentFrame = await this.captureWindow(snapshot.windowId, signal);
       const sent = await this.ocr(sentFrame, signal, { scale:2 });
       const sentCheck = verifyOcrContains(text, sent.lines, { minRatio:.55 });
-      check(sentCheck.ok,'CHAT_SEND_VERIFY',`发送后未在会话窗口核验到消息内容(匹配率 ${sentCheck.ratio})；如已发出请人工确认，未发出请在微信中手动发送。`,409);
-      return { text, fingerprint:createHash('sha256').update(text).digest('hex'), evidence:{ image:sentFrame.toString('base64'), lines:sent.lines, observedTitle:binding.title, coverage:'verified-send', inputRatio:inputCheck.ratio, sentRatio:sentCheck.ratio } };
+      let sentVerified = sentCheck.ok;
+      if (!sentVerified && behavioral) {
+        // 短文本已发证据:输入框回落到基准(内容离开输入框)+ 消息区画面发生变化。
+        const boxAfter = await this.invoke({ action:'hash', image: sentFrame.toString('base64'), region: inputBand }, signal);
+        const areaAfter = await this.invoke({ action:'hash', image: sentFrame.toString('base64'), region: validateRegion(c.messageRegion) }, signal);
+        sentVerified = boxAfter.dark <= preBand.dark + 60 && Math.abs(areaAfter.dark - msgPre.dark) >= 40;
+      }
+      check(sentVerified,'CHAT_SEND_VERIFY',`发送后未在会话窗口核验到消息内容(匹配率 ${sentCheck.ratio})；如已发出请人工确认，未发出请在微信中手动发送。`,409);
+      return { text, fingerprint:createHash('sha256').update(text).digest('hex'), evidence:{ image:sentFrame.toString('base64'), lines:sent.lines, observedTitle:binding.title, coverage:'verified-send', mode: behavioral?'behavioral':'ocr', inputRatio:inputCheck.ratio, sentRatio:sentCheck.ratio } };
     });
   }
 }
