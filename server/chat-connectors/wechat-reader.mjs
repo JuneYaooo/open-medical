@@ -52,7 +52,7 @@ export class WechatReader {
       let result;
       try { result = await this.invoke({ action:'status' }); } catch { return { ready:false,message:'Windows 桌面控制组件不可用，请更新安装包后重试' }; }
       const running = Array.isArray(result.apps) && result.apps.length > 0;
-      return { ready:running, message:running ? '已找到微信窗口；读取前请手动打开会话，关联与回复支持按备注名自动定位并核验头像' : '请打开并登录微信', coverage:'visible-window', navigation:'manual', loginVerified:false };
+      return { ready:running, message:running ? '已找到微信窗口；关联、读取与回复都支持按备注名自动定位并核验头像（绑定卡默认勾选「读取前自动定位」），不会在微信中搜索' : '请打开并登录微信', coverage:'visible-window', navigation:'manual', loginVerified:false };
     }
     if (this.platform !== 'darwin') return { ready:false,message:'此安装版的微信读取支持 macOS 与 Windows' };
     if (this.ocr === recognizeImage && !localOcrAvailable()) return { ready:false,message:'缺少本地文字识别组件，请更新桌面安装包' };

@@ -494,7 +494,7 @@ export class ChatFollowups {
       else {
         // Old multi-chat schedules require a fresh choice; never search or rotate chats.
         if (!c.autoBindingId) { c.autoUntil=''; c.lastError='请选择一个已校准会话后重新开启定时读取'; this.write(c); continue; }
-        await this.sync(channel,{consent:true,bindingId:c.autoBindingId}).catch(()=>{});
+        await this.sync(channel,{consent:true,bindingId:c.autoBindingId,autoLocate:true}).catch(()=>{});
       }
       await this.summarizePending(c);
     } } finally { this.ticking = false; }
