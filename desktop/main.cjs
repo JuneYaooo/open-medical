@@ -307,6 +307,22 @@ async function start() {
       callback(choice.response ? {video:sources[choice.response-1]} : {});
     } catch {callback({});}
   });
+  // 工作记录导出走页面里的 blob 下载。没有 will-download 处理时，Electron
+  // 对这类下载的落盘名不稳定（会出现随机 UUID 的 .tmp 文件），用户无法辨认；
+  // 这里固定用页面建议的文件名（如「标题.md」）直接保存到「下载」文件夹。
+  session.defaultSession.on("will-download", (_event, item) => {
+    if (!item.getURL().startsWith("blob:")) return;
+    const suggested = item.getFilename() || "export.md";
+    const downloads = app.getPath("downloads");
+    const dot = suggested.lastIndexOf(".");
+    const stem = dot > 0 ? suggested.slice(0, dot) : suggested;
+    const ext = dot > 0 ? suggested.slice(dot) : "";
+    let target = join(downloads, suggested);
+    for (let n = 1; existsSync(target); n += 1) {
+      target = join(downloads, `${stem} (${n})${ext}`);
+    }
+    item.setSavePath(target);
+  });
   ipcMain.handle("omw:choose-directory", async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "选择授权工作文件夹",

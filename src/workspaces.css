@@ -171,7 +171,10 @@ summary:focus-visible { outline:2px solid #ddd; outline-offset:3px; }
 .model-settings-dialog footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
 .model-settings-dialog button:disabled { opacity:.45; cursor:wait; }
 .model-settings-dialog .model-settings-error { background:#fdf1ee; padding:12px; border-radius:8px; color:#a44436; }
-.model-settings-dialog .model-settings-success { background:#eef6ee; padding:12px; border-radius:8px; color:#28735b; }@media(max-width:620px) {
+.model-settings-dialog .model-settings-success { background:#eef6ee; padding:12px; border-radius:8px; color:#28735b; }
+/* 勾选类 label（如「此模型支持图片」）保持勾选框与文字同行，且勾选框不被通用 input 样式拉伸。 */
+.model-settings-dialog label.model-check { flex-direction:row; align-items:flex-start; gap:8px; line-height:1.7; }
+.model-settings-dialog label.model-check input[type="checkbox"] { width:auto; flex:0 0 auto; margin:2px 0 0; padding:0; }@media(max-width:620px) {
 .model-settings-body { display:block; } .model-settings-body aside { display:none; } .model-settings-body section { padding:20px; }
 }
 .desk-section-title { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom:12px; }

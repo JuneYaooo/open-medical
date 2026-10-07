@@ -1388,14 +1388,6 @@ export function WorkspacesView({
                         <p className="wb-muted">此目录为空，或点击 ↻ 刷新。</p>
                       )}
                     </div>
-                    <div className="wb-files-toolbar">
-                      <button
-                        className="wb-browse-toggle"
-                        onClick={() => setBrowserOpen(false)}
-                      >
-                        收起浏览
-                      </button>
-                    </div>
                   </>
                 )}
                 <div className="wb-files-toolbar">
@@ -1588,7 +1580,9 @@ export function WorkspacesView({
               )}
               {["terminal", "extensions"].includes(panel) && <WorkspaceExtensionsPanel key={`${panel}-${current.id}`} workspace={current} refresh={refresh} disabled={busy || running} focus={panel} />}
               <div hidden={panel !== "settings"} className="desk-settings-panel">
-                <DesktopPanel key={`desktop-${current.id}`} current={current} />
+                {navigator.userAgent.includes("Mac") && (
+                  <DesktopPanel key={`desktop-${current.id}`} current={current} />
+                )}
                 <div className="desk-settings-header">
                   <div>
                     <h3>项目设置</h3>

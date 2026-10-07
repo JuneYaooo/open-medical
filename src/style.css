@@ -668,6 +668,8 @@ small {
   color: #7d927b;
   padding: 5px 2px;
   font-size: 11px;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 .composer select {
   font-size: 10px;
