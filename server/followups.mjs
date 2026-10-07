@@ -372,6 +372,16 @@ export class FollowUpManager {
     this.store.db.prepare("DELETE FROM follow_ups WHERE id=?").run(id);
     this.store.audit(job.sessionId, "followup.deleted", { followUpId: id });
   }
+  // 微信随访在应用内核验发送、医生确认归档后直接完成一次性任务(不经 agent 执行通道)。
+  completeByChat(id) {
+    const job = this.row(id);
+    check(job.status !== "running", "RUN_ACTIVE", "请先停止当前随访执行", 409);
+    check(job.once === true, "INVALID_INPUT", "周期随访不支持直接完成，等下一个间隔", 409);
+    job.status = "completed";
+    this.save(job);
+    this.store.audit(job.sessionId, "followup.completed", { followUpId: id, via: "wechat" });
+    return job;
+  }
   start() {
     if (!this.autoStart || this.timer || this.stopped) return;
     this.timer = setInterval(() => this.tick().catch(() => {}), this.pollMs);

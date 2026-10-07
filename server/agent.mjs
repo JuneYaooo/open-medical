@@ -1,5 +1,7 @@
 import { ChatFollowups } from "./chat-followups.mjs";
 import { chatFollowupsApi } from "./chat-followups-api.mjs";
+import { WechatAutoFollow } from "./chat-autofollow.mjs";
+import { chatAutoFollowApi } from "./chat-autofollow-api.mjs";
 import { KnowledgeOrganizer } from "./medical/knowledge-organizer.mjs";
 import { ModelProfiles } from "./core/model-profiles.mjs";
 import { createReadStream } from "node:fs";
@@ -625,6 +627,7 @@ export function createServer(options = {}) {
     platform: options.wechatBridgePlatform ?? process.platform,
   });
   const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, ...options.chatFollowups });
+  const chatAutoFollow = new WechatAutoFollow({ chat: chatFollowups, followups, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief, store, ...options.chatAutoFollow });
   const ingestSecret =
     options.ingestSecret || process.env.MEDICAL_INGEST_SECRET || "";
   const digestMessages = async (pid, bodyData) => {
@@ -1307,6 +1310,7 @@ export function createServer(options = {}) {
       }
       if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
+      if (path.startsWith("/api/chat-autofollow/") && await track(chatAutoFollowApi(chatAutoFollow, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
       if (path === "/api/wecom/contacts" && req.method === "GET") return send(res, 200, wecom.directory.contacts({ status: url.searchParams.get("status") || undefined, query: url.searchParams.get("q") || undefined }));
       if (path === "/api/wecom/directory" && req.method === "GET") return send(res, 200, wecom.directory.status());
@@ -2147,6 +2151,7 @@ export function createServer(options = {}) {
   server.schedule = schedule;
   server.extensions = extensions;
   server.chatFollowups = chatFollowups;
+  server.chatAutoFollow = chatAutoFollow;
   server.care = care;
   server.pendingActions = pending;
   server.once("listening", () => {

@@ -125,6 +125,17 @@ export class ChatFollowups {
     return this.publicConfig(channel);
   }
   patient(id) { const p = this.patients.get(identifier(id)); check(!p.archived, 'PATIENT_ARCHIVED', '请先恢复患者档案', 409); return p; }
+  // 当前微信账号下、可用于触达的绑定(患者 → 绑定):自动随访队列用。
+  wechatBindingByPatient() {
+    const map = new Map();
+    let c; try { c = this.config('wechat'); } catch { return map; }
+    if (!c.enabled) return map;
+    const account = this.account(c);
+    for (const b of this.db.prepare("SELECT data FROM chat_bindings WHERE channel='wechat' AND account=?").all(account).map(json)) {
+      if (!b.disabled && b.mode !== 'import' && b.calibration && !map.has(b.patientId)) map.set(b.patientId, b.id);
+    }
+    return map;
+  }
   bindings(patientId) { return this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? ORDER BY rowid DESC').all(patientId).map(json).filter(b => !b.disabled).map(b => ({ ...b, currentAccount: b.mode === 'import' || (this.registry.entries.has(b.channel) && b.account === this.account(this.config(b.channel))) })); }
   binding(id) { const b = json(this.db.prepare('SELECT data FROM chat_bindings WHERE id=?').get(identifier(id))); check(b && !b.disabled, 'NOT_FOUND', '会话关联不存在或已解除', 404); this.patient(b.patientId); check(b.mode === 'import' || (this.registry.entries.has(b.channel) && b.account === this.account(this.config(b.channel))), 'CHAT_ACCOUNT', '当前账号与关联不一致，请重新核验', 409); return b; }
   async preview(input) {
@@ -381,6 +392,8 @@ export class ChatFollowups {
         const delta = visibleDelta(previous?.frameText || previous?.text,result.text);
         const source = { id: hash([b.conversationId,result.fingerprint]), conversationId: b.conversationId, senderId: '', direction: 'unknown', type: 'visible-window', text: delta.text, frameText: result.text, gap: delta.gap, sentAt: null, observedAt: now(), evidence: result.evidence, partial: true, title: b.title };
         if (delta.text) ({ added, drafts } = this.ingest(c,[source]));
+        // 入库钩子:自动随访用它把「已发送待回复」的随访标记为已回复并做红旗筛查。
+        if (this.onIngested && delta.text) { try { this.onIngested(b, delta.text); } catch {} }
       } else {
         let cursor = c.cursor;
         for (let page = 0; page < 10; page++) {

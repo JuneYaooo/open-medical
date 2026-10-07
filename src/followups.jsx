@@ -1,4 +1,5 @@
 import { CampaignPanel } from "./care-inbox";
+import { WechatOutreachPanel } from "./chat-autofollow";
 import { ChatFollowupsPanel } from "./chat-followups";
 import { Modal } from "./components";
 import { patientOptionLabel } from "./patient-labels";
@@ -202,7 +203,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
           <button className={section === "auto" ? "active" : ""} onClick={() => setSection("auto")}>自动随访</button>
           <button className={section === "chats" ? "active" : ""} onClick={() => setSection("chats")}>聊天随访</button>
         </nav>
-        {section === "auto" && <section className="followups-section"><p className="muted">自动随访会按计划通过企业微信给患者发送问题，收集回复并写入「随访待办」中的随访记录；「计划与模板」只在本机提醒医生联系患者。</p><CampaignPanel onOpenPatient={onOpenPatient} /></section>}
+        {section === "auto" && <section className="followups-section"><p className="muted">企业微信按计划自动收集；个人微信（桌面版）的到期随访在下方：AI 起草话术、医生确认发送、回复自动按条目整理、确认后归档。红旗命中会置顶提醒，不进入自动流程。</p><CampaignPanel onOpenPatient={onOpenPatient} /><WechatOutreachPanel /></section>}
         {section === "chats" && <ChatFollowupsPanel patients={patients} onSettings={onSettings} />}
         <div hidden={section !== "queue"}>
           <FollowupRecords
