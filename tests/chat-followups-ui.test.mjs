@@ -102,6 +102,11 @@ test('failed permission check explains platform recovery actions and exposes onl
  }
  assert.equal(await page.getByRole('button',{name:'确认账号并验证连接',exact:true}).count(),0);
  server.chatFollowups.wechat.status=async()=>({ready:true,message:'测试权限已恢复'});await page.getByRole('button',{name:process.platform==='darwin'?'重新检测权限':'重新检测',exact:true}).click();await page.getByLabel('已核对的微信号').waitFor();
+ // 设置页是 .product-content 的直接子元素:必须自带滚动容器,否则底部内容在窗口内不可达(0.9.59 回归)。
+ await page.setViewportSize({width:1280,height:680});
+ const scroll=await page.evaluate(()=>{const el=document.querySelector('.product-content > .app-settings-page');if(!el)return{scrollable:false};el.scrollTop=el.scrollHeight;const last=[...document.querySelectorAll('.app-settings-page .muted')].at(-1);const r=last.getBoundingClientRect();return{scrollable:el.scrollHeight>el.clientHeight&&el.scrollTop>0,bottomVisible:r.bottom<=innerHeight+1};});
+ assert.equal(scroll.scrollable,true,'设置页在内容超窗时必须可滚动');
+ assert.equal(scroll.bottomVisible,true,'滚动后设置页底部内容必须进入视口');
 });
 
 test('wx-cli setup, session selection, review draft and plugin lifecycle through browser',{skip},async t=>{

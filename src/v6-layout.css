@@ -582,6 +582,9 @@
 .workspace-shell .panel-tabs { flex-wrap: wrap; }
 .workspace-shell .panel-tabs > button { white-space: nowrap; flex: 0 0 auto; }
 .app-settings-page { box-sizing: border-box; width: 100%; padding: 32px; max-width: 1280px; margin: 0; text-align: left; }
+/* 设置页是 .product-content 的直接子元素且无自带滚动容器:内容高于窗口时被裁掉且
+   文档不可滚动(随访连接分区加入引导内容后触发)。让它自己成为滚动容器。 */
+.product-content > .app-settings-page { flex: 1; min-height: 0; overflow-y: auto; }
 .app-settings-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; }
 .app-settings-layout > nav { display: flex; flex-direction: column; gap: 6px; align-self: start; }
 .app-settings-layout > nav button { text-align: left; padding: 12px 16px; border: 0; background: transparent; }
