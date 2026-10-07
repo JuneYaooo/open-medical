@@ -56,9 +56,12 @@ test('automatic model permission is separate, expires and can be stopped from se
 });
 
 async function connectWechat(page) {
- assert.equal(await page.getByLabel('已核对的微信号').count(),0);
- await page.getByRole('button',{name:'检查微信与权限',exact:true}).click();
- await page.getByLabel('已核对的微信号').fill('synthetic-wechat');
+ // 打开设置页即自动检测(无需手点检查按钮),检测通过后账号表单直接出现。
+ await page.getByLabel('已核对的微信号',{exact:true}).waitFor();
+ await page.getByLabel('已核对的微信号',{exact:true}).fill('宁静致远');
+ await page.getByText('这不太像微信号',{exact:false}).waitFor();
+ await page.getByText('在微信里哪里看自己的微信号').click();
+ await page.getByLabel('已核对的微信号',{exact:true}).fill('synthetic-wechat');
  await page.getByLabel('我已在微信中核对当前登录账号，了解换号后需要重新关联').check();
  await page.getByRole('button',{name:'确认账号并验证连接',exact:true}).click();
  await page.getByText('权限检查通过，账号核验声明已保存。请继续关联患者会话。',{exact:true}).waitFor();

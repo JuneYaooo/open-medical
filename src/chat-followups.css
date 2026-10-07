@@ -71,3 +71,5 @@
 /* 绑定卡工具栏内的「读取前自动定位」勾选:随按钮行内居中,不用表单行的顶部对齐。 */
 .chat-followups .toolbar-actions .chat-check.chat-autoread { align-items:center; font-size:14px; white-space:nowrap; }
 .chat-followups .toolbar-actions .chat-check.chat-autoread input { margin-top:0; }
+/* 连接配置:微信号格式软提示;不拦截提交,只当场纠正「把昵称当微信号」这类常见错误。 */
+.chat-warn { color:#8a5a1e; font-weight:400; line-height:1.6; }
