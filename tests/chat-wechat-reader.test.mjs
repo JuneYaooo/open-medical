@@ -178,6 +178,55 @@ test('send uses the plain OCR path and pastes once when the text is readable',as
  assert.equal(calls.filter(a=>a==='paste').length,1,'OCR 可读时不走行为链');
  assert.equal(calls.filter(a=>a==='key').length,3,'ctrl+a、Delete、Return 各一次');
 });
+test('scan clicks the in-place back arrow from a chat view and groups list rows with stable fingerprints',async()=>{
+ let clicked=null;let view='chat';let frames=0;
+ const chatLines=[{text:'〈 June',confidence:.95,box:{x:.21,y:.08,width:.13,height:.05}},{text:'消息内容',confidence:.95,box:{x:.4,y:.3,width:.2,height:.04}}];
+ const listLines=[
+  {text:'June',confidence:.95,box:{x:.13,y:.15,width:.12,height:.03}},
+  {text:'你好，最近怎么样',confidence:.9,box:{x:.34,y:.15,width:.3,height:.03}},
+  {text:'21:13',confidence:.9,box:{x:.85,y:.15,width:.08,height:.03}},
+  {text:'李雷',confidence:.95,box:{x:.13,y:.27,width:.12,height:.03}},
+  {text:'[图片]',confidence:.9,box:{x:.34,y:.27,width:.2,height:.03}},
+  {text:'昨天',confidence:.9,box:{x:.85,y:.27,width:.08,height:.03}},
+  {text:'王五',confidence:.95,box:{x:.13,y:.39,width:.12,height:.03}},
+  {text:'收到',confidence:.9,box:{x:.34,y:.39,width:.2,height:.03}},
+  {text:'周三',confidence:.9,box:{x:.85,y:.39,width:.08,height:.03}},
+ ];
+ const r=new WechatReader({platform:'win32',
+  invoke:async i=>{
+   if(i.action==='click'){clicked=i;view='list';}
+   if(i.action==='status')return{apps:[{id:'微信'}]};
+   if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};
+   return{ok:true};},
+  captureWindow:async()=>Buffer.from(`frame-${++frames}`),
+  ocr:async()=>({width:548,height:794,lines:view==='chat'?chatLines:listLines})});
+ r.status=async()=>({ready:true,message:'ok'});
+ const first=await r.scanConversationList(new AbortController().signal);
+ assert.ok(clicked,'聊天视图下会点返回箭头回列表');
+ assert.ok(clicked.x>100&&clicked.x<140&&clicked.y>50&&clicked.y<110,'点击落在顶栏行首的箭头位置');
+ assert.deepEqual(first.rows.map(row=>row.name),['June','李雷','王五'],'时间戳行不作名字,预览归入所在行');
+ assert.equal(first.rows[0].fingerprint,first.rows[0].fingerprint);
+ const second=await r.scanConversationList(new AbortController().signal);
+ assert.deepEqual(second.rows,first.rows,'同画面指纹稳定');
+ // 已在列表视图:不再点击
+ let clicks=0;view='list';
+ const listed=new WechatReader({platform:'win32',
+  invoke:async i=>{if(i.action==='click')clicks++;if(i.action==='status')return{apps:[{id:'微信'}]};if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};return{ok:true};},
+  captureWindow:async()=>Buffer.from('f'),
+  ocr:async()=>({width:548,height:794,lines:listLines})});
+ listed.status=async()=>({ready:true});
+ await listed.scanConversationList(new AbortController().signal);
+ assert.equal(clicks,0,'已在列表视图不点击');
+ // 永远回不到列表:报错且不乱点第二次
+ view='chat';let chatClicks=0;
+ const stuck=new WechatReader({platform:'win32',
+  invoke:async i=>{if(i.action==='click')chatClicks++;if(i.action==='status')return{apps:[{id:'微信'}]};if(i.action==='snapshot')return{windowId:7,bounds:{X:0,Y:0,Width:548,Height:794},text:'微信'};return{ok:true};},
+  captureWindow:async()=>Buffer.from('f'),
+  ocr:async()=>({width:548,height:794,lines:chatLines})});
+ stuck.status=async()=>({ready:true});
+ await assert.rejects(stuck.scanConversationList(new AbortController().signal),e=>e.code==='CHAT_LOCATE');
+ assert.equal(chatClicks,1,'只尝试一次返回,失败即停');
+});
 test('avatar scanning scrolls the message area up, retries and restores the position',async()=>{
  const make=(platform,foundOnScan)=>{
   const wheels=[];let scans=0;

@@ -415,3 +415,75 @@ test("bind preview and avatar refresh use the scanning grab when the viewport la
   assert.equal(again.status, 201);
   assert.deepEqual(grabs, ["default-band", "binding-band"], "重抓用绑定里的头像带扫描");
 });
+
+test("watch-all schedule scans the list, reads only changed bound rows and dedupes next cycle", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  let scanCalls = 0;
+  reader.scanConversationList = async () => {
+    scanCalls++;
+    return { rows: scanCalls === 1
+      ? [{ name: "June", fingerprint: "fp-june-1" }, { name: "未绑定的人", fingerprint: "fp-x" }]
+      : [{ name: "June", fingerprint: "fp-june-1" }] };
+  };
+  const f = await connectedByName(t, reader);
+  const s = f.server.chatFollowups;
+  const locateAfterPreview = reader.calls.locate.length;
+  const end = new Date(Date.now() + 3600000).toISOString();
+  const saved = await f.json("/api/chat-followups/connections/wechat", "POST", {
+    enabled: true,
+    accountId: "synthetic-account",
+    revision: s.config("wechat").revision,
+    intervalMinutes: 5,
+    autoUntil: end,
+    automaticConsent: true,
+    autoSummarize: false,
+    autoBindingId: "__all__",
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(s.config("wechat").autoWatch, "all");
+  assert.equal(s.config("wechat").autoBindingId, "");
+  await s.tick();
+  assert.equal(reader.calls.locate.length - locateAfterPreview, 1, "只有变化的已绑定行被定位读取");
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.drafts.length, 1, "监听轮照常入库生成草稿");
+  const gated = s.config("wechat");
+  gated.nextRun = 0;
+  s.write(gated);
+  await s.tick();
+  assert.equal(scanCalls, 2, "第二轮仍会扫描列表");
+  assert.equal(reader.calls.locate.length - locateAfterPreview, 1, "指纹未变不重复读取");
+  assert.ok(s.config("wechat").nextRun > Date.now(), "无变化也推进 nextRun");
+});
+
+test("watch-all keeps the schedule when one conversation fails and retries it next cycle", async (t) => {
+  const reader = locatingReader();
+  reader.calls.locateOk = true;
+  reader.scanConversationList = async () => ({ rows: [{ name: "June", fingerprint: "fp-june-1" }] });
+  const f = await connectedByName(t, reader);
+  const s = f.server.chatFollowups;
+  const { AppError } = await import("../server/errors.mjs");
+  reader.read = async () => { throw new AppError("CHAT_OCR", "聊天区域文字不清晰", 409); };
+  await f.json("/api/chat-followups/connections/wechat", "POST", {
+    enabled: true,
+    accountId: "synthetic-account",
+    revision: s.config("wechat").revision,
+    intervalMinutes: 5,
+    autoUntil: new Date(Date.now() + 3600000).toISOString(),
+    automaticConsent: true,
+    autoSummarize: false,
+    autoBindingId: "__all__",
+  });
+  await s.tick();
+  assert.match(s.config("wechat").lastError || "", /June/, "失败会话记录在 lastError");
+  assert.ok(Date.parse(s.config("wechat").autoUntil) > Date.now(), "单个会话失败不停整个监听调度");
+  const good = wechatReader();
+  reader.read = good.read;
+  const c = s.config("wechat");
+  c.nextRun = 0;
+  s.write(c);
+  await s.tick();
+  const state = (await f.json(`/api/chat-followups/patients/${f.p.id}`)).data;
+  assert.equal(state.drafts.length, 1, "下一轮重试成功并入库");
+  assert.equal(s.config("wechat").lastError, "");
+});

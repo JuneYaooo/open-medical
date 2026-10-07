@@ -7,6 +7,7 @@ import { sqliteTransaction } from './sqlite-transaction.mjs';
 import { WecomArchiveClient, collectorUrl } from './chat-connectors/wecom-archive.mjs';
 import { ChatConnectorRegistry } from './chat-connectors/registry.mjs';
 import { WechatReader, validateRegion } from './chat-connectors/wechat-reader.mjs';
+import { flatName } from './chat-connectors/wechat-windows.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const json = row => row ? JSON.parse(row.data) : null;
@@ -18,6 +19,8 @@ export class ChatFollowups {
     this.wechat = wechat || new WechatReader(); this.archive = archive || new WecomArchiveClient();
     this.registry = new ChatConnectorRegistry({ wechat: this.wechat, archive: this.archive, wxcli, plugins });
     this.pendingAI = new Map(); this.stopped = false; this.ticking = false; this.active = new Map(); this.probes = new Map(); this.imports = new Map(); this.previews = new Map(); this.timer = null;
+    // 监听模式的会话列表行指纹(上轮状态)与连续失败计数:仅内存,重启后首轮全量重扫可见行。
+    this.watchState = new Map(); this.watchFails = new Map();
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chat_connector_plugins (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS chat_connections (channel TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -72,8 +75,15 @@ export class ChatFollowups {
     check(Number.isInteger(c.intervalMinutes) && c.intervalMinutes >= 5 && c.intervalMinutes <= 1440, 'CHAT_CONFIG', '同步间隔须为 5–1440 分钟');
     if (c.autoUntil) check(input.automaticConsent === true && Number.isFinite(Date.parse(c.autoUntil)) && Date.parse(c.autoUntil) > Date.now() && Date.parse(c.autoUntil) <= Date.now() + 86400000, 'CHAT_CONFIG', '自动同步需确认范围，截止时间须在未来 24 小时内');
     if (channel === 'wechat') {
-      c.autoBindingId = c.autoUntil ? input.autoBindingId : '';
-      if(c.autoUntil) { const b=this.binding(c.autoBindingId); check(b.channel==='wechat' && b.calibration && b.account===this.account(c),'CHAT_BINDING','请选择一个已校准的微信会话进行定时读取',409); }
+      // 定时读取两种模式:指定单个已校准会话,或「监听会话列表」覆盖全部已关联会话。
+      const watchAll = input.autoBindingId === '__all__';
+      c.autoWatch = c.autoUntil && watchAll ? 'all' : '';
+      c.autoBindingId = c.autoUntil && !watchAll ? input.autoBindingId : '';
+      if (c.autoUntil && watchAll) {
+        const calibrated = this.db.prepare("SELECT COUNT(*) n FROM chat_bindings WHERE channel='wechat' AND account=? AND IFNULL(json_extract(data,'$.mode'),'')!='import' AND IFNULL(json_extract(data,'$.disabled'),0)=0 AND json_extract(data,'$.calibration') IS NOT NULL").get(this.account(c)).n;
+        check(calibrated > 0, 'CHAT_BINDING', '请先关联并校准至少一个微信会话，再开启全部会话监听', 409);
+      }
+      if(c.autoUntil && !watchAll) { const b=this.binding(c.autoBindingId); check(b.channel==='wechat' && b.calibration && b.account===this.account(c),'CHAT_BINDING','请选择一个已校准的微信会话进行定时读取',409); }
     }
     if (channel !== 'wechat') c.endpoint = collectorUrl(string(input.endpoint, '采集器地址', 500));
     c.autoSummarize = Boolean(c.autoUntil && input.autoSummarize);
@@ -88,6 +98,7 @@ export class ChatFollowups {
       check(!/[\r\n]/.test(token) && (token || (this.registry.get(channel).protocol === 'wx-cli' && local)), 'CHAT_CONFIG', '请填写有效的连接密钥；只有本机 wx-cli 可以留空');
     }
     c.revision++; c.nextRun = 0; c.lastError = ''; c.lastSyncAt = changed ? '' : c.lastSyncAt; c.cursor = changed ? '0' : c.cursor;
+    if (channel === 'wechat') { this.watchState.clear(); this.watchFails.clear(); }
     this.cancel(channel); if (changed || token !== this.secret(previous).token || !c.enabled) this.probes.delete(channel);
     sqliteTransaction(this.db, () => { this.vault.set(`chat:${channel}`, { token }); this.write(c); });
     return this.publicConfig(channel);
@@ -353,7 +364,7 @@ export class ChatFollowups {
     try { return await job.promise; }
     finally { if (this.active.get(channel) === job) this.active.delete(channel); }
   }
-  async runSync(c, input, signal) {
+  async runSync(c, input, signal, options = {}) {
     let added = 0, drafts = 0, hasMore = false;
     try {
       if (c.channel === 'wechat') {
@@ -390,7 +401,7 @@ export class ChatFollowups {
       this.assertCurrent(c,signal); const saved = this.config(c.channel); saved.lastSyncAt = now(); saved.lastError = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved);
       return { added, drafts, hasMore, partial: c.channel === 'wechat', message: c.channel === 'wechat' ? '已读取可见聊天区域，发送者和消息时间需复核；不代表完整历史' : hasMore ? '已同步本批消息，仍有后续页，请继续同步' : '本次增量同步完成' };
     } catch (e) {
-      if (this.registry.entries.has(c.channel) && this.config(c.channel).revision === c.revision) { const saved = this.config(c.channel); saved.lastError = e instanceof AppError ? e.message : '同步失败，请检查连接后重试'; if (c.channel === 'wechat') saved.autoUntil = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved); }
+      if (this.registry.entries.has(c.channel) && this.config(c.channel).revision === c.revision) { const saved = this.config(c.channel); saved.lastError = e instanceof AppError ? e.message : '同步失败，请检查连接后重试'; if (c.channel === 'wechat' && !options.keepSchedule) saved.autoUntil = ''; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved); }
       throw e instanceof AppError ? e : new AppError('CHAT_SYNC', '同步失败，请检查客户端、采集器与权限', 502);
     }
   }
@@ -491,6 +502,7 @@ export class ChatFollowups {
       const c = this.config(channel);
       if (!c.enabled || !c.autoUntil || Date.parse(c.autoUntil) <= Date.now() || c.nextRun > Date.now() || this.active.has(channel)) continue;
       if (channel !== 'wechat') await this.sync(channel,{ consent:true }).catch(() => {});
+      else if (c.autoWatch === 'all') await this.runWatchJob(c);
       else {
         // Old multi-chat schedules require a fresh choice; never search or rotate chats.
         if (!c.autoBindingId) { c.autoUntil=''; c.lastError='请选择一个已校准会话后重新开启定时读取'; this.write(c); continue; }
@@ -508,6 +520,59 @@ export class ChatFollowups {
       try { this.binding(d.bindingId); d.autoAttemptedAt = now(); this.db.prepare('UPDATE chat_drafts SET data=? WHERE id=?').run(JSON.stringify(d),d.id); await this.summarize(d.id,{revision:d.revision,externalConsent:true}); }
       catch { if (!this.stopped) { const saved = this.config(c.channel); saved.lastError = '部分草稿自动整理失败，请在随访中检查或手动重试'; this.write(saved); } }
     }
+  }
+  // 监听模式(全部已关联会话):每到间隔扫一眼会话列表(不导航),只对「行内容有变化」
+  // 的已关联会话逐个自动定位并读取。规模只跟有新消息的会话数相关,与绑定总数无关;
+  // 单个会话失败只记录并留到下轮(同批内容连续失败 3 轮后暂停,等它再变化),不停整个调度。
+  async runWatchJob(c) {
+    if (this.active.has('wechat')) return;
+    const controller = new AbortController(); const job = { controller, promise: null };
+    this.active.set('wechat', job);
+    job.promise = this.runWatchCycle(c, controller.signal);
+    try { await job.promise; }
+    catch (e) {
+      // 结构性失败(微信窗口丢失/组件不可用):与单会话定时同一策略,停表并记录。
+      if (this.registry.entries.has('wechat') && this.config('wechat').revision === c.revision) {
+        const saved = this.config('wechat'); saved.autoUntil = ''; saved.lastError = e instanceof AppError ? e.message : '自动监听失败，请检查微信窗口'; saved.nextRun = Date.now() + saved.intervalMinutes * 60000; this.write(saved);
+      }
+    }
+    finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
+  }
+  async runWatchCycle(c, signal, { maxVisits = 8 } = {}) {
+    const { rows } = await this.wechat.scanConversationList(signal);
+    const bindings = this.db.prepare("SELECT data FROM chat_bindings WHERE channel='wechat' AND account=?").all(this.account(c)).map(json)
+      .filter(b => !b.disabled && b.mode !== 'import' && b.calibration);
+    const byName = new Map(bindings.map(b => [flatName(b.title), b]));
+    const changed = [];
+    for (const row of rows) {
+      const b = byName.get(flatName(row.name));
+      if (!b || this.watchState.get(b.id) === row.fingerprint) continue;
+      const fail = this.watchFails.get(b.id);
+      if (fail && fail.fingerprint === row.fingerprint && fail.count >= 3) continue;
+      changed.push({ b, row });
+    }
+    const errors = [];
+    let visited = 0;
+    for (const { b, row } of changed) {
+      if (visited >= maxVisits) break;
+      visited++;
+      try {
+        await this.runSync(c, { consent: true, bindingId: b.id, autoLocate: true }, signal, { keepSchedule: true });
+        this.watchState.set(b.id, row.fingerprint);
+        this.watchFails.delete(b.id);
+      } catch (e) {
+        const fail = this.watchFails.get(b.id);
+        this.watchFails.set(b.id, { count: fail && fail.fingerprint === row.fingerprint ? fail.count + 1 : 1, fingerprint: row.fingerprint });
+        errors.push(`${b.title}：${e instanceof AppError ? e.message : '读取失败'}`);
+      }
+    }
+    // 无变化也要推进 nextRun,否则调度器会每 30 秒白扫一次列表。
+    if (this.registry.entries.has('wechat') && this.config('wechat').revision === c.revision) {
+      const saved = this.config('wechat'); saved.lastSyncAt = now(); saved.nextRun = Date.now() + saved.intervalMinutes * 60000;
+      saved.lastError = errors.length ? `监听读取部分会话失败（${errors.length}）：${errors[0]}` : '';
+      this.write(saved);
+    }
+    return { visited, changed: changed.length, errors };
   }
   async stop() { this.stopped = true; clearInterval(this.timer); for (const c of this.registry.ids()) this.cancel(c); await Promise.allSettled([...this.active.values(),...this.pendingAI.values()].map(j => j.promise)); this.previews.clear(); this.imports.clear(); }
 }

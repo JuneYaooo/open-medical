@@ -55,6 +55,26 @@ test('automatic model permission is separate, expires and can be stopped from se
  await page.getByRole('button',{name:'停止自动同步',exact:true}).click();await page.getByText('自动同步已停止',{exact:true}).waitFor();assert.equal(server.chatFollowups.config('wechat').autoUntil,'');assert.equal(server.chatFollowups.config('wechat').autoSummarize,false);
 });
 
+test('watch-all automatic sync covers every bound conversation',{skip},async t=>{
+ const {page,origin,server}=await setup(t);await page.goto(origin+'/?view=settings&settingsTab=followup');
+ await connectWechat(page);
+ const p=(await server.patients.create({name:'监听模式患者'}));
+ const preview=await server.chatFollowups.preview({consent:true});
+ await server.chatFollowups.bind({channel:'wechat',patientId:p.id,title:'合成微信家属',speakerName:'家属',relationship:'family',confirmed:true,previewId:preview.id,titleRegion:{x:.4,y:.02,width:.3,height:.06},messageRegion:{x:.4,y:.12,width:.58,height:.6}});
+ await page.reload();await page.getByRole('button',{name:'重新检查连接',exact:true}).click();
+ await page.locator('.chat-connection-form summary').click();await page.getByLabel('在有限时段内自动同步').check();
+ await page.getByLabel('定时读取的会话').selectOption('__all__');
+ await page.getByText('监听会话列表',{exact:false}).first().waitFor();
+ const end=new Date(Date.now()+3600000);end.setMinutes(end.getMinutes()-end.getTimezoneOffset());
+ await page.getByLabel('截止时间（最长 24 小时）').fill(end.toISOString().slice(0,16));
+ await page.getByLabel(/我确认在此时段内读取此账号已关联的会话/).check();
+ await page.getByRole('button',{name:'保存自动同步设置',exact:true}).click();await page.getByText('自动同步设置已保存',{exact:true}).waitFor();
+ const config=server.chatFollowups.config('wechat');
+ assert.equal(config.autoWatch,'all');assert.equal(config.autoBindingId,'');
+ await page.getByRole('button',{name:'停止自动同步',exact:true}).click();await page.getByText('自动同步已停止',{exact:true}).waitFor();
+ assert.equal(server.chatFollowups.config('wechat').autoWatch,'');
+});
+
 async function connectWechat(page) {
  // 打开设置页即自动检测(无需手点检查按钮),检测通过后账号表单直接出现。
  await page.getByLabel('已核对的微信号',{exact:true}).waitFor();

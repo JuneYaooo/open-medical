@@ -14,6 +14,7 @@ import {
   matchRatio,
   ocrLinesText,
   flatName,
+  flatHeaderName,
   flattenForMatch,
   headerNameHit,
   hashDistance,
@@ -196,6 +197,51 @@ export class WechatReader {
       }
       return { names: names.slice(0, 30) };
     });
+  }
+  // 会话列表扫描(监听模式的基础):确保微信停在列表视图,返回可见行(名字+行指纹)。
+  // 新消息会把会话顶到列表顶部并改变行内容,所以「行指纹变化」就是新消息信号——
+  // 不需要在名单里轮询,规模只跟"有新消息的会话数"相关,与绑定总数无关。
+  async ensureConversationList(signal) {
+    const countRows = (s) => s.lines.filter(l => l.confidence >= .8 && l.box.y > .1 && l.box.y < .92 && l.box.x > .11 && l.box.x < .3 && l.text.trim().length >= 2).length;
+    const snap = await this.captureFrame(signal);
+    if (countRows(snap) >= 3) return snap;
+    // 聊天视图:顶栏带(y<.115,消息区从 y≈.12 开始)里最顶部的一行就是会话名——
+    // 不要求「恰好一行」:消息首行的 OCR y 会抖进 .12,多行条件会随机失效。
+    // 箭头是窗口固定件(x≈.21-.25,紧凑布局实测),OCR 有时把它并进名字行、有时整个丢掉,
+    // 所以 x 用固定槽位,y 跟随顶栏行;名字本身不可点,点它不会返回列表。
+    const top = snap.lines.filter(l => l.box.y < .115 && l.box.x > .1 && l.box.x < .7 && flatHeaderName(l.text))
+      .sort((a,b) => a.box.y - b.box.y);
+    if (top.length) {
+      const h = top[0], b = snap.bounds;
+      await this.invoke({ action:'click', x: Math.round(b.X + .23*b.Width), y: Math.round(b.Y + (h.box.y + h.box.height/2)*b.Height) }, signal);
+      // 列表动画+OCR 采样有竞态:轮询确认,不重复点击(回列表后同位置是搜索框,点它会开搜索)。
+      for (let i = 0; i < 3; i++) {
+        await wait(700, signal);
+        cancelled(signal);
+        const after = await this.captureFrame(signal);
+        if (countRows(after) >= 3) return after;
+      }
+    }
+    check(false,'CHAT_LOCATE','未能确认微信停在会话列表；请手动回到会话列表(点左上角返回，不要按 Esc)后重试',409);
+  }
+  async scanConversationList(signal) {
+    const snap = await this.ensureConversationList(signal);
+    const usable = snap.lines.filter(l => l.confidence >= .8 && l.box.y > .1 && l.box.y < .92 && l.text.trim().length >= 2);
+    const noise = /^[\d\s:：.。/]+$/;
+    const nameLines = usable.filter(l => l.box.x > .11 && l.box.x < .3 && !noise.test(l.text.trim()))
+      .sort((a,b) => a.box.y - b.box.y);
+    const seen = new Set(); const rows = [];
+    for (const name of nameLines) {
+      const key = flatName(name.text);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      // 行指纹 = 该行 y 带内全部文本(名字+预览+时间):预览或时间变化即视为有新消息。
+      const center = name.box.y + name.box.height/2;
+      const band = usable.filter(l => Math.abs(l.box.y + l.box.height/2 - center) < .045);
+      const fingerprint = createHash('sha256').update(band.map(l => `${Math.round(l.box.y*100)}|${l.text}`).sort().join('\n')).digest('hex').slice(0,32);
+      rows.push({ name: name.text.trim(), fingerprint });
+    }
+    return { rows };
   }
   // 按备注名定位会话(Windows):当前顶栏名字即命中则不动;否则在会话列表中找
   // 唯一精确同名行并点击;导航后核验顶栏名字或头像指纹,任一通过才算定位成功。
