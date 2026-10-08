@@ -137,12 +137,6 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
   return (
     <section className="knowledge-auto" aria-label="自动整理资料">
       <div className="knowledge-auto-head">
-        <div>
-          <h3>添加资料，自动整理</h3>
-          <p>
-            支持文档、图片、录音、视频和字幕。上传完成后可离开本页，处理进度会保存。
-          </p>
-        </div>
         <button
           className="primary"
           disabled={!collection || Boolean(uploading)}
@@ -150,6 +144,35 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
         >
           添加资料并自动整理
         </button>
+        <div className="knowledge-auto-options">
+          <label>
+            资料性质{" "}
+            <select
+              aria-label="上传资料性质"
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+            >
+              {["资料", "指南/共识", "课程/讲座", "病例报告", "笔记/经验"].map(
+                (k) => (
+                  <option key={k}>{k}</option>
+                ),
+              )}
+            </select>
+          </label>
+          <button
+            className="text-button"
+            onClick={() => {
+              setShowSettings(!showSettings);
+              setSettings({
+                baseUrl: data.transcription?.baseUrl || "",
+                model: data.transcription?.model || "whisper-1",
+                apiKey: "",
+              });
+            }}
+          >
+            转写服务{data.transcriptionReady ? "：已配置" : "：未配置"}
+          </button>
+        </div>
       </div>
       <input
         ref={fileRef}
@@ -160,39 +183,14 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
         hidden
         onChange={upload}
       />
-      <div className="knowledge-auto-options">
-        <label>
-          资料性质{" "}
-          <select
-            aria-label="上传资料性质"
-            value={kind}
-            onChange={(e) => setKind(e.target.value)}
-          >
-            {["资料", "指南/共识", "课程/讲座", "病例报告", "笔记/经验"].map(
-              (k) => (
-                <option key={k}>{k}</option>
-              ),
-            )}
-          </select>
-        </label>
-        <button
-          className="text-button"
-          onClick={() => {
-            setShowSettings(!showSettings);
-            setSettings({
-              baseUrl: data.transcription?.baseUrl || "",
-              model: data.transcription?.model || "whisper-1",
-              apiKey: "",
-            });
-          }}
-        >
-          转写服务{data.transcriptionReady ? "：已配置" : "：未配置"}
-        </button>
-      </div>
-      <p className="knowledge-processing-note">
-        整理内容交由当前聊天模型处理；音频交由您配置的转写服务处理。原件保存在本机。文档/图片单份不超过
-        100MB，音视频不超过 250MB、2 小时；一次最多可选 200 份，整理按队列逐份进行。
-      </p>
+      <details className="knowledge-auto-note">
+        <summary>规则与限制</summary>
+        <p className="knowledge-processing-note">
+          支持文档、图片、录音、视频和字幕。上传完成后可离开本页，处理进度会保存。整理内容交由当前聊天模型处理；音频交由您配置的转写服务处理，原件保存在本机。文档/图片单份不超过
+          100MB，音视频不超过 250MB、2 小时；一次最多可选 200
+          份，整理按队列逐份进行。
+        </p>
+      </details>
       {!data.modelReady && (
         <p className="knowledge-inline-warning">
           整理模型尚未配置。资料可先保存，配置后点击“继续整理”。
@@ -500,7 +498,11 @@ export function KnowledgeMap({ collection, onRead, onAsk, refreshKey }) {
           </p>
         </div>
       ) : (
-        <div className="knowledge-map-layout">
+        <div
+          className={
+            chosen ? "knowledge-map-layout has-selection" : "knowledge-map-layout"
+          }
+        >
           <div>
             <svg viewBox="0 0 800 480" role="group" aria-label="知识关系图">
               {edges.map((e) => {
@@ -550,76 +552,68 @@ export function KnowledgeMap({ collection, onRead, onAsk, refreshKey }) {
               ))}
             </svg>
             <p className="muted">
-              每次展示最多 18 个主题，点击节点查看关联和原文；也可搜索定位。
+              点击节点查看关联、原文依据和资料类型；不同来源的说法分别保留，不自动合并成诊疗结论。每次展示最多
+              18 个主题，也可搜索定位。
             </p>
             {!visible.length && <p>没有匹配的知识点。</p>}
           </div>
-          <aside className="knowledge-map-evidence">
-            {chosen ? (
-              <>
-                <h3>{chosen.label}</h3>
-                <p>{chosen.type} · 来源关系待核对</p>
-                {onAsk && (
-                  <button className="secondary" onClick={() => onAsk(chosen)}>
-                    围绕这个主题提问
-                  </button>
-                )}
-                {graph.edges
-                  .filter((e) => e.from === chosen.id || e.to === chosen.id)
-                  .map((e) => (
-                    <article key={e.id}>
-                      <strong>
-                        {graph.nodes.find((n) => n.id === e.from)?.label} →{" "}
-                        {e.relation} →{" "}
-                        {graph.nodes.find((n) => n.id === e.to)?.label}
-                      </strong>
-                      <blockquote>{e.quote}</blockquote>
-                      <p>
-                        {e.sourceKind} · {e.docTitle}
-                      </p>
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          onRead(e.docId, {
-                            startLine: e.startLine,
-                            endLine: e.endLine,
-                          })
-                        }
-                      >
-                        查看依据 · 第 {e.startLine}–{e.endLine} 行
-                      </button>
-                    </article>
-                  ))}
-                <h4>提到此主题的资料</h4>
-                {chosen.evidence.map((ev, i) => (
-                  <article key={i}>
-                    <blockquote>{ev.quote}</blockquote>
+          {chosen && (
+            <aside className="knowledge-map-evidence">
+              <h3>{chosen.label}</h3>
+              <p>{chosen.type} · 来源关系待核对</p>
+              {onAsk && (
+                <button className="secondary" onClick={() => onAsk(chosen)}>
+                  围绕这个主题提问
+                </button>
+              )}
+              {graph.edges
+                .filter((e) => e.from === chosen.id || e.to === chosen.id)
+                .map((e) => (
+                  <article key={e.id}>
+                    <strong>
+                      {graph.nodes.find((n) => n.id === e.from)?.label} →{" "}
+                      {e.relation} →{" "}
+                      {graph.nodes.find((n) => n.id === e.to)?.label}
+                    </strong>
+                    <blockquote>{e.quote}</blockquote>
                     <p>
-                      {ev.sourceKind} · {ev.docTitle}
+                      {e.sourceKind} · {e.docTitle}
                     </p>
                     <button
                       className="text-button"
                       onClick={() =>
-                        onRead(ev.docId, {
-                          startLine: ev.startLine,
-                          endLine: ev.endLine,
+                        onRead(e.docId, {
+                          startLine: e.startLine,
+                          endLine: e.endLine,
                         })
                       }
                     >
-                      查看原文
+                      查看依据 · 第 {e.startLine}–{e.endLine} 行
                     </button>
                   </article>
                 ))}
-              </>
-            ) : (
-              <>
-                <h3>点击一个知识点</h3>
-                <p>
-                  在这里查看相关关系、原文依据和资料类型。不同来源的说法分别保留，不自动合并成诊疗结论。
-                </p>
-              </>
-            )}
-          </aside>
+              <h4>提到此主题的资料</h4>
+              {chosen.evidence.map((ev, i) => (
+                <article key={i}>
+                  <blockquote>{ev.quote}</blockquote>
+                  <p>
+                    {ev.sourceKind} · {ev.docTitle}
+                  </p>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      onRead(ev.docId, {
+                        startLine: ev.startLine,
+                        endLine: ev.endLine,
+                      })
+                    }
+                  >
+                    查看原文
+                  </button>
+                </article>
+              ))}
+            </aside>
+          )}
         </div>
       )}
     </section>

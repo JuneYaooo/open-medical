@@ -237,11 +237,12 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
   return (
     <div className="module-view">
       <section className="module-card guidelines-view">
-        <div className="module-head">
-          <div>
-            <h2>知识库资料</h2>
-            <p className="module-phase">原始资料、带出处的知识条目与知识地图</p>
-          </div>
+        <div className="module-head knowledge-view-head">
+          <h2>知识库资料</h2>
+          <nav className="tab-row knowledge-view-tabs" aria-label="知识库视图">
+            <button className={displayMode==="list"?"active":""} onClick={()=>setDisplayMode("list")}>资料列表</button>
+            <button className={displayMode==="map"?"active":""} onClick={()=>setDisplayMode("map")}>知识地图</button>
+          </nav>
         </div>
         {error && (
           <p className="form-error" role="alert">
@@ -249,11 +250,6 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
           </p>
         )}
         {notice && <p className="form-notice">{notice}</p>}
-
-        <nav className="tab-row knowledge-view-tabs" aria-label="知识库视图">
-          <button className={displayMode==="list"?"active":""} onClick={()=>setDisplayMode("list")}>资料列表</button>
-          <button className={displayMode==="map"?"active":""} onClick={()=>setDisplayMode("map")}>知识地图</button>
-        </nav>
         <KnowledgeOrganization collection={filters.collection} docs={visibleDocs} onRefresh={refresh} onRead={openReader}/>
         {displayMode==="map" && <KnowledgeMap collection={filters.collection} refreshKey={docs} onRead={openReader} onAsk={onOpenTask ? async node=>{
           try {

@@ -71,32 +71,32 @@ export function KnowledgeLibraries({ onOpenTask }) {
     } catch (e) { setError(e.message); setDeleting(null); }
     finally { setBusy(false); }
   };
+  const startCreate = () => {
+    setError("");
+    setForm({
+      name: "",
+      description: "",
+      whenToUse: "",
+      limitations: "",
+      revision: 0,
+      isNew: true,
+    });
+  };
   return (
     <div className="module-view library-hub">
-      <div className="module-head">
-        <div>
-          <h1>本地知识库</h1>
-          <p className="module-phase">
-            把常用指南、书籍和科室资料整理成自己的参考库。
-          </p>
+      {!selected && (
+        <div className="module-head">
+          <div>
+            <h1>本地知识库</h1>
+            <p className="module-phase">
+              把常用指南、书籍和科室资料整理成自己的参考库。
+            </p>
+          </div>
+          <button className="primary" onClick={startCreate}>
+            新建知识库
+          </button>
         </div>
-        <button
-          className="primary"
-          onClick={() => {
-            setError("");
-            setForm({
-              name: "",
-              description: "",
-              whenToUse: "",
-              limitations: "",
-              revision: 0,
-              isNew: true,
-            });
-          }}
-        >
-          新建知识库
-        </button>
-      </div>
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error} <button className="text-button" onClick={() => { setLoading(true); load().then(() => setError("")).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>重新加载知识库</button>
@@ -183,25 +183,32 @@ export function KnowledgeLibraries({ onOpenTask }) {
       )}
       {selected ? (
         <>
-          <button
-            className="text-button"
-            onClick={() => {
-              setSelected(null);
-              load().catch((e) => setError(e.message));
-            }}
-          >
-            ← 全部知识库
-          </button>
+          <div className="library-topbar">
+            <button
+              className="text-button"
+              onClick={() => {
+                setSelected(null);
+                load().catch((e) => setError(e.message));
+              }}
+            >
+              ← 全部知识库
+            </button>
+            <button className="text-button" onClick={startCreate}>
+              新建知识库
+            </button>
+          </div>
           <section className="library-description">
             <header>
               <h2>{selected.name}</h2>
-              <button
-                className="text-button"
-                onClick={() => setForm({ ...selected, isNew: false })}
-              >
-                编辑说明
-              </button>
-              <button className="text-button library-delete-button" disabled={busy} onClick={() => prepareDelete(selected.name)}>删除知识库</button>
+              <div className="library-description-actions">
+                <button
+                  className="text-button"
+                  onClick={() => setForm({ ...selected, isNew: false })}
+                >
+                  编辑说明
+                </button>
+                <button className="text-button library-delete-button" disabled={busy} onClick={() => prepareDelete(selected.name)}>删除知识库</button>
+              </div>
             </header>
             <p>{selected.description || "尚未填写收录说明"}</p>
             <p>
