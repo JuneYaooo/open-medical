@@ -218,6 +218,89 @@ test("quotes and cross-batch invented links are rejected; subtitle timing remain
   assert.equal(batches.length, 3);
   assert.equal(batches[1].startLine, 101);
 });
+test("citation mismatches return verbatim reference text so the model can copy it", () => {
+  const batch = { startLine: 10, endLine: 10, text: "原文讨论  甲和乙的关系。" };
+  let error;
+  try {
+    validateKnowledgeBatch(
+      {
+        title: "主题",
+        summary: "摘要",
+        nodes: [
+          {
+            label: "甲",
+            type: "疾病",
+            quote: "原文没有这些话",
+            startLine: 10,
+            endLine: 10,
+          },
+          {
+            label: "乙",
+            type: "检查",
+            quote: "原文讨论",
+            startLine: 11,
+            endLine: 11,
+          },
+        ],
+        relations: [
+          {
+            from: "甲",
+            to: "乙",
+            relation: "资料讨论",
+            quote: "原文讨论了",
+            startLine: 10,
+            endLine: 10,
+          },
+        ],
+      },
+      batch,
+    );
+  } catch (e) {
+    error = e;
+  }
+  assert.equal(error?.code, "KNOWLEDGE_CITATION");
+  // 一次报出全部不匹配项,并附去空白原文供照抄
+  assert.match(error.message, /共 3 处不匹配/);
+  assert.match(error.message, /原文讨论甲和乙的关系。/);
+  assert.match(error.message, /逐字复制/);
+  // 照抄错误里给出的原文后即可通过校验
+  const reference = batch.text.replace(/\s+/g, "");
+  const fixed = validateKnowledgeBatch(
+    {
+      title: "主题",
+      summary: "摘要",
+      nodes: [
+        {
+          label: "甲",
+          type: "疾病",
+          quote: reference,
+          startLine: 10,
+          endLine: 10,
+        },
+        {
+          label: "乙",
+          type: "检查",
+          quote: "讨论甲和乙",
+          startLine: 10,
+          endLine: 10,
+        },
+      ],
+      relations: [
+        {
+          from: "甲",
+          to: "乙",
+          relation: "资料讨论",
+          quote: "讨论甲和乙",
+          startLine: 10,
+          endLine: 10,
+        },
+      ],
+    },
+    batch,
+  );
+  assert.equal(fixed.nodes.length, 2);
+  assert.equal(fixed.relations.length, 1);
+});
 test("transcription adapter sends bounded multipart and preserves timestamp or chunk precision", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "omw-transcription-"));
   t.after(() => rm(dir, { recursive: true, force: true }));

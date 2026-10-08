@@ -5,7 +5,7 @@ import { join, extname, resolve } from "node:path";
 import { AgentRuntime } from "../core/agent-runtime.mjs";
 import { ToolRegistry } from "../core/tool-registry.mjs";
 import { PermissionEngine } from "../core/permissions.mjs";
-import { check, string } from "../errors.mjs";
+import { check, string, AppError } from "../errors.mjs";
 import { providerConfigured } from "../core/provider-status.mjs";
 import { visionTranscriber } from "../core/image-text.mjs";
 import {
@@ -71,40 +71,48 @@ export function validateKnowledgeBatch(value, batch) {
     "知识节点或关系超出本批限制",
   );
   const lines = batch.text.split("\n");
-  const evidence = (item) => {
-    check(
-      Number.isInteger(item.startLine) &&
-        Number.isInteger(item.endLine) &&
-        item.startLine >= batch.startLine &&
-        item.endLine <= batch.endLine &&
-        item.endLine >= item.startLine &&
-        item.endLine - item.startLine <= 40,
-      "KNOWLEDGE_CITATION",
-      "出处行号须在本批原文内，且不超过 40 行",
-    );
+  // 引文不匹配时收集而不是立即抛出：一次性把每处不匹配对应的去空白原文
+  // 回给模型，下一次调用照抄即可。PDF 提取文本断行、夹空格频繁，模型靠
+  // 猜测逐字引用往往要试两三次，立即抛出会把批次预算耗在重复试探上。
+  const citationErrors = [];
+  const evidence = (item, kind, label) => {
+    const inRange =
+      Number.isInteger(item?.startLine) &&
+      Number.isInteger(item?.endLine) &&
+      item.startLine >= batch.startLine &&
+      item.endLine <= batch.endLine &&
+      item.endLine >= item.startLine &&
+      item.endLine - item.startLine <= 40;
+    if (!inRange) {
+      citationErrors.push({
+        kind,
+        label,
+        problem: `出处行号须在本批原文内，且不超过 40 行（当前 startLine/endLine：${item?.startLine}/${item?.endLine}，本批 L${batch.startLine}–L${batch.endLine}）`,
+      });
+      return null;
+    }
     const quote = string(item.quote, "连续原文", 800);
-    check(
-      quote.length >= 4 &&
-        lines
-          .slice(
-            item.startLine - batch.startLine,
-            item.endLine - batch.startLine + 1,
-          )
-          .join("\n")
-          .replace(/\s+/g, "")
-          .includes(quote.replace(/\s+/g, "")),
-      "KNOWLEDGE_CITATION",
-      "引文必须是所指行内的连续原文，不能改写或补充",
-    );
-    return { quote, startLine: item.startLine, endLine: item.endLine };
+    const reference = lines
+      .slice(
+        item.startLine - batch.startLine,
+        item.endLine - batch.startLine + 1,
+      )
+      .join("\n")
+      .replace(/\s+/g, "");
+    if (quote.length >= 4 && reference.includes(quote.replace(/\s+/g, "")))
+      return { quote, startLine: item.startLine, endLine: item.endLine };
+    citationErrors.push({
+      kind,
+      label,
+      problem: `quote 不是 L${item.startLine}–L${item.endLine} 内的连续原文（至少 4 字）`,
+      reference: reference.slice(0, 800),
+    });
+    return null;
   };
   const nodes = value.nodes.map((n) => {
     check(types.includes(n.type), "KNOWLEDGE_OUTPUT", "节点类别无效");
-    return {
-      label: string(n.label, "节点名称", 80),
-      type: n.type,
-      ...evidence(n),
-    };
+    const label = string(n.label, "节点名称", 80);
+    return { label, type: n.type, ...evidence(n, "节点", label) };
   });
   const labels = new Set(nodes.map((n) => n.label));
   const relations = value.relations.map((r) => {
@@ -113,13 +121,29 @@ export function validateKnowledgeBatch(value, batch) {
       "KNOWLEDGE_OUTPUT",
       "关系两端必须对应本批不同节点",
     );
+    const relation = string(r.relation, "关系", 80);
     return {
       from: r.from,
       to: r.to,
-      relation: string(r.relation, "关系", 80),
-      ...evidence(r),
+      relation,
+      ...evidence(r, "关系", `${r.from}→${r.to}`),
     };
   });
+  if (citationErrors.length) {
+    const listed = citationErrors.slice(0, 3),
+      rest = citationErrors.length - listed.length;
+    throw new AppError(
+      "KNOWLEDGE_CITATION",
+      `引文必须是所指行内的连续原文，不能改写、缩写或用省略号拼接（本批共 ${citationErrors.length} 处不匹配）。校验忽略所有空白；请从下方对应范围的去空白原文中逐字复制一段连续文字作为 quote，startLine/endLine 与该范围保持一致：` +
+        listed
+          .map(
+            (e, i) =>
+              `\n${i + 1}.[${e.kind}]${e.label}：${e.problem}。该范围原文（已去空白）：${e.reference || "见上"}`,
+          )
+          .join("") +
+        (rest ? `\n（另有 ${rest} 处不匹配未列出，保存前请逐项自查。）` : ""),
+    );
+  }
   return { title, summary, nodes, relations };
 }
 export class KnowledgeOrganizer {
@@ -678,11 +702,13 @@ export class KnowledgeOrganizer {
           },
         },
       ]);
+      // 每批是一个小运行：最多 7 轮、6 次真实保存调用。引文校验失败的
+      // 重试消耗预算，预算过紧会让大批量资料在压线状态下整批失败。
       await new AgentRuntime({
         provider,
-        maxRounds: 4,
+        maxRounds: 7,
         maxToolCalls: 1,
-        maxTotalToolCalls: 3,
+        maxTotalToolCalls: 6,
         maxContextChars: 65000,
       }).run({
         messages: [
@@ -702,7 +728,7 @@ export class KnowledgeOrganizer {
           profile: "standard",
           grants: { "filesystem.write": true },
         }),
-        signal: AbortSignal.any([signal, AbortSignal.timeout(180000)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(240000)]),
         thinking: "disabled",
         domain: {
           beforeComplete: () =>
