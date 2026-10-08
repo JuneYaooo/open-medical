@@ -78,7 +78,7 @@
   color: #66766c;
 }
 .library-description header + p {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 .library-topbar {
   display: flex;
@@ -199,11 +199,37 @@
 }
 .knowledge-view-head {
   justify-content: flex-start;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 .knowledge-view-tabs {
+  gap: 4px;
+  padding: 3px;
+  background: #e8efe5;
+  border-radius: 9px;
   border-bottom: 0;
+}
+.knowledge-view-tabs button {
+  border-bottom: 0;
+  border-radius: 7px;
+  padding: 6px 16px;
+  font-size: 13px;
+  margin-bottom: 0;
+}
+.knowledge-view-tabs button:hover {
+  color: var(--ink);
+}
+.knowledge-view-tabs button.active {
+  background: white;
+  box-shadow: 0 1px 3px #1f402720;
+}
+.library-hub .knowledge-filters {
+  margin-top: 14px;
+}
+.knowledge-map-layout .muted {
+  font-size: 12.5px;
+  margin: 8px 2px;
+  line-height: 1.7;
 }
 .trial-form fieldset,
 fieldset.trial-form {
@@ -342,7 +368,7 @@ fieldset.trial-form {
 .patient-question-context span { display: block; white-space: normal; }
 @media (max-width: 600px) { .patient-question-actions { align-items: flex-start; } .patient-question-actions p { max-width: 22ch; } }
 
-.knowledge-auto { padding: 12px 16px; margin: 12px 0 16px; background: #f5f8f4; border: 1px solid #dce6dc; border-radius: 12px; }
+.knowledge-auto { padding: 14px 18px; margin: 4px 0 14px; background: #f5f8f4; border: 1px solid #dce6dc; border-radius: 12px; }
 .knowledge-auto-head { display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; }
 .knowledge-map h3 { margin: 0 0 8px; font-size: 18px; }
 .knowledge-auto p { margin:8px 0; line-height:1.6; }
@@ -350,8 +376,8 @@ fieldset.trial-form {
 .knowledge-auto-head > button { flex-shrink:0; }
 .knowledge-auto-options { display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; }
 .knowledge-auto-options label { display:flex; align-items:center; gap:10px; }
-.knowledge-auto-note { flex-basis:100%; }
-.knowledge-auto-note summary { cursor:pointer; width:fit-content; color:#66766c; font-size:12.5px; }
+.knowledge-auto-note { flex-basis:100%; margin-top:4px; }
+.knowledge-auto-note summary { cursor:pointer; width:fit-content; color:#66766c; font-size:12.5px; padding:2px 0; }
 .knowledge-processing-note { font-size:12.5px; margin:6px 0 2px; }
 .knowledge-media-settings { display:grid; gap:12px; padding:18px; background:white; border-radius:8px; }
 .knowledge-media-settings label { display:grid; gap:6px; }

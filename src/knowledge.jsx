@@ -65,6 +65,7 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
       const text = material.text;
       if (!text) throw new Error("无法从该文件提取文本");
       setPending({ name: material.name || file.name, text });
+      setDisplayMode("list");
       setNotice(material.ocr ? "已完成本地文字识别，请核对下方文字再入库。" : "");
       setMeta({
         title: file.name.replace(/\.[^.]+$/, "").slice(0, 120),
@@ -250,7 +251,21 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
           </p>
         )}
         {notice && <p className="form-notice">{notice}</p>}
-        <KnowledgeOrganization collection={filters.collection} docs={visibleDocs} onRefresh={refresh} onRead={openReader}/>
+        <KnowledgeOrganization
+          collection={filters.collection}
+          docs={visibleDocs}
+          onRefresh={refresh}
+          onRead={openReader}
+          actions={
+            <button
+              className="secondary"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy}
+            >
+              <Upload size={14} /> 手动导入（仅建索引）
+            </button>
+          }
+        />
         {displayMode==="map" && <KnowledgeMap collection={filters.collection} refreshKey={docs} onRead={openReader} onAsk={onOpenTask ? async node=>{
           try {
             const task=await api("/api/sessions","POST",{title:"知识问答："+node.label});
@@ -316,15 +331,7 @@ export function KnowledgeView({ onOpenTask, collection = "" }) {
               </button>
             </div>
           </div>
-        ) : (
-          <button
-            className="secondary"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-          >
-            <Upload size={14} /> 手动导入（仅建索引）
-          </button>
-        )}
+        ) : null}
         <input
           ref={fileRef}
           type="file"

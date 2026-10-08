@@ -19,7 +19,7 @@ const statuses = {
   completed: "整理完成",
   cancelled: "已停止",
 };
-export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
+export function KnowledgeOrganization({ collection, docs, onRefresh, onRead, actions }) {
   const [data, setData] = useState({ jobs: [] }),
     [error, setError] = useState(""),
     [uploading, setUploading] = useState(""),
@@ -172,6 +172,7 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
           >
             转写服务{data.transcriptionReady ? "：已配置" : "：未配置"}
           </button>
+          {actions}
         </div>
       </div>
       <input
