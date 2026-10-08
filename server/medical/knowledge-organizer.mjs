@@ -248,6 +248,8 @@ export class KnowledgeOrganizer {
           }
         : null,
       maxFileMB: 250,
+      maxDocumentMB: 100,
+      maxFilesPerBatch: 200,
       sourceKinds,
     };
   }
@@ -300,9 +302,9 @@ export class KnowledgeOrganizer {
         for await (const chunk of req) {
           bytes += chunk.length;
           check(
-            bytes <= (MEDIA_EXTENSIONS.has(ext) ? 250 : 20) * 1024 * 1024,
+            bytes <= (MEDIA_EXTENSIONS.has(ext) ? 250 : 100) * 1024 * 1024,
             "BODY_LIMIT",
-            "文件超过容量：音视频 250MB，其他资料 20MB",
+            "文件超过容量：音视频 250MB，其他资料 100MB",
             413,
           );
           digest.update(chunk);
@@ -578,9 +580,9 @@ export class KnowledgeOrganizer {
       );
       const prepared = sourceLines(job.parts);
       check(
-        prepared.text.length <= 480000,
+        prepared.text.length <= 2000000,
         "TEXT_LIMIT",
-        "提取内容超过 48 万字符，请拆分资料",
+        "提取内容超过 200 万字符，请拆分资料",
       );
       job = this.update(id, { parts: job.parts, prepared }, signal);
     }

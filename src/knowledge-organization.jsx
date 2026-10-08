@@ -80,6 +80,12 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
     const files = [...event.target.files];
     event.target.value = "";
     if (!files.length) return;
+    if (files.length > (data.maxFilesPerBatch || 200)) {
+      setError(
+        `一次最多选择 ${data.maxFilesPerBatch || 200} 份资料，请分批上传；本次已选 ${files.length} 份，未提交。`,
+      );
+      return;
+    }
     setError("");
     setNotice("");
     const failures = [];
@@ -185,7 +191,7 @@ export function KnowledgeOrganization({ collection, docs, onRefresh, onRead }) {
       </div>
       <p className="knowledge-processing-note">
         整理内容交由当前聊天模型处理；音频交由您配置的转写服务处理。原件保存在本机。文档/图片单份不超过
-        20MB，音视频不超过 250MB、2 小时。
+        100MB，音视频不超过 250MB、2 小时；一次最多可选 200 份，整理按队列逐份进行。
       </p>
       {!data.modelReady && (
         <p className="knowledge-inline-warning">

@@ -1,7 +1,8 @@
 // Extract data only: never execute Office macros, formulas or external links.
-export async function extractOfficeText(bytes, name) {
-  if (!bytes.byteLength) throw new Error("文件为空（0 字节），请检查原文件");
-  if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('Office 文件超过 20MB，请拆分后导入');
+export async function extractOfficeText(bytes, name, { maxBytes = 20 * 1024 * 1024, maxChars = 400000 } = {}) {
+  if (!bytes.byteLength) throw new Error('文件为空（0 字节），请检查原文件');
+  const mb = Math.max(1, Math.round(maxBytes / 1024 / 1024));
+  if (bytes.byteLength > maxBytes) throw new Error(`Office 文件超过 ${mb}MB，请拆分后导入`);
   let text;
   if (/\.docx$/i.test(name)) {
     const { default: mammoth } = await import('mammoth/mammoth.browser.js');
@@ -26,14 +27,14 @@ export async function extractOfficeText(bytes, name) {
         });
         const line = `行 ${number}: ${cells.join(' | ')}`;
         chars += line.length;
-        if (chars > 400000) throw new Error('表格文本超过 400000 字符，请拆分后导入');
+        if (chars > maxChars) throw new Error(`表格文本超过 ${maxChars} 字符，请拆分后导入`);
         lines.push(line);
       });
     });
     text = lines.join('\n');
   }
   if (!text.trim()) throw new Error('文档没有可提取文字；图片型 Word 请将图片单独上传');
-  if (text.length > 400000) throw new Error('文档文本超过 400000 字符，请拆分后导入');
+  if (text.length > maxChars) throw new Error(`文档文本超过 ${maxChars} 字符，请拆分后导入`);
   return { text, extraction: { type: /\.docx$/i.test(name) ? 'docx_text' : 'xlsx_text', originalRetained: false } };
 }
 

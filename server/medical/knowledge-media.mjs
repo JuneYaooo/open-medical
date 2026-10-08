@@ -125,7 +125,16 @@ export async function extractDocument(path, name, signal, options = {}) {
     const { extractPdfText } = await import("../../shared/pdf-text.mjs");
     return [
       {
-        text: (await extractPdfText(new Uint8Array(bytes), getDocument)).text,
+        // 容量与整理器 TEXT_LIMIT 对齐：100MB、2000 页、200 万字符；
+        // 大文件解析慢，超时放宽到 10 分钟。
+        text: (
+          await extractPdfText(new Uint8Array(bytes), getDocument, {
+            timeoutMs: 600000,
+            maxPages: 2000,
+            maxChars: 2000000,
+            maxBytes: 100 * 1024 * 1024,
+          })
+        ).text,
         kind: "text",
       },
     ];
@@ -133,7 +142,13 @@ export async function extractDocument(path, name, signal, options = {}) {
   if ([".docx", ".xlsx"].includes(ext))
     return [
       {
-        text: (await extractOfficeText(new Uint8Array(bytes), name)).text,
+        // 与整理器 TEXT_LIMIT 对齐：100MB、200 万字符。
+        text: (
+          await extractOfficeText(new Uint8Array(bytes), name, {
+            maxBytes: 100 * 1024 * 1024,
+            maxChars: 2000000,
+          })
+        ).text,
         kind: "text",
       },
     ];
