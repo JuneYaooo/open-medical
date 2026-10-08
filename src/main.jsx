@@ -161,7 +161,7 @@ const eventLabel = (event) =>
         retrying: "服务暂忙，正在重试",
       }[event.payload?.status] || event.payload?.status,
   })[event.type] || event.type;
-function ArtifactView({ artifact, onReview, onEdit, onSource }) {
+function ArtifactView({ artifact, onReview, onEdit, onSource, onOpen }) {
   const [review, setReview] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -311,7 +311,7 @@ function ArtifactView({ artifact, onReview, onEdit, onSource }) {
           <span>未进行临床解释</span>
         </div>
       ))}
-      {artifact.type === "similar_cases" && <SimilarCases key={artifact.id} artifact={artifact} />}
+      {artifact.type === "similar_cases" && <SimilarCases key={artifact.id} artifact={artifact} variant="teaser" onOpen={onOpen} />}
       {(artifact.concerns || (!artifact.events &&
         !artifact.pico &&
         !artifact.matches &&
@@ -1776,7 +1776,7 @@ function App() {
                             {m.role === "user" ? (
                               m.content
                             ) : (
-                              runOf(m.runId)?.artifacts?.some(a => a.type === "similar_cases") ? <SimilarCases key={m.runId} onOpen={() => setAcceptId(runOf(m.runId).artifacts.find(a => a.type === "similar_cases").id)} artifact={runOf(m.runId).artifacts.find(a => a.type === "similar_cases")} onRefresh={busy ? undefined : () => send(null, {message:"请重新检索这个患者的相似病例，并逐项对照疾病、阶段、治疗、用药和年龄性别，保存有原文依据的相似度结果。"})} /> : hasTaskResult(runOf(m.runId)) ? <><TaskResult key={m.runId} run={runOf(m.runId)}/><details className="task-result"><summary>查看文字说明</summary><RichMessage text={m.content}/></details></> : <RichMessage text={m.content} />
+                              runOf(m.runId)?.artifacts?.some(a => a.type === "similar_cases") ? <><SimilarCases key={m.runId} variant="teaser" onOpen={() => setAcceptId(runOf(m.runId).artifacts.find(a => a.type === "similar_cases").id)} artifact={runOf(m.runId).artifacts.find(a => a.type === "similar_cases")} onRefresh={busy ? undefined : () => send(null, {message:"请重新检索这个患者的相似病例，并逐项对照疾病、阶段、治疗、用药和年龄性别，保存有原文依据的相似度结果。"})} />{m.content ? <details className="task-result"><summary>查看文字说明</summary><RichMessage text={m.content}/></details> : null}</> : hasTaskResult(runOf(m.runId)) ? <><TaskResult key={m.runId} run={runOf(m.runId)}/><details className="task-result"><summary>查看文字说明</summary><RichMessage text={m.content}/></details></> : <RichMessage text={m.content} />
                             )}
                           </div>
                           {m.role !== "user" && ["delivery_failed","unverified"].includes(m.outcome || runOf(m.runId)?.outcome) &&
@@ -1832,7 +1832,7 @@ function App() {
                     {!busy && (!session?.patientId || questionRunId) &&
                       (session?.artifacts.length || 0) > 0 &&
                       session.artifacts
-                        .filter(a => !(a.type === "treatment_review" && session.messages.some(m=>m.role==="assistant" && m.runId===(session.patientId ? questionRun : session.runs.at(-1))?.id)) && (session.patientId ? questionRun : session.runs.at(-1))?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && completedCaseRun((session.patientId ? questionRun : session.runs.at(-1))) && session.messages.some(m => m.role === "assistant" && m.runId === (session.patientId ? questionRun : session.runs.at(-1)).id)))
+                        .filter(a => !(a.type === "treatment_review" && session.messages.some(m=>m.role==="assistant" && m.runId===(session.patientId ? questionRun : session.runs.at(-1))?.id)) && (session.patientId ? questionRun : session.runs.at(-1))?.artifacts?.some(current => current.id === a.id) && !(a.type === "similar_cases" && session.messages.some(m => m.role === "assistant" && m.runId === (session.patientId ? questionRun : session.runs.at(-1))?.id)))
                         .slice(-3)
                         .reverse()
                         .map((a) => (
@@ -2519,6 +2519,10 @@ function App() {
                       <ArtifactView
                         artifact={selectedArtifact}
                         onSource={openSource}
+                        onOpen={() => {
+                          setArtifactId(selectedArtifact.id);
+                          setAcceptId(selectedArtifact.id);
+                        }}
                         onReview={async (body) => {
                           await api(
                             `/api/sessions/${activeId}/artifacts/${selectedArtifact.id}/review`,
