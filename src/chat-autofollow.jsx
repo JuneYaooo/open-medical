@@ -38,7 +38,8 @@ function OutreachItem({ it, busy, act }) {
   const [consent, setConsent] = useState(false);
   const [note, setNote] = useState(o?.record?.summary || '');
   const [confirmed, setConfirmed] = useState(false);
-  useEffect(() => { setText(o?.text || ''); setNote(o?.record?.summary || ''); setConsent(false); setConfirmed(false); }, [it.outreach?.revision]);
+  const [notice, setNotice] = useState('');
+  useEffect(() => { setText(o?.text || ''); setNote(o?.record?.summary || ''); setConsent(false); setConfirmed(false); setNotice(''); }, [it.outreach?.revision]);
   const wechatOk = Boolean(it.bindingId);
   return <li className="care-card">
     <header><strong>{it.patientName}</strong><span className="care-tag">{it.name}</span><span className="care-tag">{STATUS[o?.status || 'none']}</span>
@@ -46,6 +47,7 @@ function OutreachItem({ it, busy, act }) {
       {!wechatOk && <span className="care-tag">未关联微信</span>}
       <time className="muted">到期 {when(it.nextDue)}</time>
     </header>
+    {notice && <p className="muted" role="status">{notice}</p>}
     {!!it.checklist.length && <ol className="muted">{it.checklist.map((c) => <li key={c}>{c}</li>)}</ol>}
     {(!o || !o.text) && <button disabled={busy !== '' || !wechatOk} onClick={act(`g-${it.jobId}`, () => api(`/api/chat-autofollow/${it.jobId}/generate`, 'POST', {}))}>{busy === `g-${it.jobId}` ? '正在生成…' : '生成随访话术'}</button>}
     {o?.text && o.status === 'draft' && <>

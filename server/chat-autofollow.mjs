@@ -1,7 +1,6 @@
 import { detectRedFlags, screenOutbound } from "./care/red-flags.mjs";
 import { extractFollowup } from "./care/triage.mjs";
-import { AppError, check, identifier } from "./errors.mjs";
-import { randomUUID } from "node:crypto";
+import { check, identifier } from "./errors.mjs";
 
 const clip = (value, max) => String(value ?? "").slice(0, max);
 const json = (row) => (row ? JSON.parse(row.data) : null);
