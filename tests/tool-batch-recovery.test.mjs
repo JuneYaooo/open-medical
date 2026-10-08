@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { AgentRuntime } from "../server/core/agent-runtime.mjs";
 import { ToolRegistry } from "../server/core/tool-registry.mjs";
 import { PermissionEngine } from "../server/core/permissions.mjs";
+import { check } from "../server/errors.mjs";
+import { validateArguments } from "../server/core/schema.mjs";
 
 const calls = (count, name = "read") => Array.from({ length: count }, (_, i) =>
   ({ id: `call-${i}`, function: { name, arguments: "{}" } }));
@@ -81,4 +83,46 @@ test("batch recovery does not bypass unknown tools, authority or the hard payloa
     permissions: new PermissionEngine({ profile: "standard" }) });
   assert.equal(result.text, "cannot commit");
   assert.equal(deniedEffects, 0);
+});
+test("COMPLETE_RETRY bounces a premature finish back into the loop instead of failing", async () => {
+  let rounds = 0, saved = false;
+  const registry = new ToolRegistry([{ definition: { type: "function", function: {
+    name: "save", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+  permission: "filesystem.write", execute: () => { saved = true; return { saved: true }; } }]);
+  const provider = { model: "fixture", async complete(messages) {
+    rounds++;
+    if (rounds === 1) return { message: { role: "assistant", content: "我直接总结一下。" } };
+    if (rounds === 2) {
+      const nudge = messages.findLast((m) => m.name === "runtime_control");
+      assert.ok(nudge, "重试提示未送达模型");
+      assert.match(nudge.content, /save/);
+      return { message: { role: "assistant", tool_calls: calls(1, "save") } };
+    }
+    return { message: { role: "assistant", content: "done" } };
+  } };
+  const runtime = new AgentRuntime({ provider, maxRounds: 4, maxTotalToolCalls: 2 });
+  const result = await runtime.run({ messages: [{ role: "user", content: "整理" }], registry,
+    permissions: new PermissionEngine({ profile: "standard", grants: { "filesystem.write": true } }),
+    domain: { beforeComplete: () =>
+      check(saved, "COMPLETE_RETRY", "尚未成功调用 save。请修正后重新调用；保存成功后再结束。") } });
+  assert.ok(result.text.endsWith("done"));
+  assert.equal(saved, true);
+  assert.equal(rounds, 3);
+});
+test("tool argument errors name the exact violated constraint", () => {
+  const schema = { type: "object",
+    properties: {
+      nodes: { type: "array", maxItems: 2, items: { type: "object",
+        properties: { label: { type: "string" }, type: { type: "string", enum: ["疾病", "检查"] } },
+        required: ["label", "type"], additionalProperties: false } },
+    },
+    required: ["nodes"], additionalProperties: false };
+  assert.throws(() => validateArguments({ nodes: [{ label: "甲", type: "药物", note: "x" }] }, schema),
+    (e) => e.code === "INVALID_TOOL_ARGS" && /type.*取值必须是/.test(e.message));
+  assert.throws(() => validateArguments({ nodes: [{ type: "疾病" }] }, schema),
+    (e) => /缺少必填字段 "label"/.test(e.message));
+  assert.throws(() => validateArguments({ nodes: [{ label: "甲", type: "疾病", note: "x" }] }, schema),
+    (e) => /未定义的字段 "note"/.test(e.message));
+  assert.throws(() => validateArguments({ nodes: "三个" }, schema),
+    (e) => /nodes（应为数组）/.test(e.message));
 });

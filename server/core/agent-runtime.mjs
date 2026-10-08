@@ -294,7 +294,9 @@ export class AgentRuntime {
             context,
           });
         } catch (error) {
-          if (!["TOOLS_RUNNING", "AGENTS_RUNNING"].includes(error.code))
+          // COMPLETE_RETRY：域声明"尚不具备完成条件"，把收尾打回执行循环
+          // 再试一轮（受 maxRounds 约束），而不是直接判死整次运行。
+          if (!["TOOLS_RUNNING", "AGENTS_RUNNING", "COMPLETE_RETRY"].includes(error.code))
             throw error;
           messages.push({
             role: "user",

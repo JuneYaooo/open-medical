@@ -731,11 +731,13 @@ export class KnowledgeOrganizer {
         signal: AbortSignal.any([signal, AbortSignal.timeout(240000)]),
         thinking: "disabled",
         domain: {
+          // COMPLETE_RETRY：模型没保存就以文字收尾时，运行时把本批打回
+          // 再试一轮，而不是让整批失败。
           beforeComplete: () =>
             check(
               saved,
-              "KNOWLEDGE_INCOMPLETE",
-              "模型尚未保存带出处的知识条目，本批可重试",
+              "COMPLETE_RETRY",
+              "尚未成功调用 save_knowledge_batch。若上一次调用因引文或参数被拒，请按返回的错误说明修正后重新调用；保存成功后再简短结束。",
             ),
         },
       });
