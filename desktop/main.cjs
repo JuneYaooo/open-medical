@@ -29,6 +29,10 @@ const { spawn } = require("node:child_process");
 
 const productName = "Open Medical Workbench";
 app.setName(productName);
+// 界面永远加载自本机回环地址；系统代理开启（如本机代理客户端）时会把
+// 127.0.0.1 的请求转发给代理并整窗 ERR_FAILED，这里对渲染进程禁用代理。
+// 模型/文献等外联走主进程 Node，不经过这条通道。
+app.commandLine.appendSwitch("no-proxy-server");
 const testDirectory = process.env.MEDICAL_DESKTOP_TEST_DIR;
 const smokeTest =
   process.argv.includes("--smoke-test") && Boolean(testDirectory);
