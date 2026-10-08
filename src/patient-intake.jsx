@@ -4,6 +4,8 @@ import { Upload, Loader2 } from "lucide-react";
 import { Modal } from "./components";
 import { api } from "./agent-runtime";
 import { importMaterial, MATERIAL_ACCEPT } from "./import-material";
+import { materialQualityLevel } from "./material-details";
+import { OCR_QUALITY_LABELS } from "../shared/ocr-quality.mjs";
 
 const labels = { diagnoses: "诊断与问题", medications: "用药", allergies: "过敏记录", labs: "检验", visits: "就诊经历" };
 const describe = (item) => typeof item === "string" ? item : [item.date, item.name || item.item || item.reason, item.value, item.unit, item.dose, item.frequency, ({ active: "正在使用", stopped: "已停用", unknown: "待核对" })[item.status], item.note, item.source && `来源：${item.source}`].filter(v => v !== undefined && v !== "").join(" · ");
@@ -219,7 +221,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         </article>)}
       </section>}
       {progress && <p role="status">{busy && <Loader2 size={15} className="spin" />} {progress}{busy && `（已用时 ${elapsed} 秒）`}</p>}
-      {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份已可读取</summary><ul aria-label="已上传资料">{files.map(file => <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? " · 已识别" : ""}</li>)}</ul></details>}
+      {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份已可读取</summary><ul aria-label="已上传资料">{files.map(file => { const level = materialQualityLevel(file); return <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? ` · 已识别${level && level !== "good" ? `（${OCR_QUALITY_LABELS[level]}，建议在患者档案的原始资料里对照原图` : ""}）` : ""}</li>; })}</ul></details>}
       {!!skipped.length && <p>已自动跳过 {skipped.length} 份重复资料，保留已有内容，不影响解析。</p>}
       {!!failedUploads.length && <p>有 {failedUploads.length} 份资料未纳入本次整理，其余有效资料继续处理。可更换文件补充，或重试失败资料。</p>}
       {failedUploads.map(({ file, error }) => <p className="error-text" key={file.name}>{file.name}：{error}</p>)}

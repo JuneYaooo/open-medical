@@ -102,9 +102,18 @@ export function createMedicalWorkspaceDomain({
         name: s.name,
         lines: s.text.split("\n").length,
         hash: s.hash,
-        ...(s.extraction?.ocr?.status === "ready" ? { textReady: true, method: "local-ocr" } : {}),
+        ...(s.extraction?.ocr?.status === "ready"
+          ? {
+              textReady: true,
+              method: s.extraction.ocr.method,
+              ...(s.extraction.ocr.quality ? { quality: s.extraction.ocr.quality.level } : {}),
+            }
+          : {}),
         ...(sources.length <= 8 ? { preview: s.text.slice(0, 1000) } : {}),
       }));
+      const unreliable = sources.filter(
+        (s) => s.extraction?.ocr?.quality && s.extraction.ocr.quality.level !== "good",
+      );
       return [
         workspace.patientId ? `当前已关联患者编号：${workspace.patientId}。可调用 read_patient_brief 读取最新档案；不必让医生重新输入已有病史。` : "",
         run.policy?.workflow === "patient-assessment" ? ASSESSMENT_GUIDANCE : "",
@@ -120,6 +129,9 @@ export function createMedicalWorkspaceDomain({
         run.policy ? `策略：${JSON.stringify(run.policy)}` : "",
         sources.length
           ? `本次材料索引（可用工具读取全文）：${JSON.stringify(manifest)}\n选中材料已建立可检索索引：语义检索用 semantic_material_search，关键词检索用 search_materials，按行读原文用 read_source。检索工具未返回不代表材料中没有相关内容。`
+          : "",
+        unreliable.length
+          ? `注意：${unreliable.map((s) => `「${s.name}」（${s.extraction.ocr.quality.level === "poor" ? "识别质量差" : "识别待核对"}）`).join("、")}为低质量文字识别，数字、日期、单位与数值可能失真或缺失；引用这些材料时须明确标注不确定，涉及关键结论时建议医生对照原图核对。`
           : "",
       ].filter(Boolean);
     },

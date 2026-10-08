@@ -527,6 +527,10 @@ export function createServer(options = {}) {
     onMaterialIngest: (file) => {
       materials.ingest(file).catch(() => {});
     },
+    onMaterialReingest: (file) => {
+      materials.remove(file.id).catch(() => {});
+      materials.ingest(file).catch(() => {});
+    },
   });
   const intakeJobs = new IntakeJobs(sessionBridge, pending);
   const agentRuntime = sessionBridge.dispatcher;
@@ -1073,16 +1077,48 @@ export function createServer(options = {}) {
             if (req.method === "POST") return send(res, 202, { job: intakeJobs.start(id, await body(req)) });
             if (req.method === "DELETE") return send(res, 200, { cancelled: intakeJobs.cancel(id) });
           }
+          if (parts.length === 4 && parts[3] === "record-refresh" && req.method === "POST") {
+            return send(res, 202, sessionBridge.refreshRecord(id, await body(req)));
+          }
           if (parts.length === 4 && parts[3] === "intake-issues" && req.method === "PUT") {
             return send(res, 200, sessionBridge.saveIntakeIssues(id, (await body(req)).issues));
           }
           if (parts[3] === "files") {
             if (parts.length === 6 && parts[5] === "prepare" && req.method === "POST") {
+              const input = await body(req).catch(() => ({}));
               const controller = new AbortController();
               const abort = () => controller.abort();
               res.once("close", abort);
-              try { return send(res, 200, await sessionBridge.prepareMaterial(id, identifier(parts[4]), controller.signal)); }
+              try {
+                const file = await sessionBridge.prepareMaterial(id, identifier(parts[4]), {
+                  signal: controller.signal,
+                  force: input.force === true,
+                  preferVision: input.preferVision === true,
+                });
+                // 重识别成功后可顺带发起病历重新整理；发起失败不回退识别结果。
+                const outcome = { file, refresh: null, refreshError: null };
+                if (input.refreshRecord === true) {
+                  try {
+                    outcome.refresh = sessionBridge.refreshRecord(id, {
+                      fileIds: [file.id],
+                      reason: input.preferVision ? "视觉模型重新识别" : "重新识别",
+                    });
+                  } catch (error) { outcome.refreshError = error.message; }
+                }
+                return send(res, 200, outcome);
+              }
               finally { res.off("close", abort); }
+            }
+            if (parts.length === 6 && parts[5] === "text" && req.method === "PUT") {
+              const input = await body(req);
+              const file = sessionBridge.updateMaterialText(id, identifier(parts[4]), input.text);
+              const outcome = { file, refresh: null, refreshError: null };
+              if (input.refreshRecord === true) {
+                try {
+                  outcome.refresh = sessionBridge.refreshRecord(id, { fileIds: [file.id], reason: "医生修正识别文本" });
+                } catch (error) { outcome.refreshError = error.message; }
+              }
+              return send(res, 200, outcome);
             }
             if (parts.length === 4 && req.method === "POST") {
               check(!intakeJobs.active.has(id), "RUN_ACTIVE", "建档任务正在后台处理，请先停止后补充资料", 409);

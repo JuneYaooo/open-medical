@@ -8,6 +8,7 @@ import { assessmentQuestion } from "./medical/assessment-tools.mjs";
 // （通用内核 + 医疗叠层），既有 sessions 表会话继续走 MedicalRuntime。
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
 import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
+import { assessOcrQuality } from "../shared/ocr-quality.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
@@ -61,7 +62,7 @@ const resolveMode = (mode) => {
 export class SessionBridge {
   // store：旧医疗会话存储；runtime：旧医疗引擎；service：统一内核；
   // sessionsRoot：会话工作区自动目录的父目录（数据库目录下）。
-  constructor(store, runtime, service, { sessionsRoot, skills = null, doctor = null, plugins = [], contextBudget = 80000, maxRounds = 512, onMaterialIngest } = {}) {
+  constructor(store, runtime, service, { sessionsRoot, skills = null, doctor = null, plugins = [], contextBudget = 80000, maxRounds = 512, onMaterialIngest, onMaterialReingest } = {}) {
     Object.assign(this, {
       store,
       runtime,
@@ -73,6 +74,7 @@ export class SessionBridge {
       contextBudget,
       maxRounds,
       onMaterialIngest,
+      onMaterialReingest,
     });
   }
 
@@ -288,7 +290,7 @@ export class SessionBridge {
     this.service.store.update(id, current => { current.intakeIssues = cleaned; });
     return { ok: true };
   }
-  async prepareMaterial(id, fileId, signal) {
+  async prepareMaterial(id, fileId, { signal, force = false, preferVision = false } = {}) {
     const workspace = this.requireSessionWorkspace(id);
     check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
     const file = (workspace.materials || []).find(file => file.id === fileId);
@@ -296,15 +298,48 @@ export class SessionBridge {
     const images = file.extraction?.type === "image"
       ? [{ artifactId: file.extraction.artifactId }]
       : file.extraction?.pageImages || [];
-    if (!images.length || file.extraction?.ocr?.status === "ready") return file;
+    // 纯文本/表格材料没有可识别页：无需 OCR，原样返回。
+    if (!images.length) return file;
+    if (!force && file.extraction?.ocr?.status === "ready") return file;
     // 回退链:macOS 本地 OCR → Windows 本地 OCR → 当前配置的视觉模型(若支持图片)。
     const analyzeImage = visionTranscriber(this.service.provider);
+    if (preferVision) {
+      check(typeof analyzeImage === "function", "OCR_UNAVAILABLE",
+        "当前模型不支持图片读取。请在模型设置中切换为多模态（视觉）模型后重试", 503);
+    }
+    const transcribe = async (data) => {
+      if (preferVision) return { kind: "vision", text: await analyzeImage(data, signal) };
+      return imageTextWithFallback(data, signal, analyzeImage);
+    };
     const pages = [];
     let kind = "ocr";
+    let upgraded = false;
     for (const image of images) {
       signal?.throwIfAborted();
       const original = this.service.artifacts.read(id, image.artifactId);
-      const result = await imageTextWithFallback(original.data, signal, analyzeImage);
+      let result = await transcribe(original.data);
+      // 本地 OCR 质量过差且视觉模型可用时自动升级重转录，避免垃圾文本流入病历。
+      // 干净的模板页（标签重复但常用字规整，如系统导出的无数值清单）升级也读不出
+      // 原文没有的数值，跳过以省去无效的视觉调用。
+      if (result.kind !== "vision" && typeof analyzeImage === "function") {
+        const quality = assessOcrQuality(result.text);
+        const templateLike =
+          (quality.signals.dedupRatio ?? 0) > 0.15 &&
+          (quality.signals.commonRatio ?? 1) > 0.92;
+        if (quality.level === "poor" && !templateLike) {
+          try {
+            const visionResult = { kind: "vision", text: await analyzeImage(original.data, signal) };
+            if (assessOcrQuality(visionResult.text).score > quality.score) {
+              result = visionResult;
+              upgraded = true;
+            }
+          } catch (error) {
+            signal?.throwIfAborted();
+            if (!["VISION_EMPTY", "OCR_UNAVAILABLE"].includes(error?.code)) throw error;
+            // 升级失败时保留本地结果，由质量标注提示医生兜底。
+          }
+        }
+      }
       if (result.kind === "vision") kind = "vision";
       const lines = result.text.split("\n").filter(Boolean).map(text => ({ text, confidence: 1 }));
       check(lines.some(line => line.text?.trim()), "OCR_EMPTY", "未识别出文字，请换清晰图片；医学影像需由医生或视觉模型另行核对", 422);
@@ -315,18 +350,86 @@ export class SessionBridge {
     const sourceLabel = kind === "vision" ? "视觉模型转录" : "本地文字识别";
     const text = pages.map(page => `[${file.name}${page.page ? ` 第 ${page.page} 页` : ""} · ${sourceLabel}]
 ` + page.lines.map(line => `${line.text}${line.confidence < 0.7 ? " [识别置信度低，请核对原图]" : ""}`).join("\n")).join("\n\n");
+    const quality = assessOcrQuality(text);
     let prepared;
     this.service.store.update(id, current => {
       const target = current.materials.find(item => item.id === fileId);
       check(target, "NOT_FOUND", "材料已移除", 404);
       // Preserve original artifact ownership and hash; OCR is a derived, cached view.
-      target.extraction.ocr = { status: "ready", method: kind === "vision" ? "vision" : "local-ocr", pages: pages.length, lines: pages.reduce((n, page) => n + page.lines.length, 0), completedAt: iso() };
+      if (force && target.extraction.ocr?.status === "ready") {
+        target.extraction.ocrPrevious = {
+          method: target.extraction.ocr.method,
+          quality: target.extraction.ocr.quality || null,
+          completedAt: target.extraction.ocr.completedAt,
+        };
+      }
+      target.extraction.ocr = {
+        status: "ready",
+        method: kind === "vision" ? "vision" : "local-ocr",
+        pages: pages.length,
+        lines: pages.reduce((n, page) => n + page.lines.length, 0),
+        completedAt: iso(),
+        quality,
+        ...(upgraded ? { upgradedFrom: "local-ocr" } : {}),
+      };
       target.extraction.originalText = file.extraction.originalText || file.text;
       target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text + "\n[文字识别结果需核对原图；不能据此解读 CT 或病理图像。]";
       prepared = target;
     });
-    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind });
+    this.reingestMaterial(prepared);
+    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind, quality: quality.level, upgraded });
     return prepared;
+  }
+  // 材料文本变化后同步检索索引，否则助手检索到的仍是旧识别文本。
+  reingestMaterial(file) {
+    if (!this.onMaterialReingest) return;
+    try { this.onMaterialReingest(file); } catch {}
+  }
+  // 医生在对照视图里直接修正识别文本：与重新识别同权重，重算质量并刷新索引。
+  updateMaterialText(id, fileId, text) {
+    this.requireSessionWorkspace(id);
+    check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
+    const value = string(text, "识别文本", 400000);
+    let prepared;
+    this.service.store.update(id, current => {
+      const target = current.materials.find(item => item.id === fileId);
+      check(target, "NOT_FOUND", "材料不存在", 404);
+      target.text = value;
+      target.hash = hashText(value);
+      target.extraction.edited = { at: iso() };
+      const quality = assessOcrQuality(value);
+      if (target.extraction.ocr) target.extraction.ocr.quality = quality;
+      prepared = target;
+    });
+    this.reingestMaterial(prepared);
+    this.store.audit(id, "file.text.edited", { fileId, chars: value.length });
+    return prepared;
+  }
+  // 重新识别/人工修正后按最新文本自动发起一次病历整理：与工作区纪律一致，
+  // 助手只提交 patient_record_propose 提案，医生确认后才写入档案。
+  refreshRecord(id, { fileIds, reason = "" } = {}) {
+    const w = this.requireSessionWorkspace(id);
+    check(Array.isArray(fileIds) && fileIds.length, "INVALID_INPUT", "请指定要重新整理的资料");
+    const files = (w.materials || []).filter(file => fileIds.includes(file.id));
+    check(files.length, "NOT_FOUND", "材料不存在", 404);
+    check(w.patientId, "NO_PATIENT", "该会话尚未关联患者档案，请先完成建档", 422);
+    const names = files.map(file => file.name).join("、");
+    const reasonText = typeof reason === "string" && reason.trim()
+      ? string(reason, "更新原因", 100)
+      : "重新识别";
+    const message = `资料「${names}」的识别文本刚刚更新（${reasonText}）。请先用 read_source 通读这些资料的最新文本，再用 read_patient_brief 读取当前档案，逐项核对就诊经过、诊断、用药、过敏与检验：只提交材料支持且确实有出入的 patient_record_propose 档案更新提案，不要直接写入档案，也不要补齐材料里没有的内容；在回复中列出本次更新了哪些条目、哪些仍待核对。`;
+    const prepared = this.prepareSend(id, {
+      mode: "model",
+      message,
+      externalConsent: true,
+      fileIds: files.map(file => file.id),
+      requestId: `record-refresh:${randomUUID()}`,
+    });
+    const runId = prepared.handle.run.id;
+    // 后台执行：立即返回，状态变化经既有 run 记录与完成通知送达医生。
+    void this.executeSend(prepared).catch(() => {});
+    this.store.audit(id, "record.refresh", { runId, fileIds: files.map(file => file.id) });
+    return { runId, fileIds: files.map(file => file.id) };
   }
   removeMaterial(id, fileId) {
     this.requireSessionWorkspace(id);

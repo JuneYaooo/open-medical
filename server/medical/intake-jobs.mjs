@@ -36,7 +36,7 @@ export class IntakeJobs {
       for (const [index, file] of saved.files.entries()) {
         signal.throwIfAborted();
         this.save(id, {progress:`识别资料 ${index + 1}/${saved.files.length}：${file.name}`});
-        try { ready.push(await this.bridge.prepareMaterial(id, file.id, signal)); }
+        try { ready.push(await this.bridge.prepareMaterial(id, file.id, { signal })); }
         catch (err) { signal.throwIfAborted(); failures.push({name:file.name, error:err.message, stage:'ocr'}); }
         this.bridge.saveIntakeIssues(id, failures);
       }
