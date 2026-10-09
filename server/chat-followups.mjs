@@ -19,6 +19,7 @@ export class ChatFollowups {
     this.wechat = wechat || new WechatReader(); this.archive = archive || new WecomArchiveClient();
     this.registry = new ChatConnectorRegistry({ wechat: this.wechat, archive: this.archive, wxcli, plugins });
     if (aibot) this.registry.register({ id: "wecom-aibot", name: "企业微信 · 智能机器人", protocol: "aibot-ws", builtin: true, client: aibot, defaultEndpoint: aibot.endpoint });
+    this.aibot = aibot || null;
     this.pendingAI = new Map(); this.stopped = false; this.ticking = false; this.active = new Map(); this.probes = new Map(); this.imports = new Map(); this.previews = new Map(); this.timer = null;
     // 监听模式的会话列表行指纹(上轮状态)与连续失败计数:仅内存,重启后首轮全量重扫可见行。
     this.watchState = new Map(); this.watchFails = new Map();
@@ -93,6 +94,7 @@ export class ChatFollowups {
       // 自动起草只进待审核队列,永不自动发送;需要明确授权模型参与。
       c.autoReply = Boolean(input.autoReply && input.autoReplyConsent);
     }
+    if (channel === 'wechat') c.autoReply = Boolean(input.autoReply && input.autoReplyConsent);
     c.autoSummarize = Boolean(c.autoUntil && input.autoSummarize);
     if (c.autoSummarize) check(input.modelConsent === true && this.provider(), 'CHAT_MODEL_CONSENT', '自动整理需要明确授权当前模型服务，并配置可用模型', 412);
     c.modelFingerprint = c.autoSummarize ? this.modelIdentity() : '';
@@ -401,6 +403,8 @@ export class ChatFollowups {
         if (delta.text) ({ added, drafts } = this.ingest(c,[source]));
         // 入库钩子:自动随访用它把「已发送待回复」的随访标记为已回复并做红旗筛查。
         if (this.onIngested && delta.text) { try { this.onIngested(b, delta.text); } catch {} }
+        // 自动起草回复:1:1 绑定会话的新消息进待审核队列(开启 autoReply 时)。
+        if (this.aibot && delta.text) { try { this.aibot.onWechatIngested(b, delta.text).catch(() => {}); } catch {} }
       } else {
         let cursor = c.cursor;
         for (let page = 0; page < 10; page++) {

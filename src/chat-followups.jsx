@@ -99,23 +99,23 @@ function RegionPicker({preview,titleRegion,messageRegion,inputPoint,onTitle,onMe
  const draw=(r,key)=>r&&<span key={key} className={`chat-region ${key}`} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.width*100}%`,height:`${r.height*100}%`}}/>;
  return <div className="chat-calibration">{requireTitle&&preview.suggestedTitleRegion&&<p role="status">已找到匹配的标题位置。请核对框选结果，再选择聊天内容区域。</p>}<div className="chat-tabs">{requireTitle&&<button type="button" aria-pressed={mode==='title'} onClick={()=>setMode('title')}>1. 框选会话标题{titleRegion?' ✓':''}</button>}<button type="button" aria-pressed={mode==='messages'} onClick={()=>setMode('messages')}>{requireTitle?'2. ':''}框选聊天内容{messageRegion?' ✓':''}</button><button type="button" aria-pressed={mode==='input'} onClick={()=>setMode('input')}>{requireTitle?'3. ':''}点选输入框{inputPoint?' ✓':''}</button></div><div className="chat-preview" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setStart(point(e));}} onPointerMove={e=>{if(start)setDrag(rect(start,point(e)));}} onPointerUp={e=>{if(start){const r=rect(start,point(e));if(mode==='input'){onInput({x:Math.round(start.x*10000)/10000,y:Math.round(start.y*10000)/10000});}else if(r.width>.02&&r.height>.015){(mode==='title'?onTitle:onMessages)(r);}}setStart(null);setDrag(null);}} onPointerCancel={()=>{setStart(null);setDrag(null);}}><img src={`data:image/png;base64,${preview.image}`} alt="当前微信窗口，仅在本机用于选择读取区域" draggable={false}/>{draw(titleRegion,'title')}{draw(messageRegion,'messages')}{draw(drag,'selection')}{inputPoint&&<span className="chat-region input-point" style={{left:`${inputPoint.x*100}%`,top:`${inputPoint.y*100}%`}}/>}</div><details><summary>用数值调整区域（百分比）</summary>{[['标题',titleRegion,onTitle],['聊天内容',messageRegion,onMessages]].map(([label,r,set])=><fieldset key={label}><legend>{label}</legend><div className="chat-region-fields">{[['x','左侧'],['y','顶部'],['width','宽度'],['height','高度']].map(([key,name])=><label key={key}>{name}<input type="number" min="0" max="100" step="0.1" value={r?Math.round(r[key]*1000)/10:''} onChange={e=>set({...r,x:r?.x||0,y:r?.y||0,width:r?.width||0,height:r?.height||0,[key]:Number(e.target.value)/100})}/></label>)}</div></fieldset>)}<fieldset><legend>输入框位置</legend><div className="chat-region-fields">{[['x','左侧'],['y','顶部']].map(([key,name])=><label key={key}>{name}<input type="number" min="0" max="100" step="0.1" value={inputPoint?Math.round(inputPoint[key]*1000)/10:''} onChange={e=>onInput({...inputPoint,x:inputPoint?.x||0.5,y:inputPoint?.y||0.85,[key]:Number(e.target.value)/100})}/></label>)}</div></fieldset></details></div>;
 }
-// 企微智能机器人回复队列:红旗提问直接给安全话术,其余按知识库起草;
-// 医生逐条通过后才发送(原路回复,失败自动回退主动推送),永不自动发送。
+// 智能回复队列(企微机器人 + 微信桌面):红旗提问直接给安全话术,其余按知识库起草;
+// 医生逐条通过后才发送——企微走原路回复/主动推送,微信走已验证的桌面发送链。
 function AibotReplies({replies,onChanged}) {
  const pending=replies.filter(r=>r.status==='draft'),done=replies.filter(r=>r.status!=='draft');
  const act=async fn=>{try{await fn();await onChanged();}catch(e){onChanged();throw e;}};
- return <section className="chat-inbox" aria-label="机器人回复队列"><h3>机器人回复{pending.length?`（待审核 ${pending.length}）`:''}</h3>
-  <p>红旗症状自动使用固定安全话术；其余按患者简报与知识库起草。每条都需您通过后才发送。</p>
+ return <section className="chat-inbox" aria-label="机器人回复队列"><h3>智能回复{pending.length?`（待审核 ${pending.length}）`:''}</h3>
+  <p>红旗症状自动使用固定安全话术；其余按患者简报与知识库起草。每条都需您通过后才发送（企微原路回复，微信经桌面发送链）。</p>
   {pending.map(r=><AibotReplyRow key={`${r.id}:${r.revision}`} row={r} act={act}/>)}
-  {done.length>0&&<details><summary>已处理 {done.length} 条</summary>{done.map(r=><p key={`${r.id}:${r.revision}`} className="muted">{r.status==='sent'?'已发送':'不回复'} · {when(r.sentAt||r.createdAt)} · 问：{r.question} · 答：{r.text}</p>)}</details>}
+  {done.length>0&&<details><summary>已处理 {done.length} 条</summary>{done.map(r=><p key={`${r.id}:${r.revision}`} className="muted">{r.status==='sent'?'已发送':'不回复'} · {r.channel==='wechat'?'微信':r.channel==='wecom-aibot'?'企微':''} · {when(r.sentAt||r.createdAt)} · 问：{r.question} · 答：{r.text}</p>)}</details>}
  </section>;
 }
 function AibotReplyRow({row,act}) {
  const [text,setText]=useState(row.text),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  return <div className="chat-draft" style={{borderLeft:row.urgent?'3px solid #b91c1c':undefined}}>
-  <p><strong>{row.urgent?'⚠ 红旗症状':`问：${row.question}`}</strong>{row.screen?.reasons?.length?` · 送审提示：${row.screen.reasons.join('、')}`:''}</p>
+  <p><strong>{row.urgent?'⚠ 红旗症状':`问：${row.question}`}</strong><span className="muted"> · {row.channel==='wechat'?'微信桌面':'企微机器人'}</span>{row.screen?.reasons?.length?` · 送审提示：${row.screen.reasons.join('、')}`:''}</p>
   <label>回复内容<textarea rows={3} maxLength={2000} aria-label="回复内容" value={text} onChange={e=>{setText(e.target.value);setConsent(false);}}/></label>
-  <p className="muted">发送时自动附 AI 助手免责声明；优先原路回复，失败自动回退主动推送。</p>
+  <p className="muted">{row.channel==='wechat'?'经桌面微信发送链发出（自动定位并核验会话）':'优先原路回复，失败自动回退主动推送'}；发送时自动附 AI 助手免责声明。</p>
   {error&&<p role="alert">{error}</p>}
   <div className="toolbar-actions">
    <label className="chat-check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>我已核对本条回复内容</label>

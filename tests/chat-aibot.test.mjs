@@ -125,7 +125,7 @@ const stubFollowups = (channel, { enabled = true, ingested = [] } = {}) => {
     secret: () => ({ token:'sec' }),
     account: () => 'acc1',
     db: { exec(){}, prepare(sql) {
-      if (sql.startsWith('INSERT INTO chat_aibot_replies')) return { run: (id, _pid, _bid, data) => { const row = JSON.parse(data); const i = store.replies.findIndex(r => r.id === id); if (i >= 0) store.replies[i] = row; else store.replies.push(row); } };
+      if (sql.startsWith('INSERT INTO chat_aibot_replies')) return { run: (id, _pid, _bid, _ch, data) => { const row = JSON.parse(data); const i = store.replies.findIndex(r => r.id === id); if (i >= 0) store.replies[i] = row; else store.replies.push(row); } };
       if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE id=')) return { get: (id) => { const hit = store.replies.find(r => r.id === id); return hit ? { data: JSON.stringify(hit) } : null; } };
       if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE patient_id=')) return { all: () => store.replies.map(r => ({ data: JSON.stringify(r) })) };
       return { get: () => ({ data: binding }) };
@@ -188,4 +188,72 @@ test('respond failure falls back to active push; dismiss requires confirmation',
   assert.equal(sent.sentVia, 'push');
   assert.equal(fallback.pushes.length, 1);
   await assert.rejects(() => channel.dismissReply(row.id, { confirmed:false }), AppError);
+});
+
+// ---- 微信侧自动起草(医生审核版) ----
+test('wechat ingest drafts a reply and sendReply goes through the desktop send chain', async () => {
+  const ingested = []; const provider = providerOf('请按时服药并记录血压，复诊时带来。');
+  const channel = new WecomAibotChannel({ provider, guidelines: knowledgeOf(), patientBrief: briefOf() });
+  const sent = [];
+  const store = { replies: [] };
+  channel.attach({
+    config: (ch) => ch === 'wechat' ? { channel:'wechat', enabled:true, autoReply:true, accountId:'wx', revision:1 } : { channel:AIBOT_CHANNEL, enabled:false, autoReply:false },
+    secret: () => ({ token:'sec' }),
+    account: () => 'acc1',
+    db: { exec(){}, prepare(sql) {
+      if (sql.startsWith('INSERT INTO chat_aibot_replies')) return { run: (id, _pid, _bid, _ch, data) => { const row = JSON.parse(data); const i = store.replies.findIndex(r => r.id === id); if (i >= 0) store.replies[i] = row; else store.replies.push(row); } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE id=')) return { get: (id) => { const hit = store.replies.find(r => r.id === id); return hit ? { data: JSON.stringify(hit) } : null; } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE patient_id=')) return { all: () => store.replies.map(r => ({ data: JSON.stringify(r) })) };
+      return { get: () => JSON.stringify({ id:'w1', patientId:'p1', title:'患者张三', conversationId:'wxid_zhang', mode:'sync', disabled:0 }) };
+    } },
+    ingest: (c, msgs) => ingested.push(...msgs),
+    sendToBinding: async (input) => { sent.push(input); return { ok:true }; },
+  });
+  const binding = { id:'w1', patientId:'p1', title:'患者张三', conversationId:'wxid_zhang', mode:'sync' };
+  await channel.onWechatIngested(binding, '最近血压有点高，要不要紧？');
+  await waitDraft(channel);
+  const rows = channel.replies('p1');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].channel, 'wechat');
+  assert.equal(rows[0].urgent, false);
+  assert.match(rows[0].text, /血压/);
+  const done = await channel.sendReply(rows[0].id, { consent:true });
+  assert.equal(done.status, 'sent');
+  assert.equal(done.sentVia, 'desktop');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].bindingId, 'w1');
+  assert.match(sent[0].text, /AI 助手/); // 免责声明
+  assert.equal(sent[0].autoLocate, true);
+});
+
+test('wechat red-flag drafts the safety reply and room/import bindings are skipped', async () => {
+  const provider = providerOf('不该被调用');
+  const channel = new WecomAibotChannel({ provider, guidelines: knowledgeOf(), patientBrief: briefOf() });
+  const calls = [];
+  const store = { replies: [] };
+  channel.attach({
+    config: (ch) => ch === 'wechat' ? { channel:'wechat', enabled:true, autoReply:true, accountId:'wx', revision:1 } : { channel:AIBOT_CHANNEL, enabled:false },
+    secret: () => ({ token:'sec' }),
+    account: () => 'acc1',
+    db: { exec(){}, prepare(sql) {
+      if (sql.startsWith('INSERT INTO chat_aibot_replies')) return { run: (id, _pid, _bid, _ch, data) => { const row = JSON.parse(data); const i = store.replies.findIndex(r => r.id === id); if (i >= 0) store.replies[i] = row; else store.replies.push(row); } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE id=')) return { get: (id) => { const hit = store.replies.find(r => r.id === id); return hit ? { data: JSON.stringify(hit) } : null; } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE patient_id=')) return { all: () => store.replies.map(r => ({ data: JSON.stringify(r) })) };
+      return { get: () => JSON.stringify({ id:'w2', patientId:'p1', title:'群', conversationId:'room:x', mode:'sync', disabled:0 }) };
+    } },
+    ingest: () => {},
+    sendToBinding: async (input) => calls.push(input),
+  });
+  // 红旗:直接安全话术
+  await channel.onWechatIngested({ id:'w2', patientId:'p1', title:'患者李四', conversationId:'wxid_li', mode:'sync' }, '突然说话不清，半边没力气');
+  await waitDraft(channel);
+  const rows = channel.replies('p1');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].urgent, true);
+  assert.equal(rows[0].text, SAFETY_REPLY);
+  assert.equal(provider.calls ?? 0, 0);
+  // 群聊绑定不起草
+  await channel.onWechatIngested({ id:'w2', patientId:'p1', title:'群', conversationId:'room:x', mode:'sync' }, '群里普通消息');
+  await new Promise(r => setTimeout(r, 100));
+  assert.equal(channel.replies('p1').length, 1);
 });
