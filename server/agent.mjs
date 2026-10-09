@@ -1,4 +1,5 @@
 import { ChatFollowups } from "./chat-followups.mjs";
+import { WecomAibotChannel } from "./chat-aibot.mjs";
 import { chatFollowupsApi } from "./chat-followups-api.mjs";
 import { WechatAutoFollow } from "./chat-autofollow.mjs";
 import { chatAutoFollowApi } from "./chat-autofollow-api.mjs";
@@ -630,7 +631,11 @@ export function createServer(options = {}) {
     // 测试缝:允许 fixture 注入 darwin 以覆盖桥接逻辑;默认真实平台。
     platform: options.wechatBridgePlatform ?? process.platform,
   });
-  const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, ...options.chatFollowups });
+  // 企微智能机器人通道:先建实例再交给 ChatFollowups 注册,start 后按配置自动拉起长连接。
+  const wecomAibot = options.chatAibot || new WecomAibotChannel({ log: (message) => console.error(`[aibot] ${message}`) });
+  const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, aibot: wecomAibot, ...options.chatFollowups });
+  wecomAibot.attach(chatFollowups);
+  wecomAibot.start();
   const chatAutoFollow = new WechatAutoFollow({ chat: chatFollowups, followups, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief, store, ...options.chatAutoFollow });
   const ingestSecret =
     options.ingestSecret || process.env.MEDICAL_INGEST_SECRET || "";
@@ -2206,6 +2211,7 @@ export function createServer(options = {}) {
     workspaces.recovery.stop();
     followups.stop();
     await chatFollowups.stop();
+    wecomAibot.stop();
     care.stop();
     extensions.stop();
     if (databasePath === ":memory:" && !options.userSkillsDir) rmSync(userSkillsDir, { recursive: true, force: true });
