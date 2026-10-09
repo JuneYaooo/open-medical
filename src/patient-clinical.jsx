@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { localCalendarDate } from "../shared/calendar-date.mjs";
+import { DIAGNOSIS_STATUS_SHORT } from "../shared/diagnoses.mjs";
 import { Download, Plus, X, Loader2, Search } from "lucide-react";
 
 const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
@@ -147,7 +148,23 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
                 <b>{d.name}</b>
                 {d.code ? ` · ${d.code}` : ""}
                 {d.date ? ` · ${fmtDate(d.date)}` : ""}
+                {d.note ? ` · ${d.note}` : ""}
               </span>
+              <select
+                aria-label={`${d.name}诊断状态`}
+                value={d.status || "confirmed"}
+                onChange={(e) =>
+                  saveDiagnoses(
+                    draft.diagnoses.map((item, i) =>
+                      i === index ? { ...item, status: e.target.value } : item,
+                    ),
+                  )
+                }
+              >
+                {Object.entries(DIAGNOSIS_STATUS_SHORT).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
               <button
                 className="icon-button"
                 title="移除"

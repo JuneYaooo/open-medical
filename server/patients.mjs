@@ -1,6 +1,7 @@
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
+import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../shared/diagnoses.mjs";
 
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
@@ -270,7 +271,7 @@ export class PatientRegistry {
         age !== null
           ? `${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9}`
           : null,
-      diagnoses: (patient.diagnoses || []).map(({ name, code, date }) => ({ name, code, date })),
+      diagnoses: (patient.diagnoses || []).map(({ name, code, date, status }) => ({ name, code, date, ...(status ? { status } : {}) })),
       medications: (patient.medications || []).map((m) => ({
         name: m.name,
         ...(m.dose ? { dose: m.dose } : {}),
@@ -640,13 +641,26 @@ function allergyState(patient, input) {
   check(status !== "recorded", "INVALID_INPUT", "请先填写已知过敏原");
   return status || (input.allergies !== undefined ? "unknown" : patient.allergyStatus || "unknown");
 }
+const diagnosisSourceList = (value) => {
+  const items = (Array.isArray(value) ? value : [])
+    .map((item) => string(item, "诊断来源", 200).trim())
+    .filter(Boolean);
+  check(items.length <= 8, "INVALID_INPUT", "诊断来源最多 8 条");
+  return [...new Set(items)];
+};
 function optionalDiagnoses(value) {
-  return structuredList(value, "诊断", 40, (item) => ({
+  const list = structuredList(value, "诊断", 40, (item) => ({
     code: item.code ? string(item.code, "ICD-10 编码", 20) : "",
     name: string(item.name, "诊断名称", 120),
     ...(item.date ? { date: clinicalDate(item.date, "诊断日期") } : {}),
+    ...(item.status ? { status: optionalChoice(item.status, DIAGNOSIS_STATUS) } : {}),
+    ...(item.note ? { note: string(item.note, "诊断备注", 300) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
+    ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
   }));
+  // Same problem repeated across documents collapses into one entry that
+  // keeps every source; doctor-entered duplicates merge the same way.
+  return mergeDiagnoses(list);
 }
 function optionalMedications(value) {
   return structuredList(value, "用药", 60, (item) => ({

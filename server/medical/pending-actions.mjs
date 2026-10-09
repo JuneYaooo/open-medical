@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { check, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { validateClinicalInput } from "../patients.mjs";
+import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../../shared/diagnoses.mjs";
 
 // Agent-proposed, doctor-confirmed write-backs. The model never writes
 // patient/followup/case data directly: it files a pending action with
@@ -337,7 +338,27 @@ export function pendingActionTools(pending, doctor = null) {
       },
     },
   });
-  const textDef = { type: "string" };
+const textDef = { type: "string" };
+const diagnosisStatusDef = {
+  type: "string",
+  enum: DIAGNOSIS_STATUS,
+  description: "confirmed=病理或资料明确的诊断/临床问题；suspected=考虑、疑似、待排、影像印象；finding=影像或检验的偶然发现与背景改变（囊肿、钙化、退行性变等）；needs_review=资料矛盾、OCR无法辨认或等待病理，须医生核对",
+};
+const diagnosisNoteDef = { type: "string", description: "诊断依据、限定语境与 OCR 疑点等说明；不写入诊断名称本身" };
+const diagnosisItemsDef = {
+  type: "object",
+  properties: {
+    code: textDef,
+    name: { type: "string", description: "规范诊断名称，一条一个临床问题；不把依据、限定词或 OCR 疑点写进名称" },
+    date: textDef,
+    status: diagnosisStatusDef,
+    note: diagnosisNoteDef,
+    source: textDef,
+    sources: { type: "array", items: textDef, description: "同一诊断的多份来源（文件名+页码或行号）" },
+  },
+  required: ["name"],
+  additionalProperties: false,
+};
   const memoryTool = doctor
     ? [
         {
@@ -379,15 +400,7 @@ export function pendingActionTools(pending, doctor = null) {
           tags: { type: "array", items: textDef },
           note: {type:"string",description:"资料备注与待核对信息：身份比对、OCR冲突、缺失项目。不是病史摘要。"},
           clinicalSummary: clinicalSummaryDef,
-          diagnoses: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: { code: textDef, name: textDef, date: textDef, source: textDef },
-              required: ["name"],
-              additionalProperties: false,
-            },
-          },
+          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；同名诊断合并为一条并用 sources 列全来源" },
           medications: {
             type: "array",
             items: {
@@ -460,20 +473,7 @@ export function pendingActionTools(pending, doctor = null) {
           patientId: textDef,
           clinicalSummary: clinicalSummaryDef,
           updateMode: { type: "string", enum: ["append", "replace"], description: "append 保留旧记录；replace 须提供所更改字段完整列表，遗漏的字段不变" },
-          diagnoses: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                code: textDef,
-                name: textDef,
-                date: textDef,
-                source: textDef,
-              },
-              required: ["name"],
-              additionalProperties: false,
-            },
-          },
+          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；append 时同名诊断自动与原档案合并来源" },
           medications: {
             type: "array",
             items: {
@@ -534,6 +534,9 @@ export function pendingActionTools(pending, doctor = null) {
           const previous = validateClinicalInput({ [key]: current[key] || [] })[key];
           if (key === "medications") check(updates[key].every((value) => !previous.some((old) => old.name === value.name && JSON.stringify(old) !== JSON.stringify(value))),
             "MEDICATION_CONFLICT", "已有同名用药且信息不同。先核对原档案；如需修改状态或剂量，用 replace 提交完整用药列表供医生复核", 409);
+          // Same problem documented again appends its source to the existing
+          // entry instead of creating a duplicate row.
+          if (key === "diagnoses") { updates[key] = mergeDiagnoses(previous, updates[key]); continue; }
           const values = new Map([...previous, ...updates[key]].map((value) => [JSON.stringify(value), value]));
           updates[key] = [...values.values()];
         }

@@ -23,6 +23,11 @@
 .chart-problems li:first-child,.chart-meds li:first-child { padding-top:0; }
 .chart-problems b,.chart-meds b { font-size:14px; line-height:1.7; }
 .chart-problems small { display:block; font-size:11px; color:#64766c; margin-top:4px; }
+.chart-problem-group { margin-top:22px; }
+.chart-problem-group:first-child { margin-top:0; }
+.chart-problem-group h4 { display:flex; align-items:baseline; gap:8px; margin:0 0 2px; font-size:12px; font-weight:600; color:#51625a; letter-spacing:.04em; }
+.chart-problem-group h4 small { font-size:11px; font-weight:400; color:#7d8c84; }
+.chart-problem-note { margin:6px 0 0; font-size:12px; line-height:1.8; color:#64766c; overflow-wrap:anywhere; }
 .chart-source { margin-top:7px; font-size:11px; color:#64766c; }
 .chart-source summary { cursor:pointer; }
 .chart-source p { overflow-wrap:anywhere; line-height:1.7; margin-bottom:0; }

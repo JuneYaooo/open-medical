@@ -8,7 +8,8 @@ import { materialQualityLevel } from "./material-details";
 import { OCR_QUALITY_LABELS } from "../shared/ocr-quality.mjs";
 
 const labels = { diagnoses: "诊断与问题", medications: "用药", allergies: "过敏记录", labs: "检验", visits: "就诊经历" };
-const describe = (item) => typeof item === "string" ? item : [item.date, item.name || item.item || item.reason, item.value, item.unit, item.dose, item.frequency, ({ active: "正在使用", stopped: "已停用", unknown: "待核对" })[item.status], item.note, item.source && `来源：${item.source}`].filter(v => v !== undefined && v !== "").join(" · ");
+const DIAGNOSIS_STATUS_TEXT = { confirmed: "确诊", suspected: "疑似待排", finding: "影像/检验发现", needs_review: "待核对" };
+const describe = (item) => typeof item === "string" ? item : [item.date, item.name || item.item || item.reason, item.value, item.unit, item.dose, item.frequency, ({ active: "正在使用", stopped: "已停用", unknown: "待核对", ...DIAGNOSIS_STATUS_TEXT })[item.status], item.note, (item.sources?.length ? item.sources : [item.source].filter(Boolean)).length ? `来源：${(item.sources?.length ? item.sources : [item.source].filter(Boolean)).join("；")}` : ""].filter(v => v !== undefined && v !== "").join(" · ");
 
 async function intakeActions(status = "pending", sourceSessionId) {
   const actions = [];

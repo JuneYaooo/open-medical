@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { check, string } from "../errors.mjs";
+import { sortDiagnoses } from "../../shared/diagnoses.mjs";
 
 // Local case library with similar-case search. Cases are structured
 // snapshots (diagnosis, demographics, key labs, treatments, outcome) plus a
@@ -82,7 +83,9 @@ export class CaseLibrary {
   // Build a case from the patient's structured record. The snapshot keeps a
   // point-in-time copy; identity stays limited to a display name.
   fromPatient(patient, { summary, outcome } = {}) {
-    const primary = (patient.diagnoses || [])[0];
+    // The case library keys similarity on the primary diagnosis, so an
+    // incidental imaging finding must not outrank the confirmed disease.
+    const primary = sortDiagnoses(patient.diagnoses || [])[0];
     return this.addCase({
       patientId: patient.id,
       patientName: patient.name,

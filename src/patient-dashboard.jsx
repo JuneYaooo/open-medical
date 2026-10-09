@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, CalendarDays, Pill, ArrowUpRight } from 'lucide-react';
 import { dashboardLabGroups, dashboardHistory } from '../shared/patient-dashboard.mjs';
+import { groupDiagnoses, sortDiagnoses } from '../shared/diagnoses.mjs';
 import { MaterialDetails, materialQualityLevel } from './material-details';
 import { api } from './agent-runtime';
 import './patient-dashboard.css';
@@ -62,7 +63,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       {[[Activity,'诊断与问题',diagnoses.length,'problems'],[Pill,'用药记录',meds.length,'medications'],[CalendarDays,'就诊记录',visits.length,'visits'],[FileText,'资料文件',files.length,'sources']].map(([Icon,label,count,id])=><a key={id} href={`#patient-${id}`} onClick={e=>{e.preventDefault();onClinical(id==='problems'?'diagnoses':id);}}><Icon size={18}/><span>{label}<b>{count}<small> 条</small></b></span></a>)}
     </nav>}
     {view === 'overview' && <div className="overview-brief" aria-label="患者近期概览">
-      <section><h3>主要诊断</h3><p>{diagnoses.slice(0,3).map(d=>typeof d==='string'?d:d.name).join(' · ') || '尚未登记诊断'}</p><button className="text-button" onClick={()=>onClinical('diagnoses')}>查看完整诊断与病史</button></section>
+      <section><h3>主要诊断</h3><p>{sortDiagnoses(diagnoses).slice(0,3).map(d=>typeof d==='string'?d:d.name).join(' · ') || '尚未登记诊断'}</p><button className="text-button" onClick={()=>onClinical('diagnoses')}>查看完整诊断与病史</button></section>
       <section><h3>最近一次就诊</h3>{visitsSorted[0] ? <p>{visitsSorted[0].date || '日期未记录'} · {visitsSorted[0].reason}</p> : <p>尚无就诊记录</p>}<button className="text-button" onClick={()=>onClinical('visits')}>查看就诊经过</button></section>
       <section><h3>最近检验</h3>{groups.slice().sort((a,b)=>String(b.records.at(-1)?.date||'').localeCompare(String(a.records.at(-1)?.date||''))).slice(0,3).map(g=><p key={g.key}>{g.item} · {g.conflict ? '同日数值待核对' : `${g.records.at(-1)?.value} ${g.unit || '单位未记录'}`}<small> · {g.records.at(-1)?.date || '日期未记录'}</small></p>)}{!groups.length && <p>尚无检验记录</p>}<button className="text-button" onClick={()=>onClinical('labs')}>查看全部检验与趋势</button></section>
       <section><h3>用药与过敏核对</h3><p>{allergies.length ? '已有过敏记录，请留意。' : patient.allergyStatus==='none_known' ? '已核对：无已知过敏。' : '过敏史尚待核对。'}{meds.some(m=>!m.status||m.status==='unknown') ? '部分用药的当前使用状态待核对。' : !meds.length ? '尚无用药记录。' : '已登记用药，接诊时核对是否变化。'}</p><button className="text-button" onClick={()=>onClinical('medications')}>查看用药与过敏</button></section>
@@ -73,7 +74,16 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       {!!patient.tags?.length && <div className="chart-tags" aria-label="患者标签">{patient.tags.map(tag=><span key={tag}>{tag}</span>)}</div>}
     </article>}
     <div>
-      {view === 'diagnoses' && <section id="chart-problems" className="chart-section" aria-label="诊断与问题"><header><h3>诊断与问题</h3><small>{diagnoses.length} 条记录</small></header>{diagnoses.length ? <ul className="chart-problems">{diagnoses.map((d,i)=><li key={i}><div><b>{typeof d==='string'?d:d.name}</b><small>{d.date || '日期未记录'}{d.code ? ` · ${d.code}` : ''}</small></div><Source value={d.source}/></li>)}</ul> : <p className="chart-empty">资料未明确提供诊断，待补充。</p>}</section>}
+      {view === 'diagnoses' && <section id="chart-problems" className="chart-section" aria-label="诊断与问题"><header><h3>诊断与问题</h3><small>{diagnoses.length} 条记录</small></header>
+        {diagnoses.length ? groupDiagnoses(diagnoses).map(group=><div key={group.status} className="chart-problem-group">
+          <h4>{group.label}<small>{group.items.length} 条</small></h4>
+          <ul className="chart-problems">{group.items.map((d,i)=><li key={i}>
+            <div><b>{typeof d==='string'?d:d.name}</b>{typeof d!=='string' && (!!d.date || !!d.code) && <small>{[d.date || '日期未记录', d.code].filter(Boolean).join(' · ')}</small>}</div>
+            {typeof d!=='string' && d.note && <p className="chart-problem-note">{d.note}</p>}
+            {typeof d!=='string' && <Source value={(d.sources?.length ? d.sources : [d.source].filter(Boolean)).join('；')}/>}
+          </li>)}</ul>
+        </div>) : <p className="chart-empty">资料未明确提供诊断，待补充。</p>}
+      </section>}
       {view === 'medications' && <section id="chart-medications" className="chart-section" aria-label="用药与过敏记录"><header><h3>用药与过敏</h3><small>{meds.length} 条用药</small></header><div className={`chart-allergies ${allergies.length ? 'recorded' : ''}`}><b>过敏史</b><p>{allergies.length ? allergies.map(a=>typeof a==='string'?a:[a.substance,a.reaction].filter(Boolean).join('：')).join('；') : patient.allergyStatus==='none_known' ? '已核对：无已知过敏' : '尚未核对'}</p></div>{meds.length ? <ul className="chart-meds">{meds.map((m,i)=><li key={i}><div className="chart-med-title"><b>{m.name}</b><span className={`chart-med-status ${m.status || 'unknown'}`}>{status[m.status] || status.unknown}</span></div><p>{[m.dose,m.frequency].filter(Boolean).join(' · ') || '剂量与频次未记录'}</p>{m.note && <p className="muted">{m.note}</p>}<Source value={m.source}/></li>)}</ul> : <p className="chart-empty">暂无用药记录，不代表未使用药物。</p>}</section>}
     </div>
     {view === 'labs' && <section className="chart-section chart-labs" aria-label="检验资料与趋势"><header><div><h3>检验资料与趋势</h3><p>同项目、同单位分别展示；趋势仅呈现记录，不自动判断正常或异常。</p></div><small>{patient.labs?.length || 0} 条检验</small></header>
