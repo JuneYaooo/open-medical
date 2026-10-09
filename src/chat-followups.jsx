@@ -28,9 +28,10 @@ export function ChatFollowupsPanel({patients,onSettings,initialPatientId}) {
 }
 function PatientChats({patientId}) {
  const [state,setState]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false),[adding,setAdding]=useState(false),[selected,setSelected]=useState([]);
+ const [replies,setReplies]=useState([]);
  const [offset,setOffset]=useState(0);
  const alive=useRef(true);
- const refresh=async()=>{const value=await api(`/api/chat-followups/patients/${patientId}?offset=${offset}`);if(alive.current)setState(value);};
+ const refresh=async()=>{const value=await api(`/api/chat-followups/patients/${patientId}?offset=${offset}`);if(alive.current)setState(value);api(`/api/chat-aibot/replies?patientId=${patientId}`).then(r=>{if(alive.current)setReplies(r.replies||[]);}).catch(()=>{});};
  useEffect(()=>{alive.current=true;refresh().catch(e=>{if(alive.current)setError(e.message);});return()=>{alive.current=false;};},[patientId,offset]);
  const act=async fn=>{setBusy(true);setError('');setNotice('');try{const message=await fn();if(alive.current){if(typeof message==='string')setNotice(message);await refresh();}}catch(e){if(alive.current)setError(e.message);}finally{if(alive.current)setBusy(false);}};
  return <>{error&&<p role="alert">{error}<button onClick={()=>act(refresh)}>重新加载聊天随访</button></p>}{notice&&<p role="status">{notice}</p>}
@@ -41,6 +42,7 @@ function PatientChats({patientId}) {
    {!state.bindings.length&&!adding&&<p className="chat-empty">此患者还没有关联会话。首次关联需要核实联系人和患者关系。</p>}
    {state.bindings.some(b=>b.channel==='wechat'&&b.mode!=='import')&&<p className="muted">关联、读取与回复都支持按备注名自动定位：只点击会话列表中的精确同名行，并核验顶栏名或头像，不会在微信中搜索。读取可不勾选「读取前自动定位」，改为在微信中手动打开会话后再读。</p>}
    <div className="chat-bindings">{state.bindings.map(b=><article key={b.id}><div><strong>{b.title}</strong><p>{b.mode==='import'?'微信导出记录':(state.connections.find(c=>c.channel===b.channel)?.plugin?.name||names[b.channel]||b.channel)} · {b.speakerName} · {b.relationship==='family'?'家属':'本人'}{!b.currentAccount?' · 账号已改变，需重新关联':''}</p></div><BindingToolbar b={b} connections={state.connections} busy={busy} act={act}/>{b.channel==='wechat'&&b.mode!=='import'&&b.calibration&&<BindingReply binding={b} disabled={busy||!b.currentAccount||!state.connections.find(c=>c.channel===b.channel)?.enabled} onDone={refresh}/>}</article>)}</div>
+   {!!replies.length&&<AibotReplies replies={replies} onChanged={refresh}/>}
    {!!state.inbox.length&&<section className="chat-inbox"><h3>待分配消息</h3><p>群聊或共享会话需要核对归属。只选择属于当前患者的消息。每个会话显示最近 100 条，分配后可继续查看。</p>{state.inbox.map(m=><label className="chat-check" key={m.id}><input type="checkbox" checked={selected.includes(m.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span>{m.text||`[${m.type}]`}<small>{when(m.sentAt||m.observedAt)}</small></span></label>)}<button disabled={busy||!selected.length} onClick={()=>act(async()=>{const groups=new Map();for(const m of state.inbox.filter(m=>selected.includes(m.id))){const ids=groups.get(m.bindingId)||[];ids.push(m.id);groups.set(m.bindingId,ids);}for(const [bindingId,messageIds] of groups)await api('/api/chat-followups/assign','POST',{bindingId,messageIds,confirmed:true});setSelected([]);return '已归入当前患者的待复核草稿';})}>确认选中消息属于当前患者</button></section>}
    <h3>随访草稿与记录</h3>{!state.drafts.length&&<p className="muted">同步后在这里查看原文、填写或生成摘要。</p>}
    <nav className="toolbar-actions" aria-label="聊天记录分页"><button disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-20))}>上一页</button><span>共 {state.total} 份 · 第 {Math.floor(offset/20)+1} 页</span><button disabled={busy||offset+20>=state.total} onClick={()=>setOffset(offset+20)}>下一页</button></nav>
@@ -96,6 +98,31 @@ function RegionPicker({preview,titleRegion,messageRegion,inputPoint,onTitle,onMe
  const rect=(a,b)=>({x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(a.x-b.x),height:Math.abs(a.y-b.y)});
  const draw=(r,key)=>r&&<span key={key} className={`chat-region ${key}`} style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.width*100}%`,height:`${r.height*100}%`}}/>;
  return <div className="chat-calibration">{requireTitle&&preview.suggestedTitleRegion&&<p role="status">已找到匹配的标题位置。请核对框选结果，再选择聊天内容区域。</p>}<div className="chat-tabs">{requireTitle&&<button type="button" aria-pressed={mode==='title'} onClick={()=>setMode('title')}>1. 框选会话标题{titleRegion?' ✓':''}</button>}<button type="button" aria-pressed={mode==='messages'} onClick={()=>setMode('messages')}>{requireTitle?'2. ':''}框选聊天内容{messageRegion?' ✓':''}</button><button type="button" aria-pressed={mode==='input'} onClick={()=>setMode('input')}>{requireTitle?'3. ':''}点选输入框{inputPoint?' ✓':''}</button></div><div className="chat-preview" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setStart(point(e));}} onPointerMove={e=>{if(start)setDrag(rect(start,point(e)));}} onPointerUp={e=>{if(start){const r=rect(start,point(e));if(mode==='input'){onInput({x:Math.round(start.x*10000)/10000,y:Math.round(start.y*10000)/10000});}else if(r.width>.02&&r.height>.015){(mode==='title'?onTitle:onMessages)(r);}}setStart(null);setDrag(null);}} onPointerCancel={()=>{setStart(null);setDrag(null);}}><img src={`data:image/png;base64,${preview.image}`} alt="当前微信窗口，仅在本机用于选择读取区域" draggable={false}/>{draw(titleRegion,'title')}{draw(messageRegion,'messages')}{draw(drag,'selection')}{inputPoint&&<span className="chat-region input-point" style={{left:`${inputPoint.x*100}%`,top:`${inputPoint.y*100}%`}}/>}</div><details><summary>用数值调整区域（百分比）</summary>{[['标题',titleRegion,onTitle],['聊天内容',messageRegion,onMessages]].map(([label,r,set])=><fieldset key={label}><legend>{label}</legend><div className="chat-region-fields">{[['x','左侧'],['y','顶部'],['width','宽度'],['height','高度']].map(([key,name])=><label key={key}>{name}<input type="number" min="0" max="100" step="0.1" value={r?Math.round(r[key]*1000)/10:''} onChange={e=>set({...r,x:r?.x||0,y:r?.y||0,width:r?.width||0,height:r?.height||0,[key]:Number(e.target.value)/100})}/></label>)}</div></fieldset>)}<fieldset><legend>输入框位置</legend><div className="chat-region-fields">{[['x','左侧'],['y','顶部']].map(([key,name])=><label key={key}>{name}<input type="number" min="0" max="100" step="0.1" value={inputPoint?Math.round(inputPoint[key]*1000)/10:''} onChange={e=>onInput({...inputPoint,x:inputPoint?.x||0.5,y:inputPoint?.y||0.85,[key]:Number(e.target.value)/100})}/></label>)}</div></fieldset></details></div>;
+}
+// 企微智能机器人回复队列:红旗提问直接给安全话术,其余按知识库起草;
+// 医生逐条通过后才发送(原路回复,失败自动回退主动推送),永不自动发送。
+function AibotReplies({replies,onChanged}) {
+ const pending=replies.filter(r=>r.status==='draft'),done=replies.filter(r=>r.status!=='draft');
+ const act=async fn=>{try{await fn();await onChanged();}catch(e){onChanged();throw e;}};
+ return <section className="chat-inbox" aria-label="机器人回复队列"><h3>机器人回复{pending.length?`（待审核 ${pending.length}）`:''}</h3>
+  <p>红旗症状自动使用固定安全话术；其余按患者简报与知识库起草。每条都需您通过后才发送。</p>
+  {pending.map(r=><AibotReplyRow key={`${r.id}:${r.revision}`} row={r} act={act}/>)}
+  {done.length>0&&<details><summary>已处理 {done.length} 条</summary>{done.map(r=><p key={`${r.id}:${r.revision}`} className="muted">{r.status==='sent'?'已发送':'不回复'} · {when(r.sentAt||r.createdAt)} · 问：{r.question} · 答：{r.text}</p>)}</details>}
+ </section>;
+}
+function AibotReplyRow({row,act}) {
+ const [text,setText]=useState(row.text),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ return <div className="chat-draft" style={{borderLeft:row.urgent?'3px solid #b91c1c':undefined}}>
+  <p><strong>{row.urgent?'⚠ 红旗症状':`问：${row.question}`}</strong>{row.screen?.reasons?.length?` · 送审提示：${row.screen.reasons.join('、')}`:''}</p>
+  <label>回复内容<textarea rows={3} maxLength={2000} aria-label="回复内容" value={text} onChange={e=>{setText(e.target.value);setConsent(false);}}/></label>
+  <p className="muted">发送时自动附 AI 助手免责声明；优先原路回复，失败自动回退主动推送。</p>
+  {error&&<p role="alert">{error}</p>}
+  <div className="toolbar-actions">
+   <label className="chat-check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>我已核对本条回复内容</label>
+   <button disabled={busy||!consent||!text.trim()} onClick={()=>{setBusy(true);setError('');act(async()=>{await api(`/api/chat-aibot/replies/${row.id}/send`,'POST',{text,consent:true});}).catch(e=>setError(e.message)).finally(()=>setBusy(false));}}>{busy?'正在发送…':'通过并发送'}</button>
+   <button disabled={busy} onClick={()=>{if(window.confirm('确认不回复这条消息？')){setBusy(true);act(()=>api(`/api/chat-aibot/replies/${row.id}/dismiss`,'POST',{confirmed:true})).catch(e=>setError(e.message)).finally(()=>setBusy(false));}}}>不回复</button>
+  </div>
+ </div>;
 }
 function DraftCard({draft,onChanged}) {
  const [note,setNote]=useState(draft.note),[contactedAt,setContactedAt]=useState(localDate()),[consent,setConsent]=useState(false),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[sources,setSources]=useState(null);

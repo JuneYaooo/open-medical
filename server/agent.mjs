@@ -1,5 +1,5 @@
 import { ChatFollowups } from "./chat-followups.mjs";
-import { WecomAibotChannel } from "./chat-aibot.mjs";
+import { WecomAibotChannel, chatAibotApi } from "./chat-aibot.mjs";
 import { chatFollowupsApi } from "./chat-followups-api.mjs";
 import { WechatAutoFollow } from "./chat-autofollow.mjs";
 import { chatAutoFollowApi } from "./chat-autofollow-api.mjs";
@@ -632,7 +632,7 @@ export function createServer(options = {}) {
     platform: options.wechatBridgePlatform ?? process.platform,
   });
   // 企微智能机器人通道:先建实例再交给 ChatFollowups 注册,start 后按配置自动拉起长连接。
-  const wecomAibot = options.chatAibot || new WecomAibotChannel({ log: (message) => console.error(`[aibot] ${message}`) });
+  const wecomAibot = options.chatAibot || new WecomAibotChannel({ log: (message) => console.error(`[aibot] ${message}`), provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief });
   const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, aibot: wecomAibot, ...options.chatFollowups });
   wecomAibot.attach(chatFollowups);
   wecomAibot.start();
@@ -1350,6 +1350,7 @@ export function createServer(options = {}) {
         }
       }
       if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
+      if (path.startsWith("/api/chat-aibot/") && await track(chatAibotApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-autofollow/") && await track(chatAutoFollowApi(chatAutoFollow, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());

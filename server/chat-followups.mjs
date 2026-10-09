@@ -89,6 +89,10 @@ export class ChatFollowups {
     // 智能机器人通道没有采集器:endpoint 固定为长连接地址(account 哈希保持稳定),
     // botId 记在 accountId,Secret 记在 token。
     if (channel !== 'wechat' && channel !== 'wecom-aibot') c.endpoint = collectorUrl(string(input.endpoint, '采集器地址', 500));
+    if (channel === 'wecom-aibot') {
+      // 自动起草只进待审核队列,永不自动发送;需要明确授权模型参与。
+      c.autoReply = Boolean(input.autoReply && input.autoReplyConsent);
+    }
     c.autoSummarize = Boolean(c.autoUntil && input.autoSummarize);
     if (c.autoSummarize) check(input.modelConsent === true && this.provider(), 'CHAT_MODEL_CONSENT', '自动整理需要明确授权当前模型服务，并配置可用模型', 412);
     c.modelFingerprint = c.autoSummarize ? this.modelIdentity() : '';

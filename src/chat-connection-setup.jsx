@@ -65,21 +65,24 @@ function AutomaticSettings({initial,onSaved}) {
 }
 
 export function AibotConnectionForm({initial,onSaved}) {
- const [saved,setSaved]=useState(initial),[form,setForm]=useState({...initial,token:''}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [saved,setSaved]=useState(initial),[form,setForm]=useState({...initial,token:'',autoReply:Boolean(initial.autoReply),autoReplyConsent:false}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const update=(key,value)=>setForm(v=>({...v,[key]:value}));
- const accept=value=>{setSaved(value);setForm({...value,token:''});onSaved(value);};
+ const accept=value=>{setSaved(value);setForm(v=>({...value,token:'',autoReply:Boolean(value.autoReply),autoReplyConsent:false}));onSaved(value);};
  const act=async fn=>{setBusy(true);setError('');setNotice('');try{const message=await fn();if(typeof message==='string')setNotice(message);}catch(e){setError(e.message);}finally{setBusy(false);}};
+ const toggleAutoReply=()=>act(async()=>{const next=!saved.autoReply;const value=await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,autoReply:next,autoReplyConsent:next,enabled:saved.enabled});accept(value);return next?'已开启自动起草：@ 消息会自动生成待审核回复，不会自动发送。':'已关闭自动起草。';});
  return <div className="chat-setup"><h3>{saved.plugin?.name}</h3>
   <p>企微群聊里 @ 机器人的消息与患者单聊会实时进入工作台：绑定会话后进入待复核草稿或待分配消息。机器人只接收 @ 自己的群消息，看不到群里的其他聊天。</p>
   <details><summary>准备智能机器人</summary><ol><li>企业管理后台 → 智能机器人：创建机器人，连接方式选「长连接」并开启 API 模式。</li><li>把机器人页的 Bot ID 和 Secret 填到下方，验证后启用。</li><li>把机器人加进患者群（或在单聊中使用）。@ 消息实时到达；未绑定的会话先在关联页的会话列表中出现，绑定后新消息才入库。</li></ol></details>
   <form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(async()=>{const value=await api(`/api/chat-followups/connections/${saved.channel}/connect`,'POST',{...form,revision:saved.revision});accept(value);setNotice(value.enabled?'连接验证通过，长连接已启动。请去关联患者会话。':'配置已保存，但连接验证未通过，尚未启用。请核对 ID 与 Secret。');});}}>
    <label>机器人 ID（Bot ID）<input required maxLength={200} value={form.accountId} onChange={e=>update('accountId',e.target.value)} autoComplete="off"/></label>
    <label>机器人 Secret<input required={!saved.hasToken} type="password" autoComplete="new-password" value={form.token} onChange={e=>update('token',e.target.value)} placeholder={saved.hasToken?'已保存，留空保留':'企业管理后台机器人页的 Secret'}/></label>
+   <label className="chat-check"><input type="checkbox" checked={Boolean(form.autoReply)} onChange={e=>{update('autoReply',e.target.checked);update('autoReplyConsent',false);}}/>自动起草回复（@ 消息自动生成待审核回复草稿，需医生逐条通过后才发送，永不自动发送）</label>
+   {form.autoReply&&<label className="chat-check"><input required type="checkbox" checked={Boolean(form.autoReplyConsent)} onChange={e=>update('autoReplyConsent',e.target.checked)}/>允许将 @ 消息、患者简报与知识库片段发送给当前模型服务起草回复；红旗症状直接使用固定安全话术不经模型</label>}
    <button disabled={busy} type="submit">{busy?'正在验证…':'验证并启用连接'}</button>
   </form>
   {notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error}</p>}
   <p role="status">{saved.status?.message}</p>
-  {saved.enabled&&<><div className="toolbar-actions"><button disabled={busy} onClick={()=>act(async()=>{const status=await api(`/api/chat-followups/connections/${saved.channel}/test`,'POST',{});setSaved(v=>({...v,status}));})}>检查连接</button><button disabled={busy} onClick={()=>act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,enabled:false,autoUntil:'',autoSummarize:false})))}>停用连接</button></div><a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联患者会话 →</a><AutomaticSettings key={`${saved.channel}:${saved.revision}`} initial={saved} onSaved={accept}/></>}
+  {saved.enabled&&<><div className="toolbar-actions"><button disabled={busy} onClick={()=>act(async()=>{const status=await api(`/api/chat-followups/connections/${saved.channel}/test`,'POST',{});setSaved(v=>({...v,status}));})}>检查连接</button><button disabled={busy} onClick={toggleAutoReply}>{saved.autoReply?'关闭自动起草':'开启自动起草'}</button><button disabled={busy} onClick={()=>act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,enabled:false,autoUntil:'',autoSummarize:false})))}>停用连接</button></div><a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联患者会话 →</a><AutomaticSettings key={`${saved.channel}:${saved.revision}`} initial={saved} onSaved={accept}/></>}
   <p className="muted">最近同步：{when(saved.lastSyncAt)}{saved.lastError?` · ${saved.lastError}`:''}</p>
  </div>;
 }

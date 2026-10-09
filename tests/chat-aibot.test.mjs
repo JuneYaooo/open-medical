@@ -41,6 +41,7 @@ test('channel ingests pushed frames into chat followups and records seen convers
   channel.attach({
     config: () => ({ channel:AIBOT_CHANNEL, enabled:true, accountId:'bot', revision:1 }),
     secret: () => ({ token:'sec' }),
+    db: { exec(){} },
     ingest: (c, msgs) => ingested.push(...msgs),
   });
   channel.onMessage(groupFrame());
@@ -52,7 +53,7 @@ test('channel ingests pushed frames into chat followups and records seen convers
   // 未启用时只记录 seen,不入库。
   const disabled = new WecomAibotChannel();
   let calls = 0;
-  disabled.attach({ config: () => ({ channel:AIBOT_CHANNEL, enabled:false }), secret: () => ({ token:'sec' }), ingest: () => calls++ });
+  disabled.attach({ db: { exec(){} }, config: () => ({ channel:AIBOT_CHANNEL, enabled:false }), secret: () => ({ token:'sec' }), ingest: () => calls++ });
   disabled.onMessage(groupFrame());
   assert.equal(calls, 0);
 });
@@ -101,4 +102,90 @@ test('aibot channel end-to-end: connect, bind group, push frame lands in inbox t
   assert.match(state.drafts[0].sourceText, /复查需要带什么/); // @ 前缀已剥除
   const listed = (await f.json('/api/chat-followups/conversations?channel=wecom-aibot')).data;
   assert.deepEqual(listed.conversations.map(c => c.id), ['room:wrAbc123']);
+});
+
+// ---- 回复引擎 ----
+import { randomUUID } from 'node:crypto';
+import { SAFETY_REPLY } from '../server/care/red-flags.mjs';
+
+class ReplySocket extends FakeSocket {
+  constructor(mode){ super(mode); this.replies = []; this.pushes = []; }
+  async reply(frame, body){ this.replies.push({ reqId: frame?.headers?.req_id, body }); if (this.mode === 'ok') return { errcode: 0 }; throw new Error('respond fail'); }
+  async push(chatId, body){ this.pushes.push({ chatId, body }); if (this.mode === 'ok') return { errcode: 0 }; throw new Error('push fail'); }
+}
+const providerOf = (text) => { let calls = 0; return { complete: async () => { calls++; return { message: { content: text } }; }, get calls(){ return calls; } };
+};
+const knowledgeOf = () => ({ search: async ({ query }) => assert.ok(query), });
+const briefOf = () => ({ read: () => ({ name: '张三' }) });
+const stubFollowups = (channel, { enabled = true, ingested = [] } = {}) => {
+  const store = { replies: [] };
+  const binding = JSON.stringify({ id:'b1', patientId:'p1', title:'家属群', disabled:0 });
+  channel.attach({
+    config: () => ({ channel:AIBOT_CHANNEL, enabled, autoReply:true, accountId:'bot', revision:1 }),
+    secret: () => ({ token:'sec' }),
+    account: () => 'acc1',
+    db: { exec(){}, prepare(sql) {
+      if (sql.startsWith('INSERT INTO chat_aibot_replies')) return { run: (id, _pid, _bid, data) => { const row = JSON.parse(data); const i = store.replies.findIndex(r => r.id === id); if (i >= 0) store.replies[i] = row; else store.replies.push(row); } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE id=')) return { get: (id) => { const hit = store.replies.find(r => r.id === id); return hit ? { data: JSON.stringify(hit) } : null; } };
+      if (sql.startsWith('SELECT data FROM chat_aibot_replies WHERE patient_id=')) return { all: () => store.replies.map(r => ({ data: JSON.stringify(r) })) };
+      return { get: () => ({ data: binding }) };
+    } },
+    ingest: (c, msgs) => ingested.push(...msgs),
+  });
+  return store;
+};
+const waitDraft = async (channel, n = 1) => { for (let i = 0; i < 40; i++) { if (channel.replies('p1').length >= n) return; await new Promise(r => setTimeout(r, 50)); } };
+
+test('red-flag question drafts the deterministic safety reply without the model', async () => {
+  const ingested = []; const provider = providerOf('不该被调用');
+  const channel = new WecomAibotChannel({ provider, guidelines: knowledgeOf(), patientBrief: briefOf() });
+  stubFollowups(channel, { ingested });
+  channel.onMessage(groupFrame({ msgid:'rf1', text:{content:'@英俊的机器人 我爸今天胸口痛得厉害还出汗'} }));
+  await waitDraft(channel);
+  const rows = channel.replies('p1');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].urgent, true);
+  assert.equal(rows[0].text, SAFETY_REPLY);
+  assert.equal(provider.calls, 0);
+});
+
+test('normal question drafts via knowledge base and provider, then send records an outbound message', async () => {
+  const ingested = []; const provider = providerOf('复查当天请携带既往报告，提前 30 分钟到院。');
+  const channel = new WecomAibotChannel({ provider, guidelines: knowledgeOf(), patientBrief: briefOf() });
+  stubFollowups(channel, { ingested });
+  channel.socket = new ReplySocket('ok');
+  channel.onMessage(groupFrame({ msgid:'q1', text:{content:'@英俊的机器人 复查要带什么'} }));
+  await waitDraft(channel);
+  const rows = channel.replies('p1');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].urgent, false);
+  assert.match(rows[0].text, /复查当天/);
+  assert.equal(provider.calls, 1);
+  const sent = await channel.sendReply(rows[0].id, { consent:true });
+  assert.equal(sent.status, 'sent');
+  assert.equal(sent.sentVia, 'respond');
+  assert.match(channel.socket.replies[0].body.markdown.content, /AI 助手/); // 免责声明发送时追加
+  const out = ingested.find(m => m.direction === 'out');
+  assert.ok(out && out.conversationId === 'room:wrAbc123');
+  // 重复发送被拒
+  await assert.rejects(() => channel.sendReply(rows[0].id, { consent:true }), AppError);
+});
+
+test('respond failure falls back to active push; dismiss requires confirmation', async () => {
+  const channel = new WecomAibotChannel({ provider: providerOf('好的，请按时到院。'), guidelines: knowledgeOf(), patientBrief: briefOf() });
+  stubFollowups(channel);
+  channel.socket = new ReplySocket('bad'); // respond 与 push 都会抛错
+  channel.onMessage(groupFrame({ msgid:'q2', text:{content:'@英俊的机器人 明天门诊吗'} }));
+  await waitDraft(channel);
+  const row = channel.replies('p1')[0];
+  await assert.rejects(() => channel.sendReply(row.id, { consent:true })); // push 也失败
+  const socket = new ReplySocket('ok'); socket.mode = 'bad-respond-only';
+  // respond 抛错、push 成功的回退路径:用自定义 socket
+  const fallback = new ReplySocket('ok');
+  fallback.reply = async () => { throw new Error('respond fail'); };
+  channel.socket = fallback;
+  const sent = await channel.sendReply(row.id, { consent:true });
+  assert.equal(sent.sentVia, 'push');
+  assert.equal(fallback.pushes.length, 1);
+  await assert.rejects(() => channel.dismissReply(row.id, { confirmed:false }), AppError);
 });

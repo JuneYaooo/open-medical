@@ -110,18 +110,26 @@ export class AibotSocket extends EventEmitter {
   }
   // 被动回复:透传消息回调的 req_id,服务端据此路由回原会话。
   reply(frame, body) {
+    return this.respond("aibot_respond_msg", frame?.headers?.req_id, body);
+  }
+  // 主动推送(aibot_send_msg):用户近期与机器人有过会话即可发;单聊 chatid 传对方 userid。
+  push(chatId, body) {
+    return this.respond("aibot_send_msg", null, { chatid: chatId, chat_type: 0, ...body });
+  }
+  respond(cmd, reqId, body) {
     return new Promise((resolve, reject) => {
       if (!this.authed) return reject(new Error("长连接未就绪"));
-      const reqId = frame?.headers?.req_id;
-      if (!reqId || this.pending.has(reqId)) return reject(new Error("缺少可用的回调 req_id"));
-      const entry = { reqId, type: "reply", resolve, reject };
-      this.pending.set(reqId, entry);
+      if (cmd === "aibot_respond_msg" && (!reqId || this.pending.has(reqId)))
+        return reject(new Error("缺少可用的回调 req_id"));
+      const key = reqId || `${cmd}-${randomUUID()}`;
+      const entry = { reqId: key, type: "reply", resolve, reject };
+      this.pending.set(key, entry);
       entry.timer = setTimeout(() => {
-        this.pending.delete(reqId);
+        this.pending.delete(key);
         reject(new Error("回复超时"));
       }, 8000);
       entry.timer.unref?.();
-      this.send({ cmd: "aibot_respond_msg", headers: { req_id: reqId }, body });
+      this.send({ cmd, headers: { req_id: key }, body });
     });
   }
   teardown(reason) {
