@@ -75,7 +75,7 @@ test("questionnaire validation, rendering, parsing and scoring are deterministic
   );
   const rendered = renderQuestionnaire(QUESTIONNAIRE);
   assert.match(rendered, /【随访问卷】月度随访/);
-  assert.match(rendered, /1\) 经常  2\) 偶尔/);
+  assert.match(rendered, /1\) 经常 {2}2\) 偶尔/);
   // 按题号的回复才被认作问卷作答。
   const parsed = parseAnswer(QUESTIONNAIRE, "今天还好，血压有点高");
   assert.equal(parsed.hasNumberedLine, false);

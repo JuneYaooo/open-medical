@@ -68,7 +68,7 @@ function AutomaticSettings({initial,onSaved}) {
 export function AibotConnectionForm({initial,onSaved}) {
  const [saved,setSaved]=useState(initial),[form,setForm]=useState({...initial,token:'',autoReply:Boolean(initial.autoReply),autoReplyConsent:false}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const update=(key,value)=>setForm(v=>({...v,[key]:value}));
- const accept=value=>{setSaved(value);setForm(v=>({...value,token:'',autoReply:Boolean(value.autoReply),autoReplyConsent:false}));onSaved(value);};
+ const accept=value=>{setSaved(value);setForm(() => ({...value,token:'',autoReply:Boolean(value.autoReply),autoReplyConsent:false}));onSaved(value);};
  const act=async fn=>{setBusy(true);setError('');setNotice('');try{const message=await fn();if(typeof message==='string')setNotice(message);}catch(e){setError(e.message);}finally{setBusy(false);}};
  const toggleAutoReply=()=>act(async()=>{const next=!saved.autoReply;const value=await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,autoReply:next,autoReplyConsent:next,enabled:saved.enabled});accept(value);return next?'已开启自动起草：@ 消息会自动生成待审核回复，不会自动发送。':'已关闭自动起草。';});
  return <div className="chat-setup"><h3>{saved.plugin?.name}</h3>

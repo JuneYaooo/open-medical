@@ -58,7 +58,7 @@ test("education materials live in their own collection with the review loop", as
   assert.equal(badRevision.status, 409);
 });
 
-test("smart-reply drafting puts reviewed education material first in the prompt", async (t) => {
+test("smart-reply drafting puts reviewed education material first in the prompt", async () => {
   const prompts = [];
   const channel = new WecomAibotChannel({
     provider: {
@@ -70,7 +70,7 @@ test("smart-reply drafting puts reviewed education material first in the prompt"
       },
     },
     guidelines: {
-      async search({ collection, reviewStatus, limit }) {
+      async search({ collection, reviewStatus }) {
         if (collection === "患教素材" && reviewStatus === "reviewed")
           return { hits: [{ docTitle: "介入术后居家注意", docId: "gl_edu", startLine: 1, endLine: 3, matches: [{ text: BODY }] }] };
         return { hits: [{ docTitle: "肝癌诊疗指南", docId: "gl_guide", startLine: 10, endLine: 20, matches: [{ text: "指南原文片段" }] }] };

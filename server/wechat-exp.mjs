@@ -104,7 +104,7 @@ export class WechatExpService {
     const want = enabled && this.toolReady;
     const signature = want ? `${revision}:${secret}` : "";
     if (signature === this.bridgeSignature && (!want || Boolean(this.bridge) === want)) return;
-    this.stopBridge();
+    this.stopBridge?.();
     this.bridgeSignature = signature;
     if (!want) return;
     this.account = accountId;
@@ -246,7 +246,7 @@ export class WechatExpService {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.stopBridge();
+    this.stopBridge?.();
   }
 }
 

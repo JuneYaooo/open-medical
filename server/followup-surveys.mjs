@@ -161,7 +161,7 @@ export function parseAnswer(questionnaire, text) {
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const match = line.match(/^(?:第\s*)?(\d{1,2}|[a-jA-J])\s*[.、,，:：\)）]\s*(.+)$/);
+    const match = line.match(/^(?:第\s*)?(\d{1,2}|[a-jA-J])\s*[.、,，:：)）]\s*(.+)$/);
     if (!match) continue;
     let question = /^\d+$/.test(match[1])
       ? byIndex.get(Number(match[1]))
