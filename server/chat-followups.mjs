@@ -202,6 +202,32 @@ export class ChatFollowups {
     this.imports.set(id,{...parsed,patientId:input.patientId,expires:Date.now()+300000});
     return {id,text:parsed.text,filename:parsed.filename,attachments:parsed.attachments,expiresAt:new Date(Date.now()+300000).toISOString()};
   }
+  // 批量导入的智能匹配:按会话名对照「已绑定的微信备注名 > 患者姓名」,匹配不上的
+  // 返回 null 由医生人工指派——绝不按模糊猜测自动归档,避免把陌生人的聊天进错档案。
+  matchImportNames(input) {
+    check(Array.isArray(input.names) && input.names.length >= 1 && input.names.length <= 200 && input.names.every(n => typeof n === 'string' && n.length <= 200), 'INVALID_INPUT', '会话名列表无效');
+    const norm = s => String(s || '').trim().toLowerCase();
+    const byTitle = new Map(), byName = new Map();
+    for (const b of this.db.prepare("SELECT data FROM chat_bindings WHERE channel='wechat'").all().map(json).filter(b => !b.disabled && b.mode !== 'import')) {
+      const t = norm(b.title); if (t && !byTitle.has(t)) byTitle.set(t, b);
+    }
+    for (const row of this.db.prepare('SELECT id, data FROM patients').all()) {
+      const p = JSON.parse(row.data);
+      if (p.archived) continue;
+      const n = norm(p.name); if (n && !byName.has(n)) byName.set(n, { patientId: row.id, patientName: p.name });
+    }
+    return { matchResults: input.names.map(raw => {
+      const name = String(raw), n = norm(name);
+      let match = null;
+      const b = byTitle.get(n);
+      if (b) {
+        const p = this.patients.get(b.patientId);
+        if (p && !p.archived) match = { patientId: b.patientId, patientName: p.name, matchedBy: 'binding', bindingTitle: b.title };
+      }
+      if (!match) { const hit = byName.get(n); if (hit) match = { ...hit, matchedBy: 'name' }; }
+      return { name, match };
+    }) };
+  }
   importExport(input) {
     this.patient(input.patientId);
     const p=this.imports.get(input.previewId);

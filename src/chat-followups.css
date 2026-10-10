@@ -73,3 +73,9 @@
 .chat-followups .toolbar-actions .chat-check.chat-autoread input { margin-top:0; }
 /* 连接配置:微信号格式软提示;不拦截提交,只当场纠正「把昵称当微信号」这类常见错误。 */
 .chat-warn { color:#8a5a1e; font-weight:400; line-height:1.6; }
+
+/* 批量导入匹配表 */
+.chat-import-batch { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+.chat-import-batch th, .chat-import-batch td { border: 1px solid var(--border, #ddd); padding: 6px 8px; text-align: left; vertical-align: top; }
+.chat-import-batch th { background: rgba(127,127,127,.08); }
+.chat-import-batch select { max-width: 220px; }

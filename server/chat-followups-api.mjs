@@ -17,6 +17,7 @@ export async function chatFollowupsApi(service, req, url, { body, send }) {
   if (p[2] === 'patients' && p.length === 4 && req.method === 'GET') return reply(service.list(p[3],url.searchParams.get('offset') || 0));
   if (p[2] === 'conversations' && p.length === 3 && req.method === 'GET') return reply(await service.conversations(url.searchParams.get('channel') || 'wecom'));
   if (p[2] === 'imports' && p.length === 4 && p[3] === 'preview' && req.method === 'POST') return reply(await service.previewImport(await body()));
+  if (p[2] === 'imports' && p.length === 4 && p[3] === 'match' && req.method === 'POST') return reply(service.matchImportNames(await body()));
   if (p[2] === 'imports' && p.length === 3 && req.method === 'POST') return reply(service.importExport(await body()),201);
   if (p[2] === 'preview' && p.length === 3 && req.method === 'POST') return reply(await service.preview(await body()));
   if (p[2] === 'contacts' && p.length === 3 && req.method === 'POST') return reply(await service.wechatContacts(await body()));

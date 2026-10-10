@@ -257,3 +257,16 @@ test('wechat red-flag drafts the safety reply and room/import bindings are skipp
   await new Promise(r => setTimeout(r, 100));
   assert.equal(channel.replies('p1').length, 1);
 });
+
+// ---- 批量导入匹配 ----
+test('import matching hits patient names, normalizes and returns null for strangers', async t => {
+  const f = await fixture(t, {});
+  const p = (await f.json('/api/patients','POST',{name:'匹配测试患者'})).data;
+  const r = (await f.json('/api/chat-followups/imports/match','POST',{names:['匹配测试患者','陌生群聊','  匹配测试患者  ']})).data;
+  assert.equal(r.matchResults.length, 3);
+  assert.equal(r.matchResults[0].match.patientId, p.id);
+  assert.equal(r.matchResults[0].match.matchedBy, 'name');
+  assert.equal(r.matchResults[1].match, null);
+  assert.equal(r.matchResults[2].match.patientId, p.id); // 归一化忽略首尾空格
+  assert.equal((await f.json('/api/chat-followups/imports/match','POST',{names:[]})).status, 400);
+});
