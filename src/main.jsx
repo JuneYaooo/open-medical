@@ -1394,6 +1394,11 @@ function App() {
           <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
             <Plus size={20}/><span>新建任务<small>和 Agent 说说你想做什么</small></span>
           </button>
+          {medical && <nav className="agent-recents" aria-label="最近任务">
+            <p className="business-nav-label">最近对话</p>
+            {sessions.slice(0,4).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
+            {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+          </nav>}
           <nav className="business-nav" aria-label="通用工作">
             {[["tasks", "任务记录", MessageSquare], ["projects", "项目文件", FolderOpen]].map(([id,label,Icon]) => <button key={id} aria-current={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "page" : undefined} className={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "active" : ""} onClick={() => navigate(id)}><Icon size={18}/>{label}</button>)}
           </nav>
@@ -1407,11 +1412,6 @@ function App() {
             <button aria-current={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "page" : undefined} className={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={18}/>资料与工具</button>
           </nav>
           {wsList.some(w=>w.pinned&&!w.archived)&&<nav className="pinned-projects" aria-label="固定项目"><p className="business-nav-label">固定项目</p>{wsList.filter(w=>w.pinned&&!w.archived).slice(0,3).map(w=><button key={w.id} onClick={()=>openWorkspaces({id:w.id})}><FolderOpen size={16}/><span>{w.title}</span></button>)}</nav>}
-          {medical && <nav className="agent-recents" aria-label="最近任务">
-            <p className="business-nav-label">最近对话</p>
-            {sessions.slice(0,8).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
-            {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
-          </nav>}
           <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
         <div className="product-content" id="main-content" tabIndex={-1}>
