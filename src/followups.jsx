@@ -493,6 +493,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                     <small>
                       {fmtDue(job.nextDue)} ·{" "}
                       {job.once ? "单次" : `每 ${job.intervalDays} 天`}
+                      {job.hasSurvey ? " · 含问卷" : ""}
                       {job.checklist?.length
                         ? ` · ${job.checklist.join("、")}`
                         : ""}

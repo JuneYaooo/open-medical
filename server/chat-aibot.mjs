@@ -168,6 +168,14 @@ export class WecomAibotChannel {
       if (row.urgent) {
         row.text = SAFETY_REPLY; // 确定性安全话术,不走模型。
       } else {
+        // 待回收的随访问卷优先:按题号格式作答的消息被问卷消费,不再起草回复。
+        if (this.surveys) {
+          const collected = this.surveys.tryCollect(b.patientId, message.text);
+          if (collected) {
+            this.log(`随访问卷回收(patient=${b.patientId}):${collected}`);
+            return;
+          }
+        }
         const draft = await this.modelDraft(b, message.text);
         if (!draft) return;
         row.text = draft;
@@ -268,6 +276,13 @@ export class WecomAibotChannel {
       if (row.urgent) {
         row.text = SAFETY_REPLY;
       } else {
+        if (this.surveys) {
+          const collected = this.surveys.tryCollect(binding.patientId, text);
+          if (collected) {
+            this.log(`微信随访问卷回收(patient=${binding.patientId}):${collected}`);
+            return;
+          }
+        }
         const draft = await this.modelDraft(binding, text, "微信");
         if (!draft) return;
         row.text = draft;

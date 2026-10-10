@@ -4,6 +4,8 @@ import { WeComPanel } from "./wecom-panel";
 import { PatientDashboard } from "./patient-dashboard";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { FollowupRecords } from "./followup-records";
+import { SurveyPanel } from "./followup-surveys-panel";
+import { QuestionnaireEditor, emptyQuestionnaire, buildQuestionnaire } from "./questionnaire-editor";
 import { useEffect, useRef, useState } from "react";
 import {
   Bell,
@@ -861,11 +863,18 @@ export function PatientsView({
                 onChanged={refreshPatient}
                 onOpenTask={onOpenWorkspace}
               />
+              <SurveyPanel
+                key={`surveys-${detail.id}`}
+                patientId={detail.id}
+                onChanged={refreshPatient}
+                onError={setError}
+              />
               {followups.map((job) => (
                 <div className="followup-card" key={job.id}>
                   <div className="followup-head">
                     <b>{job.name}</b>
                     <span className="badge">{{ active: "计划中", running: "提醒生成中", paused: "已暂停", completed: "提醒已生成" }[job.status] || job.status}</span>
+                    {job.questionnaire && <span className="badge">含问卷</span>}
                   </div>
                   <small className="muted">
                     {job.once ? "单次提醒" : `每 ${job.intervalDays} 天`} ·{" "}
@@ -1092,6 +1101,8 @@ function FollowupModal({ patientId, onClose, onCreated }) {
     checklist: "",
     externalConsent: false,
   });
+  const [withSurvey, setWithSurvey] = useState(false);
+  const [questionnaire, setQuestionnaire] = useState(() => emptyQuestionnaire());
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const set = (key) => (e) =>
@@ -1113,6 +1124,7 @@ function FollowupModal({ patientId, onClose, onCreated }) {
           .map((s) => s.trim())
           .filter(Boolean),
         externalConsent: form.externalConsent,
+        ...(withSurvey ? { questionnaire: buildQuestionnaire(questionnaire) } : {}),
       });
       await onCreated();
     } catch (err) {
@@ -1164,6 +1176,17 @@ function FollowupModal({ patientId, onClose, onCreated }) {
           />
           授权随访到期时自动把未处理消息原文发送给当前模型服务生成记录摘要
         </label>
+        <label className="consent">
+          <input
+            type="checkbox"
+            checked={withSurvey}
+            onChange={(e) => setWithSurvey(e.target.checked)}
+          />
+          附带结构化随访问卷（到期生成，患者按题号回复自动计分，越界进今日待办）
+        </label>
+        {withSurvey && (
+          <QuestionnaireEditor value={questionnaire} onChange={setQuestionnaire} />
+        )}
         {error && <p className="error-text">{error}</p>}
         <button className="primary" disabled={saving}>
           创建随访计划

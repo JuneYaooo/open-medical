@@ -2,6 +2,7 @@ import { providerConfigured } from "./core/provider-status.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
+import { normalizeQuestionnaire } from "./followup-surveys.mjs";
 import {
   composeDigest,
   selectDigestMessages,
@@ -11,7 +12,7 @@ import {
 // Durable per-patient follow-up queue. Same semantics as MedicalScheduler:
 // synchronous claim on the single database owner, missed intervals advance,
 // failed occurrences pause instead of replaying an uncertain request.
-const CONTACT_SOURCES = Object.freeze({ manual: "医生主动登记的联系", campaign: "随访计划自动收集", chat: "聊天随访归档" });
+const CONTACT_SOURCES = Object.freeze({ manual: "医生主动登记的联系", campaign: "随访计划自动收集", chat: "聊天随访归档", survey: "随访问卷自动回收" });
 
 export class FollowUpManager {
   constructor(
@@ -116,6 +117,9 @@ export class FollowUpManager {
       "INVALID_INPUT",
       "随访条目须为最多 20 条且不重复",
     );
+    const questionnaire = input.questionnaire
+      ? normalizeQuestionnaire(input.questionnaire)
+      : null;
     const job = {
       id: randomUUID(),
       patientId,
@@ -124,6 +128,7 @@ export class FollowUpManager {
       intervalDays,
       once,
       checklist,
+      questionnaire,
       externalConsent: input.externalConsent === true,
       nextDue: firstDueAt,
       status: "active",
@@ -224,7 +229,7 @@ export class FollowUpManager {
     const validated=nodes.map(node=>{
       check(node&&Number.isInteger(node.offsetDays)&&node.offsetDays>=0&&node.offsetDays<=3650,'INVALID_INPUT','节点天数须为 0–3650 的整数');
       check(Array.isArray(node.items)&&node.items.length<=10,'INVALID_INPUT','每节点最多 10 条随访内容');
-      return {offsetDays:node.offsetDays,title:string(node.title,'节点标题',100),items:node.items.map(item=>string(item,'随访内容',500))};
+      return {offsetDays:node.offsetDays,title:string(node.title,'节点标题',100),items:node.items.map(item=>string(item,'随访内容',500)),questionnaire:node.questionnaire?normalizeQuestionnaire(node.questionnaire):null};
     });
     const patient = this.patientRow(patientId);
     check(
@@ -260,6 +265,7 @@ export class FollowUpManager {
         intervalDays: null,
         once: true,
         checklist: node.items,
+        questionnaire: node.questionnaire || null,
         externalConsent: externalConsent === true,
         nextDue,
         status: "active",
@@ -317,6 +323,7 @@ export class FollowUpManager {
           once: job.once === true,
           intervalDays: job.intervalDays,
           checklist: job.checklist,
+          hasSurvey: Boolean(job.questionnaire),
           status: job.status,
           nextDue: job.nextDue,
           revision: job.revision,
@@ -474,10 +481,14 @@ export class FollowUpManager {
       const reminder = this.createReminder(
         patient,
         job,
-        messages.length
-          ? `有 ${messages.length} 条未处理消息`
-          : "按计划到期的常规随访",
+        job.questionnaire
+          ? "按计划到期，随访问卷待下发"
+          : messages.length
+            ? `有 ${messages.length} 条未处理消息`
+            : "按计划到期的常规随访",
       );
+      if (job.questionnaire && this.surveys)
+        this.surveys.createForReminder(patient, job, reminder);
       result = { status: "completed", digest: false, reminderId: reminder.id };
       if (messages.length) {
         if (
@@ -735,6 +746,52 @@ export class FollowUpManager {
 }
 
 const item = (text) => text;
+// Sample questionnaire for the hypertension plan's monthly check-in: symptom
+// options carry weights, the home BP reading has its own alert bound.
+const HYPERTENSION_MONTHLY = {
+  title: "高血压月度自测",
+  replyWindowHours: 72,
+  questions: [
+    {
+      id: "bp",
+      text: "最近一周晨起自测收缩压平均值是多少？",
+      type: "number",
+      unit: "mmHg",
+      required: true,
+      alertIf: { op: "gt", value: 180 },
+    },
+    {
+      id: "dizzy",
+      text: "近一周是否有头晕或头痛？",
+      type: "single",
+      required: true,
+      options: [
+        { label: "经常", score: 2 },
+        { label: "偶尔", score: 1 },
+        { label: "没有", score: 0 },
+      ],
+    },
+    {
+      id: "adherence",
+      text: "降压药是否按医嘱服用？",
+      type: "single",
+      required: true,
+      options: [
+        { label: "规律服用", score: 0 },
+        { label: "偶尔漏服", score: 1 },
+        { label: "经常漏服", score: 2 },
+      ],
+    },
+  ],
+  scoring: {
+    alert: {
+      op: "gte",
+      value: 3,
+      severity: "warning",
+      message: "随访自测症状与依从性评分偏高，建议尽快复核血压管理与用药依从性。",
+    },
+  },
+};
 // Built-in plan templates seeded on first use; nodes become one-shot jobs.
 const BUILTIN_PLANS = [
   {
@@ -748,6 +805,7 @@ const BUILTIN_PLANS = [
         offsetDays: 30,
         title: "1 个月随访",
         items: [item("家庭血压记录"), item("服药依从性"), item("不良反应")],
+        questionnaire: HYPERTENSION_MONTHLY,
       },
       {
         offsetDays: 90,

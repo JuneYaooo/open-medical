@@ -38,6 +38,7 @@ import {
   selectDigestMessages,
 } from "./patients.mjs";
 import { FollowUpManager } from "./followups.mjs";
+import { FollowUpSurveys } from "./followup-surveys.mjs";
 import { WeComConnector } from "./wecom.mjs";
 import { CareEngine } from "./care/engine.mjs";
 import { careTools } from "./care/tools.mjs";
@@ -635,6 +636,27 @@ export function createServer(options = {}) {
   const wecomAibot = options.chatAibot || new WecomAibotChannel({ log: (message) => console.error(`[aibot] ${message}`), provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief });
   const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, aibot: wecomAibot, ...options.chatFollowups });
   wecomAibot.attach(chatFollowups);
+  // 随访问卷:到期随提醒生成,医生经已验证渠道下发,患者按题号回复由确定性解析回收。
+  const surveys = new FollowUpSurveys(store, followups, {
+    provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null,
+    channels: {
+      async sendWechat(patientId, text) {
+        const binding = chatFollowups.wechatBindingByPatient(patientId);
+        check(binding, "CHAT_CHANNEL", "该患者没有已绑定的微信会话，可改用手动渠道发送", 409);
+        await chatFollowups.sendToBinding({ bindingId: binding.id, text, consent: true, autoLocate: true });
+      },
+      async sendAibot(patientId, text) {
+        const channel = chatFollowups.registry.get("wecom-aibot")?.client;
+        check(channel?.live, "CHAT_CHANNEL", "企微机器人长连接不在线，可改用手动渠道发送", 409);
+        const row = chatFollowups.db.prepare("SELECT data FROM chat_bindings WHERE patient_id=? AND channel='wecom-aibot' AND COALESCE(json_extract(data,'$.disabled'),0)=0 ORDER BY rowid DESC LIMIT 1").get(patientId);
+        check(row, "CHAT_CHANNEL", "该患者没有已绑定的企微机器人会话", 409);
+        await channel.socket.push(JSON.parse(row.data).conversation, { msgtype: "text", text: { content: text } });
+      },
+    },
+  });
+  followups.surveys = surveys;
+  risks.surveyAlertsProvider = (patient) => surveys.alerts(patient);
+  wecomAibot.surveys = surveys;
   wecomAibot.start();
   const chatAutoFollow = new WechatAutoFollow({ chat: chatFollowups, followups, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief, store, ...options.chatAutoFollow });
   const ingestSecret =
@@ -1761,6 +1783,20 @@ export function createServer(options = {}) {
           if (parts[4] === "digest" && req.method === "POST")
             return send(res, 200, await digestMessages(pid, await body(req)));
         }
+        if (parts[3] === "followup-surveys") {
+          if (parts.length === 4 && req.method === "GET") return send(res, 200, { surveys: surveys.list(pid) });
+          if (parts.length === 6 && req.method === "POST") {
+            const surveyId = identifier(parts[4]);
+            if (parts[5] === "send") return send(res, 200, await surveys.send(pid, surveyId, await body(req)));
+            if (parts[5] === "collect") {
+              const row = surveys.collect(pid, surveyId, await body(req));
+              risks.evaluatePatient(pid);
+              return send(res, 200, row);
+            }
+            if (parts[5] === "cancel") return send(res, 200, surveys.cancel(pid, surveyId, await body(req)));
+            if (parts[5] === "ai-parse") return send(res, 200, await surveys.aiParse(pid, surveyId));
+          }
+        }
         if (parts[3] === "followups") {
           if (parts.length === 4 && req.method === "GET")
             return send(res, 200, { jobs: followups.list(pid) });
@@ -2198,6 +2234,7 @@ export function createServer(options = {}) {
   server.scheduler = scheduler;
   server.patients = patients;
   server.followups = followups;
+  server.surveys = surveys;
   server.doctor = runtime.doctor;
   server.literature = literature;
   server.guidelines = guidelines;

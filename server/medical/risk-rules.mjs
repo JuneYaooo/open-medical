@@ -112,6 +112,11 @@ export class RiskEngine {
     const fired = [];
     for (const alert of this.laboratoryAlerts(patient)) fired.push(alert);
     for (const alert of this.monitorAlerts(patient, now)) fired.push(alert);
+    // Follow-up survey alerts are recomputed by the surveys module so the
+    // auto-resolve loop below sees a consistent, deterministic view.
+    if (this.surveyAlertsProvider)
+      for (const alert of this.surveyAlertsProvider(patient, now))
+        fired.push(alert);
     for (const alert of this.medicationAlerts(patient)) fired.push(alert);
     for (const alert of this.followupAlerts(patient, now)) fired.push(alert);
     for (const alert of fired) this.upsert(patient, alert, now);
