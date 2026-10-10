@@ -86,7 +86,7 @@ test('journey all clinical scales laboratory codes and adverse-reaction calculat
 test('journey project connect browse pin archive restore and reopen',{skip},async t=>{
  const {page}=await setup(t),root=mkdtempSync(join(tmpdir(),'journey-project-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  writeFileSync(join(root,'note.md'),'# Journey project\nOriginal text');
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();
  await page.getByRole('button',{name:'连接项目',exact:true}).click();
  await page.screenshot({path:join(output,'project-connect-form.png')});
  await page.getByLabel('名称',{exact:true}).fill('完整动线项目');
@@ -96,20 +96,19 @@ test('journey project connect browse pin archive restore and reopen',{skip},asyn
  await page.locator('.conversation-head h1').filter({hasText:'完整动线项目'}).waitFor();
  await page.getByRole('tab',{name:'文件',exact:true}).click();await page.getByText('note.md',{exact:true}).first().click();
  await page.getByText('Original text',{exact:false}).first().waitFor();
- const nav=page.getByRole('navigation',{name:'通用工作'});
- await nav.getByRole('button',{name:'项目文件',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();
  await page.getByRole('button',{name:'固定完整动线项目',exact:true}).click();await page.getByRole('button',{name:'取消固定完整动线项目',exact:true}).waitFor();
  await page.getByRole('button',{name:'归档完整动线项目',exact:true}).click();
  await page.getByRole('button',{name:'已归档',exact:true}).click();await page.getByRole('button',{name:'恢复完整动线项目',exact:true}).click();
  await page.getByRole('button',{name:'使用中',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
  await page.locator('.conversation-head h1').filter({hasText:'完整动线项目'}).waitFor();
- await page.reload();await nav.getByRole('button',{name:'项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
+ await page.reload();await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'完整动线项目'}).click();
  await page.locator('.conversation-head h1').filter({hasText:'完整动线项目'}).waitFor();assert.equal(readFileSync(join(root,'note.md'),'utf8'),'# Journey project\nOriginal text');
 });
 
 test('journey extensions authorize terminal plugin MCP memory revoke and uninstall',{skip:skip||process.env.JOURNEY_DOCKER!=='1',timeout:120000},async t=>{
  const {page,json}=await setup(t),root=mkdtempSync(join(tmpdir(),'journey-ext-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();
  await page.getByLabel('名称',{exact:true}).fill('扩展闭环项目');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByText('工具、插件与记忆',{exact:true}).click();
  await page.getByText('授权与运行环境',{exact:true}).click();

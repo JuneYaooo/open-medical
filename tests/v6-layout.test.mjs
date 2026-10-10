@@ -14,15 +14,15 @@ test('V6 uses real navigation, project identity, task history and display modes 
  const session=await f.session('持续任务验收');
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(f.origin);await page.getByRole('heading',{name:'想做什么，直接说。'}).waitFor();
- const nav=page.getByRole('navigation',{name:'通用工作'});
- assert.deepEqual(await nav.getByRole('button').allTextContents(),['任务记录','项目文件']);
+ assert.equal(await page.getByRole('navigation',{name:'通用工作'}).count(),0,'医疗模式下任务/项目入口降为最近对话尾部的链接');
+ await page.getByRole('button',{name:'查看全部任务记录',exact:true}).waitFor();
  assert.equal(await page.locator('.advanced-nav').count(),0);
  await page.screenshot({path:'output/playwright/v6-home.png'});
- await nav.getByRole('button',{name:'项目文件',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();
  const projects=page.getByRole('main',{name:'项目目录'});await projects.waitFor();
  await projects.getByRole('button',{name:'固定项目甲',exact:true}).click();await page.getByRole('navigation',{name:'固定项目'}).waitFor();
  await projects.locator('.directory-open',{hasText:'项目甲'}).click();await page.locator('.conversation-head h1').filter({hasText:'项目甲'}).waitFor();
- await nav.getByRole('button',{name:'项目文件',exact:true}).click();await projects.locator('.directory-open',{hasText:'项目乙'}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();await projects.locator('.directory-open',{hasText:'项目乙'}).click();
  await page.locator('.conversation-head h1').filter({hasText:'项目乙'}).waitFor();
  await page.locator('.composer textarea').fill('保留在项目乙的输入草稿');
  const modes=page.getByRole('group',{name:'工作区显示方式'});
@@ -36,7 +36,7 @@ test('V6 uses real navigation, project identity, task history and display modes 
  assert.equal(await page.getByRole('heading',{name:'浏览器',exact:true}).count(),0);
  assert.equal(await page.getByRole('heading',{name:'终端与代码',exact:true}).count(),0);
  assert.equal(await page.getByRole('heading',{name:'技能与连接',exact:true}).count(),0);
- await nav.getByRole('button',{name:'任务记录',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部任务记录',exact:true}).click();
  const history=page.getByRole('main',{name:'任务记录'});await history.waitFor();
  assert.equal(await history.getByRole('button',{name:/持续任务验收/}).count(),1);
  await history.getByRole('button',{name:/持续任务验收/}).click();await page.locator('.conversation-head h1').filter({hasText:'持续任务验收'}).waitFor();

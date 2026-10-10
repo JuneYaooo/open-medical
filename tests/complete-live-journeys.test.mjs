@@ -54,14 +54,14 @@ test('live journey empty settings to real connection first task restart and reta
  const sessions=await f.json('/api/sessions');assert.equal(sessions.sessions.length,1);const id=sessions.sessions[0].id;
  const completed=await finish(f,id);assert.match(completed.messages.filter(m=>m.role==='assistant').at(-1).content,/连接验收成功/);
  await f.restart();const settings=await f.json('/api/model-settings');assert.equal(settings.model,provider.model);assert.equal(settings.source,'saved');assert.equal(settings.hasKey,true);
- await page.getByRole('button',{name:'任务记录',exact:true}).click();await page.getByRole('main',{name:'任务记录'}).getByRole('button',{name:/连接验收成功/}).click();await page.getByText('连接验收成功',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'查看全部任务记录',exact:true}).click();await page.getByRole('main',{name:'任务记录'}).getByRole('button',{name:/连接验收成功/}).click();await page.getByText('连接验收成功',{exact:true}).waitFor();
  assert.equal(readFileSync(join(f.dir,'state.sqlite')).includes(Buffer.from(provider.apiKey)),false);
 });
 
 test('live journey project proposal sandbox verification approval git rollback schedule restart',{skip:!enabled,timeout:420000},async t=>{
  const f=await start(t),{page}=f,root=join(f.dir,'project');mkdirSync(root);writeFileSync(join(root,'note.md'),'ORIGINAL_JOURNEY\n');
  const git=(...args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();git('init','-q');git('add','note.md');git('-c','user.name=Journey Test','-c','user.email=journey@example.invalid','commit','-qm','initial synthetic fixture');git('config','user.name','Journey Test');git('config','user.email','journey@example.invalid');
- await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();await page.getByLabel('名称',{exact:true}).fill('项目执行闭环');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
+ await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();await page.getByRole('button',{name:'连接项目',exact:true}).click();await page.getByLabel('名称',{exact:true}).fill('项目执行闭环');await page.getByLabel('文件夹绝对路径',{exact:true}).fill(root);await page.getByLabel('授权此工作区读取该目录').check();await page.getByRole('button',{name:'创建工作区',exact:true}).click();
  await page.getByLabel('授权模式',{exact:true}).selectOption('workspace-write');await page.getByLabel('授权模式',{exact:true}).selectOption('review');
  const w=(await f.json('/api/workspaces')).workspaces[0];
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByText('高级授权（工具模式、可写子目录、独立 Git）',{exact:true}).click();await page.getByLabel('独立授权 Git 提交（不依赖“完全批准”档位）').check();await page.getByRole('button',{name:'保存高级授权',exact:true}).click();
@@ -78,7 +78,7 @@ test('live journey project proposal sandbox verification approval git rollback s
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.locator('.workspace-schedules > summary').click();
  await page.getByLabel('任务内容',{exact:true}).fill('软件验收，只回答 JOURNEY_SCHEDULE_OK，不调用工具。');const due=new Date(Math.ceil((Date.now()+15000)/60000)*60000);due.setMinutes(due.getMinutes()-due.getTimezoneOffset());await page.getByLabel('执行时间',{exact:true}).fill(due.toISOString().slice(0,16));await page.getByLabel('授权按此计划将任务和读取文件发送给当前模型').check();await page.getByRole('button',{name:'创建计划',exact:true}).click();await page.locator('.workspace-schedules article').waitFor();
  const before=(await f.json('/api/workspaces/'+w.id)).runs.length;await f.restart();await page.goto('about:blank');const scheduled=await finish(f,w.id,before,true);assert.match(scheduled.messages.filter(m=>m.role==='assistant').at(-1).content,/JOURNEY_SCHEDULE_OK/);assert.equal(scheduled.schedules.length,1);
- await page.goto(f.origin());await page.getByRole('navigation',{name:'通用工作'}).getByRole('button',{name:'项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'项目执行闭环'}).click();await page.getByText('JOURNEY_SCHEDULE_OK',{exact:true}).waitFor();
+ await page.goto(f.origin());await page.getByRole('button',{name:'查看全部项目文件',exact:true}).click();await page.locator('.directory-open',{hasText:'项目执行闭环'}).click();await page.getByText('JOURNEY_SCHEDULE_OK',{exact:true}).waitFor();
 });
 
 test('live journey one patient materials model chart proposal care followup backup restore and next consultation',{skip:!enabled,timeout:420000},async t=>{
@@ -128,5 +128,5 @@ test('live journey literature search abstract citation import and durable task m
  await item.getByRole('button',{name:/复制引用/}).click();assert.ok((await page.evaluate(()=>navigator.clipboard.readText())).includes(title));
  await item.getByRole('button',{name:'导入为材料',exact:true}).click();await page.locator('.composer').waitFor({timeout:45000});
  const sessions=(await f.json('/api/sessions')).sessions;assert.equal(sessions.length,1);const s=await f.json('/api/sessions/'+sessions[0].id);assert.equal(s.files.length,1);assert.ok(s.files[0].text.includes(title));
- await f.restart();await page.getByRole('button',{name:'任务记录',exact:true}).click();await page.getByRole('main',{name:'任务记录'}).getByRole('button',{name:/文献 ·/}).click();await page.getByRole('button',{name:'查看资料',exact:true}).click();await page.getByText(s.files[0].name,{exact:false}).first().waitFor();
+ await f.restart();await page.getByRole('button',{name:'查看全部任务记录',exact:true}).click();await page.getByRole('main',{name:'任务记录'}).getByRole('button',{name:/文献 ·/}).click();await page.getByRole('button',{name:'查看资料',exact:true}).click();await page.getByText(s.files[0].name,{exact:false}).first().waitFor();
 });

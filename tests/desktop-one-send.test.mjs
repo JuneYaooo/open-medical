@@ -87,7 +87,7 @@ test("桌面 · 项目任务一次发送：首页发送后自动开始运行", {
   const seededWorkspace = await seeded.json();
 
   // 首页：新建任务 → 通用任务 → 输入 → 只点击一次发送。
-  await page.getByRole("navigation", { name: "通用工作" }).getByRole("button", { name: "任务记录", exact: true }).click();
+  await page.getByRole("button", { name: "查看全部任务记录", exact: true }).click();
   await page.locator(".app-navigation .new-session").click();
   await page.locator(".hub-composer textarea").waitFor();
   await page.getByRole('combobox',{name:'任务关联项目'}).selectOption(seededWorkspace.id);

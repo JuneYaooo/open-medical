@@ -1394,14 +1394,20 @@ function App() {
           <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
             <Plus size={20}/><span>新建任务</span>
           </button>
-          {medical && <nav className="agent-recents" aria-label="最近对话">
+          {medical && <div className="agent-recents">
             <p className="business-nav-label">最近对话</p>
-            {sessions.slice(0,4).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
-            {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
-          </nav>}
-          <nav className="business-nav" aria-label="通用工作">
+            <nav aria-label="最近对话" className="agent-recents-list">
+              {sessions.slice(0,15).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
+              {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+              <div className="agent-recents-tail">
+                <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
+                <button onClick={() => navigate("projects")}>查看全部项目文件</button>
+              </div>
+            </nav>
+          </div>}
+          {!medical && <nav className="business-nav" aria-label="通用工作">
             {[["tasks", "任务记录", MessageSquare], ["projects", "项目文件", FolderOpen]].map(([id,label,Icon]) => <button key={id} aria-current={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "page" : undefined} className={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "active" : ""} onClick={() => navigate(id)}><Icon size={18}/>{label}</button>)}
-          </nav>
+          </nav>}
           {medical && <>
             <p className="business-nav-label">医疗工作</p>
             <nav className="business-nav" aria-label="主要业务">
