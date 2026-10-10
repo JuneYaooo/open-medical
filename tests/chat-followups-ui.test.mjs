@@ -124,7 +124,7 @@ test('failed permission check explains platform recovery actions and exposes onl
  server.chatFollowups.wechat.status=async()=>({ready:true,message:'测试权限已恢复'});await page.getByRole('button',{name:process.platform==='darwin'?'重新检测权限':'重新检测',exact:true}).click();await page.getByLabel('已核对的微信号').waitFor();
  // 设置页是 .product-content 的直接子元素:必须自带滚动容器,否则底部内容在窗口内不可达(0.9.59 回归)。
  await page.setViewportSize({width:1280,height:680});
- const scroll=await page.evaluate(()=>{const el=document.querySelector('.product-content > .app-settings-page');if(!el)return{scrollable:false};el.scrollTop=el.scrollHeight;const last=[...document.querySelectorAll('.app-settings-page .muted')].at(-1);const r=last.getBoundingClientRect();return{scrollable:el.scrollHeight>el.clientHeight&&el.scrollTop>0,bottomVisible:r.bottom<=innerHeight+1};});
+ const scroll=await page.evaluate(()=>{const el=document.querySelector('.product-content > .app-settings-page');if(!el)return{scrollable:false};el.scrollTop=el.scrollHeight;const last=[...document.querySelectorAll('.app-settings-page .muted')].filter(el=>el.checkVisibility ? el.checkVisibility() : el.offsetParent!==null).at(-1);const r=last.getBoundingClientRect();return{scrollable:el.scrollHeight>el.clientHeight&&el.scrollTop>0,bottomVisible:r.bottom<=innerHeight+1};});
  assert.equal(scroll.scrollable,true,'设置页在内容超窗时必须可滚动');
  assert.equal(scroll.bottomVisible,true,'滚动后设置页底部内容必须进入视口');
 });
@@ -143,7 +143,7 @@ test('wx-cli setup, session selection, review draft and plugin lifecycle through
  const form=page.locator('.chat-binding-form');await form.getByLabel('渠道',{exact:true}).selectOption('wx-cli');await form.getByRole('button',{name:'读取可关联会话'}).click();await form.getByLabel('选择服务会话').selectOption('wxid_family');assert.equal(await form.getByLabel('会话名称',{exact:true}).inputValue(),'合成微信家属');
  await form.getByLabel('联系人称呼',{exact:true}).fill('合成家属');await form.getByRole('checkbox').check();await form.getByRole('button',{name:'确认关联',exact:true}).click();await page.getByRole('button',{name:'同步会话增量'}).click();await page.locator('.chat-draft').waitFor();
  assert.equal(s.list(patient.id).drafts.length,1);
- await page.goto(origin+'/?view=settings&settingsTab=followup');await page.getByText('管理连接插件',{exact:true}).click();await page.getByLabel('插件清单（JSON）').fill(JSON.stringify({manifestVersion:1,id:'ui-connector',name:'测试系统连接',protocol:'archive-v1'}));await page.getByRole('button',{name:'安装连接插件'}).click();await page.getByRole('button',{name:'测试系统连接',exact:true}).waitFor();
+ await page.goto(origin+'/?view=settings&settingsTab=followup');await page.getByText('管理连接插件',{exact:true}).click();await page.getByText('高级：粘贴连接清单 JSON',{exact:true}).click();await page.getByLabel('插件清单（JSON）').fill(JSON.stringify({manifestVersion:1,id:'ui-connector',name:'测试系统连接',protocol:'archive-v1'}));await page.getByRole('button',{name:'安装连接插件'}).click();await page.getByRole('button',{name:'测试系统连接',exact:true}).waitFor();
  await page.reload();await page.getByRole('button',{name:'测试系统连接',exact:true}).click();await page.getByRole('heading',{name:'测试系统连接',exact:true}).waitFor();
  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
  await page.getByText('管理连接插件',{exact:true}).click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'移除插件',exact:true}).click();await page.getByRole('button',{name:'测试系统连接',exact:true}).waitFor({state:'hidden'});

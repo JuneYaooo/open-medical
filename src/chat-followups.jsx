@@ -201,11 +201,27 @@ function DraftCard({draft,onChanged}) {
  </article>;
 }
 
+const PLUGIN_CATALOG=[
+ {manifest:{manifestVersion:1,id:'wechat-exp',name:'微信历史导入（本机导出桥接）',protocol:'wx-cli',defaultEndpoint:'http://127.0.0.1:9101'},
+  desc:'把本机导出桥接服务里的微信会话接入随访：读取会话列表、选择要导入的人并标注患者归属与关系，历史同步进待复核草稿。',
+  steps:'前提：自行部署并启动外部桥接服务（随插件附带的独立项目，见其 README）。安装后在连接里填账号 ID（wxid）并验证启用，服务地址已默认填好。',
+  risk:'⚠ 该类桥接依赖读取本机微信数据，取密钥行为存在账号被平台处罚的先例（一次性备份风险较低但不为零）。请知情后启用。'},
+];
 function ConnectorPlugins({connections,onChanged}) {
- const [manifest,setManifest]=useState('{"manifestVersion":1,"id":"my-connector","name":"我的连接","protocol":"archive-v1"}'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [manifest,setManifest]=useState(JSON.stringify(PLUGIN_CATALOG[0].manifest,null,1)),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const act=async fn=>{setBusy(true);setError('');try{await fn();onChanged();}catch(e){setError(e.message);}finally{setBusy(false);}};
- return <details className="chat-setup"><summary>管理连接插件</summary><p>安装兼容 wx-cli 或 archive-v1 的连接清单，安装后填写服务地址并验证启用。停用或移除插件会停止后续同步，已采集记录保留。第三方连接服务的能力、数据读取方式与合规风险由其提供方决定（可能包含读取本机聊天数据等敏感操作，部分行为存在账号被平台处罚的先例），请确认你了解并接受后再启用。</p>
-  <form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(()=>api('/api/chat-followups/plugins','POST',JSON.parse(manifest)));}}><label>插件清单（JSON）<textarea rows={4} maxLength={2000} value={manifest} onChange={e=>setManifest(e.target.value)}/></label><button disabled={busy}>安装连接插件</button></form>
+ const installed=id=>connections.some(c=>c.channel===id);
+ return <details className="chat-setup"><summary>管理连接插件</summary><p>从插件目录一键安装，或粘贴第三方连接清单。第三方连接服务的能力、数据读取方式与合规风险由其提供方决定（可能包含读取本机聊天数据等敏感操作，部分行为存在账号被平台处罚的先例），请确认你了解并接受后再启用。</p>
+  {PLUGIN_CATALOG.map(entry=>{
+   const done=installed(entry.manifest.id);
+   return <div key={entry.manifest.id} className="chat-draft"><strong>{entry.manifest.name}</strong>{done&&<span role="status"> · 已安装</span>}
+    <p>{entry.desc}</p><p className="muted">{entry.steps}</p>
+    <p role="status">{entry.risk}</p>
+    <div className="toolbar-actions"><button disabled={busy||done} onClick={()=>act(()=>api('/api/chat-followups/plugins','POST',entry.manifest))}>{done?'已安装':'安装插件'}</button></div>
+   </div>;})}
+  <details><summary>高级：粘贴连接清单 JSON</summary>
+   <form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(()=>api('/api/chat-followups/plugins','POST',JSON.parse(manifest)));}}><label>插件清单（JSON）<textarea rows={4} maxLength={2000} value={manifest} onChange={e=>setManifest(e.target.value)}/></label><button disabled={busy}>安装连接插件</button></form>
+  </details>
   {connections.filter(c=>!c.plugin?.builtin).map(c=><p key={c.channel}>{c.plugin?.name||c.channel} · {c.enabled?'已启用':'未启用'} <button disabled={busy} onClick={()=>{if(window.confirm(`移除「${c.plugin?.name||c.channel}」连接插件并清除其连接密钥？已有记录保留。`))act(()=>api(`/api/chat-followups/plugins/${c.channel}`,'DELETE'));}}>移除插件</button></p>)}
   {error&&<p role="alert">{error}</p>}
  </details>;

@@ -79,3 +79,6 @@
 .chat-import-batch th, .chat-import-batch td { border: 1px solid var(--border, #ddd); padding: 6px 8px; text-align: left; vertical-align: top; }
 .chat-import-batch th { background: rgba(127,127,127,.08); }
 .chat-import-batch select { max-width: 220px; }
+
+/* 插件目录卡片:长 URL 等不破坏移动端宽度 */
+.chat-setup .chat-draft p, .chat-setup .chat-draft strong { overflow-wrap: anywhere; }

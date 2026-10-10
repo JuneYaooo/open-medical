@@ -71,10 +71,10 @@ export class ChatConnectorRegistry {
     );
     check(
       Object.keys(input).every((k) =>
-        ["manifestVersion", "id", "name", "protocol"].includes(k),
+        ["manifestVersion", "id", "name", "protocol", "defaultEndpoint"].includes(k),
       ),
       "CHAT_PLUGIN",
-      "连接清单只支持 manifestVersion、id、name、protocol",
+      "连接清单只支持 manifestVersion、id、name、protocol、defaultEndpoint",
     );
     check(
       ["wx-cli", "archive-v1"].includes(input.protocol),
@@ -86,6 +86,9 @@ export class ChatConnectorRegistry {
       id: input.id,
       name: string(input.name, "插件名称", 80),
       protocol: input.protocol,
+      ...(input.defaultEndpoint !== undefined
+        ? { defaultEndpoint: string(input.defaultEndpoint, "默认服务地址", 200) }
+        : {}),
     };
   }
   install(input) {

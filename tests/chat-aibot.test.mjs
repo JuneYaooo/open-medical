@@ -105,7 +105,6 @@ test('aibot channel end-to-end: connect, bind group, push frame lands in inbox t
 });
 
 // ---- 回复引擎 ----
-import { randomUUID } from 'node:crypto';
 import { SAFETY_REPLY } from '../server/care/red-flags.mjs';
 
 class ReplySocket extends FakeSocket {
@@ -269,4 +268,13 @@ test('import matching hits patient names, normalizes and returns null for strang
   assert.equal(r.matchResults[1].match, null);
   assert.equal(r.matchResults[2].match.patientId, p.id); // 归一化忽略首尾空格
   assert.equal((await f.json('/api/chat-followups/imports/match','POST',{names:[]})).status, 400);
+});
+
+// ---- 插件目录安装（defaultEndpoint 直通）----
+test('plugin manifest with defaultEndpoint installs and prefills the connection default', async t => {
+  const f = await fixture(t, {});
+  const installed = (await f.json('/api/chat-followups/plugins','POST',{manifestVersion:1,id:'wechat-exp-test',name:'目录安装测试',protocol:'wx-cli',defaultEndpoint:'http://127.0.0.1:9101'})).data;
+  assert.equal(installed.endpoint, 'http://127.0.0.1:9101');
+  assert.equal(installed.plugin?.name, '目录安装测试');
+  assert.equal((await f.json('/api/chat-followups/plugins','POST',{manifestVersion:1,id:'bad-keys',name:'x',protocol:'wx-cli',evil:'1'})).status, 400);
 });
