@@ -45,7 +45,8 @@ export function PluginCenter() {
 }
 // 微信历史导入的按钮式安装向导:下载组件 → 备份聊天记录(遇到多账号则选择) →
 // 自动启用连接。每步一个按钮,状态由 /api/wechat-exp/status 轮询驱动。
-function PluginSetup({entry}) {
+// 插件中心和随访连接页共用;onDone 在步骤③连接成功后回调连接对象,便于宿主刷新状态。
+export function PluginSetup({entry,onDone}) {
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[accounts,setAccounts]=useState(null),[wxid,setWxid]=useState('');
  const poll=async()=>{try{const s=await api('/api/wechat-exp/status','GET');setStatus(s);return s;}catch{return null;}};
  useEffect(()=>{poll();},[]);
@@ -73,7 +74,8 @@ function PluginSetup({entry}) {
      if(!accountId)throw new Error('未识别到微信账号，请先完成备份');
      const settings=await api('/api/chat-followups/settings');
      const existing=(settings.connections||[]).find(c=>c.channel===connection.channel);
-     await api(`/api/chat-followups/connections/${connection.channel}/connect`,'POST',{enabled:true,accountId,token:'',revision:existing?.revision??0,intervalMinutes:15});
+     const value=await api(`/api/chat-followups/connections/${connection.channel}/connect`,'POST',{enabled:true,accountId,token:'',revision:existing?.revision??0,intervalMinutes:15});
+     onDone?.(value);
      setNotice('微信历史导入已启用：到随访 → 关联会话 选择要导入的人。');
    })}>{busy?'正在启用…':`③ 启用微信历史导入${s.account?`（账号 ${s.account.slice(0,18)}）`:''}`}</button>
    <a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联会话并导入 →</a>

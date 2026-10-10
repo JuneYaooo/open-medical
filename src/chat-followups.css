@@ -4,6 +4,19 @@
 .chat-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 24px; }
 .chat-tabs button { background:transparent; border:1px solid var(--border,#d9e3da); padding:10px 16px; }
 .chat-tabs button[aria-pressed=true] { background:#e6eee3; color:#245c46; border-color:#9db5a5; }
+/* 渠道分组标题 + 白话说明卡:让"实时/历史导入"的分工一眼可辨 */
+.chat-channel-group { margin-top:26px; }
+.chat-channel-group h3 { margin:0 0 4px; font-size:17px; }
+.chat-channel-group .muted { margin:0; }
+.chat-channel-group+.chat-channel-group { padding-top:6px; }
+.chat-tab-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#2b7059; margin-right:8px; vertical-align:middle; }
+.chat-channel-brief { margin:-8px 0 22px; padding:14px 18px; border:1px solid #cfdccf; border-radius:10px; background:#f4f8f2; }
+.chat-channel-brief p { margin:4px 0; }
+.chat-channel-brief strong { color:#245c46; }
+/* 高级折叠区里的手填字段:左侧细线标识这是不常动的配置 */
+.chat-advanced-connection { padding-left:14px; border-left:3px solid #dfe8de; }
+.chat-advanced-connection form, .chat-advanced-connection .chat-connection-form { margin-top:8px; }
+.chat-advanced-connection summary { color:#68786e; }
 .chat-connection-form, .chat-binding-form { display:flex; flex-direction:column; gap:16px; }
 .chat-connection-form>label, .chat-binding-form label:not(.chat-check), .chat-draft>label:not(.chat-check), .chat-region-fields label { display:flex; flex-direction:column; gap:8px; }
 .chat-settings textarea, .chat-settings input:not([type=checkbox]), .chat-followups input:not([type=checkbox]), .chat-followups select, .chat-followups textarea { width:100%; min-width:0; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:10px 12px; color:inherit; background:#fff; font:inherit; }

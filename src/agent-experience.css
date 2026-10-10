@@ -8,7 +8,9 @@
 .agent-new-task small { font-size: 11px; font-weight: 400; color: #e1eee6; }
 .v6-shell .agent-new-task:hover { background: #1e523c; }
 .v6-shell .resource-nav { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
-.agent-recents { margin-top: 18px; min-height: 80px; }
+/* 最近对话吃掉侧栏剩余高度:列表紧跟导航分组展开、超出内部滚动,
+   避免列表和「设置与连接」一起被 margin-top:auto 挤到左下角。 */
+.agent-recents { margin-top: 18px; flex: 1 1 auto; min-height: 96px; overflow-y: auto; padding-bottom: 4px; }
 .agent-recents button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; border: 0; background: transparent; text-align: left; padding: 9px 12px; color: var(--muted); border-radius: 6px; }
 .agent-recents button:hover, .agent-recents button.active { background: #e5ece1; color: var(--ink); }
 .agent-recents button > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }

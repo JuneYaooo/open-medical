@@ -8,14 +8,45 @@ import './chat-followups.css';
 const names={wechat:'微信桌面',wecom:'企业微信存档','wecom-aibot':'企微智能机器人'};
 const when=value=>value?new Date(value).toLocaleString():'尚未同步';
 const localDate=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16);};
+// 渠道按"解决什么问题"分组,而不是按协议平铺:普通医生只关心实时随访还是历史导入。
+// 顺序即推荐顺序;说明用白话,技术细节留给各表单里的折叠区。
+const CHANNEL_GROUPS=[
+ {label:'实时随访：患者新消息自动进来',hint:'患者在微信或企业微信里发消息后，系统自动读取并整理成待复核草稿。按你们实际用哪个聊天工具，选一个配置即可。',channels:['wechat','wecom-aibot','wecom']},
+ {label:'历史记录导入：把过去的聊天一次性导入',hint:'不需要实时在线。导入的内容同样先进入待复核草稿，你核对后再归档。一般用「微信历史导入」的按钮向导就够了。',channels:['wechat-exp','wx-cli']},
+];
+const CHANNEL_BLURBS={
+ wechat:{prepare:'本机安装并登录微信桌面版即可，没有要填的技术字段',
+  what:'应用按备注名在电脑微信里自动定位患者会话，实时读取新消息并帮你起草回复；发送前逐条由你审核，不会自动发出。'},
+ 'wecom-aibot':{prepare:'企业管理员在企微后台创建一次智能机器人（约 5 分钟），把机器人拉进患者群或单聊',
+  what:'患者群里 @ 机器人的消息和患者单聊会实时进入工作台，起草回复后由你逐条审核发送。'},
+ wecom:{prepare:'由 IT 管理员开通企业微信「会话存档」权限并部署采集服务',
+  what:'企业微信官方的会话存档接口，适合机构统一接入。个人或科室试用可以忽略这一项，不影响其他功能。'},
+ 'wechat-exp':{prepare:'无需准备，下面向导全程点按钮完成',
+  what:'推荐的微信历史记录导入方式：向导自动下载导出组件、备份微信聊天记录并启用连接，不需要命令行。想导入过去一段时间的聊天记录，选这个。'},
+ 'wx-cli':{prepare:'在终端手动安装并运行 wx-cli 服务（高级用户）',
+  what:'手动版的历史导入，能力和「微信历史导入」向导重复。推荐直接用向导；这一项留给已经自己部署好 wx-cli 的用户。'},
+};
 export function ChatConnectionSettings() {
  const [connections,setConnections]=useState(null),[error,setError]=useState(''),[channel,setChannel]=useState('wechat'),[version,setVersion]=useState(0);
  useEffect(()=>{let alive=true;api('/api/chat-followups/settings').then(v=>{if(alive){setConnections(v.connections);setError('');}}).catch(e=>{if(alive)setError(e.message);});return()=>{alive=false;};},[version]);
- return <section className="chat-settings"><h2>随访连接</h2><p>分别连接微信与企业微信，患者和家属的会话在随访中关联。</p>
-  <nav className="chat-tabs" aria-label="随访连接渠道">{(connections||[]).map(({channel:id,plugin})=><button key={id} aria-pressed={channel===id} onClick={()=>setChannel(id)}>{plugin?.name||names[id]||id}</button>)}</nav>
+ useEffect(()=>{if(connections?.length&&!connections.some(c=>c.channel===channel))setChannel(connections[0].channel);},[connections]);
+ const selected=connections?.find(c=>c.channel===channel);
+ const blurb=CHANNEL_BLURBS[channel];
+ // 静态两组之外(第三方插件装的渠道)兜底收进"已安装的连接插件",保证任何渠道都有 tab。
+ const groups=connections?(()=>{const known=new Set(CHANNEL_GROUPS.flatMap(g=>g.channels));const extra=connections.filter(c=>!known.has(c.channel));return extra.length?[...CHANNEL_GROUPS,{label:'已安装的连接插件',hint:'在「设置 → 插件」里安装的连接渠道出现在这里，配置方式按各插件自己的说明来。',channels:extra.map(c=>c.channel)}]:CHANNEL_GROUPS;})():CHANNEL_GROUPS;
+ return <section className="chat-settings"><h2>随访连接</h2><p>把患者和家属的微信、企业微信会话接进随访。不知道选哪个的话：想导入过去的聊天记录用「微信历史导入」，想让新消息自动进来用「企微智能机器人」（企业微信）或「微信桌面」。</p>
   {error&&<p role="alert">{error}<button onClick={()=>setVersion(v=>v+1)}>重新加载连接</button></p>}
   {!connections&&!error&&<p role="status">正在读取连接配置…</p>}
-  {connections&&connections.filter(c=>c.channel===channel).map(c=>['wechat','wecom'].includes(channel)?<ConnectionForm key={channel} initial={c} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>:channel==='wecom-aibot'?<AibotConnectionForm key={channel} initial={c} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>:<ServiceConnectionForm key={channel} initial={c} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>)}
+  {connections&&groups.map(group=>{
+   const items=connections.filter(c=>group.channels.includes(c.channel));
+   if(!items.length)return null;
+   return <div className="chat-channel-group" key={group.label}>
+    <h3>{group.label}</h3>
+    <p className="muted">{group.hint}</p>
+    <nav className="chat-tabs" aria-label={group.label}>{items.map(({channel:id,plugin})=><button key={id} aria-pressed={channel===id} onClick={()=>setChannel(id)}>{connections.find(c=>c.channel===id)?.enabled&&<span className="chat-tab-dot" aria-hidden="true"/>}{plugin?.name||names[id]||id}</button>)}</nav>
+   </div>;})}
+  {selected&&blurb&&<div className="chat-channel-brief" aria-label="渠道说明"><p><strong>这是什么：</strong>{blurb.what}</p><p><strong>你要准备什么：</strong>{blurb.prepare}</p></div>}
+  {selected&&(['wechat','wecom'].includes(channel)?<ConnectionForm key={channel} initial={selected} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>:channel==='wecom-aibot'?<AibotConnectionForm key={channel} initial={selected} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>:<ServiceConnectionForm key={channel} initial={selected} onSaved={c=>setConnections(old=>old.map(v=>v.channel===c.channel?c:v))}/>)}
   {connections&&<p className="muted">更多可安装的插件在 <a className="chat-next-link" href="/?view=settings&settingsTab=plugins">设置 → 插件</a> 里一键安装。</p>}
  </section>;
 }

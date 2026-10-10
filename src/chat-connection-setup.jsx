@@ -1,4 +1,5 @@
 import { MacPermissionHelp } from './mac-permission-help';
+import { PluginSetup } from './plugin-center';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './agent-runtime';
 const when=value=>value?new Date(value).toLocaleString():'尚未同步';
@@ -91,18 +92,23 @@ export function AibotConnectionForm({initial,onSaved}) {
 export function ServiceConnectionForm({initial,onSaved}) {
  const [saved,setSaved]=useState(initial),[form,setForm]=useState({...initial,token:''}),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const wx=saved.plugin?.protocol==='wx-cli';
+ // 带按钮向导的渠道(微信历史导入):向导负责全部配置,手填表单只留给高级用户。
+ const wizard=saved.plugin?.id==='wechat-exp';
  const update=(key,value)=>setForm(v=>({...v,[key]:value}));
  const accept=value=>{setSaved(value);setForm({...value,token:''});onSaved(value);};
  const act=async fn=>{setBusy(true);setError('');try{await fn();}catch(e){setError(e.message);}finally{setBusy(false);}};
+ const submit=e=>{e.preventDefault();act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}/connect`,'POST',{...form,revision:saved.revision})));};
+ const accountIdField=<label>{wx?'账号 ID（current_account.wxid）':'账号 ID（采集协议 corpId）'}<input required maxLength={200} value={form.accountId} onChange={e=>update('accountId',e.target.value)} autoComplete="off"/></label>;
+ const endpointField=<label>服务地址<input required type="url" value={form.endpoint} onChange={e=>update('endpoint',e.target.value)} placeholder={wx?'http://127.0.0.1:9100':'https://collector.example.com'}/></label>;
+ const tokenField=<label>连接密钥<input type="password" value={form.token} onChange={e=>update('token',e.target.value)} autoComplete="new-password" placeholder={saved.hasToken?'已保存，留空保留':wx?'本机未设置 token 时可留空':'采集服务的 Bearer token'}/></label>;
+ const submitButton=<button disabled={busy} type="submit">{busy?'正在连接…':'验证并启用连接'}</button>;
  return <div className="chat-setup"><h3>{saved.plugin?.name}</h3>
-  <p>{wx?'连接已启动的 wx-cli 服务，读取本机数据库中的历史消息。选择会话并关联患者后，同步内容进入待复核草稿。':'连接兼容采集服务，关联患者会话后同步原文，核对并归档。'}</p>
-  {wx&&<details><summary>准备 wx-cli 服务</summary><p>在运行微信的 Mac 上安装并配置 wx-cli，再运行 <code>wx-cli server run</code>。使用 <code>wx-cli server status --format json</code> 查看 current_account.wxid，填写到下方账号 ID。</p><p>密钥和数据库由 wx-cli 管理；本插件读取文本及媒体描述，暂不解码附件或发送消息。首次同步扫描所关联会话的本地历史。自动同步间隔至少 5 分钟。</p><a href="https://github.com/pandorafuture/wx-cli" target="_blank" rel="noreferrer">wx-cli 安装与支持范围</a></details>}
-  <form className="chat-connection-form" onSubmit={e=>{e.preventDefault();act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}/connect`,'POST',{...form,revision:saved.revision})));}}>
-   <label>{wx?'账号 ID（current_account.wxid）':'账号 ID（采集协议 corpId）'}<input required maxLength={200} value={form.accountId} onChange={e=>update('accountId',e.target.value)} autoComplete="off"/></label>
-   <label>服务地址<input required type="url" value={form.endpoint} onChange={e=>update('endpoint',e.target.value)} placeholder={wx?'http://127.0.0.1:9100':'https://collector.example.com'}/></label>
-   <label>连接密钥<input type="password" value={form.token} onChange={e=>update('token',e.target.value)} autoComplete="new-password" placeholder={saved.hasToken?'已保存，留空保留':wx?'本机未设置 token 时可留空':'采集服务的 Bearer token'}/></label>
-   <button disabled={busy} type="submit">{busy?'正在连接…':'验证并启用连接'}</button>
-  </form>
+  <p>{wizard?'下面的向导自动下载组件、备份微信聊天记录并启用连接，全程点按钮；完成后去随访页选择要导入的人。一般不需要手动填下面的连接信息。':wx?'连接已启动的 wx-cli 服务，读取本机数据库中的历史消息。选择会话并关联患者后，同步内容进入待复核草稿。':'连接兼容采集服务，关联患者会话后同步原文，核对并归档。'}</p>
+  {wizard&&<PluginSetup entry={{manifest:{...saved.plugin}}} onDone={accept}/>}
+  {!wizard&&wx&&<details><summary>准备 wx-cli 服务</summary><p>在运行微信的 Mac 上安装并配置 wx-cli，再运行 <code>wx-cli server run</code>。使用 <code>wx-cli server status --format json</code> 查看 current_account.wxid，填写到下方账号 ID。</p><p>密钥和数据库由 wx-cli 管理；本插件读取文本及媒体描述，暂不解码附件或发送消息。首次同步扫描所关联会话的本地历史。自动同步间隔至少 5 分钟。</p><a href="https://github.com/pandorafuture/wx-cli" target="_blank" rel="noreferrer">wx-cli 安装与支持范围</a></details>}
+  {wizard?<details className="chat-advanced-connection"><summary>高级：手动填写连接信息（一般不需要）</summary><form className="chat-connection-form" onSubmit={submit}>{accountIdField}{endpointField}{tokenField}{submitButton}</form></details>:<form className="chat-connection-form" onSubmit={submit}>
+   {wx?<><p className="muted">账号 ID 填 <code>wx-cli server status</code> 里的 current_account.wxid；服务地址和密钥保持默认即可。</p>{accountIdField}<details className="chat-advanced-connection"><summary>高级：服务地址与连接密钥（保持默认即可）</summary>{endpointField}{tokenField}</details>{submitButton}</>:<>{accountIdField}{endpointField}{tokenField}{submitButton}</>}
+  </form>}
   <p role="status">{saved.status?.message}</p>{error&&<p role="alert">{error}</p>}
   {saved.enabled&&<><div className="toolbar-actions"><button disabled={busy} onClick={()=>act(async()=>{const status=await api(`/api/chat-followups/connections/${saved.channel}/test`,'POST',{});setSaved(v=>({...v,status}));})}>检查已保存连接</button><button disabled={busy} onClick={()=>{if(window.confirm('下次同步将重新扫描已关联会话的全部本地历史，已保存消息会去重。继续？'))act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}/rescan`,'POST',{revision:saved.revision,confirmed:true})));}}>重新扫描历史</button><button disabled={busy} onClick={()=>act(async()=>accept(await api(`/api/chat-followups/connections/${saved.channel}`,'POST',{...saved,enabled:false,autoUntil:'',autoSummarize:false})))}>停用连接</button></div><a className="chat-next-link" href="/?view=followups&followupTab=chat">去关联患者会话 →</a><AutomaticSettings key={`${saved.channel}:${saved.revision}`} initial={saved} onSaved={accept}/></>}
   <p className="muted">最近同步：{when(saved.lastSyncAt)}{saved.lastError?` · ${saved.lastError}`:''}</p>
