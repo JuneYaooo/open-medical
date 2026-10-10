@@ -298,11 +298,11 @@ test(
     page.on("pageerror", (err) => pageErrors.push(err.message));
     await page.goto(origin + "/?view=home");
   await page.locator(".app-navigation").waitFor();
-    await page.waitForSelector('nav[aria-label="最近任务"]', { timeout: 15000 });
+    await page.waitForSelector('nav[aria-label="最近对话"]', { timeout: 15000 });
 
     // 打开注入的统一内核会话，进入工作台对话
     await page
-      .locator('nav[aria-label="最近任务"] button:has-text("交付呈现演示")')
+      .locator('nav[aria-label="最近对话"] button:has-text("交付呈现演示")')
       .click();
     await page.waitForSelector(".composer textarea", { timeout: 15000 });
 
@@ -340,7 +340,7 @@ test(
 
     // 统一内核会话：执行中输入框可用（追加要求入口一致），Enter 走 steer
     await page
-      .locator('nav[aria-label="最近任务"] button:has-text("追加要求演示")')
+      .locator('nav[aria-label="最近对话"] button:has-text("追加要求演示")')
       .click();
     await page.waitForSelector(".composer textarea", { timeout: 15000 });
     await page.locator(".composer textarea").fill("把资料整理成清单");

@@ -1394,7 +1394,7 @@ function App() {
           <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
             <Plus size={20}/><span>新建任务<small>和 Agent 说说你想做什么</small></span>
           </button>
-          {medical && <nav className="agent-recents" aria-label="最近任务">
+          {medical && <nav className="agent-recents" aria-label="最近对话">
             <p className="business-nav-label">最近对话</p>
             {sessions.slice(0,4).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
             {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
