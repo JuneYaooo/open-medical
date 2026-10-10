@@ -1,5 +1,6 @@
 import { ChatFollowups } from "./chat-followups.mjs";
 import { WecomAibotChannel, chatAibotApi } from "./chat-aibot.mjs";
+import { WechatExpService, wechatExpApi } from "./wechat-exp.mjs";
 import { chatFollowupsApi } from "./chat-followups-api.mjs";
 import { WechatAutoFollow } from "./chat-autofollow.mjs";
 import { chatAutoFollowApi } from "./chat-autofollow-api.mjs";
@@ -637,6 +638,9 @@ export function createServer(options = {}) {
   const wecomAibot = options.chatAibot || new WecomAibotChannel({ log: (message) => console.error(`[aibot] ${message}`), provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, guidelines, patientBrief });
   const chatFollowups = new ChatFollowups({ store, patients, followups, directory: vaultDir, provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null, aibot: wecomAibot, ...options.chatFollowups });
   wecomAibot.attach(chatFollowups);
+  // 微信历史导入:向导式组件下载/备份 + 内置 wx-cli 协议桥接(仅 127.0.0.1)。
+  const wechatExp = options.wechatExp || new WechatExpService({ dataDir: vaultDir, log: (message) => console.error(`[wechat-exp] ${message}`) });
+  wechatExp.start(chatFollowups);
   // 随访问卷:到期随提醒生成,医生经已验证渠道下发,患者按题号回复由确定性解析回收。
   const surveys = new FollowUpSurveys(store, followups, {
     provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null,
@@ -1377,6 +1381,7 @@ export function createServer(options = {}) {
       }
       if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value), pending }))) return;
       if (path.startsWith("/api/chat-aibot/") && await track(chatAibotApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
+      if (path.startsWith("/api/wechat-exp/") && await track(wechatExpApi(wechatExp, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-autofollow/") && await track(chatAutoFollowApi(chatAutoFollow, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path === "/api/wecom/status" && req.method === "GET") return send(res, 200, wecom.status());
@@ -2293,6 +2298,7 @@ export function createServer(options = {}) {
     followups.stop();
     await chatFollowups.stop();
     wecomAibot.stop();
+    wechatExp.stop();
     care.stop();
     extensions.stop();
     if (databasePath === ":memory:" && !options.userSkillsDir) rmSync(userSkillsDir, { recursive: true, force: true });
