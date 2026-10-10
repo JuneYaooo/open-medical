@@ -107,3 +107,24 @@
 .ocr-text-edit div { display:flex; gap:8px; margin-top:4px; }
 .ocr-actions { display:flex; align-items:center; gap:12px; margin-top:10px; flex-wrap:wrap; }
 @media(max-width:900px) { .ocr-compare { grid-template-columns:1fr; } }
+
+/* 个性化检验监测 */
+.chart-monitors { margin-top:22px; border-top:1px solid var(--border); padding-top:16px; }
+.chart-monitors header { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+.chart-monitors h4 { margin:0 0 4px; font-size:15px; }
+.chart-monitors header p { margin:0; font-size:12px; color:#64766c; }
+.chart-monitor-form { margin:12px 0; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--soft); }
+.chart-monitor-row { display:flex; flex-wrap:wrap; gap:12px 18px; align-items:flex-end; font-size:12px; }
+.chart-monitor-row label { display:flex; flex-direction:column; gap:4px; }
+.chart-monitor-row input, .chart-monitor-row select { padding:7px 10px; border:1px solid var(--border); border-radius:6px; background:#fff; font-size:13px; min-width:90px; }
+.chart-monitor-row label:nth-child(3) { flex-direction:row; align-items:center; gap:6px; }
+.chart-monitor-row label:nth-child(3) input { width:100px; }
+.chart-monitor-actions { display:flex; align-items:center; gap:14px; margin-top:10px; }
+.chart-monitor-list { list-style:none; margin:10px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.chart-monitor-list li { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; }
+.chart-monitor-list li small { flex-basis:100%; }
+.chart-monitor-sev { font-size:11px; padding:3px 8px; border-radius:999px; background:var(--soft); }
+.chart-monitor-sev.critical { color:#a94737; background:#faeceb; }
+.chart-monitor-state { font-size:11px; padding:3px 8px; border-radius:999px; color:#64766c; background:var(--soft); }
+.chart-monitor-state.fired { color:#866522; background:#fdf6ea; }
+.chart-monitor-state.paused { color:#64766c; }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError } from "../errors.mjs";
+import { AppError, check, identifier, string } from "../errors.mjs";
 import { evaluateMedicationSafety } from "./med-safety.mjs";
 
 // Deterministic, data-driven risk rules evaluated against the structured
@@ -90,6 +90,11 @@ export class RiskEngine {
   constructor(store, followups = null) {
     this.store = store;
     this.followups = followups;
+    // Per-patient lab monitors set by the doctor on top of the built-in
+    // LAB_RULES; same advisory semantics, thresholds chosen per patient.
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS lab_monitors (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, data TEXT NOT NULL)",
+    );
   }
   patientRow(patientId) {
     const row = this.store.db
@@ -106,6 +111,7 @@ export class RiskEngine {
     const now = Date.now();
     const fired = [];
     for (const alert of this.laboratoryAlerts(patient)) fired.push(alert);
+    for (const alert of this.monitorAlerts(patient, now)) fired.push(alert);
     for (const alert of this.medicationAlerts(patient)) fired.push(alert);
     for (const alert of this.followupAlerts(patient, now)) fired.push(alert);
     for (const alert of fired) this.upsert(patient, alert, now);
@@ -201,6 +207,219 @@ export class RiskEngine {
       });
     }
     return alerts;
+  }
+  // Doctor-set per-patient monitors. Item matching is a bidirectional
+  // substring match on the normalized analyte name (「钾」 matches 「血钾」);
+  // the alert message always carries the actual matched record so the doctor
+  // can see exactly what fired.
+  monitorAlerts(patient, now) {
+    const monitors = this.listMonitors(patient.id).filter(
+      (monitor) => monitor.status === "active",
+    );
+    if (!monitors.length) return [];
+    const alerts = [];
+    const labs = (patient.labs || []).filter(
+      (lab) =>
+        Number.isFinite(lab.value) && Number.isFinite(Date.parse(lab.date)),
+    );
+    for (const monitor of monitors) {
+      const needle = normalizeItem(monitor.item);
+      if (!needle) continue;
+      const matches = labs.filter((lab) => {
+        const item = normalizeItem(lab.item);
+        return item.includes(needle) || needle.includes(item);
+      });
+      if (!matches.length) continue;
+      const latest = matches
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+      const valueOut =
+        monitor.op === "lt"
+          ? latest.value < monitor.threshold
+          : latest.value > monitor.threshold;
+      const recheckDue =
+        Number.isInteger(monitor.recheckDays) &&
+        now - Date.parse(latest.date) > monitor.recheckDays * 86400000;
+      if (!valueOut && !recheckDue) continue;
+      // Monitor revision rides in the evidence so editing a monitor re-opens
+      // acknowledged alerts instead of leaving stale dispositions behind.
+      const evidence = [
+        latest,
+        { condition: valueOut ? "value" : "recheck", monitorRevision: monitor.revision },
+      ];
+      alerts.push(
+        valueOut
+          ? {
+              ruleKey: `lab_monitor_${monitor.id}`,
+              severity: monitor.severity,
+              title: `监测：${latest.item}越界`,
+              message: `「${latest.item}」最新值 ${formatValue(latest.value)}${latest.unit || ""}（${latest.date}）${monitor.op === "lt" ? "低于" : "高于"}监测阈值 ${formatValue(monitor.threshold)}${monitor.unitHint || latest.unit || ""}。`,
+              evidence,
+            }
+          : {
+              ruleKey: `lab_monitor_${monitor.id}`,
+              severity: "warning",
+              title: `监测：${latest.item}复查到期`,
+              message: `「${latest.item}」最近一次记录为 ${latest.date}，已超过 ${monitor.recheckDays} 天未复查。`,
+              evidence,
+            },
+      );
+    }
+    return alerts;
+  }
+  listMonitors(patientId) {
+    identifier(patientId);
+    return this.store.db
+      .prepare("SELECT data FROM lab_monitors WHERE patient_id=? ORDER BY rowid")
+      .all(patientId)
+      .map((row) => JSON.parse(row.data));
+  }
+  createMonitor(patientId, input = {}) {
+    identifier(patientId);
+    const patient = this.patientRow(patientId);
+    check(patient, "NOT_FOUND", "患者不存在", 404);
+    check(!patient.archived, "PATIENT_ARCHIVED", "已归档患者不能新建监测", 409);
+    const row = {
+      id: randomUUID(),
+      patientId,
+      item: string(input.item, "监测项目", 60),
+      op: input.op === "lt" ? "lt" : "gt",
+      threshold: input.threshold,
+      recheckDays: null,
+      severity: "warning",
+      note: input.note ? string(input.note, "备注", 200) : "",
+      unitHint: input.unit ? string(input.unit, "单位", 30) : "",
+      status: "active",
+      createdAt: Date.now(),
+      revision: 0,
+    };
+    check(
+      input.op === "gt" || input.op === "lt",
+      "INVALID_INPUT",
+      "监测方向须为高于（gt）或低于（lt）",
+    );
+    check(
+      Number.isFinite(row.threshold),
+      "INVALID_INPUT",
+      "监测阈值须为数值",
+    );
+    if (input.recheckDays !== undefined && input.recheckDays !== null && input.recheckDays !== "") {
+      check(
+        Number.isInteger(input.recheckDays) &&
+          input.recheckDays >= 1 &&
+          input.recheckDays <= 3650,
+        "INVALID_INPUT",
+        "复查间隔须为 1–3650 天",
+      );
+      row.recheckDays = input.recheckDays;
+    }
+    if (input.severity !== undefined) {
+      check(
+        ["warning", "critical"].includes(input.severity),
+        "INVALID_INPUT",
+        "严重度仅支持提醒或重要",
+      );
+      row.severity = input.severity;
+    }
+    this.store.db
+      .prepare("INSERT INTO lab_monitors VALUES (?,?,?)")
+      .run(row.id, patientId, JSON.stringify(row));
+    this.store.audit(patient.sessionId, "lab_monitor.created", {
+      monitorId: row.id,
+      item: row.item,
+      op: row.op,
+      threshold: row.threshold,
+    });
+    return row;
+  }
+  updateMonitor(patientId, monitorId, input = {}) {
+    identifier(monitorId);
+    const row = this.store.db
+      .prepare("SELECT data FROM lab_monitors WHERE id=? AND patient_id=?")
+      .get(monitorId, patientId);
+    check(row, "NOT_FOUND", "监测不存在", 404);
+    const monitor = JSON.parse(row.data);
+    check(
+      monitor.revision === input.revision,
+      "REVISION_CONFLICT",
+      "监测已变化，请刷新",
+      409,
+    );
+    if (input.item !== undefined) monitor.item = string(input.item, "监测项目", 60);
+    if (input.op !== undefined) {
+      check(
+        input.op === "gt" || input.op === "lt",
+        "INVALID_INPUT",
+        "监测方向须为高于（gt）或低于（lt）",
+      );
+      monitor.op = input.op;
+    }
+    if (input.threshold !== undefined) {
+      check(
+        Number.isFinite(input.threshold),
+        "INVALID_INPUT",
+        "监测阈值须为数值",
+      );
+      monitor.threshold = input.threshold;
+    }
+    if (input.recheckDays !== undefined) {
+      if (input.recheckDays === null || input.recheckDays === "") {
+        monitor.recheckDays = null;
+      } else {
+        check(
+          Number.isInteger(input.recheckDays) &&
+            input.recheckDays >= 1 &&
+            input.recheckDays <= 3650,
+          "INVALID_INPUT",
+          "复查间隔须为 1–3650 天",
+        );
+        monitor.recheckDays = input.recheckDays;
+      }
+    }
+    if (input.severity !== undefined) {
+      check(
+        ["warning", "critical"].includes(input.severity),
+        "INVALID_INPUT",
+        "严重度仅支持提醒或重要",
+      );
+      monitor.severity = input.severity;
+    }
+    if (input.note !== undefined) monitor.note = string(input.note, "备注", 200);
+    if (input.status !== undefined) {
+      check(
+        ["active", "paused"].includes(input.status),
+        "INVALID_INPUT",
+        "监测状态仅支持开启或暂停",
+      );
+      monitor.status = input.status;
+    }
+    monitor.revision++;
+    this.store.db
+      .prepare("UPDATE lab_monitors SET data=? WHERE id=?")
+      .run(JSON.stringify(monitor), monitorId);
+    this.store.audit(null, "lab_monitor.updated", {
+      monitorId,
+      revision: monitor.revision,
+      status: monitor.status,
+    });
+    return monitor;
+  }
+  removeMonitor(patientId, monitorId, revision) {
+    identifier(monitorId);
+    const row = this.store.db
+      .prepare("SELECT data FROM lab_monitors WHERE id=? AND patient_id=?")
+      .get(monitorId, patientId);
+    check(row, "NOT_FOUND", "监测不存在", 404);
+    const monitor = JSON.parse(row.data);
+    check(
+      monitor.revision === revision,
+      "REVISION_CONFLICT",
+      "监测已变化，请刷新",
+      409,
+    );
+    this.store.db.prepare("DELETE FROM lab_monitors WHERE id=?").run(monitorId);
+    this.store.audit(null, "lab_monitor.deleted", { monitorId });
+    return { ok: true };
   }
   medicationAlerts(patient) {
     const alerts = [];

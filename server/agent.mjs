@@ -1695,6 +1695,24 @@ export function createServer(options = {}) {
         }
         if (parts[3] === "labs" && parts.length === 5 && parts[4] === "new" && req.method === "GET") return send(res, 200, { labs: schedule.newLabs(pid) });
         if (parts[3] === "labs" && parts.length === 5 && parts[4] === "reviewed" && req.method === "POST") return send(res, 200, schedule.markLabsReviewed(pid, (await body(req)).keys));
+        if (parts[3] === "lab-monitors") {
+          if (parts.length === 4 && req.method === "GET") return send(res, 200, { monitors: risks.listMonitors(pid) });
+          if (parts.length === 4 && req.method === "POST") {
+            const monitor = risks.createMonitor(pid, await body(req));
+            risks.evaluatePatient(pid);
+            return send(res, 201, monitor);
+          }
+          if (parts.length === 5 && req.method === "PATCH") {
+            const monitor = risks.updateMonitor(pid, identifier(parts[4]), await body(req));
+            risks.evaluatePatient(pid);
+            return send(res, 200, monitor);
+          }
+          if (parts.length === 5 && req.method === "DELETE") {
+            risks.removeMonitor(pid, identifier(parts[4]), (await body(req)).revision);
+            risks.evaluatePatient(pid);
+            return send(res, 200, { ok: true });
+          }
+        }
         if (parts[3] === "care-tasks") {
           if (parts.length === 4 && req.method === "GET") return send(res, 200, careTasks.list(pid, {
             status: url.searchParams.get("status") || "active", offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 20),
