@@ -128,6 +128,15 @@ const metersFromSession = (s) => {
   }
   return { chars, tokens, rounds };
 };
+// Codex 式相对时间标签:分钟/小时/天/周,给侧栏最近对话列表用。
+const agoLabel = (value) => {
+  if (!value) return "";
+  const s = (Date.now() - new Date(value)) / 1000;
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + "分钟";
+  if (s < 86400) return Math.round(s / 3600) + "小时";
+  if (s < 604800) return Math.round(s / 86400) + "天";
+  return Math.round(s / 604800) + "周";
+};
 const eventLabel = (event) =>
   ({
     "policy.evaluated": `识别任务：${INTENTS[event.payload?.intent] || "资料整理"}`,
@@ -1394,29 +1403,53 @@ function App() {
           <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
             <Plus size={20}/><span>新建任务</span>
           </button>
+          {medical && <div className="medical-quick-wrap">
+            <nav className="medical-quick" aria-label="主要业务">
+              {[["care", "患者消息", Inbox], ["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>)}
+            </nav>
+            <nav className="medical-quick" aria-label="资料与工具">
+              <button aria-current={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "page" : undefined} className={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={17}/><span>资料与工具</span></button>
+            </nav>
+          </div>}
           {medical && <div className="agent-recents">
             <p className="business-nav-label">最近对话</p>
             <nav aria-label="最近对话" className="agent-recents-list">
-              {sessions.slice(0,15).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : ""}</small></button>)}
-              {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
-              <div className="agent-recents-tail">
-                <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
-                <button onClick={() => navigate("projects")}>查看全部项目文件</button>
-              </div>
+              {(() => {
+                // Codex 式形态映射:会话没有项目字段但有患者——患者即"项目分组",
+                // 无患者关联的进「历史」。每组最多 3 条,分组最多 5 个,历史最多 6 条。
+                const groups = new Map(); const loose = [];
+                for (const item of sessions) {
+                  if (item.patientId) {
+                    if (!groups.has(item.patientId)) groups.set(item.patientId, []);
+                    if (groups.get(item.patientId).length < 3) groups.get(item.patientId).push(item);
+                  } else if (loose.length < 6) loose.push(item);
+                  if (groups.size >= 5 && loose.length >= 6) break;
+                }
+                const taskButton = item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : agoLabel(item.updatedAt)}</small></button>;
+                return <>
+                  {[...groups.entries()].map(([pid, items]) => items.length ? <div key={pid} className="agent-recents-group">
+                    <p className="agent-recents-group-label">{patientsList.find(p => p.id === pid)?.name || "患者"}</p>
+                    {items.map(taskButton)}
+                  </div> : null)}
+                  {loose.length > 0 && <div className={groups.size ? "agent-recents-group" : undefined}>
+                    {groups.size > 0 && <p className="agent-recents-group-label">历史</p>}
+                    {loose.map(taskButton)}
+                  </div>}
+                  {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+                  <div className="agent-recents-tail">
+                    <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
+                    <button onClick={() => navigate("projects")}>查看全部项目文件</button>
+                  </div>
+                </>;
+              })()}
             </nav>
           </div>}
           {!medical && <nav className="business-nav" aria-label="通用工作">
             {[["tasks", "任务记录", MessageSquare], ["projects", "项目文件", FolderOpen]].map(([id,label,Icon]) => <button key={id} aria-current={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "page" : undefined} className={(id === "tasks" ? ["tasks","workbench","review","history"].includes(view) : ["projects","workspaces"].includes(view)) ? "active" : ""} onClick={() => navigate(id)}><Icon size={18}/>{label}</button>)}
           </nav>}
-          {medical && <>
-            <p className="business-nav-label">医疗工作</p>
-            <nav className="business-nav" aria-label="主要业务">
-              {[["care", "患者消息", Inbox], ["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={18}/>{label}</button>)}
-            </nav>
-          </>}
-          <nav className="business-nav resource-nav" aria-label="资料与工具">
+          {!medical && <nav className="business-nav resource-nav" aria-label="资料与工具">
             <button aria-current={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "page" : undefined} className={["tools","knowledge","literature","cases","clinical-ref","data-analysis","drg"].includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={18}/>资料与工具</button>
-          </nav>
+          </nav>}
           {wsList.some(w=>w.pinned&&!w.archived)&&<nav className="pinned-projects" aria-label="固定项目"><p className="business-nav-label">固定项目</p>{wsList.filter(w=>w.pinned&&!w.archived).slice(0,3).map(w=><button key={w.id} onClick={()=>openWorkspaces({id:w.id})}><FolderOpen size={16}/><span>{w.title}</span></button>)}</nav>}
           <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>

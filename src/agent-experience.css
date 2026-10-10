@@ -7,6 +7,17 @@
 .agent-new-task span { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; }
 .v6-shell .agent-new-task:hover { background: #1e523c; }
 .v6-shell .resource-nav { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+/* 医疗常用功能:侧栏顶部一小块 3 列启动台。两个 nav(主要业务/资料与工具)
+   用 display:contents 融进同一网格,名字与按钮文字不变以兼容既有测试。 */
+.medical-quick-wrap { margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 4px; }
+.medical-quick { display: contents; }
+.medical-quick button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 58px; padding: 8px 4px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); font-size: 12px; }
+.medical-quick button:hover { background: #e5ece1; }
+.medical-quick button.active { background: #e1ebde; color: #235139; }
+/* 最近对话的患者分组小标题(非按钮,保证列表第一个可点元素是会话本身) */
+.agent-recents-group { margin-top: 10px; }
+.agent-recents-group:first-child { margin-top: 0; }
+.agent-recents-group-label { margin: 0 0 2px; padding: 0 12px; font-size: 11px; color: #8a988e; }
 /* 最近对话紧挨「新建任务」,医疗模式下就是侧栏主体:列表吃掉剩余高度、
    内部滚动(≈top15),「任务记录/项目文件」降为尾部两个链接,不再占导航位。 */
 .agent-recents { margin-top: 14px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
