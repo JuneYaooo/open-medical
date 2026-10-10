@@ -6,6 +6,7 @@ const when=value=>value?new Date(value).toLocaleString():'尚未同步';
 const PLUGIN_CATALOG=[
  {manifest:{manifestVersion:1,id:'wechat-exp',name:'微信历史导入（本机导出桥接）',protocol:'wx-cli',defaultEndpoint:'http://127.0.0.1:9101'},
   category:'聊天渠道',
+  setup:true,
   desc:'把微信里的聊天记录备份并接入随访：读取会话列表、选择要导入的人并标注患者归属与关系，历史同步进待复核草稿。全程按钮操作，无需命令行。',
   goto:{tab:'followup',label:'去随访连接配置 →'},
   risk:'⚠ 该能力依赖一个外部导出组件（安装向导会自动下载）。该组件需要从微信进程内存提取数据库密钥，此行为可能被微信感知上报，存在账号被平台处罚的先例（一次性备份风险较低但不为零）。请仅用你自己拥有的账号与数据，知情后启用。'},
@@ -47,7 +48,9 @@ export function PluginCenter() {
 function PluginSetup({entry}) {
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[accounts,setAccounts]=useState(null),[wxid,setWxid]=useState('');
  const poll=async()=>{try{const s=await api('/api/wechat-exp/status','GET');setStatus(s);return s;}catch{return null;}};
- useEffect(()=>{poll();const t=setInterval(poll,2500);return()=>clearInterval(t);},[]);
+ useEffect(()=>{poll();},[]);
+ // 仅在任务进行中持续轮询;空闲时不轮询,避免页面永远达不到 networkidle(会挂起 UI 测试的 goto)。
+ useEffect(()=>{ if(!status?.job) return; const t=setInterval(poll,2500); return()=>clearInterval(t); },[status?.job]);
  const runStep=async fn=>{setBusy(true);setError('');try{await fn();await poll();}catch(e){setError(e.message);}finally{setBusy(false);}};
  const s=status||{toolReady:false,backupReady:false,account:'',bridgeRunning:false,job:null,warning:''};
  const connection=entry.connection||{channel:entry.manifest.id,endpoint:entry.manifest.defaultEndpoint};
