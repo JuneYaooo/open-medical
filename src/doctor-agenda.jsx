@@ -13,11 +13,19 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
   const [data, setData] = useState(null);
   const [kind, setKind] = useState("all");
   const [query, setQuery] = useState("");
+  const [group, setGroup] = useState("");
+  const [groups, setGroups] = useState([]);
   const [offset, setOffset] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(null);
   const [error, setError] = useState("");
+  useEffect(() => {
+    // 分组筛选项来自患者列表的在用分组（全局助手确认的分组会出现在这里）。
+    api("/api/patients?summary=1&archived=1")
+      .then((result) => setGroups([...new Set((result.patients || []).flatMap((p) => p.groups || []))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))))
+      .catch(() => {});
+  }, [refreshKey]);
   useEffect(() => {
     let live = true;
     let generation = 0;
@@ -25,7 +33,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
       const request = ++generation;
       setLoading(true);
       try {
-        const result = await api(`/api/doctor/overview?kind=${kind}&q=${encodeURIComponent(query)}&offset=${offset}&limit=6`);
+        const result = await api(`/api/doctor/overview?kind=${kind}&q=${encodeURIComponent(query)}${group ? `&group=${encodeURIComponent(group)}` : ""}&offset=${offset}&limit=6`);
         if (live && request === generation) {
           if (offset && offset >= result.total) { setOffset(Math.max(0, Math.floor((result.total - 1) / 6) * 6)); return; }
           setData(result); setError("");
@@ -36,7 +44,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
     const delay = setTimeout(load, query ? 200 : 0);
     const interval = setInterval(() => { if (!document.hidden) load(); }, 15000);
     return () => { live = false; clearTimeout(delay); clearInterval(interval); };
-  }, [kind, query, offset, refreshKey]);
+  }, [kind, query, group, offset, refreshKey]);
   const open = async (item) => {
     setOpening(item.id);
     setError("");
@@ -66,6 +74,10 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
       <div className="agenda-toolbar">
         <div className="agenda-filters" aria-label="待办分类">{Object.entries(kinds).map(([key, label]) => <button key={key} aria-pressed={kind === key} className={kind === key ? "active" : ""} onClick={() => { setKind(key); setOffset(0); }}>{label}<span>{data?.counts[key] ?? "—"}</span></button>)}</div>
         <label className="agenda-search"><Search size={14} /><input aria-label="搜索今日待办" placeholder="患者或事项" value={query} onChange={(e) => { setQuery(e.target.value); setOffset(0); }} /></label>
+        {groups.length > 0 && <label className="agenda-search agenda-group-filter"><select aria-label="按分组筛选待办" value={group} onChange={(e) => { setGroup(e.target.value); setOffset(0); }}>
+          <option value="">全部分组</option>
+          {groups.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select></label>}
       </div>
       {error && <p className="form-error" role="alert">{error}<button className="text-button" onClick={() => setRefreshKey((value) => value + 1)}>重试</button></p>}
       {!data && !error && <div className="agenda-loading" role="status">正在整理今日待办…</div>}

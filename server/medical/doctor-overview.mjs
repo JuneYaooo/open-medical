@@ -12,17 +12,24 @@ const TRIAL_STEP = { shortlisted: "联系患者，说明研究", contacted: "登
 // computed before pagination. A row never doubles as a "complete" action.
 export class DoctorOverview {
   constructor(store, sessions, { schedule, extensions, contactMatches, trialWork } = {}) { this.store = store; this.sessions = sessions; this.schedule = schedule; this.extensions = extensions; this.contactMatches = contactMatches; this.trialWork = trialWork; }
-  read({ kind = "all", query = "", offset = 0, limit = 12, now = Date.now() } = {}) {
+  read({ kind = "all", query = "", group = "", offset = 0, limit = 12, now = Date.now() } = {}) {
     check(AGENDA_KINDS.includes(kind), "INVALID_INPUT", "待办分类无效");
     check(typeof query === "string" && query.length <= 100, "INVALID_INPUT", "搜索词过长");
+    check(typeof group === "string" && group.length <= 40, "INVALID_INPUT", "分组名过长");
     check(Number.isSafeInteger(offset) && offset >= 0 && Number.isSafeInteger(limit) && limit >= 1 && limit <= 100,
       "INVALID_INPUT", "分页参数无效");
     const db = this.store.db;
     const table = (name) => db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
     const people = new Map(db.prepare("SELECT id,data FROM patients").all().map((row) => {
       const p = JSON.parse(row.data);
-      return [row.id, { id: row.id, name: p.name, patientNumber: p.patientNumber || "", birthYear: p.birthYear, archived: p.archived }];
+      return [row.id, { id: row.id, name: p.name, patientNumber: p.patientNumber || "", birthYear: p.birthYear, archived: p.archived, groups: p.groups || [] }];
     }));
+    // 分组联动：分组待办只保留属于该分组在管患者的事项；与患者无关的
+    // 通用事项（认领收件箱、工作台进化等）在筛选时隐藏。
+    const groupMembers = group
+      ? new Set([...people.values()].filter((p) => !p.archived && p.groups.includes(group)).map((p) => p.id))
+      : null;
+    const inGroup = (item) => !groupMembers || (item.patientId && groupMembers.has(item.patientId));
     const rows = [], work = [];
     const place = (list) => (item) => {
       const patient = item.patientId ? people.get(item.patientId) : null;
@@ -154,12 +161,13 @@ export class DoctorOverview {
     if (matches) addWork({ id: "care-contacts", kind: "review", title: `${matches} 位微信客户待确认是哪位患者`, detail: "系统已按备注电话、编号推荐",
       at: 0, count: matches, fallbackName: "企业微信", action: { type: "view", view: "care", tab: "contacts", label: "去确认" } });
 
-    const counts = Object.fromEntries(AGENDA_KINDS.map((key) => [key, key === "all" ? rows.length : rows.filter((item) => item.kind === key).length]));
+    const visible = rows.filter(inGroup);
+    const counts = Object.fromEntries(AGENDA_KINDS.map((key) => [key, key === "all" ? visible.length : visible.filter((item) => item.kind === key).length]));
     const needle = query.trim().toLowerCase();
     const matchesQuery = (item) => !needle || `${item.patientName} ${item.patientNumber} ${item.title} ${item.detail}`.toLowerCase().includes(needle);
-    const filtered = rows.filter((item) => (kind === "all" || item.kind === kind) && matchesQuery(item))
+    const filtered = visible.filter((item) => (kind === "all" || item.kind === kind) && matchesQuery(item))
       .sort((a, b) => a.weight - b.weight || a.at - b.at || a.id.localeCompare(b.id));
-    const workItems = work.filter(matchesQuery).sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
+    const workItems = work.filter((item) => inGroup(item) && matchesQuery(item)).sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
     return { counts, total: filtered.length, offset, limit, hasMore: offset + limit < filtered.length,
       items: filtered.slice(offset, offset + limit), work: { total: workItems.length, items: workItems.slice(0, 30) },
       generatedAt: now, patientCount: [...people.values()].filter((p) => !p.archived).length };

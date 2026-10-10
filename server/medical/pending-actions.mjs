@@ -13,6 +13,7 @@ import { normalizeGroupProposal } from "./patient-grouping.mjs";
 const TYPES = [
   "patient-create",
   "patient-update",
+  "patient-grouping",
   "followup-create",
   "case-save",
   "care-message",
@@ -138,6 +139,37 @@ export class PendingActions {
         "随访提案需要 name",
       );
     }
+    if (type === "patient-grouping") {
+      // 多患者分组提案：逐人快照姓名与当前分组，供托盘展示和确认时核对；
+      // 患者级冲突（归档/分组已满）在 confirm 时逐人跳过，不整体失败。
+      const groupName = string(payload.groupName, "分组名称", 40);
+      check(
+        Array.isArray(payload.patients) && payload.patients.length >= 1 && payload.patients.length <= 100,
+        "INVALID_INPUT",
+        "分组提案须包含 1–100 位患者",
+      );
+      const seen = new Set();
+      const entries = [];
+      for (const entry of payload.patients) {
+        check(entry && typeof entry === "object" && !Array.isArray(entry), "INVALID_INPUT", "分组患者条目无效");
+        const patient = this.patients.row(entry.patientId);
+        check(!patient.archived, "PATIENT_ARCHIVED", `患者 ${patient.name} 已归档，请先恢复档案再分组`, 409);
+        if (seen.has(patient.id)) continue;
+        seen.add(patient.id);
+        entries.push({
+          patientId: patient.id,
+          name: patient.name,
+          reason: string(entry.reason, "分组依据", 200),
+          groups: patient.groups || [],
+        });
+      }
+      normalized = {
+        groupName,
+        patients: entries,
+        ...(payload.note ? { note: string(payload.note, "备注", 300) } : {}),
+        ...(payload.sourceSessionId ? { sourceSessionId: string(payload.sourceSessionId, "来源会话", 200) } : {}),
+      };
+    }
     if (type === "case-save") {
       if (patientId) {
         const patient = this.patients.row(patientId);
@@ -178,7 +210,7 @@ export class PendingActions {
       summary: title,
       createdAt: time,
       updatedAt: time,
-      note: isCare(type) ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
+      note: isCare(type) || type === "patient-grouping" ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
     };
   }
   list({ patientId, status = "pending", type, sourceSessionId, limit = 100, offset = 0 } = {}) {
@@ -295,6 +327,25 @@ export class PendingActions {
           }
         }
         applied = { assignments: appliedRows, skipped };
+      } else if (action.type === "patient-grouping") {
+        // 分组提案在生成后患者档案可能已变化：逐人按当前档案合并分组，
+        // 已在组内视为幂等成功；归档或分组数已满 10 的跳过并在结果中说明，
+        // 不让个别患者的漂移推翻整份提案。
+        let added = 0;
+        let already = 0;
+        const skipped = [];
+        for (const entry of action.payload.patients) {
+          const patient = this.patients.row(entry.patientId);
+          if (patient.archived) { skipped.push({ patientId: entry.patientId, name: entry.name, reason: "已归档" }); continue; }
+          if ((patient.groups || []).includes(action.payload.groupName)) { already++; continue; }
+          if ((patient.groups || []).length >= 10) { skipped.push({ patientId: entry.patientId, name: entry.name, reason: "已有 10 个分组" }); continue; }
+          this.patients.update(entry.patientId, {
+            groups: [...(patient.groups || []), action.payload.groupName],
+            expectedRevision: patient.revision,
+          });
+          added++;
+        }
+        applied = { added, already, skipped };
       } else {
         if (action.patientId) {
           const patient = this.patients.row(action.patientId);

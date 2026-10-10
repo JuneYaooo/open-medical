@@ -3,7 +3,7 @@ import { ClipboardCheck, X } from "lucide-react";
 import { api } from "./agent-runtime";
 import "./care.css";
 
-const TYPES = { "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展" };
+const TYPES = { "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展" };
 export const PENDING_REFRESH_EVENT = "care-pending-refresh";
 
 function Preview({ action }) {
@@ -19,6 +19,8 @@ function Preview({ action }) {
   if (action.type === "care-group-message") return <><p className="care-hint">客户群「{p.groupName}」· 确认后由群主 {p.owner} 在企业微信中点发送</p><pre>{p.text}</pre></>;
   if (action.type === "care-education-broadcast") return <><p className="care-hint">患教素材「{p.materialTitle || "自定义内容"}」· 将为 {p.recipients?.length} 位患者创建企业微信单发任务（成员仍需在企业微信中手动点发送）</p><pre>{p.text}</pre></>;
   if (action.type === "patient-group-suggest") return <ul className="care-hint">{(p.assignments || []).map((a) => <li key={a.patientId}><b>{a.name}</b> 追加分组：{a.addTags.join("、")}</li>)}</ul>;
+  if (action.type === "patient-grouping") return <><p className="care-hint">把 {(p.patients || []).length} 位患者加入分组「{p.groupName}」{p.note ? ` · ${p.note}` : ""}</p>
+    <ul className="care-hint">{(p.patients || []).map((x, i) => <li key={x.patientId || i}>{x.name}{x.groups?.length ? `（已分组：${x.groups.join("、")}）` : ""}：{x.reason}</li>)}</ul></>;
   return <pre>{JSON.stringify(p.changes ?? p, null, 2)}</pre>;
 }
 
@@ -29,7 +31,7 @@ export function PendingTray() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const load = useCallback(() => api("/api/pending-actions?status=pending")
-    .then((data) => setActions((data.actions || []).filter((a) => a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-") || a.type === "patient-group-suggest")))
+    .then((data) => setActions((data.actions || []).filter((a) => a.type === "patient-grouping" || a.type === "patient-group-suggest" || a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
     .catch(() => {}), []);
   useEffect(() => {
     load();

@@ -473,6 +473,10 @@ export function createServer(options = {}) {
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
       saveDisplayResult: (id, runId, value) => workspaces.store.update(id, w => { const run=w.runs.find(r=>r.id===runId);run.displayResults=[...(run.displayResults||[]).filter(r=>r.key!==value.key),value].slice(-12); }),
       readPatientBrief: (patientId) => patientBrief.read(patientId),
+      // 全局助手工具面的依赖（访问器延迟解析：注册表在下方才创建）。
+      patients: () => patients,
+      pending: () => pending,
+      followups: () => followups,
       plugins: [
         ...knowledgeToolPlugins,
         ...localPlugins(pendingActionTools(pending, doctor)),
@@ -1041,6 +1045,9 @@ export function createServer(options = {}) {
           );
         return send(res, 201, sessionBridge.createSession(b));
       }
+      // 全局助手会话（单例）：幂等查找或创建，前端入口每次点击复用。
+      if (path === "/api/assistant/session" && req.method === "POST")
+        return send(res, 200, sessionBridge.ensureGlobalSession());
       const parts = path.split("/").filter(Boolean);
       if (parts[0] === "api" && parts[1] === "sessions" && parts[2]) {
         const id = identifier(parts[2]);
@@ -1413,6 +1420,7 @@ export function createServer(options = {}) {
       if (path === "/api/doctor/overview" && req.method === "GET")
         return send(res, 200, doctorOverview.read({
           kind: url.searchParams.get("kind") || "all", query: url.searchParams.get("q") || "",
+          group: url.searchParams.get("group") || "",
           offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 12),
         }));
       if (path === "/api/followup-plans" && req.method === "GET")

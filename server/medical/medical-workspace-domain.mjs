@@ -3,6 +3,7 @@ import {configureTaskPresentation} from './task-presentation.mjs';
 import {configureSimilarCaseTools, SIMILAR_CASE_GUIDANCE, similarCaseAnswer} from './similar-case-workflow.mjs';
 import { configureAssessmentTools, ASSESSMENT_GUIDANCE, assessmentAnswer } from "./assessment-tools.mjs";
 import { configureIntakeTools } from "./intake-tools.mjs";
+import { configureGlobalAssistantTools, GLOBAL_ASSISTANT_DISCIPLINE, GLOBAL_ASSISTANT_GUIDANCE, rosterDigest } from "./global-assistant.mjs";
 import { GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
 import { TOOL_DEFINITIONS, runTool, medicalToolAllowed } from "../medical-core.mjs";
 import { check } from "../errors.mjs";
@@ -57,6 +58,9 @@ export function createMedicalWorkspaceDomain({
   readPatientBrief = null,
   saveIntakeNotes = () => {},
   saveDisplayResult = () => {},
+  patients = null,
+  pending = null,
+  followups = null,
 } = {}) {
   // 会话叠层的插件经 runTool 统一分发：材料 sources、schema 校验与
   // readOnly 约定和医疗会话路径共用同一执行契约。
@@ -71,6 +75,11 @@ export function createMedicalWorkspaceDomain({
     // 按需分层：未启用医疗的工作区（普通项目）只带通用内核指令，
     // 不注入医疗纪律文本。
     systemFor(workspace) {
+      // 全局助手会话（modeFlags.global）：换用收窄的全局纪律与工具面，
+      // 不加载病历整理/评估等工作流文本。contextIdentity 包含 systemFor
+      // 输出，标记切换即失效旧运行上下文的复用。
+      if (workspace?.modeFlags?.global)
+        return `${GenericDomain.system}\n${GLOBAL_ASSISTANT_DISCIPLINE}`;
       return medicalWorkspaceEnabled(workspace)
         ? `${GenericDomain.system}\n${MEDICAL_WORKSPACE_DISCIPLINE}`
         : GenericDomain.system;
@@ -115,6 +124,8 @@ export function createMedicalWorkspaceDomain({
         (s) => s.extraction?.ocr?.quality && s.extraction.ocr.quality.level !== "good",
       );
       return [
+        workspace.modeFlags?.global && patients ? `全局助手 · ${rosterDigest(patients())}` : "",
+        workspace.modeFlags?.global ? GLOBAL_ASSISTANT_GUIDANCE : "",
         workspace.patientId ? `当前已关联患者编号：${workspace.patientId}。可调用 read_patient_brief 读取最新档案；不必让医生重新输入已有病史。` : "",
         run.policy?.workflow === "patient-assessment" ? ASSESSMENT_GUIDANCE : "",
         run.policy?.workflow === "similar-case-search" ? SIMILAR_CASE_GUIDANCE : "",
@@ -168,6 +179,19 @@ export function createMedicalWorkspaceDomain({
             plugins: sessionPluginMap,
           });
         };
+        // 全局助手会话：换用收窄的跨模块工具面（患者查询/扫描/分组提案/
+        // 知识库/随访），不注册病历整理、评估等工作流工具。
+        if (workspace.modeFlags?.global) {
+          configureGlobalAssistantTools(registry, workspace, workspace.runs?.find((run) => run.id === runId), {
+            patients: patients?.(),
+            pending: pending?.(),
+            brief: readPatientBrief,
+            followups: followups?.(),
+            sessionPlugins,
+            dispatch: (name, args) => execute(name, args, { sources: [] }),
+          });
+          return;
+        }
         for (const definition of TOOL_DEFINITIONS.filter((definition) => medicalToolAllowed(definition.function.name, intent)))
           registry.register({
             permission: "tools.execute",

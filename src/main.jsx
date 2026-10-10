@@ -579,6 +579,7 @@ function App() {
   const [homeDraft, setHomeDraft] = useState({});
   const [patientsList, setPatientsList] = useState([]);
   const [listError, setListError] = useState("");
+  const [assistantId, setAssistantId] = useState("");
   const [currentPatientId, setCurrentPatientId] = useState(
     () => localStorage.getItem("om.currentPatient") || "",
   );
@@ -1225,6 +1226,18 @@ function App() {
     navigate("patients");
     writeLocation("patients", { id: route.id, tab: route.tab, replace: true });
   };
+  // 全局助手：服务端单例会话，入口幂等复用同一段对话。
+  const openGlobalAssistant = async () => {
+    try {
+      const data = await api("/api/assistant/session", "POST", {});
+      setAssistantId(data.id);
+      setSidebar(false);
+      await refreshList().catch(() => {});
+      await openTask(data.id);
+    } catch (e) {
+      setListError(`全局助手打开失败：${e.message}`);
+    }
+  };
   const openTask = async (id, options = {}) => {
     setView("workbench", { id, tab: options.tab });
     const data = await select(id);
@@ -1405,6 +1418,7 @@ function App() {
           </button>
           {medical && <div className="medical-quick-wrap">
             <nav className="medical-quick" aria-label="主要业务">
+              <button aria-current={view === "workbench" && session?.id === assistantId ? "page" : undefined} className={view === "workbench" && session?.id === assistantId ? "active" : ""} onClick={openGlobalAssistant}><Bot size={17}/><span>全局助手</span></button>
               {[["care", "患者消息", Inbox], ["agenda", "今日待办", CalendarClock], ["patients", "患者", Stethoscope], ["followups", "随访", MessageSquare], ["research", "临床试验", BookOpen]].map(([id,label,Icon]) => <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>)}
             </nav>
             <nav className="medical-quick" aria-label="资料与工具">

@@ -108,7 +108,7 @@ export class SessionBridge {
   }
 
   // ---------- 创建 / 删除 / 改名 ----------
-  createSession({ title, patientId, copiedFrom } = {}) {
+  createSession({ title, patientId, copiedFrom, global = false } = {}) {
     const root = join(this.sessionsRoot, randomUUID());
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const w = this.service.create({
@@ -128,6 +128,9 @@ export class SessionBridge {
       approvalPolicy: "workspace-write",
       autoApplyConsent: true,
     });
+    // 全局助手会话：modeFlags.global 切换领域层（系统指令与工具面），
+    // 单例由 ensureGlobalSession 保证。
+    if (global) this.service.setModeFlag(w.id, "global", true);
     if (copiedFrom)
       this.service.store.update(w.id, (current) => {
         current.copiedFrom = copiedFrom;
@@ -187,6 +190,16 @@ export class SessionBridge {
       this.service.store.update(id, (current) => { current.title = name; }, w.revision);
       this.store.audit(id, "session.renamed", { title: name });
     });
+  }
+  // 全局助手会话（单例）：常驻跨模块对话入口，重复调用复用同一会话。
+  ensureGlobalSession() {
+    const existing = this.service.store.db
+      .prepare(
+        "SELECT id FROM agent_workspaces WHERE json_extract(data,'$.kind')='session' AND json_extract(data,'$.modeFlags.global')=1 ORDER BY json_extract(data,'$.createdAt') DESC LIMIT 1",
+      )
+      .get();
+    if (existing) return this.get(existing.id);
+    return this.createSession({ title: "全局助手", global: true });
   }
 
   // ---------- 材料（session.files 的内核等价物） ----------
@@ -690,6 +703,18 @@ export class SessionBridge {
     const mode = resolveMode(requestedMode);
     const policy = medicalPolicy(message);
     if (body.workflow === "patient-intake") policy.workflow = "patient-intake";
+    // 全局助手会话：固定全局工作流与问答式交付，阻止其他工作流路由；
+    // 非患者会话默认链式继承上下文，形成常驻记忆。
+    const globalSession = w.modeFlags?.global === true;
+    if (globalSession) {
+      check(
+        body.workflow === undefined || body.workflow === "global-assistant",
+        "INVALID_INPUT",
+        "全局助手会话只接受全局助手任务",
+      );
+      policy.workflow = "global-assistant";
+      policy.presentation = "answer";
+    }
     if (body.requestId !== undefined)
       check(
         !this.service.store.hasRequest(id, body.requestId),
@@ -762,7 +787,7 @@ export class SessionBridge {
       revision: body.sessionRevision ?? body.revision ?? w.revision,
       message,
       externalConsent: true,
-      completion: body.completion ?? (focused ? {kind:"answer"} : requestsMedicalDeliverable(message) ? {kind:"execution"} : undefined),
+      completion: body.completion ?? (globalSession ? { kind: "answer" } : focused ? {kind:"answer"} : requestsMedicalDeliverable(message) ? {kind:"execution"} : undefined),
       requestId: body.requestId,
       thinking: body.thinking,
       skills: body.skills,
@@ -778,7 +803,11 @@ export class SessionBridge {
       limits: {
         maxContextChars: Math.max(this.contextBudget, 10000),
         ...(Number.isFinite(this.maxRounds) ? { maxRounds: this.maxRounds } : {}),
-        ...(focused ? {maxRounds:20,maxTotalToolCalls:48,timeoutMs:480000} : {}),
+        ...(globalSession
+          ? { maxRounds: 40, maxTotalToolCalls: 80, timeoutMs: 480000 }
+          : focused
+            ? {maxRounds:20,maxTotalToolCalls:48,timeoutMs:480000}
+            : {}),
       },
     });
     return { kind: "workspace", handle };
