@@ -3,7 +3,7 @@ import { ClipboardCheck, X } from "lucide-react";
 import { api } from "./agent-runtime";
 import "./care.css";
 
-const TYPES = { "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展" };
+const TYPES = { "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展" };
 export const PENDING_REFRESH_EVENT = "care-pending-refresh";
 
 function Preview({ action }) {
@@ -18,6 +18,7 @@ function Preview({ action }) {
   if (action.type === "trial-enrollment") return <p className="care-hint">「{p.trialTitle}」· 入组状态改为 <b>{p.label}</b>{p.consentDate ? ` · 知情同意签署 ${p.consentDate}` : ""}{p.note ? ` · ${p.note}` : ""}</p>;
   if (action.type === "care-group-message") return <><p className="care-hint">客户群「{p.groupName}」· 确认后由群主 {p.owner} 在企业微信中点发送</p><pre>{p.text}</pre></>;
   if (action.type === "care-education-broadcast") return <><p className="care-hint">患教素材「{p.materialTitle || "自定义内容"}」· 将为 {p.recipients?.length} 位患者创建企业微信单发任务（成员仍需在企业微信中手动点发送）</p><pre>{p.text}</pre></>;
+  if (action.type === "patient-group-suggest") return <ul className="care-hint">{(p.assignments || []).map((a) => <li key={a.patientId}><b>{a.name}</b> 追加分组：{a.addTags.join("、")}</li>)}</ul>;
   return <pre>{JSON.stringify(p.changes ?? p, null, 2)}</pre>;
 }
 
@@ -28,7 +29,7 @@ export function PendingTray() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const load = useCallback(() => api("/api/pending-actions?status=pending")
-    .then((data) => setActions((data.actions || []).filter((a) => a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
+    .then((data) => setActions((data.actions || []).filter((a) => a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-") || a.type === "patient-group-suggest")))
     .catch(() => {}), []);
   useEffect(() => {
     load();

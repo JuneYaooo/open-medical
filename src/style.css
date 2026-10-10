@@ -4887,3 +4887,8 @@ nav.toolbox .session b{font-weight:500;}
 .survey-multi { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .survey-number { display: inline-flex; align-items: center; gap: 6px; }
 .survey-number input { width: 110px; }
+
+/* 患者分组建议表 */
+.group-suggest-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0; }
+.group-suggest-table th, .group-suggest-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.group-suggest-table th { color: var(--muted); font-weight: 600; font-size: 12px; }

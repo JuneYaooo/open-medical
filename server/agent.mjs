@@ -49,6 +49,7 @@ import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
 import { GuidelineLibrary, knowledgeTools, EDUCATION_COLLECTION } from "./medical/guidelines.mjs";
+import { scanGroupSuggestions } from "./medical/patient-grouping.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { PatientBrief } from "./medical/patient-brief.mjs";
 import { PatientImporter } from "./medical/patient-import.mjs";
@@ -1649,6 +1650,17 @@ export function createServer(options = {}) {
         const patient = patients.create(await body(req));
         risks.evaluatePatient(patient.id);
         return send(res, 201, patient);
+      }
+      if (path === "/api/patients/group-suggestions" && req.method === "POST")
+        return send(res, 200, { suggestions: scanGroupSuggestions(patients) });
+      if (path === "/api/patients/group-suggestions/propose" && req.method === "POST") {
+        const b = await body(req);
+        const action = pending.propose({
+          type: "patient-group-suggest",
+          payload: b,
+          summary: `分组建议：为 ${b.assignments?.length || 0} 位患者追加疾病分组（依据诊断 ICD-10/名称）`,
+        });
+        return send(res, 201, action);
       }
       if (path === "/api/inbox" && req.method === "GET")
         return send(res, 200, { messages: patients.unassigned() });

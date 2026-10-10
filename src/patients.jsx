@@ -419,6 +419,7 @@ export function PatientsView({
         ) : (
           <div className="toolbar-actions">
             <button className="secondary" onClick={() => setModal("import-patients")}>导入已有患者</button>
+            <button className="secondary" onClick={() => setModal("group-suggest")}>生成分组建议</button>
             <button className="primary" onClick={() => setModal("new-patient")}>
               <UserPlus size={15} /> 上传资料建档
             </button>
@@ -957,6 +958,15 @@ export function PatientsView({
           }}
         />
       )}
+      {modal === "group-suggest" && (
+        <GroupSuggestModal
+          onClose={() => setModal(null)}
+          onProposed={async (message) => {
+            setModal(null);
+            setNotice(message);
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -1192,6 +1202,71 @@ function FollowupModal({ patientId, onClose, onCreated }) {
           创建随访计划
         </button>
       </form>
+    </Modal>
+  );
+}
+
+// 患者分组建议:按结构化诊断(ICD-10/名称)与常用药名确定性派生,
+// 生成待确认提案;确认前不改任何档案,确认时逐患者乐观更新并报告冲突。
+function GroupSuggestModal({ onClose, onProposed }) {
+  const [loading, setLoading] = useState(true);
+  const [suggestions, setSuggestions] = useState([]);
+  const [checked, setChecked] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/api/patients/group-suggestions", "POST", {})
+      .then((data) => {
+        setSuggestions(data.suggestions || []);
+        setChecked(Object.fromEntries((data.suggestions || []).map((s) => [s.patientId, true])));
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const selected = suggestions.filter((s) => checked[s.patientId]);
+  const propose = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/patients/group-suggestions/propose", "POST", {
+        assignments: selected.map((s) => ({ patientId: s.patientId, addTags: s.addTags })),
+      });
+      await onProposed(`已创建分组建议提案（${selected.length} 位患者），请到「待确认」托盘核对后确认执行。`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title="生成分组建议" onClose={onClose}>
+      {loading && <p role="status">正在按诊断与用药扫描全部在管患者…</p>}
+      {error && <p className="error-text" role="alert">{error}</p>}
+      {!loading && !suggestions.length && <p className="muted">没有可建议的分组：全部患者都没有可推断的诊断依据，或已有对应分组。</p>}
+      {!!suggestions.length && (
+        <>
+          <p className="muted">依据结构化诊断（ICD-10 编码或诊断名称）推断；无诊断命中的患者按常用药给出「待核对」分组。确认前不会修改任何档案。</p>
+          <table className="group-suggest-table">
+            <thead>
+              <tr><th aria-label="选择"></th><th>患者</th><th>建议分组</th><th>依据</th></tr>
+            </thead>
+            <tbody>
+              {suggestions.map((s) => (
+                <tr key={s.patientId}>
+                  <td><input type="checkbox" checked={Boolean(checked[s.patientId])} onChange={(e) => setChecked({ ...checked, [s.patientId]: e.target.checked })} aria-label={`选择 ${s.name}`} /></td>
+                  <td><b>{s.name}</b>{s.currentGroups?.length ? <small className="muted"> 现有：{s.currentGroups.join("、")}</small> : null}</td>
+                  <td>{s.addTags.join("、")}</td>
+                  <td><small className="muted">{s.matched.map((m) => `${m.name || m.code || "诊断"}→${m.tag}`).join("；")}</small></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="toolbar-actions">
+            <button className="primary" disabled={busy || !selected.length} onClick={propose}>{busy ? "创建中…" : `创建提案（${selected.length} 位患者）`}</button>
+            <button className="secondary" onClick={onClose}>取消</button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

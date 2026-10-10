@@ -3,6 +3,7 @@ import { check, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { validateClinicalInput } from "../patients.mjs";
 import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../../shared/diagnoses.mjs";
+import { normalizeGroupProposal } from "./patient-grouping.mjs";
 
 // Agent-proposed, doctor-confirmed write-backs. The model never writes
 // patient/followup/case data directly: it files a pending action with
@@ -20,6 +21,7 @@ const TYPES = [
   "care-bind",
   "care-group-message",
   "care-education-broadcast",
+  "patient-group-suggest",
   "trial-batch",
   "trial-enrollment",
   "ext-change",
@@ -118,6 +120,9 @@ export class PendingActions {
         "患者档案提案至少包含一项变更（诊断/用药/过敏/检验/就诊）",
       );
       normalized = fields;
+    }
+    if (type === "patient-group-suggest") {
+      normalized = normalizeGroupProposal(this.patients, payload);
     }
     if (type === "patient-create") {
       normalized = {
@@ -270,6 +275,26 @@ export class PendingActions {
         });
       } else if (action.type === "followup-create") {
         applied = this.followups.create(action.patientId, action.payload);
+      } else if (action.type === "patient-group-suggest") {
+        // Per-patient optimistic apply: a profile edited after the proposal
+        // is skipped with its reason, never overwritten.
+        const appliedRows = [];
+        const skipped = [];
+        for (const assignment of action.payload.assignments) {
+          try {
+            const patient = this.patients.row(assignment.patientId);
+            const groups = [...new Set([...(patient.groups || []), ...assignment.addTags])];
+            check(groups.length <= 10, "GROUP_LIMIT", "分组超过 10 个，请先整理该患者的现有分组");
+            const updated = this.patients.update(assignment.patientId, {
+              groups,
+              expectedRevision: assignment.baseRevision,
+            });
+            appliedRows.push({ patientId: assignment.patientId, name: assignment.name, groups: updated.groups });
+          } catch (error) {
+            skipped.push({ patientId: assignment.patientId, name: assignment.name, reason: error.message });
+          }
+        }
+        applied = { assignments: appliedRows, skipped };
       } else {
         if (action.patientId) {
           const patient = this.patients.row(action.patientId);
