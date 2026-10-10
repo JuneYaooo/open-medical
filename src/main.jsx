@@ -1392,7 +1392,7 @@ function App() {
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
           <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
-            <Plus size={20}/><span>新建任务<small>和 Agent 说说你想做什么</small></span>
+            <Plus size={20}/><span>新建任务</span>
           </button>
           {medical && <nav className="agent-recents" aria-label="最近对话">
             <p className="business-nav-label">最近对话</p>

@@ -1,11 +1,10 @@
-/* Agent entry and stable navigation. */
+/* Agent entry and stable navigation. 单行「新建任务」:高度对齐导航按钮,把纵向空间留给导航。 */
 .v6-shell .app-navigation > .agent-new-task {
-  display: flex; align-items: center; gap: 12px; padding: 15px 14px;
-  min-height: 70px; background: #28654c; color: #fff; border: 1px solid #28654c;
-  border-radius: 10px; text-align: left; margin-bottom: 18px; overflow: hidden;
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  min-height: 48px; background: #28654c; color: #fff; border: 1px solid #28654c;
+  border-radius: 10px; text-align: left; margin-bottom: 14px; overflow: hidden;
 }
-.agent-new-task span { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; font-size: 17px; font-weight: 600; }
-.agent-new-task small { font-size: 11px; font-weight: 400; color: #e1eee6; }
+.agent-new-task span { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; }
 .v6-shell .agent-new-task:hover { background: #1e523c; }
 .v6-shell .resource-nav { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
 /* 最近对话紧挨「新建任务」:开始新任务/继续最近任务是一对动作,不挤占业务导航。
@@ -55,7 +54,6 @@
   .v6-shell .hub-patient-picker select { max-width: 190px; }
 }
 .v6-shell .agent-new-task > span { color: #fff; min-width: 0; }
-.v6-shell .agent-new-task small { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .v6-shell .agent-new-task > svg { flex-shrink: 0; }
 .v6-shell .agent-new-task { padding-inline: 12px; gap: 9px; }
 .v6-shell .hub-intro, .v6-shell .hub-composer, .v6-shell .hub-composer-hint, .agent-starters, .agent-setup-note { width: 100%; max-width: 860px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
