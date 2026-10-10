@@ -1136,6 +1136,9 @@ export function createServer(options = {}) {
               }
               finally { res.off("close", abort); }
             }
+            if (parts.length === 6 && parts[5] === "meta" && req.method === "PATCH") {
+              return send(res, 200, sessionBridge.setFileMeta(id, identifier(parts[4]), await body(req)));
+            }
             if (parts.length === 6 && parts[5] === "text" && req.method === "PUT") {
               const input = await body(req);
               const file = sessionBridge.updateMaterialText(id, identifier(parts[4]), input.text);

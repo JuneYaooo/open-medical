@@ -128,3 +128,18 @@
 .chart-monitor-state { font-size:11px; padding:3px 8px; border-radius:999px; color:#64766c; background:var(--soft); }
 .chart-monitor-state.fired { color:#866522; background:#fdf6ea; }
 .chart-monitor-state.paused { color:#64766c; }
+
+/* 资料库:类型 × 日期报告文件夹 */
+.library-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.library-filter button { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.library-filter button.active { background: var(--soft); color: var(--accent); font-weight: 600; }
+.library-group { margin: 0 0 18px; }
+.library-group > header h4 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.library-group > header h4 small { color: #64766c; font-weight: 400; }
+.library-lab-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12px; color: #64766c; background: var(--soft); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+.library-meta-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 0; border-top: 1px dashed var(--border); font-size: 12px; }
+.library-meta-editor label { display: flex; align-items: center; gap: 6px; }
+.library-meta-editor select, .library-meta-editor input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: #fff; }
+.lib-cat { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: #64766c; }
+.lib-cat.confirmed { color: var(--accent); background: #eaf2eb; }
+.chart-files summary .lib-cat, .chart-files summary small { margin-left: 8px; }

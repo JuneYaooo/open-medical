@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, CalendarDays, Pill, ArrowUpRight } from 'lucide-react';
 import { dashboardLabGroups, dashboardHistory } from '../shared/patient-dashboard.mjs';
 import { groupDiagnoses, sortDiagnoses } from '../shared/diagnoses.mjs';
+import { MATERIAL_CATEGORIES } from '../shared/material-classify.mjs';
+import { groupMaterials } from '../shared/material-folder.mjs';
 import { MaterialDetails, materialQualityLevel } from './material-details';
 import { api } from './agent-runtime';
 import './patient-dashboard.css';
@@ -26,7 +28,7 @@ function LabPlot({ group }) {
 }
 export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", onChanged, onError }) {
   const [editing, setEditing] = useState(false);
-  const titles = {overview:'患者概览',diagnoses:'诊断与病史',medications:'用药与过敏',labs:'检验趋势',visits:'就诊经过',sources:'原始资料'};
+  const titles = {overview:'患者概览',diagnoses:'诊断与病史',medications:'用药与过敏',labs:'检验趋势',visits:'就诊经过',sources:'原始资料',library:'资料库'};
   const [selected, setSelected] = useState('');
   const [materialQuery, setMaterialQuery] = useState('');
   const [visionSupported, setVisionSupported] = useState(false);
@@ -37,10 +39,12 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   const [monitorForm, setMonitorForm] = useState(null);
   const [monitorBusy, setMonitorBusy] = useState(false);
   const groups = useMemo(()=>dashboardLabGroups(patient.labs || []),[patient.labs]);
+  const [libraryFilter, setLibraryFilter] = useState('');
   const group = groups.find(g=>g.key===selected) || groups.find(g=>g.canPlot) || groups[0];
   const diagnoses=patient.diagnoses || [], meds=patient.medications || [], visits=patient.visits || [], allergies=patient.allergies || [];
   const history=dashboardHistory(patient);
   const files=session.files || [];
+  const libraryGroups = useMemo(()=>groupMaterials(files),[files]);
   const visitsSorted=[...visits].sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')));
   const status={active:'正在使用',stopped:'已停用',unknown:'状态待核对'};
   useEffect(() => { api('/api/model-settings').then(s => setVisionSupported(s.vision === true)).catch(() => {}); }, []);
@@ -75,6 +79,12 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
     try {
       await api(`/api/patients/${patient.id}/lab-monitors/${monitor.id}`, 'DELETE', { revision: monitor.revision });
       loadMonitors();
+    } catch (error) { onError?.(error.message); }
+  };
+  const setFileMeta = async (file, patch) => {
+    try {
+      await api(`/api/sessions/${session.id}/files/${file.id}/meta`, 'PATCH', patch);
+      onChanged?.();
     } catch (error) { onError?.(error.message); }
   };
   const reviewFiles = files.map(file => ({ file, level: materialQualityLevel(file) })).filter(x => x.level && x.level !== 'good');
@@ -165,6 +175,44 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       {ocrBulk && <p role="status">{ocrBulk}</p>}
       {ocrNotice && <p role="status">{ocrNotice}</p>}
       <label className="chart-source-search">查找文件<input value={materialQuery} onChange={e=>setMaterialQuery(e.target.value)} placeholder="输入文件名"/></label><div className="chart-files">{files.filter(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())).map(file=><details key={file.id}><summary><FileText size={15}/><span>{file.name}</span></summary><MaterialDetails file={file} sessionId={session.id} visionSupported={visionSupported} onChanged={handleMaterialsChanged} onError={onError}/></details>)}</div>{!files.length && <p className="chart-empty">尚未关联资料文件。</p>}{!!files.length && !files.some(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())) && <p className="chart-empty">没有匹配的文件。</p>}</section>}
+      {view === 'library' && <section className="chart-section chart-library" aria-label="资料库">
+        <header><div><h3>资料库</h3><p>按类型 × 资料日期归类；「推测」分类来自文件名与识别文本的关键词，点开资料即可确认或修改。</p></div><small>{files.length} 份资料</small></header>
+        {libraryGroups.length > 1 && <nav className="library-filter" aria-label="按类型筛选">
+          <button className={!libraryFilter ? 'active' : ''} onClick={()=>setLibraryFilter('')}>全部 {files.length}</button>
+          {libraryGroups.map(g=><button key={g.category} className={libraryFilter === g.category ? 'active' : ''} onClick={()=>setLibraryFilter(libraryFilter === g.category ? '' : g.category)}>{g.category} {g.count}</button>)}
+        </nav>}
+        {libraryGroups.filter(g=>!libraryFilter || g.category === libraryFilter).map(g=><div className="library-group" key={g.category}>
+          <header><h4>{g.category}<small>{g.count} 份{g.dateRange ? ` · ${g.dateRange}` : ''}</small></h4>
+          {g.category === '检验报告' && !!groups.length && <div className="library-lab-strip">
+            {groups.slice().sort((a,b)=>String(b.records.at(-1)?.date||'').localeCompare(String(a.records.at(-1)?.date||''))).slice(0,4).map(lab=><span key={lab.key}>{lab.item} · {lab.conflict ? '待核对' : `${lab.records.at(-1)?.value} ${lab.unit || ''}`}<small> {lab.records.at(-1)?.date || ''}</small></span>)}
+            <button className="text-button" onClick={()=>onClinical('labs')}>查看全部检验与趋势</button>
+          </div>}
+          </header>
+          <div className="chart-files">{g.files.map(file=><details key={file.id}>
+            <summary>
+              <FileText size={15}/><span>{file.name}</span>
+              <span className={`lib-cat ${file.category ? 'confirmed' : 'guess'}`}>{file.category || file.categorySuggestion?.category || '未分类'}{!file.category && file.categorySuggestion ? '（推测）' : ''}</span>
+              {!!file.documentDate && <small>{file.documentDate}</small>}
+              {(() => { const level = materialQualityLevel(file); return level ? <span className={`ocr-badge ${level}`}>{level === 'good' ? '识别良好' : level === 'fair' ? '识别待核对' : '识别质量低'}</span> : null; })()}
+            </summary>
+            <div className="library-meta-editor">
+              <label>类型
+                <select value={file.category || ''} onChange={e=>setFileMeta(file, { category: e.target.value })}>
+                  <option value="">未分类</option>
+                  {MATERIAL_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              {!!file.categorySuggestion && file.categorySuggestion.category !== file.category && <button className="text-button" onClick={()=>setFileMeta(file, { category: file.categorySuggestion.category })}>采纳推测「{file.categorySuggestion.category}」{file.categorySuggestion.reason ? `（${file.categorySuggestion.reason}）` : ''}</button>}
+              <label>资料日期
+                <input type="date" value={file.documentDate || ''} onChange={e=>setFileMeta(file, { documentDate: e.target.value })}/>
+              </label>
+              {!!file.dateSuggestion && file.dateSuggestion !== file.documentDate && <button className="text-button" onClick={()=>setFileMeta(file, { documentDate: file.dateSuggestion })}>采纳推测 {file.dateSuggestion}</button>}
+            </div>
+            <MaterialDetails file={file} sessionId={session.id} visionSupported={visionSupported} onChanged={handleMaterialsChanged} onError={onError}/>
+          </details>)}</div>
+        </div>)}
+        {!files.length && <p className="chart-empty">尚未关联资料文件。先在「原始资料」或资料工作区上传，识别完成后会自动归类。</p>}
+      </section>}
     </div>
     </>}
   </section>;

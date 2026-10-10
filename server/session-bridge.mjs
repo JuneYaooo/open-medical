@@ -9,12 +9,23 @@ import { assessmentQuestion } from "./medical/assessment-tools.mjs";
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
 import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 import { assessOcrQuality } from "../shared/ocr-quality.mjs";
+import { classifyMaterial, suggestDocumentDate, MATERIAL_CATEGORIES } from "../shared/material-classify.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AppError, check, string } from "./errors.mjs";
 import { medicalPolicy } from "../shared/medical.mjs";
+
+// 确定性资料归类/日期建议:报告文件夹视图的初始提示,最终分类由医生确认。
+const materialSuggestions = (name, text) => {
+  const category = classifyMaterial({ name, text });
+  const date = suggestDocumentDate({ name, text });
+  return {
+    ...(category ? { categorySuggestion: category } : {}),
+    ...(date ? { dateSuggestion: date } : {}),
+  };
+};
 import { runTool, localWork } from "./medical-core.mjs";
 import { consultationNotice, publicSession } from "./runtime.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
@@ -199,6 +210,7 @@ export class SessionBridge {
         id: randomUUID(), name, hash: artifact.hash, size: artifact.size, createdAt: iso(),
         text: `[图片材料：${name}]\n原图 artifactId: ${artifact.id}。使用 inspect_image 读取病历文字、日期、数值及单位，无法辨认的内容标记待核对，禁止猜测。Mac 文本模型可用本地 OCR；无可用读取工具时请切换视觉模型；本条索引不是 OCR 结果。`,
         extraction: { type: "image", artifactId: artifact.id, originalRetained: true },
+        ...materialSuggestions(name, ""),
       };
       this.service.store.update(id, (w) => { w.materials ||= []; w.materials.push(file); });
       this.store.audit(id, "file.added", { fileId: file.id, hash: file.hash });
@@ -260,6 +272,7 @@ export class SessionBridge {
       createdAt: iso(),
       size: Buffer.byteLength(text),
       ...(extraction ? { extraction } : {}),
+      ...materialSuggestions(name, text),
     };
     this.service.store.update(id, (current) => {
       current.materials ||= [];
@@ -374,6 +387,15 @@ export class SessionBridge {
       };
       target.extraction.originalText = file.extraction.originalText || file.text;
       target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text + "\n[文字识别结果需核对原图；不能据此解读 CT 或病理图像。]";
+      // 识别文本落地后补一次归类/日期建议;医生已确认的字段不被覆盖。
+      if (!target.category) {
+        const suggestion = classifyMaterial({ name: target.name, text: target.text });
+        if (suggestion) target.categorySuggestion = suggestion;
+      }
+      if (!target.documentDate) {
+        const date = suggestDocumentDate({ name: target.name, text: target.text });
+        if (date) target.dateSuggestion = date;
+      }
       prepared = target;
     });
     this.reingestMaterial(prepared);
@@ -403,6 +425,35 @@ export class SessionBridge {
     });
     this.reingestMaterial(prepared);
     this.store.audit(id, "file.text.edited", { fileId, chars: value.length });
+    return prepared;
+  }
+  // 医生确认资料类型与资料日期:报告文件夹视图的最终分类来源。
+  setFileMeta(id, fileId, input = {}) {
+    this.requireSessionWorkspace(id);
+    check(!this.service.active.has(id), "RUN_ACTIVE", "执行期间不能变更材料", 409);
+    let prepared;
+    this.service.store.update(id, (current) => {
+      const target = current.materials.find((item) => item.id === fileId);
+      check(target, "NOT_FOUND", "材料不存在", 404);
+      if (input.category !== undefined) {
+        check(MATERIAL_CATEGORIES.includes(input.category), "INVALID_INPUT", "资料类型无效");
+        target.category = input.category;
+      }
+      if (input.documentDate !== undefined) {
+        if (input.documentDate === "" || input.documentDate === null) {
+          target.documentDate = "";
+        } else {
+          check(
+            /^\d{4}-\d{2}-\d{2}$/.test(input.documentDate) && Number.isFinite(Date.parse(input.documentDate)),
+            "INVALID_INPUT",
+            "资料日期须为 YYYY-MM-DD",
+          );
+          target.documentDate = input.documentDate;
+        }
+      }
+      prepared = target;
+    });
+    this.store.audit(id, "file.meta.updated", { fileId, category: prepared.category || "", documentDate: prepared.documentDate || "" });
     return prepared;
   }
   // 重新识别/人工修正后按最新文本自动发起一次病历整理：与工作区纪律一致，
