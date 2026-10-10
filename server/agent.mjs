@@ -48,7 +48,7 @@ import { careApi } from "./care/api.mjs";
 import { WeChatMacBridge } from "./wechat-bridge.mjs";
 import { DoctorProfile } from "./medical/doctor-profile.mjs";
 import { LiteratureService, literatureTools } from "./medical/literature.mjs";
-import { GuidelineLibrary, knowledgeTools } from "./medical/guidelines.mjs";
+import { GuidelineLibrary, knowledgeTools, EDUCATION_COLLECTION } from "./medical/guidelines.mjs";
 import { searchIcd10 } from "./medical/icd10.mjs";
 import { PatientBrief } from "./medical/patient-brief.mjs";
 import { PatientImporter } from "./medical/patient-import.mjs";
@@ -1371,7 +1371,7 @@ export function createServer(options = {}) {
             );
         }
       }
-      if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
+      if (path.startsWith("/api/care/") && await track(careApi(care, req, url, { body: () => body(req), send: (status, value) => send(res, status, value), pending }))) return;
       if (path.startsWith("/api/chat-aibot/") && await track(chatAibotApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-followups/") && await track(chatFollowupsApi(chatFollowups, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
       if (path.startsWith("/api/chat-autofollow/") && await track(chatAutoFollowApi(chatAutoFollow, req, url, { body: () => body(req), send: (status, value) => send(res, status, value) }))) return;
@@ -1978,6 +1978,16 @@ export function createServer(options = {}) {
         }
         if (sub[0] === "reindex" && req.method === "POST")
           return send(res, 200, await guidelines.reindex());
+        if (sub[0] === "education-materials") {
+          if (sub.length === 1 && req.method === "GET")
+            return send(res, 200, { materials: guidelines.list({ collection: EDUCATION_COLLECTION, reviewStatus: url.searchParams.get("reviewStatus") || undefined, query: url.searchParams.get("q") || "" }) });
+          if (sub.length === 1 && req.method === "POST") {
+            const b = await body(req);
+            return send(res, 201, await guidelines.addDocument({ title: b.title, text: b.body, kind: "患教", collection: EDUCATION_COLLECTION, source: "local", fileName: "" }));
+          }
+          if (sub.length === 2 && req.method === "PUT")
+            return send(res, 200, await guidelines.updateDocumentText(sub[1], await body(req)));
+        }
         if (sub.length === 1 && sub[0] !== "search") {
           if (req.method === "GET")
             return send(res, 200, guidelines.get(sub[0]));

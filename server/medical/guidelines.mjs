@@ -8,7 +8,10 @@ import { KNOWLEDGE_STATES, knowledgeMetadata, optionalSourceUrl, optionalReviewD
 // search returns chunk hits with document + line provenance so guideline
 // answers can cite the original text like every other medical artifact.
 const CHUNK_LINES = 60;
-export const KNOWLEDGE_KINDS = ["指南", "书籍", "资料", "文献", "其他"];
+export const KNOWLEDGE_KINDS = ["指南", "书籍", "资料", "文献", "患教", "其他"];
+// Dedicated collection of doctor-reviewed patient-education materials
+// (plain-language write-ups). Smart replies cite reviewed entries first.
+export const EDUCATION_COLLECTION = "患教素材";
 const sha256 = (value) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -18,6 +21,18 @@ export class GuidelineLibrary {
     this.activeIndexWrites = 0;
     this.deletingCollection = false;
     store.db.exec("CREATE TABLE IF NOT EXISTS knowledge_collections (name TEXT PRIMARY KEY, data TEXT NOT NULL)");
+    store.db
+      .prepare("INSERT OR IGNORE INTO knowledge_collections(name,data) VALUES(?,?)")
+      .run(
+        EDUCATION_COLLECTION,
+        JSON.stringify({
+          name: EDUCATION_COLLECTION,
+          description: "医生确认过的患教素材（患者能看懂的大白话），智能回复优先引用已核对的条目。",
+          whenToUse: "患者提问与常见病管理解释时优先引用；也可按分组批量发送给患者。",
+          limitations: "只转述素材写明的内容，不新增医学建议。",
+          revision: 0,
+        }),
+      );
     this.embedder = embedder; // { available(), model, embed(inputs) } — optional
     this.vectorStore = vectorStore; // LanceVectorStore — optional
   }
@@ -138,6 +153,50 @@ export class GuidelineLibrary {
       this.store.audit(null, "knowledge.metadata.updated", { docId: id, revision: doc.revision, reviewStatus: status });
       return this.get(id);
     });
+  }
+  // Body-level edit for short library documents (education materials):
+  // keeps id and metadata, revokes the review status like a source edit,
+  // and rebuilds chunks plus the vector index best-effort.
+  async updateDocumentText(id, input = {}) {
+    const doc = this.docRow(id);
+    check(input.expectedRevision === (doc.revision || 0), "REVISION_CONFLICT", "资料已被修改，请重新打开文档后再编辑", 409);
+    const body = string(input.text, "正文", 500000);
+    const previous = { ...knowledgeMetadata(doc), title: doc.title, org: doc.org, year: doc.year, kind: doc.kind, collection: doc.collection, revision: doc.revision || 0 };
+    const chunks = chunkify(body, 2000);
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.store.db.prepare("DELETE FROM guideline_chunks WHERE doc_id=?").run(id);
+      const insertChunk = this.store.db.prepare("INSERT INTO guideline_chunks(doc_id,ord,start_line,end_line,text) VALUES (?,?,?,?,?)");
+      for (const chunk of chunks) insertChunk.run(id, chunk.ord, chunk.startLine, chunk.endLine, chunk.text);
+      doc.text = body;
+      doc.reviewStatus = "unreviewed";
+      doc.revision = (doc.revision || 0) + 1;
+      doc.updatedAt = Date.now();
+      doc.metadataHistory = [...(doc.metadataHistory || []), { ...previous, replacedAt: doc.updatedAt }].slice(-50);
+      this.store.db.prepare("UPDATE guideline_docs SET data=? WHERE id=?").run(JSON.stringify(doc), id);
+      this.store.db.exec("COMMIT");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK");
+      throw error;
+    }
+    // Derived views are stale the moment the text changes: purge the old
+    // vector rows and knowledge-map entries, then reindex best-effort.
+    if (this.afterRemoveDocuments) { try { await this.afterRemoveDocuments([id]); } catch { /* derived data only */ } }
+    let indexState = "keyword_only";
+    if (this.embedder?.available() && this.vectorStore) {
+      try {
+        const vectors = await this.embedder.embed(chunks.map((chunk) => chunk.text.slice(0, 4000)));
+        await this.vectorStore.upsertDoc(id, this.embedder.model, chunks.map((chunk, index) => ({
+          doc_id: id, ord: chunk.ord, title: doc.title, org: doc.org, year: doc.year,
+          start_line: chunk.startLine, end_line: chunk.endLine, text: chunk.text.slice(0, 2000), vector: vectors[index],
+        })));
+        indexState = "ready";
+      } catch { indexState = "failed"; }
+    }
+    doc.indexing = { status: indexState, embedded: indexState === "ready" ? chunks.length : 0, model: this.embedder?.model || null, updatedAt: new Date().toISOString() };
+    this.store.db.prepare("UPDATE guideline_docs SET data=? WHERE id=?").run(JSON.stringify(doc), id);
+    this.store.audit(null, "knowledge.text.updated", { docId: id, revision: doc.revision });
+    return this.get(id);
   }
   async addDocument(input) {
     check(!this.deletingCollection, "KNOWLEDGE_BUSY", "正在删除知识库，请稍后上传", 409);

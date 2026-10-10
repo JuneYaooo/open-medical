@@ -19,6 +19,7 @@ const TYPES = [
   "care-settings",
   "care-bind",
   "care-group-message",
+  "care-education-broadcast",
   "trial-batch",
   "trial-enrollment",
   "ext-change",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./agent-runtime";
 import { KnowledgeView } from "./knowledge";
+import { EducationTools } from "./education-materials";
 import "./medical-modules.css";
 export function KnowledgeLibraries({ onOpenTask }) {
   const [loading, setLoading] = useState(true);
@@ -11,6 +12,7 @@ export function KnowledgeLibraries({ onOpenTask }) {
     [error, setError] = useState(""),
     [deleting, setDeleting] = useState(null),
     [notice, setNotice] = useState("");
+  const [materialsVersion, setMaterialsVersion] = useState(0);
   const load = async () => {
     const data = await api("/api/knowledge/collections");
     setLibraries(data.collections);
@@ -222,8 +224,13 @@ export function KnowledgeLibraries({ onOpenTask }) {
               </p>
             )}
           </section>
+          <EducationTools
+            onCreated={(message) => { setNotice(message); setMaterialsVersion((v) => v + 1); }}
+            onProposed={(message) => { setNotice(message); }}
+            onError={(message) => setError(message)}
+          />
           <KnowledgeView
-            key={selected.name}
+            key={`${selected.name}-${materialsVersion}`}
             collection={selected.name}
             onOpenTask={onOpenTask}
           />

@@ -461,3 +461,13 @@ fieldset.trial-form {
 @media (max-width: 900px) { .trial-table thead { display:none; } .trial-table tr { display:block; border-bottom:1px solid var(--line,#e2e2e0); padding:8px 0; } .trial-table td { display:block; border:0; padding:4px 0; } }
 .trial-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; }
 .trial-toolbar .trial-filters { margin:0; }
+
+/* 患教素材工具条与群发预览 */
+.education-tools { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; }
+.education-tools > .toolbar-actions { align-items: center; }
+.education-form { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--soft); }
+.education-broadcast { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.education-broadcast h4 { margin: 0; }
+.education-broadcast-row { display: flex; flex-wrap: wrap; gap: 12px 18px; }
+.education-broadcast-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.education-broadcast-row select { min-width: 220px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }

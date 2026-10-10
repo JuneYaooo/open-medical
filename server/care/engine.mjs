@@ -4,13 +4,14 @@ import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { CareChannels } from "./channels.mjs";
 import { AI_DISCLAIMER, SAFETY_REPLY, detectRedFlags, screenOutbound } from "./red-flags.mjs";
 import { extractFollowup, runTriage } from "./triage.mjs";
+import { EDUCATION_COLLECTION } from "../medical/guidelines.mjs";
 import {
   DEFAULT_SETTINGS, alertRow, campaignRow, createCareSchema, replyRow,
   validatePatientSettings, validateSettings,
 } from "./store.mjs";
 
 const iso = (ms) => new Date(ms).toISOString();
-const CARE_PROPOSALS = ["care-message", "care-campaign", "care-settings", "care-bind", "care-group-message"];
+const CARE_PROPOSALS = ["care-message", "care-campaign", "care-settings", "care-bind", "care-group-message", "care-education-broadcast"];
 const TERMINAL_STEPS = ["recorded", "no_reply", "failed", "skipped", "cancelled"];
 // Sent steps that can still receive replies. "unknown" may have been delivered.
 const OPEN_STEPS = ["sent", "awaiting_member", "unknown", "replied"];
@@ -233,8 +234,15 @@ export class CareEngine {
     if (!this.guidelines) return [];
     try {
       const query = text.replace(/\s+/g, " ").slice(0, 120);
+      const hits = [];
+      // 已核对的患教素材优先进入候选,标题前缀让提示词按转述规则处理。
+      try {
+        const edu = await this.guidelines.search({ query, collection: EDUCATION_COLLECTION, reviewStatus: "reviewed", limit: 2 });
+        for (const hit of edu.hits || []) hits.push({ ...hit, docTitle: `[患教素材] ${hit.docTitle}` });
+      } catch { /* 素材检索失败回退普通知识库 */ }
       const found = await this.guidelines.search({ query, limit: 4 });
-      return (found.hits || []).map((hit, i) => ({ id: `K${i + 1}`, title: hit.docTitle, snippet: (hit.matches || []).map((m) => m.text).join("\n") || hit.snippet, docId: hit.docId, startLine: hit.startLine, endLine: hit.endLine }));
+      hits.push(...(found.hits || []));
+      return hits.map((hit, i) => ({ id: `K${i + 1}`, title: hit.docTitle, snippet: (hit.matches || []).map((m) => m.text).join("\n") || hit.snippet, docId: hit.docId, startLine: hit.startLine, endLine: hit.endLine }));
     } catch { return []; }
   }
 
@@ -761,6 +769,34 @@ export class CareEngine {
       check(this.channels.wecom?.directory, "WECOM_UNCONFIGURED", "企业微信连接不可用", 503);
       return this.channels.wecom.directory.normalizeGroupMessage(payload);
     }
+    if (type === "care-education-broadcast") {
+      const wecom = this.channels.wecom;
+      check(wecom?.client, "WECOM_UNCONFIGURED", "尚未配置企业微信客户联系", 503);
+      // 素材模式:只带 materialId,正文与标题在提案时从患教素材库解析,
+      // 托盘里医生看到的就是实际外发内容。
+      const materialId = payload.materialId ? string(payload.materialId, "素材编号", 40) : "";
+      let materialTitle = payload.materialTitle ? string(payload.materialTitle, "素材标题", 150) : "";
+      let text = typeof payload.text === "string" ? payload.text : "";
+      if (materialId && !text.trim()) {
+        const doc = this.guidelines?.get?.(materialId);
+        check(doc && doc.collection === EDUCATION_COLLECTION, "INVALID_INPUT", "患教素材不存在");
+        text = doc.text;
+        if (!materialTitle) materialTitle = doc.title;
+      }
+      text = string(text, "患教内容", 2000);
+      check(text.trim(), "INVALID_INPUT", "患教内容为空");
+      check(Buffer.byteLength(text) <= 4000, "INVALID_INPUT", "患教内容超过 4000 字节");
+      check(Array.isArray(payload.patientIds) && payload.patientIds.length >= 1 && payload.patientIds.length <= 200, "INVALID_INPUT", "请选择 1–200 位患者");
+      const seen = new Set();
+      const recipients = payload.patientIds.map((patientId) => {
+        const patient = this.patients.row(identifier(patientId));
+        check(!seen.has(patient.id), "INVALID_INPUT", "患者列表有重复");
+        seen.add(patient.id);
+        check(!patient.archived, "PATIENT_ARCHIVED", `患者「${patient.name}」已归档，请先移出名单`, 409);
+        return { patientId: patient.id, name: patient.name };
+      });
+      return { materialId, materialTitle, text, recipients };
+    }
     check(false, "INVALID_INPUT", "未知的患者管理提案");
   }
   // Runs inside the PendingActions confirm transaction: synchronous only.
@@ -790,6 +826,28 @@ export class CareEngine {
       const task = directory.groupDraft({ ...p, requestId: action.id });
       this.track(Promise.resolve().then(() => directory.groupSubmit(task.id, { confirmed: true })).catch(() => {}));
       return task;
+    }
+    if (action.type === "care-education-broadcast") {
+      const wecom = this.channels.wecom;
+      const created = [];
+      const skipped = [];
+      for (const recipient of p.recipients) {
+        try {
+          const bindings = wecom.bindings(recipient.patientId).filter((b) => b.active);
+          const binding = bindings.find((b) => b.relationship === "self") || bindings[0];
+          if (!binding) {
+            skipped.push({ ...recipient, reason: "没有有效的企微客户关联" });
+            continue;
+          }
+          const task = wecom.draft({ patientId: recipient.patientId, bindingId: binding.id, text: p.text, requestId: `${action.id}_${recipient.patientId}` });
+          created.push(task);
+          // 网络提交在确认事务提交后执行;企微侧仍需成员手动点发送。
+          this.track(Promise.resolve().then(() => wecom.submit(task.id, { confirmed: true })).catch(() => {}));
+        } catch (error) {
+          skipped.push({ ...recipient, reason: error.message });
+        }
+      }
+      return { broadcast: { created: created.length, skipped, taskIds: created.map((task) => task.id) } };
     }
   }
   static isProposal(type) { return CARE_PROPOSALS.includes(type); }

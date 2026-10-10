@@ -1,11 +1,20 @@
 // HTTP surface of the care engine; mirrors the chat tools so the UI and
 // the agent share the same deterministic services.
-export async function careApi(care, req, url, { body, send }) {
+import { check } from "../errors.mjs";
+
+export async function careApi(care, req, url, { body, send, pending = null }) {
   const p = url.pathname.split("/").filter(Boolean);
   if (p[0] !== "api" || p[1] !== "care") return false;
   const q = (key) => url.searchParams.get(key) || undefined;
   const reply = (value, status = 200) => { send(status, value); return true; };
   const get = req.method === "GET", post = req.method === "POST", put = req.method === "PUT";
+  // 患教群发:UI 选素材与患者分组后先提案,医生在待确认托盘一键确认。
+  if (p[2] === "education-broadcast" && p[3] === "propose" && p.length === 4 && post) {
+    check(pending, "PENDING_UNAVAILABLE", "提案服务未就绪", 503);
+    const b = await body();
+    const summary = `患教群发「${b.materialTitle || "自定义内容"}」给 ${b.patientIds?.length || 0} 位患者（内容需在托盘核对）`;
+    return reply(pending.propose({ type: "care-education-broadcast", payload: b, summary }), 201);
+  }
   if (p.length === 3) {
     if (p[2] === "overview" && get) return reply(care.overview());
     if (p[2] === "inbox" && get) return reply(care.inbox({ status: q("status"), level: q("level"), patientId: q("patientId"), limit: q("limit") }));
