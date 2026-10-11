@@ -55,7 +55,7 @@ import "./style.css";
 import "./business-layout.css";
 import "./v6-layout.css";
 import "./agent-experience.css";
-import { importMaterial, uploadScannedPages } from "./import-material";
+import { importMaterial, uploadScannedPages, uploadProgressText } from "./import-material";
 import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
 import { WorkspacesView } from "./workspaces";
@@ -614,6 +614,8 @@ function App() {
     [sidebar, setSidebar] = useState(false),
     [inspector, setInspector] = useState(initialLocation.view === "workbench" && Boolean(initialLocation.tab)),
     [uploading, setUploading] = useState(false),
+    // 附件导入进度：{ name, index, total, stage, done, count }，让长耗时的逐页渲染/上传可见
+    [uploadProgress, setUploadProgress] = useState(null),
     [homeFiles, setHomeFiles] = useState([]),
     [citation, setCitation] = useState(null);
   const inputRef = useRef(),
@@ -1141,14 +1143,24 @@ function App() {
       let current = readLocation().view === "home" ? homePending.current : session;
       if (!current) current = await create();
       if (!current) return;
-      for (const file of files) {
-        const input = await importMaterial(file);
-        const material = await uploadScannedPages(current.id, input);
+      for (const [index, file] of files.entries()) {
+        setUploadProgress({ name: file.name, index, files: files.length, stage: "read" });
+        const input = await importMaterial(file, (event) =>
+          setUploadProgress({ name: file.name, index, files: files.length, ...event }));
+        const material = await uploadScannedPages(current.id, input, (done, count) =>
+          setUploadProgress({ name: file.name, index, files: files.length, stage: "upload", done, count }));
+        setUploadProgress({ name: file.name, index, files: files.length, stage: "save" });
         await api(`/api/sessions/${current.id}/files`, {
           method: "POST",
           body: JSON.stringify(material),
         });
+        // 这份材料已落库，首页立刻回读让芯片逐份出现，而不是全部完成后才一次性出现
+        if (homePending.current?.id === current.id) {
+          const fresh = await api(`/api/sessions/${current.id}`);
+          setHomeFiles(fresh.files || []);
+        }
       }
+      setUploadProgress(null);
       setConsent(false);
       await updateSession();
       setTab("materials");
@@ -1160,6 +1172,7 @@ function App() {
     } catch (err) {
       setError(err.message);
     } finally {
+      setUploadProgress(null);
       setUploading(false);
     }
   };
@@ -1582,6 +1595,7 @@ function App() {
               onAttach={homeAttach}
               attachmentError={error}
               uploading={uploading}
+              uploadProgress={uploadProgress}
               attachedFiles={homeFiles}
               attachedCount={homeFiles.length}
               onRemoveAttachment={removeHomeAttachment}
@@ -2157,6 +2171,12 @@ function App() {
                         accept=".png,.jpg,.jpeg,.webp,.txt,.md,.markdown,.csv,.tsv,.json,.pdf,.xlsx,.docx"
                         onChange={upload}
                       />
+                      {uploading && (
+                        <span className="attach-progress" role="status">
+                          <Loader2 size={13} className="spin" />
+                          {uploadProgressText(uploadProgress)}
+                        </span>
+                      )}
                       <span className="tb-divider" />
                       <label
                         className="tb-item"

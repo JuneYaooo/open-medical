@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, AtSign, X, FileText } from "lucide-react";
+import { Paperclip, AtSign, X, FileText, Loader2 } from "lucide-react";
 import { api } from "../agent-runtime";
-import { importMaterial } from "../import-material";
+import { importMaterial, uploadProgressText } from "../import-material";
 // 与医疗任务 composer 同一套工具栏风格：材料/引用/技能常驻底部，
 // 附件以卡片展示，可拖拽或粘贴文件。
 export function ComposerTools({
@@ -15,7 +15,9 @@ export function ComposerTools({
   onSkill,
 }) {
   const file = useRef(null),
-    [loading, setLoading] = useState(false);
+    [loading, setLoading] = useState(false),
+    // 导入进度：{ name, index, files, stage, done, count / total }
+    [progress, setProgress] = useState(null);
   const alive = useRef(true),
     importing = useRef(false);
   const [skills, setSkills] = useState(null);
@@ -44,10 +46,11 @@ export function ComposerTools({
       if (attachments.length + files.length > 5)
         throw new Error("每次最多添加 5 份材料");
       const result = [];
-      for (const f of files) {
+      for (const [index, f] of files.entries()) {
         if (/\.(png|jpe?g|webp)$/i.test(f.name) || /^image\/(png|jpeg|webp)$/.test(f.type)) {
           if (f.size > 4000000)
             throw new Error("上传图片限 4MB；更大的图片可放在项目目录中引用");
+          setProgress({ name: f.name || "clipboard.png", index, files: files.length, stage: "save" });
           const bytes = new Uint8Array(await f.arrayBuffer());
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -68,11 +71,14 @@ export function ComposerTools({
           )
         )
           throw new Error("支持 PNG、JPEG、WebP、Word、Excel、文本、代码和有文字层的 PDF");
-        const material = await importMaterial(f);
+        setProgress({ name: f.name, index, files: files.length, stage: "read" });
+        const material = await importMaterial(f, (event) =>
+          setProgress({ name: f.name, index, files: files.length, ...event }));
         if (material.pageImages?.length) {
-          for (const page of material.pageImages) {
-            const image = await api(`/api/workspaces/${current.id}/images`, "POST", { name: `PDF-page-${page.page}.jpg`, data: page.data });
-            material.text += `\n[PDF 第 ${page.page} 页扫描图] artifactId: ${image.id}，请使用 inspect_image 读取。`;
+          for (const [page, imageData] of material.pageImages.entries()) {
+            setProgress({ name: f.name, index, files: files.length, stage: "upload", done: page, count: material.pageImages.length });
+            const image = await api(`/api/workspaces/${current.id}/images`, "POST", { name: `PDF-page-${imageData.page}.jpg`, data: imageData.data });
+            material.text += `\n[PDF 第 ${imageData.page} 页扫描图] artifactId: ${image.id}，请使用 inspect_image 读取。`;
           }
           delete material.pageImages;
         }
@@ -91,7 +97,10 @@ export function ComposerTools({
       if (alive.current) setError(e.message);
     } finally {
       importing.current = false;
-      if (alive.current) setLoading(false);
+      if (alive.current) {
+        setLoading(false);
+        setProgress(null);
+      }
     }
   }
   useEffect(() => {
@@ -136,8 +145,14 @@ export function ComposerTools({
         onClick={() => file.current.click()}
       >
         <Paperclip size={16} />
-        {loading ? "读取中…" : "材料"}
+        {loading ? "导入中…" : "材料"}
       </button>
+      {loading && (
+        <span className="attach-progress" role="status">
+          <Loader2 size={13} className="spin" />
+          {uploadProgressText(progress)}
+        </span>
+      )}
       <button
         type="button"
         className="attach-button"

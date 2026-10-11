@@ -20,7 +20,16 @@ async function renderScannedPage(page, [maxEdge, quality]) {
   canvas.width = 0; canvas.height = 0;
   return data;
 }
-export async function importMaterial(file) {
+// 附件导入进度文案：逐份、逐阶段（读取/解析/渲染页/上传页/保存），与建档弹窗同一口径
+export const uploadProgressText = (progress) => {
+  if (!progress) return "正在导入材料…";
+  const file = `第 ${progress.index + 1}/${progress.files} 份 · ${progress.name}`;
+  if (progress.stage === "render") return `${file} · 正在读取第 ${progress.done + 1}/${progress.total} 页`;
+  if (progress.stage === "upload") return `${file} · 正在上传第 ${progress.done + 1}/${progress.count} 页`;
+  if (progress.stage === "save") return `${file} · 正在保存材料`;
+  return `${file} · 正在读取内容…`;
+};
+export async function importMaterial(file, onProgress = () => {}) {
   if (!file.size) throw new Error(`${file.name} 是空文件（0 字节），请检查原文件后重新上传`);
   if (/\.(png|jpe?g|webp)$/i.test(file.name)) {
     if (file.size > 4000000) throw new Error("图片超过 4MB，请压缩后导入");
@@ -43,6 +52,7 @@ export async function importMaterial(file) {
   ]);
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   const bytes = new Uint8Array(await file.arrayBuffer());
+  onProgress({ stage: "parse", done: 0, total: 0 });
   const result = await extractPdfText(
     bytes.slice(),
     pdfjs.getDocument,
@@ -61,7 +71,10 @@ export async function importMaterial(file) {
     const task = pdfjs.getDocument({ data: bytes, isEvalSupported: false, standardFontDataUrl: "/pdfjs/standard_fonts/", cMapUrl: "/pdfjs/cmaps/", cMapPacked: true });
     try {
       const pdf = await task.promise;
-      for (const number of result.extraction.emptyPages) {
+      const pages = result.extraction.emptyPages;
+      for (const [index, number] of pages.entries()) {
+        // 渲染密集扫描页可能数秒一页，逐页上报让界面能显示“读取第 x/y 页”
+        onProgress({ stage: "render", done: index, total: pages.length });
         const page = await pdf.getPage(number);
         let data;
         for (const attempt of RENDER_ATTEMPTS) {

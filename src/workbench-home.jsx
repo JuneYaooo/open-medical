@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { requestCareSetup, setupProgress } from "./care-setup";
 import { api, medicalEnabled } from "./agent-runtime";
+import { uploadProgressText } from "./import-material";
 
 const materialSize = (bytes) =>
   bytes >= 1048576
@@ -246,6 +247,7 @@ export function WorkbenchHome({
   onView,
   onAttach,
   uploading,
+  uploadProgress,
   attachedFiles = [],
   attachedCount = 0,
   onRemoveAttachment,
@@ -519,6 +521,12 @@ export function WorkbenchHome({
                 </button>
               )}
             </div>
+            {taskType === "medical" && uploading && !isFollowup && (
+              <p className="attach-progress" role="status">
+                <Loader2 size={13} className="spin" />
+                {uploadProgressText(uploadProgress)}
+              </p>
+            )}
             {taskType === "medical" && attached && !isFollowup && (
               <div className="attach-list" aria-label="已附加材料">
                 <span className="attach-list-label">

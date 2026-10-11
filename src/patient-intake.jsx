@@ -154,7 +154,10 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         signal.throwIfAborted();
         setProgress(`上传资料 ${index + 1}/${selected.length}：${file.name}`);
         try {
-          const input = await importMaterial(file);
+          const input = await importMaterial(file, ({ stage, done, total }) =>
+            setProgress(stage === "render"
+              ? `上传资料 ${index + 1}/${selected.length} · 读取扫描页 ${done + 1}/${total}：${file.name}`
+              : `上传资料 ${index + 1}/${selected.length} · 正在解析 PDF 文本：${file.name}`));
           signal.throwIfAborted();
           const finalized = await uploadScannedPages(sessionId.current, input, (done, total) =>
             setProgress(`上传扫描页 ${done + 1}/${total}：${file.name}`));
