@@ -1,7 +1,7 @@
 {
   "name": "open-medical-agent",
   "private": true,
-  "version": "0.9.91",
+  "version": "0.9.92",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

@@ -5,18 +5,17 @@ import { check } from "../errors.mjs";
 // 图片文字读取回退链:macOS 本地 OCR → Windows 本地 OCR(Windows.Media.Ocr)
 // → 视觉模型转录(analyzeImage 由调用方按当前模型能力注入)。
 // 全部不可用时抛 OCR_UNAVAILABLE,提示两条可执行的出路。
-// 返回 { kind: 'ocr' | 'vision', text },文本自带来源与核对提示。
+// 返回 { kind: 'ocr' | 'vision', text }。文本保持医生可读的原样转录,不拼接
+// 系统提示行;OCR 是衍生文本、数值需核对原图的提醒由运行时 system prompt 与
+// inspect_image 的 note 字段传递。
 export async function imageTextWithFallback(bytes, signal, analyzeImage) {
-  const ocrNote =
-    "\n[本段由本地 OCR 识别，不解读 CT/病理等医学图像；表格顺序、数值、小数点、单位与患者身份均需对照原图核对]";
   if (localOcrAvailable()) {
     const result = await recognizeImage(bytes, signal);
     return {
       kind: "ocr",
-      text:
-        result.lines
-          .map((l) => l.text + (l.confidence < 0.7 ? " [文字识别待核对]" : ""))
-          .join("\n") + ocrNote,
+      text: result.lines
+        .map((l) => l.text + (l.confidence < 0.7 ? " [文字识别待核对]" : ""))
+        .join("\n"),
     };
   }
   if (windowsOcrAvailable()) {
@@ -25,7 +24,7 @@ export async function imageTextWithFallback(bytes, signal, analyzeImage) {
       const text = result.lines
         .map((l) => l.text + (l.confidence < 0.7 ? " [文字识别待核对]" : ""))
         .join("\n");
-      if (text.trim()) return { kind: "ocr", text: text + "\n" + ocrNote };
+      if (text.trim()) return { kind: "ocr", text };
       // Windows OCR 读不出文字时交给视觉模型(若可用),不再直接失败。
     } catch (error) {
       signal?.throwIfAborted();
@@ -78,8 +77,6 @@ export function visionTranscriber(provider) {
       "视觉模型未能读出图片文字，请换更清晰的图片或改用 PDF/TXT 资料",
       422,
     );
-    return (
-      text + "\n[本段由视觉模型转录，诊断细节、数值与单位请对照原图复核]"
-    );
+    return text;
   };
 }

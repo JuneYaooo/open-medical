@@ -399,7 +399,7 @@ export class SessionBridge {
         ...(upgraded ? { upgradedFrom: "local-ocr" } : {}),
       };
       target.extraction.originalText = file.extraction.originalText || file.text;
-      target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text + "\n[文字识别结果需核对原图；不能据此解读 CT 或病理图像。]";
+      target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text;
       // 识别文本落地后补一次归类/日期建议;医生已确认的字段不被覆盖。
       if (!target.category) {
         const suggestion = classifyMaterial({ name: target.name, text: target.text });

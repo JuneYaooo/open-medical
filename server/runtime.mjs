@@ -621,6 +621,7 @@ export class MedicalRuntime {
                   ]
                 : []),
               "可将时间线、检验摘录、用药资料检查委派给独立子代理。沙箱只用于资料计算，计算结果不能自动确认临床结论。",
+              "OCR 与文档抽取的材料文本可能有缺字、错字；表格顺序、数值、小数点、单位与患者身份等关键信息须提示医生对照原图（原文）核对，不能据此解读 CT、病理等医学图像。",
               "选中材料已建立可检索索引：语义检索用 semantic_material_search，关键词检索用 search_materials，按行读原文用 read_source。检索工具未返回不代表材料中没有相关内容。",
               "当上下文被压缩时，摘要中会给出 archiveId，用 read_context_archive 分段取回原文。",
               `策略：${JSON.stringify(run.policy)}`,
