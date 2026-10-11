@@ -614,7 +614,7 @@ function App() {
     [sidebar, setSidebar] = useState(false),
     [inspector, setInspector] = useState(initialLocation.view === "workbench" && Boolean(initialLocation.tab)),
     [uploading, setUploading] = useState(false),
-    [homeFileCount, setHomeFileCount] = useState(0),
+    [homeFiles, setHomeFiles] = useState([]),
     [citation, setCitation] = useState(null);
   const inputRef = useRef(),
     fileRef = useRef(),
@@ -747,7 +747,7 @@ function App() {
   // Keep pending attachments while navigating; explicit new task or send consumes them.
   const resetHomePending = () => {
     homePending.current = null;
-    setHomeFileCount(0);
+    setHomeFiles([]);
   };
   const select = async (id) => {
     setError("");
@@ -1155,7 +1155,7 @@ function App() {
       setNotice("材料已保存。图片保留原图，可用本地 OCR 或视觉模型读取；PDF、Word、Excel 保存抽取文本，请核对来源和缺失信息。");
       if (homePending.current?.id === current.id) {
         const fresh = await api(`/api/sessions/${current.id}`);
-        setHomeFileCount(fresh.files.length);
+        setHomeFiles(fresh.files || []);
       }
     } catch (err) {
       setError(err.message);
@@ -1172,6 +1172,20 @@ function App() {
       if (!homePending.current) return;
     }
     fileRef.current?.click();
+  };
+  // 首页发送前移除一份材料：删除后回读会话，芯片列表与服务器保持一致。
+  const removeHomeAttachment = async (fileId) => {
+    const pending = homePending.current;
+    if (!pending) return;
+    try {
+      await api(`/api/sessions/${pending.id}/files/${fileId}`, {
+        method: "DELETE",
+      });
+      const fresh = await api(`/api/sessions/${pending.id}`);
+      setHomeFiles(fresh.files || []);
+    } catch (err) {
+      setError(err.message);
+    }
   };
   const openSource = (source) => {
     setCitation(source);
@@ -1272,7 +1286,7 @@ function App() {
   const prepareTask = async ({ prompt, patient, title, skills = [] }) => {
     const pending = homePending.current;
     homePending.current = null;
-    setHomeFileCount(0);
+    setHomeFiles([]);
     let data;
     if (pending) {
       if (title)
@@ -1568,7 +1582,9 @@ function App() {
               onAttach={homeAttach}
               attachmentError={error}
               uploading={uploading}
-              attachedCount={homeFileCount}
+              attachedFiles={homeFiles}
+              attachedCount={homeFiles.length}
+              onRemoveAttachment={removeHomeAttachment}
               fileInputRef={fileRef}
               onFilesPicked={upload}
             />

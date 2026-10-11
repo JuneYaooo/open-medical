@@ -18,6 +18,7 @@ import {
   FlaskConical,
   FolderOpen,
   History,
+  Image,
   Loader2,
   MessageSquare,
   Search,
@@ -27,6 +28,12 @@ import {
 } from "lucide-react";
 import { requestCareSetup, setupProgress } from "./care-setup";
 import { api, medicalEnabled } from "./agent-runtime";
+
+const materialSize = (bytes) =>
+  bytes >= 1048576
+    ? `${(bytes / 1048576).toFixed(1)} MB`
+    : `${Math.max(1, Math.round((bytes || 0) / 1024))} KB`;
+const isImageName = (name) => /\.(png|jpe?g|webp)$/i.test(name || "");
 
 export const MEDICAL_WORKFLOWS = [
   {
@@ -239,7 +246,9 @@ export function WorkbenchHome({
   onView,
   onAttach,
   uploading,
+  attachedFiles = [],
   attachedCount = 0,
+  onRemoveAttachment,
   fileInputRef,
   onFilesPicked,
 }) {
@@ -287,7 +296,7 @@ export function WorkbenchHome({
         .slice(0, 8)
     : [];
   // 材料已附加后，本次任务的目标会话已定，锁定类型与患者切换
-  const attached = attachedCount > 0;
+  const attached = attachedCount > 0 || Boolean(attachedFiles.length);
   const consentRequired =
     Boolean(config?.modelConfigured) && accessMode === "each";
   useEffect(() => {
@@ -510,6 +519,32 @@ export function WorkbenchHome({
                 </button>
               )}
             </div>
+            {taskType === "medical" && attached && !isFollowup && (
+              <div className="attach-list" aria-label="已附加材料">
+                <span className="attach-list-label">
+                  <Paperclip size={12} />
+                  {attachedFiles.length
+                    ? `本次将发送 ${attachedFiles.length} 份材料`
+                    : `已附 ${attachedCount} 份材料`}
+                </span>
+                {attachedFiles.map((file) => (
+                  <span className="attach-chip" key={file.id}>
+                    {isImageName(file.name) ? <Image size={12} /> : <FileText size={12} />}
+                    <b title={file.name}>{file.name}</b>
+                    <small>{materialSize(file.size)}</small>
+                    <button
+                      type="button"
+                      aria-label={`移除材料 ${file.name}`}
+                      title="发送前移除这份材料"
+                      disabled={uploading}
+                      onClick={() => onRemoveAttachment?.(file.id)}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             {isFollowup ? (
               <div className="hub-followup-prompt">
                 <CalendarClock size={21} />
@@ -728,11 +763,6 @@ export function WorkbenchHome({
                     </label>
                   )}</>}
                 </>
-              )}
-              {taskType === "medical" && !isFollowup && attached && (
-                <span className="hub-attach-count">
-                  已附 {attachedCount} 份材料
-                </span>
               )}
               <span className="composer-spacer" />
               {consentRequired && !isFollowup && (

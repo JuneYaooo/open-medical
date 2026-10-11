@@ -115,11 +115,11 @@ test('draft navigation retains unsent home text and attachments until explicit n
   const uploaded = page.waitForResponse(r=>r.url().endsWith('/files')&&r.request().method()==='POST');
   await (await chooser).setFiles({name:'draft.txt',mimeType:'text/plain',buffer:Buffer.from('仅用于导航验证的合成材料')});
   await uploaded;
-  await page.getByText('已附 1 份材料',{exact:true}).waitFor();
+  await page.locator('.attach-chip',{hasText:'draft.txt'}).waitFor();
   await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'患者',exact:true}).click();
   await page.goBack();
   assert.equal(await page.getByRole('textbox',{name:'任务内容'}).inputValue(),'暂存的合成病例整理要求');
-  assert.match(await page.locator('.hub-composer').innerText(),/已附 1 份材料/);
+  assert.match(await page.locator('.hub-composer').innerText(),/draft\.txt/);
   await page.getByRole('button',{name:'清空草稿',exact:true}).click();
   assert.equal(await page.getByRole('textbox',{name:'任务内容'}).inputValue(),'');
 });

@@ -2559,14 +2559,58 @@ blockquote p {
   align-self: center;
   height: 20px;
 }
-.hub-attach-count {
+.attach-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 7px 0 2px;
+}
+.attach-list-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
-  color: #5f8a6e;
+  font-weight: 600;
+  color: #2a6d57;
+  white-space: nowrap;
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   background: #e7f0e5;
+  color: #245740;
   border: 1px solid #cfe0cc;
   border-radius: 999px;
-  padding: 3px 9px;
+  padding: 4px 6px 4px 10px;
+  font-size: 12px;
+}
+.attach-chip b {
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.attach-chip small {
+  font-size: 10px;
+  color: #5f8a6e;
+}
+.attach-chip button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: #4c7a5f;
+  padding: 2px;
+  border-radius: 999px;
+}
+.attach-chip button:hover:not(:disabled) {
+  background: #cfe0cc;
+}
+.attach-chip button:disabled {
+  opacity: 0.5;
 }
 .hub-task-type button:disabled,
 .hub-patient-picker select:disabled {
