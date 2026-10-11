@@ -102,11 +102,27 @@
 .ocr-seg button { border:0; background:#fff; padding:6px 14px; font-size:12px; cursor:pointer; }
 .ocr-seg button.active { background:var(--soft); color:var(--accent); font-weight:600; }
 .ocr-compare { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; align-items:start; }
+/* 逐页图文对照：每页一张卡，页内左图右文，滚动时始终是「这一页的图 ↔ 这一页的文字」。 */
+.ocr-pages { display:flex; flex-direction:column; gap:14px; margin-top:4px; }
+.ocr-page { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.ocr-page-head { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--soft); border-bottom:1px solid var(--border); font-size:12px; color:#3f5148; }
+.ocr-page-head b { font-size:12px; }
+.ocr-page-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; padding:10px 12px; align-items:start; }
+.ocr-page-body.text-only { grid-template-columns:1fr; }
+.ocr-page-body pre, .ocr-text-only { margin:0; }
+.ocr-image { display:block; max-width:100%; max-height:520px; width:auto; height:auto; margin:0 auto; border-radius:6px; border:1px solid var(--border); cursor:zoom-in; }
+.ocr-image:hover { border-color:var(--accent); }
+.ocr-image-tools { display:block; text-align:center; margin-top:4px; }
+.ocr-image-tools a { color:#64766c; }
+.ocr-page-empty { color:#8a978f; }
+.ocr-lightbox { position:fixed; inset:0; z-index:1200; background:rgba(16,22,19,.85); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:zoom-out; }
+.ocr-lightbox img { max-width:94vw; max-height:86vh; border-radius:6px; transition:transform .08s linear; transform-origin:center; }
+.ocr-lightbox small { color:rgba(255,255,255,.75); font-size:12px; }
 .ocr-text-edit textarea { width:100%; box-sizing:border-box; font:inherit; font-size:12px; line-height:1.8; padding:10px; border:1px solid var(--border); border-radius:6px; }
 .ocr-text-edit small { display:block; margin:6px 0; color:#64766c; }
 .ocr-text-edit div { display:flex; gap:8px; margin-top:4px; }
 .ocr-actions { display:flex; align-items:center; gap:12px; margin-top:10px; flex-wrap:wrap; }
-@media(max-width:900px) { .ocr-compare { grid-template-columns:1fr; } }
+@media(max-width:900px) { .ocr-compare, .ocr-page-body { grid-template-columns:1fr; } }
 
 /* 个性化检验监测 */
 .chart-monitors { margin-top:22px; border-top:1px solid var(--border); padding-top:16px; }

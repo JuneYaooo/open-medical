@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from './agent-runtime';
 import { assessOcrQuality, OCR_QUALITY_LABELS } from '../shared/ocr-quality.mjs';
+import { splitOcrPages, cleanText } from '../shared/ocr-pages.mjs';
 
-function MaterialImage({ sessionId, artifactId, name }) {
+function MaterialImage({ sessionId, artifactId, name, onZoom }) {
   const [url, setUrl] = useState(''), [error, setError] = useState('');
   useEffect(() => {
     let alive = true, objectUrl;
@@ -13,8 +14,13 @@ function MaterialImage({ sessionId, artifactId, name }) {
       }).catch((e) => { if (alive) setError(e.message); });
     return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [sessionId, artifactId]);
-  return <figure style={{ margin: '8px 0' }}>{url ? <><a href={url} download={name}>下载图片</a><img src={url} alt={name} style={{ display: 'block', maxWidth: '100%', height: 'auto' }} /></> : <small>{error || '读取图片…'}</small>}</figure>;
+  return <figure style={{ margin: '8px 0' }}>{url ? <>
+    <img src={url} alt={name} loading="lazy" className="ocr-image" title="点击放大" onClick={() => onZoom?.({ url, name })} />
+    <small className="ocr-image-tools"><a href={url} download={name}>下载原图</a></small>
+  </> : <small>{error || '读取图片…'}</small>}</figure>;
 }
+
+const METHOD_LABELS = { 'local-ocr': '本地识别', vision: '视觉模型', 'pdf-text': 'PDF 文字层' };
 
 // 质量等级：优先读服务端在识别时算好的分，旧材料没有分时按同一算法现算兜底。
 export function materialQualityLevel(file) {
@@ -24,14 +30,14 @@ export function materialQualityLevel(file) {
   return null;
 }
 
-const METHOD_LABELS = { 'local-ocr': '本地识别', vision: '视觉模型' };
-
 export function MaterialDetails({ file, sessionId, visionSupported = null, onChanged, onError }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState('compare');
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
   const e = file.extraction;
   // 纯文本材料（txt/md/csv/json）没有 extraction：保留原来的「查看文字内容」折叠块。
   if (!e) return <details><summary>查看文字内容</summary><pre>{file.text || '暂无可读取文字'}</pre></details>;
@@ -72,7 +78,45 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
       <div><button className="primary" disabled={busy || !draftText.trim()} onClick={saveText}>保存修正</button>
         <button className="secondary" disabled={busy} onClick={() => { setEditing(false); setDraftText(''); }}>取消</button></div>
     </div>
-    : <pre>{file.text || '暂无可读取文字'}</pre>;
+    : null;
+
+  // 逐页对照：把识别文本拆回页单元，图按页号挂载；解析不出页结构时退回「全部图 + 全文」。
+  const { pages, fallback } = splitOcrPages(file.text);
+  const imagesByPage = new Map(images.map((image) => [image.page ?? 'solo', image.artifactId]));
+  const pageRows = pages.map((page, index) => {
+    const artifactId = imagesByPage.get(page.page ?? 'solo')
+      ?? (fallback && index === 0 ? imagesByPage.get('solo') : null)
+      ?? (!fallback && pages.length === 1 ? imagesByPage.get('solo') : null);
+    return { ...page, artifactId, key: page.page ?? `p${index}` };
+  });
+  for (const [key, artifactId] of imagesByPage) {
+    if (key === 'solo' || pageRows.some((row) => String(row.page) === String(key))) continue;
+    pageRows.push({ page: key, method: null, text: '', artifactId, key: `img${key}` });
+  }
+  pageRows.sort((a, b) => (a.page ?? 0) - (b.page ?? 0));
+  const singlePage = pageRows.length === 1;
+
+  const compareBody = fallback || !pageRows.length
+    ? <div className="ocr-compare">
+      {images.map((image) => <MaterialImage key={image.artifactId} sessionId={sessionId} artifactId={image.artifactId} name={image.page ? `${file.name}-第${image.page}页.jpg` : file.name} onZoom={setZoom} />)}
+      {!editing && <pre>{cleanText(file.text) || '暂无可读取文字'}</pre>}
+    </div>
+    : <div className="ocr-pages">
+      {pageRows.map((row) => <section className="ocr-page" key={row.key}>
+        <header className="ocr-page-head">
+          <b>{singlePage ? '原图与识别文字' : `第 ${row.page} 页`}</b>
+          {row.method && <span className="ocr-badge plain">{METHOD_LABELS[row.method] || row.method}</span>}
+        </header>
+        <div className={row.artifactId ? 'ocr-page-body' : 'ocr-page-body text-only'}>
+          {row.artifactId
+            ? <MaterialImage sessionId={sessionId} artifactId={row.artifactId} name={singlePage ? file.name : `${file.name}-第${row.page}页.jpg`} onZoom={setZoom} />
+            : null}
+          {row.text
+            ? <pre>{row.text}</pre>
+            : <pre className="ocr-page-empty">本页没有识别文字；{row.artifactId ? '请点开上方原图核对。' : '该页未保存扫描图。'}</pre>}
+        </div>
+      </section>)}
+    </div>;
 
   return <><small>{label}</small>
     {(level || method || previous || edited) && <p className="ocr-meta">
@@ -87,10 +131,10 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
           <button className={mode === 'compare' ? 'active' : ''} onClick={() => setMode('compare')}>图文对照</button>
           <button className={mode === 'text' ? 'active' : ''} onClick={() => setMode('text')}>仅文字</button>
         </div>
-        <div className={mode === 'compare' ? 'ocr-compare' : ''}>
-          {mode === 'compare' && images.map((image) => <MaterialImage key={image.artifactId} sessionId={sessionId} artifactId={image.artifactId} name={image.page ? `${file.name}-第${image.page}页.jpg` : file.name} />)}
-          {textPane}
-        </div>
+        {editing ? textPane : <>
+          {mode === 'compare' && compareBody}
+          {mode === 'text' && <pre className="ocr-text-only">{cleanText(file.text) || '暂无可读取文字'}</pre>}
+        </>}
       </>}
     </details>}
     {canReprepare && visionSupported !== null && <div className="ocr-actions">
@@ -98,6 +142,11 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
         ? <button className="secondary" disabled={busy} onClick={reprepare}>视觉模型重新识别并整理</button>
         : <small className="muted">当前模型不支持图片识别；要在模型设置中更换多模态模型后重新识别。</small>}
       {!editing && <button className="text-button" disabled={busy} onClick={() => { setDraftText(file.text || ''); setEditing(true); }}>修正文字</button>}
+    </div>}
+    {zoom && <div className="ocr-lightbox" role="dialog" aria-label={`查看 ${zoom.name} 原图`} onClick={() => { setZoom(null); setZoomScale(1); }}
+      onWheel={(event) => setZoomScale((s) => Math.min(5, Math.max(0.5, s * (event.deltaY < 0 ? 1.15 : 0.87))))}>
+      <img src={zoom.url} alt={zoom.name} style={{ transform: `scale(${zoomScale})` }} />
+      <small>点击任意位置关闭 · 滚轮缩放（{Math.round(zoomScale * 100)}%）</small>
     </div>}
   </>;
 }
