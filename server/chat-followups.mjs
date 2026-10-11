@@ -1,4 +1,4 @@
-import { parseWechatExport } from './chat-connectors/wechat-export.mjs';
+import { parseWechatExportBatch } from './chat-connectors/wechat-export.mjs';
 import { visibleDelta } from './chat-connectors/visible-delta.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { CredentialVault } from './core/oauth.mjs';
@@ -193,14 +193,25 @@ export class ChatFollowups {
     try { return await job.promise; } finally { if (this.active.get('wechat') === job) this.active.delete('wechat'); }
   }
   async previewImport(input) {
-    this.patient(input.patientId);
     check(input.consent===true,'CHAT_CONSENT','请确认在本机读取所选导出文件',412);
-    const parsed = await parseWechatExport(input);
+    const parsed = await parseWechatExportBatch(input);
     for(const [id,p] of this.imports) if(p.expires<Date.now()) this.imports.delete(id);
     while(this.imports.size>=3) this.imports.delete(this.imports.keys().next().value);
     const id=randomUUID();
-    this.imports.set(id,{...parsed,patientId:input.patientId,expires:Date.now()+300000});
-    return {id,text:parsed.text,filename:parsed.filename,attachments:parsed.attachments,expiresAt:new Date(Date.now()+300000).toISOString()};
+    // 单会话沿用既有逐患者核对流；多会话进批量流：按会话名给出患者匹配
+    // 建议，归属由医生逐会话确认（复用 matchImportNames 的确定性匹配）。
+    if(parsed.conversations.length===1) {
+      this.patient(input.patientId);
+      const one=parsed.conversations[0];
+      this.imports.set(id,{text:one.text,attachments:parsed.attachments,filename:parsed.filename,fileHash:parsed.fileHash,patientId:input.patientId,expires:Date.now()+300000});
+      return {id,text:one.text,filename:parsed.filename,attachments:parsed.attachments,expiresAt:new Date(Date.now()+300000).toISOString()};
+    }
+    const suggestions=this.matchImportNames({names:parsed.conversations.map(c=>c.name)}).matchResults;
+    const conversations=parsed.conversations.map((c,index)=>({id:randomUUID(),name:c.name,filename:c.filename,text:c.text,match:suggestions[index]?.match||null}));
+    this.imports.set(id,{batch:true,conversations,attachments:parsed.attachments,filename:parsed.filename,fileHash:parsed.fileHash,expires:Date.now()+300000});
+    return {id,batch:true,filename:parsed.filename,attachments:parsed.attachments,
+      conversations:conversations.map(c=>({id:c.id,name:c.name,chars:c.text.length,snippet:c.text.slice(0,160),match:c.match})),
+      expiresAt:new Date(Date.now()+300000).toISOString()};
   }
   // 批量导入的智能匹配:按会话名对照「已绑定的微信备注名 > 患者姓名」,匹配不上的
   // 返回 null 由医生人工指派——绝不按模糊猜测自动归档,避免把陌生人的聊天进错档案。
@@ -231,23 +242,38 @@ export class ChatFollowups {
   importExport(input) {
     this.patient(input.patientId);
     const p=this.imports.get(input.previewId);
-    check(p && p.expires>Date.now() && p.patientId===input.patientId,'CHAT_PREVIEW','文件预览已失效，请重新选择文件',409);
+    check(p && p.expires>Date.now(),'CHAT_PREVIEW','文件预览已失效，请重新选择文件',409);
+    if(p.batch) {
+      // 批量流：一次确认导入一个会话；归属患者逐会话核对，与单会话同一
+      // 落库路径（绑定 + ingest 待复核草稿），导入后从批次中移除。
+      const conversation=p.conversations.find(c=>c.id===input.conversationId);
+      check(conversation,'CHAT_PREVIEW','会话不在本次批量预览中，请刷新后重试',409);
+      const outcome=this.commitExport(input.patientId,{text:conversation.text,filename:conversation.filename,fileHash:p.fileHash,attachments:p.attachments},input);
+      p.conversations=p.conversations.filter(c=>c.id!==conversation.id);
+      if(!p.conversations.length) this.imports.delete(input.previewId);
+      return {...outcome,remaining:p.conversations.length,message:'该会话已导入待复核草稿；附件仅记录文件名，未解析内容'};
+    }
+    check(p.patientId===input.patientId,'CHAT_PREVIEW','文件预览已失效，请重新选择文件',409);
+    const outcome=this.commitExport(input.patientId,p,input);
+    this.imports.delete(input.previewId);
+    return {...outcome,message:'所选文本已导入待复核草稿；附件仅记录文件名，未解析内容'};
+  }
+  // 单会话落库：绑定（或复用）+ ingest；批量与单文件流共用。
+  commitExport(patientId,parsed,input) {
     check(input.confirmed===true && ['self','family'].includes(input.relationship),'CHAT_BINDING','请核对原文、患者归属与联系人关系',412);
     const title=string(input.title,'会话名称',150),speakerName=string(input.speakerName,'联系人称呼',100);
     // A distinct account namespace prevents imported files from authorizing desktop reads.
     const c={channel:'wechat',accountId:'local-file-import',endpoint:'wechat-export-v1'};
-    const account=this.account(c),conversationId=`export:${hash([input.patientId,title,speakerName,input.relationship])}`;
-    const outcome=sqliteTransaction(this.db,()=>{
-      let b=this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? AND channel=? AND account=? AND conversation=?').all(input.patientId,'wechat',account,conversationId).map(json).find(b=>!b.disabled);
+    const account=this.account(c),conversationId=`export:${hash([patientId,title,speakerName,input.relationship])}`;
+    return sqliteTransaction(this.db,()=>{
+      let b=this.db.prepare('SELECT data FROM chat_bindings WHERE patient_id=? AND channel=? AND account=? AND conversation=?').all(patientId,'wechat',account,conversationId).map(json).find(b=>!b.disabled);
       if(!b) {
-        b={id:randomUUID(),patientId:input.patientId,channel:'wechat',account,conversationId,title,speakerName,relationship:input.relationship,mode:'import',verifiedAt:now()};
+        b={id:randomUUID(),patientId,channel:'wechat',account,conversationId,title,speakerName,relationship:input.relationship,mode:'import',verifiedAt:now()};
         this.db.prepare('INSERT INTO chat_bindings VALUES (?,?,?,?,?,?)').run(b.id,b.patientId,b.channel,b.account,b.conversationId,JSON.stringify(b));
       }
-      const sourceId=`export:${hash([conversationId,p.text])}`;
-      return this.ingest(c,[{id:sourceId,conversationId,text:p.text,type:'wechat-export',direction:'unknown',sentAt:null,partial:true,evidence:{coverage:'selected-export',filename:p.filename,attachments:p.attachments,fileHash:p.fileHash}}]);
+      const sourceId=`export:${hash([conversationId,parsed.text])}`;
+      return this.ingest(c,[{id:sourceId,conversationId,text:parsed.text,type:'wechat-export',direction:'unknown',sentAt:null,partial:true,evidence:{coverage:'selected-export',filename:parsed.filename,attachments:parsed.attachments,fileHash:parsed.fileHash}}]);
     });
-    this.imports.delete(input.previewId);
-    return {...outcome,message:'所选文本已导入待复核草稿；附件仅记录文件名，未解析内容'};
   }
   async conversations(channel = 'wecom') {
     const c = this.ready(channel);

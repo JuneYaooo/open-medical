@@ -53,36 +53,47 @@ export function ChatConnectionSettings() {
 export function ChatFollowupsPanel({patients,onSettings,initialPatientId}) {
  const [patientId,setPatientId]=useState(initialPatientId||'');
  return <section className="chat-followups" aria-label="聊天随访"><header><div><h2>聊天随访</h2><p>关联患者或家属会话，整理新增聊天，再核对归档。</p></div>{onSettings&&<button onClick={onSettings}>配置随访连接</button>}</header>
-  {!initialPatientId&&<details className="chat-binding-form"><summary>批量导入聊天记录（第三方工具导出的 TXT 文件夹）</summary><BatchImportForm patients={patients}/></details>}
+  {!initialPatientId&&<details className="chat-binding-form"><summary>批量导入聊天记录（微信导出 ZIP 或第三方工具的 TXT 文件夹）</summary><BatchImportForm patients={patients}/></details>}
   {!initialPatientId&&<label className="chat-patient-picker">选择患者<select aria-label="选择患者" value={patientId} onChange={e=>setPatientId(e.target.value)}><option value="">请选择患者</option>{patients.map(p=><option key={p.id} value={p.id}>{patientOptionLabel(p)}</option>)}</select></label>}
   {patientId?<PatientChats key={patientId} patientId={patientId}/>:<p className="chat-empty">先选择患者，再关联本人或家属的微信会话。</p>}
  </section>;
 }
-// 批量导入:多选第三方工具(如本机导出脚本)产出的聊天 TXT → 自动按「联系人」匹配
-// 患者(已绑定备注名 > 患者姓名) → 医生核对/改判后批量导入各患者的待复核草稿。
-// 匹配不上的行必须人工指派,绝不按模糊猜测自动归档。
+// 批量导入:支持两种格式——微信原生导出 ZIP(内含多份聊天 TXT,会话名取自
+// 文件名,服务端批量预览+匹配)和第三方工具导出的散装 TXT(头部带「联系人:」)。
+// 自动按「已绑定备注名 > 患者姓名」匹配患者 → 医生核对/改判后逐会话导入
+// 各患者的待复核草稿。匹配不上的行必须人工指派,绝不按模糊猜测自动归档。
 function BatchImportForm({patients}) {
  const [rows,setRows]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirmed,setConfirmed]=useState(false);
- const update=(i,key,value)=>setRows(old=>old.map((r,idx)=>idx===i?{...r,[key]:value,done:false,error:''}:r));
+ const update=(i,key,value)=>setRows(old=>old.map((r,idx)=>idx===i?{...r,[key]:value,done:false,error:''}:old));
  const onFiles=async list=>{
   setBusy(true);setError('');setNotice('');
   try{
-   const picked=[...list].filter(f=>/\.txt$/i.test(f.name));
-   if(!picked.length)throw new Error('请选择第三方工具导出的 .txt 文件');
-   const parsed=[];
-   for(const f of picked){
-    if(f.size>4*1024*1024)throw new Error(`${f.name} 超过 4MB，请分批导出`);
-    const text=await f.text();
-    const contact=(text.match(/^联系人[::](.+)$/m)?.[1]||'').trim();
-    if(!contact)throw new Error(`${f.name} 头部没有「联系人:」字段，请确认是导出工具生成的聊天 TXT`);
-    const data=await new Promise((res,rej)=>{const r=new FileReader();r.onerror=()=>rej(new Error('文件读取失败'));r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(f);});
-    parsed.push({file:f.name,contact,text,data});
+   const picked=[...list].filter(f=>/\.(txt|zip)$/i.test(f.name));
+   if(!picked.length)throw new Error('请选择微信导出的 ZIP 或第三方工具导出的 .txt 文件');
+   const zip=picked.find(f=>/\.zip$/i.test(f.name));
+   if(zip){
+    if(picked.length>1)throw new Error('ZIP 请单独选择，不要与散装 TXT 混选');
+    if(zip.size>4*1024*1024)throw new Error('ZIP 超过 4MB，请分批导出');
+    const data=await new Promise((res,rej)=>{const r=new FileReader();r.onerror=()=>rej(new Error('文件读取失败'));r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(zip);});
+    const preview=await api('/api/chat-followups/imports/preview','POST',{filename:zip.name,data,consent:true});
+    if(!preview.batch)throw new Error('该 ZIP 只包含一个会话，请在所选患者下的「导入微信聊天记录」中处理');
+    setRows(preview.conversations.map(c=>({file:c.name,contact:c.name,chars:c.chars,snippet:c.snippet,previewId:preview.id,conversationId:c.id,patientId:c.match?.patientId||'',relationship:'self',match:c.match||null,done:false,error:''})));
+   } else {
+    const parsed=[];
+    for(const f of picked){
+     if(f.size>4*1024*1024)throw new Error(`${f.name} 超过 4MB，请分批导出`);
+     const text=await f.text();
+     const contact=(text.match(/^联系人[::](.+)$/m)?.[1]||'').trim();
+     if(!contact)throw new Error(`${f.name} 头部没有「联系人:」字段，请确认是导出工具生成的聊天 TXT`);
+     const data=await new Promise((res,rej)=>{const r=new FileReader();r.onerror=()=>rej(new Error('文件读取失败'));r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(f);});
+     parsed.push({file:f.name,contact,text,data});
+    }
+    const matched=(await api('/api/chat-followups/imports/match','POST',{names:parsed.map(p=>p.contact)})).matchResults||[];
+    setRows(parsed.map(p=>{
+     const hit=matched.find(m=>m.name===p.contact)?.match;
+     return {file:p.file,contact:p.contact,text:p.text,data:p.data,patientId:hit?.patientId||'',relationship:'self',match:hit||null,done:false,error:''};
+    }));
    }
-   const matched=(await api('/api/chat-followups/imports/match','POST',{names:parsed.map(p=>p.contact)})).matchResults||[];
-   setRows(parsed.map(p=>{
-    const hit=matched.find(m=>m.name===p.contact)?.match;
-    return {file:p.file,contact:p.contact,text:p.text,data:p.data,patientId:hit?.patientId||'',relationship:'self',match:hit||null,done:false,error:''};
-   }));
    setConfirmed(false);
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
@@ -94,8 +105,14 @@ function BatchImportForm({patients}) {
    for(const r of targets){
     const i=rows.indexOf(r);
     try{
-     const preview=await api('/api/chat-followups/imports/preview','POST',{patientId:r.patientId,filename:r.file,data:r.data,consent:true});
-     const result=await api('/api/chat-followups/imports','POST',{patientId:r.patientId,previewId:preview.id,title:r.contact,speakerName:r.contact,relationship:r.relationship,confirmed:true});
+     let result;
+     if(r.previewId){
+      // 原生 ZIP:服务端已持有会话文本,逐会话确认导入。
+      result=await api('/api/chat-followups/imports','POST',{patientId:r.patientId,previewId:r.previewId,conversationId:r.conversationId,title:r.contact,speakerName:r.contact,relationship:r.relationship,confirmed:true});
+     } else {
+      const preview=await api('/api/chat-followups/imports/preview','POST',{patientId:r.patientId,filename:r.file,data:r.data,consent:true});
+      result=await api('/api/chat-followups/imports','POST',{patientId:r.patientId,previewId:preview.id,title:r.contact,speakerName:r.contact,relationship:r.relationship,confirmed:true});
+     }
      setRows(old=>old.map((row,idx)=>idx===i?{...row,done:true,added:result.added}:row));ok++;
     }catch(e){setRows(old=>old.map((row,idx)=>idx===i?{...row,error:e.message}:row));}
    }
@@ -104,13 +121,13 @@ function BatchImportForm({patients}) {
  };
  const pending=rows.filter(r=>!r.done);
  return <div className="chat-binding-form">
-  <p>先用本机导出脚本把需要的会话导出成 TXT 文件夹，再在这里一次选入：系统按「联系人」自动匹配患者（已绑定备注名优先，其次患者姓名），匹配不上的请人工指派或留空跳过。</p>
-  <label>选择导出的聊天 TXT（可多选）<input type="file" multiple accept=".txt" disabled={busy} onChange={e=>{const list=e.target.files;e.target.value='';if(list&&list.length)onFiles(list);}}/></label>
+  <p>微信「合并转发」导出的 ZIP（可含多份聊天 TXT）一次选入；或先用本机导出脚本把会话导出成 TXT 文件夹再多选。系统按会话名/「联系人」自动匹配患者（已绑定备注名优先，其次患者姓名），匹配不上的请人工指派或留空跳过。批量预览 5 分钟内有效。</p>
+  <label>选择微信导出 ZIP 或聊天 TXT（可多选）<input type="file" multiple accept=".txt,.zip" disabled={busy} onChange={e=>{const list=e.target.files;e.target.value='';if(list&&list.length)onFiles(list);}}/></label>
   {busy&&<p role="status">正在解析与匹配…</p>}
   {error&&<p role="alert">{error}</p>}
-  {!!rows.length&&<table className="chat-import-batch"><thead><tr><th>文件</th><th>联系人</th><th>匹配依据</th><th>导入到患者</th><th>关系</th><th>状态</th></tr></thead><tbody>
-   {rows.map((r,i)=><tr key={r.file+`:${i}`}>
-    <td>{r.file}</td><td>{r.contact}</td>
+  {!!rows.length&&<table className="chat-import-batch"><thead><tr><th>会话</th><th>联系人</th><th>匹配依据</th><th>导入到患者</th><th>关系</th><th>状态</th></tr></thead><tbody>
+   {rows.map((r,i)=><tr key={(r.conversationId||r.file)+`:${i}`}>
+    <td>{r.file}{r.chars?` · ${r.chars} 字`:''}{r.snippet&&<><br/><small className="muted">{r.snippet.slice(0,60)}…</small></>}</td><td>{r.contact}</td>
     <td>{r.match?(r.match.matchedBy==='binding'?`绑定备注名：${r.match.bindingTitle}`:`患者姓名：${r.match.patientName}`):<span className="muted">未匹配，请人工指派</span>}</td>
     <td><select aria-label={`指派患者：${r.contact}`} value={r.patientId} onChange={e=>update(i,'patientId',e.target.value)}><option value="">跳过（不导入）</option>{patients.map(p=><option key={p.id} value={p.id}>{patientOptionLabel(p)}</option>)}</select></td>
     <td><select aria-label={`关系：${r.contact}`} value={r.relationship} onChange={e=>update(i,'relationship',e.target.value)}><option value="self">本人</option><option value="family">家属</option></select></td>
