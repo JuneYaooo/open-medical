@@ -1,9 +1,24 @@
 import { extractPdfText } from "../shared/pdf-text.mjs";
+import { api } from "./agent-runtime";
 export const MATERIAL_ACCEPT = ".png,.jpg,.jpeg,.webp,.pdf,.xlsx,.docx,.txt,.md,.markdown,.csv,.tsv,.json";
 export function encodeBytes(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+// 单页渲染图要能通过服务端图片上传上限（base64 ≤ 5333336 ≈ 4MB 二进制），
+// 超限的页按质量/分辨率逐级降档重渲；页与页独立上传，总量不再受限。
+const PAGE_BUDGET = 5333336;
+const RENDER_ATTEMPTS = [[1800, 0.85], [1800, 0.65], [1350, 0.7], [1000, 0.7]];
+async function renderScannedPage(page, [maxEdge, quality]) {
+  const initial = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: Math.min(2, maxEdge / Math.max(initial.width, initial.height)) });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+  await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  const data = canvas.toDataURL("image/jpeg", quality).split(",")[1];
+  canvas.width = 0; canvas.height = 0;
+  return data;
 }
 export async function importMaterial(file) {
   if (!file.size) throw new Error(`${file.name} 是空文件（0 字节），请检查原文件后重新上传`);
@@ -46,22 +61,35 @@ export async function importMaterial(file) {
     const task = pdfjs.getDocument({ data: bytes, isEvalSupported: false, standardFontDataUrl: "/pdfjs/standard_fonts/", cMapUrl: "/pdfjs/cmaps/", cMapPacked: true });
     try {
       const pdf = await task.promise;
-      let total = 0;
       for (const number of result.extraction.emptyPages) {
         const page = await pdf.getPage(number);
-        const initial = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: Math.min(2, 1800 / Math.max(initial.width, initial.height)) });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-        const data = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-        total += data.length;
-        if (total > 6500000) throw new Error("扫描页面图片超过单次上传容量，请拆分 PDF");
+        let data;
+        for (const attempt of RENDER_ATTEMPTS) {
+          data = await renderScannedPage(page, attempt);
+          if (data.length <= PAGE_BUDGET) break;
+        }
+        if (data.length > PAGE_BUDGET)
+          throw new Error(`第 ${number} 页扫描内容过密，压缩后仍超出单页图片上限，请降低扫描分辨率后重试`);
         pageImages.push({ page: number, data });
-        canvas.width = 0; canvas.height = 0;
         page.cleanup();
       }
     } finally { await task.destroy(); }
   }
   return { name: file.name, ...result, ...(pageImages.length ? { pageImages } : {}) };
+}
+// 把扫描页逐页上传成图片 artifact（复用工作台图片端点），再把 pageImages
+// 换成 artifactId 引用。建档与首页附件都走这里，单请求只携带引用，
+// 因此扫描 PDF 不再受"整份材料一个请求"的体积限制。
+export async function uploadScannedPages(sessionId, input, onProgress = () => {}) {
+  if (!input.pageImages?.length) return input;
+  const pageImages = [];
+  for (const [index, page] of input.pageImages.entries()) {
+    onProgress(index, input.pageImages.length);
+    const image = await api(`/api/workspaces/${sessionId}/images`, "POST", {
+      name: `PDF-page-${page.page}.jpg`,
+      data: page.data,
+    });
+    pageImages.push({ page: page.page, artifactId: image.id });
+  }
+  return { ...input, pageImages };
 }

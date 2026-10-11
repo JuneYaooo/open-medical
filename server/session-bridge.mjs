@@ -265,16 +265,29 @@ export class SessionBridge {
       check(/\.pdf$/i.test(name) && Array.isArray(input.pageImages) && input.pageImages.length <= 30 && input.pageImages.length === extraction?.emptyPages.length,
         "PDF_EXTRACTION", "扫描页面与 PDF 空白页索引不一致");
       const pages = input.pageImages;
-      check(new Set(pages.map((p) => p.page)).size === pages.length && pages.every((p) => extraction.emptyPages.includes(p.page) && typeof p.data === "string" && p.data.length <= 5333336 && /^[A-Za-z0-9+/]+={0,2}$/.test(p.data)), "PDF_EXTRACTION", "扫描页面无效");
-      const digest = hashText(text + pages.map((p) => p.data).join(""));
+      check(new Set(pages.map((p) => p.page)).size === pages.length && pages.every((p) => extraction.emptyPages.includes(p.page) && (typeof p.data === "string" || typeof p.artifactId === "string")), "PDF_EXTRACTION", "扫描页面无效");
+      // 页面图片两种来源：内嵌 base64（旧客户端 / 会话复制），或先经
+      // /api/workspaces/:id/images 逐页上传的 artifactId（建档大扫描件，
+      // 避免单份材料一个请求超过 8MB 体积上限）。统一解析回 base64 做
+      // 校验与查重，两种来源对相同页面得到相同指纹。
+      const datas = pages.map((p) => {
+        if (typeof p.data === "string") return p.data;
+        const { item, data } = this.service.artifacts.read(id, p.artifactId);
+        check(/^image\//.test(item.mime), "PDF_EXTRACTION", "扫描页面无效");
+        return data.toString("base64");
+      });
+      check(datas.every((data) => data.length <= 5333336 && /^[A-Za-z0-9+/]+={0,2}$/.test(data)), "PDF_EXTRACTION", "扫描页面无效");
+      const digest = hashText(text + datas.join(""));
       const current = this.requireSessionWorkspace(id);
       check((current.materials || []).length < 100, "FILE_LIMIT", "每个会话最多 100 份材料");
       check(!(current.materials || []).some((f) => f.extraction?.imageHash === digest), "DUPLICATE_FILE", "相同内容已在本会话中", 409);
       extraction.imageHash = digest;
       extraction.pageImages = pages.map((p) => {
-        const artifact = this.service.uploadImage(id, { name: `PDF-page-${p.page}.jpg`, data: p.data });
-        text += `\n[PDF 第 ${p.page} 页扫描图] artifactId: ${artifact.id}，使用 inspect_image 读取原文，不能猜测不清晰内容。`;
-        return { page: p.page, artifactId: artifact.id };
+        const artifactId = typeof p.data === "string"
+          ? this.service.uploadImage(id, { name: `PDF-page-${p.page}.jpg`, data: p.data }).id
+          : p.artifactId;
+        text += `\n[PDF 第 ${p.page} 页扫描图] artifactId: ${artifactId}，使用 inspect_image 读取原文，不能猜测不清晰内容。`;
+        return { page: p.page, artifactId };
       });
     }
     const file = {

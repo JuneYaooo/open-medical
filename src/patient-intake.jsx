@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import { Modal } from "./components";
 import { api } from "./agent-runtime";
-import { importMaterial, MATERIAL_ACCEPT } from "./import-material";
+import { importMaterial, uploadScannedPages, MATERIAL_ACCEPT } from "./import-material";
 import { materialQualityLevel } from "./material-details";
 import { OCR_QUALITY_LABELS } from "../shared/ocr-quality.mjs";
 
@@ -156,7 +156,10 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         try {
           const input = await importMaterial(file);
           signal.throwIfAborted();
-          const material = await api(`/api/sessions/${sessionId.current}/files`, { method: "POST", body: JSON.stringify(input), signal });
+          const finalized = await uploadScannedPages(sessionId.current, input, (done, total) =>
+            setProgress(`上传扫描页 ${done + 1}/${total}：${file.name}`));
+          signal.throwIfAborted();
+          const material = await api(`/api/sessions/${sessionId.current}/files`, { method: "POST", body: JSON.stringify(finalized), signal });
           saveFiles([...materials.current, material]); needsParse.current = true;
         } catch (err) {
           signal.throwIfAborted();

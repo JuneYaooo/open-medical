@@ -66,6 +66,24 @@ test('scanned PDF is stored with all page artifacts, duplicates do not accumulat
   assert.equal(copy.status, 201); assert.notEqual(copy.data.files[0].extraction.pageImages[0].artifactId, file.data.extraction.pageImages[0].artifactId);
 });
 
+test('scanned PDF pages may reference pre-uploaded image artifacts and dedupe against inline data', async (t) => {
+  const f = await fixture(t), session = await f.session();
+  const upload = await f.json(`/api/workspaces/${session.id}/images`, 'POST', { name: 'PDF-page-1.jpg', data: image });
+  assert.equal(upload.status, 201);
+  const artifactId = upload.data.id;
+  const extraction = { type: 'pdf_text', pageCount: 1, emptyPages: [1] };
+  const file = await f.json(`/api/sessions/${session.id}/files`, 'POST', { name: 'scan.pdf', text: '[PDF 第 1 页]', extraction, pageImages: [{ page: 1, artifactId }] });
+  assert.equal(file.status, 201);
+  assert.deepEqual(file.data.extraction.pageImages, [{ page: 1, artifactId }]);
+  assert.ok(file.data.text.includes(`artifactId: ${artifactId}`));
+  // 同一页先上传后引用与内嵌 base64 指纹一致：换成 data 形式再次导入命中查重。
+  const inline = await f.json(`/api/sessions/${session.id}/files`, 'POST', { name: 'scan-again.pdf', text: '[PDF 第 1 页]', extraction, pageImages: [{ page: 1, data: image }] });
+  assert.equal(inline.status, 409);
+  // 引用不属于本会话的 artifact 直接拒绝。
+  const missing = await f.json(`/api/sessions/${session.id}/files`, 'POST', { name: 'scan-missing.pdf', text: '[PDF 第 1 页]', extraction, pageImages: [{ page: 1, artifactId: '00000000-0000-0000-0000-000000000000' }] });
+  assert.equal(missing.status, 404);
+});
+
 test('xlsx extracts sheets and cell locations, preserves cached values without calculating formulas', async () => {
   const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('检验');
   sheet.addRow(['项目', '结果']); sheet.addRow(['血红蛋白', 100]); sheet.getCell('C2').value = { formula: '1+1', result: 2 };

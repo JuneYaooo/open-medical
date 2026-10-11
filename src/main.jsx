@@ -55,7 +55,7 @@ import "./style.css";
 import "./business-layout.css";
 import "./v6-layout.css";
 import "./agent-experience.css";
-import { importMaterial } from "./import-material";
+import { importMaterial, uploadScannedPages } from "./import-material";
 import { TaskCenter } from "./task-center";
 import { PatientsView } from "./patients";
 import { WorkspacesView } from "./workspaces";
@@ -1142,7 +1142,8 @@ function App() {
       if (!current) current = await create();
       if (!current) return;
       for (const file of files) {
-        const material = await importMaterial(file);
+        const input = await importMaterial(file);
+        const material = await uploadScannedPages(current.id, input);
         await api(`/api/sessions/${current.id}/files`, {
           method: "POST",
           body: JSON.stringify(material),
