@@ -557,6 +557,9 @@ function App() {
     [consent, setConsent] = useState(false);
   const [questionSelection, setQuestionSelection] = useState({});
   const questionDrafts = useRef(new Map());
+  // 患者页一键入口带到下一次发送的显式工作流（如治疗方案评估），
+  // 草稿模式下医生核对后手动发送时一并提交。
+  const pendingWorkflowRef = useRef("");
   const [accessMode, setAccessMode] = useState("auto");
   const [thinking, setThinking] = useState("disabled");
   const [pickedSkills, setPickedSkills] = useState([]),
@@ -993,6 +996,8 @@ function App() {
     let started = false;
     const modelEnabled =
       Boolean(config?.modelConfigured) && accessMode !== "local";
+    const pendingWorkflow = pendingWorkflowRef.current;
+    pendingWorkflowRef.current = "";
     const req = modeToRequest(modelEnabled, {
       message: text,
     });
@@ -1008,6 +1013,7 @@ function App() {
             : {}),
           skills: pickedSkills,
           delegations: [],
+          ...(pendingWorkflow ? { workflow: pendingWorkflow } : {}),
           ...(current.patientId ? { conversationParentRunId: current.id === session?.id && canFollowQuestion ? questionRunId : null } : {}),
           ...override,
           sessionRevision: current.revision,
@@ -1239,6 +1245,7 @@ function App() {
     }
   };
   const openTask = async (id, options = {}) => {
+    pendingWorkflowRef.current = options.workflow || "";
     setView("workbench", { id, tab: options.tab });
     const data = await select(id);
     if (data) {

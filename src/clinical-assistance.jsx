@@ -9,7 +9,7 @@ export function ClinicalAssistance({patient,session,onNavigate,onOpenTask}) {
  const diagnoses=(patient.diagnoses||[]).map(d=>typeof d==='string'?d:d.name).filter(Boolean);
  const medications=patient.medications||[];
  const unknown=medications.filter(m=>!m.status || m.status==='unknown').length;
- const start=kind=>onOpenTask(patient.sessionId,{draft:assistanceDraft(kind,profile,question)});
+ const start=kind=>onOpenTask(patient.sessionId,{draft:assistanceDraft(kind,profile,question),...(kind==='assessment'?{workflow:'patient-assessment'}:{})});
  const results=(session?.artifacts||[]).filter(a=>['treatment_review','similar_cases'].includes(a.type)).slice(-2);
  return <section className="clinical-assistance" aria-label="患者诊疗辅助面板">
   <div className="assistance-context">

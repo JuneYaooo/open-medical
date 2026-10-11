@@ -775,7 +775,8 @@ export class SessionBridge {
       "请先确认本次输入可以发送给所配置的模型服务",
       412,
     );
-    const assessment = Boolean(w.patientId && policy.workflow !== "patient-intake" && assessmentQuestion(message));
+    // 患者页一键入口可显式指定评估工作流，不再依赖草稿文本命中正则。
+    const assessment = Boolean(w.patientId && policy.workflow !== "patient-intake" && (body.workflow === "patient-assessment" || assessmentQuestion(message)));
     const similarCases = Boolean(w.patientId && policy.workflow !== "patient-intake" && similarCaseQuestion(message));
     if (assessment) policy.workflow = "patient-assessment";
     if (similarCases) { policy.workflow = "similar-case-search"; policy.intent = "similar_cases"; policy.searchScope = /(?:只|仅).{0,6}本地|不要.{0,3}(?:联网|网上)/.test(message) ? "local" : "online"; }
