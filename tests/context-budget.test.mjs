@@ -34,6 +34,26 @@ test('media estimates inspect content parts, expose uncertainty and retain visio
   assert.equal(budget.mediaTokens, 16384);
   assertContextBudget(budget);
 });
+test('inline base64 media is estimated by the media reserve, never as text bytes', () => {
+  const image = 'data:image/jpeg;base64,' + 'Q'.repeat(400000);
+  const budget = contextBudget({ provider: { model: 'vision', contextWindow: 1000000, maxTokens: 8192 },
+    messages: [{ role: 'system', content: '按用户问题分析图片。' },
+      { role: 'user', content: [{ type: 'input_text', text: '读取病历文字' }, { type: 'input_image', image_url: image, detail: 'auto' }] }] });
+  assert.equal(budget.unknownMultimodal, true);
+  assert.equal(budget.mediaTokens, 16384);
+  assert.ok(budget.chars < 2000, `media base64 leaked into chars: ${budget.chars}`);
+  assertContextBudget(budget);
+  assert.equal(contextBudget({ messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }] }] }).chars < 500, true);
+  assert.equal(contextBudget({ messages: [{ role: 'user', content: 'x'.repeat(200000) }] }).fits, false);
+});
+test('calibration divides real input by text estimate plus the media reserve', () => {
+  const budget = contextBudget({ messages: [{ role: 'user', content: [
+    { type: 'input_text', text: 'question' },
+    { type: 'input_image', image_url: 'data:image/jpeg;base64,' + 'Q'.repeat(1000) },
+  ] }] });
+  const calibrated = calibrateInput({ prompt_tokens: 40000 }, budget);
+  assert.ok(calibrated > 1 && calibrated < 3, `calibration ${calibrated}`);
+});
 test('compaction preserves authoritative facts/latest user/whole tool batch and archives original', async () => {
   const messages = [{ role: 'system', content: 'permission: read only' },
     { role: 'user', content: 'old request' }, { role: 'assistant', content: '旧'.repeat(12000) },
