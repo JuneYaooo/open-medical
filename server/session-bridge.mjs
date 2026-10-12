@@ -37,6 +37,11 @@ import {
 
 const hashText = (value) => createHash("sha256").update(value).digest("hex");
 const iso = () => new Date().toISOString();
+// 病历整理文本里模型自述「读不清原文」的措辞，与它引用的文件名。
+// 统计评分（assessOcrQuality）对"页眉词完整+正文乱码"的词汤式页面会误判
+// 良好；模型整理时却明确知道哪份材料缺数值——把它的判断回写为质量标注。
+const UNREADABLE_MARKER = /不可读|无法辨认|难以辨认|无法识别|缺字|乱码|字迹不清|模糊不清/i;
+const FILE_REF = /([^\s,，、;；:：()（）\[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/gi;
 const sessionKind = (w) => w?.kind === "session";
 // Extraction steps a run performs on the way to its deliverable.
 const SUPPORTING = new Set(["clinical_timeline", "observations"]);
@@ -461,6 +466,49 @@ export class SessionBridge {
   reingestMaterial(file) {
     if (!this.onMaterialReingest) return;
     try { this.onMaterialReingest(file); } catch {}
+  }
+  // 病历整理回写质量标注：从建档/档案更新提案的正文里找出模型自述读不清的
+  // 原文文件，把它们的识别质量降为「待核对」（已有更差的评级则不动）。
+  // 只降级、不升级，重新识别后随新文本重算，标注自然失效。
+  flagSuspectMaterials(id, payload = {}) {
+    this.requireSessionWorkspace(id);
+    const texts = [];
+    for (const visit of payload?.visits || []) texts.push(visit?.note, visit?.reason, visit?.source);
+    for (const dx of payload?.diagnoses || []) {
+      texts.push(dx?.note, dx?.source);
+      // needs_review 的语义即"OCR 无法辨认或等待病理，须医生核对"。
+      if (dx?.status === "needs_review") texts.push(dx?.source, dx?.sources, dx?.note);
+    }
+    for (const dx of payload?.diagnoses || []) if (Array.isArray(dx?.sources)) texts.push(...dx.sources);
+    texts.push(payload?.clinicalSummary?.text, payload?.clinicalSummary?.source);
+    const flagged = new Set();
+    for (const value of texts) {
+      if (typeof value !== "string" || !value) continue;
+      if (!UNREADABLE_MARKER.test(value)) continue;
+      for (const match of value.matchAll(FILE_REF)) flagged.add(match[1]);
+    }
+    if (!flagged.size) return [];
+    const changed = [];
+    this.service.store.update(id, current => {
+      for (const file of current.materials || []) {
+        if (!flagged.has(file.name)) continue;
+        const ocr = file.extraction?.ocr;
+        if (ocr?.status !== "ready") continue;
+        const level = ocr.quality?.level;
+        if (level === "poor") continue;
+        ocr.quality = {
+          ...(ocr.quality || {}),
+          level: "fair",
+          score: Math.min(ocr.quality?.score ?? 100, 65),
+          flaggedBy: "agent-review",
+          flaggedReason: "整理病历时模型标注该材料原文存在不可读内容",
+          flaggedAt: iso(),
+        };
+        changed.push(file.name);
+      }
+    });
+    if (changed.length) this.store.audit(id, "file.ocr.agent-flagged", { files: changed });
+    return changed;
   }
   // 医生在对照视图里直接修正识别文本：与重新识别同权重，重算质量并刷新索引。
   updateMaterialText(id, fileId, text) {

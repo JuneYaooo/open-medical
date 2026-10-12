@@ -118,6 +118,13 @@ export function PatientsView({
   const [inbox, setInbox] = useState([]);
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState("overview");
+  // 时间轴「查看原文」跨标签跳转的目标材料：状态放在父级，因为按 tab 切换
+  // 会重挂载 PatientDashboard，组件内的 state 活不过那次重挂。
+  const [sourceFocus, setSourceFocus] = useState(null);
+  const openRecordTab = (nextTab, opts = {}) => {
+    setTab(nextTab);
+    if ("focusFile" in opts) setSourceFocus(opts.focusFile);
+  };
   const [patientLoading, setPatientLoading] = useState(false);
   useEffect(() => { if (detail) onLocationChange?.(detail.id, tab); }, [detail?.id, tab]);
   useEffect(() => { panelRoot.current?.scrollTo({ top: detail ? 0 : listScroll.current }); }, [detail?.id]);
@@ -440,14 +447,22 @@ export function PatientsView({
           <p className="muted" style={{ fontSize: 12 }}>
             AI 建档提案（从对话材料中识别的新患者，确认后才真正建档）：
           </p>
-          {createProposals.map((proposal) => (
-            <div className="hub-risk" key={proposal.id}>
+          {createProposals.map((proposal) => {
+            // 不同任务提出的同名/互含姓名提案提示疑似同一患者，避免建出重复档案；
+            // 同一任务的重复提案已由服务端取代机制合并，这里兜住跨任务的。
+            const name = String(proposal.payload?.name || "").trim();
+            const twin = name
+              ? createProposals.find(p => p.id !== proposal.id && String(p.payload?.name || "").trim() &&
+                  (String(p.payload.name).trim().includes(name) || name.includes(String(p.payload.name).trim())))
+              : null;
+            return <div className="hub-risk" key={proposal.id}>
               <div className="hub-risk-main">
                 <b>{proposal.summary}</b>
                 <small>
                   {proposalDetail(proposal.type, proposal.payload) ||
                     (proposal.payload?.note || "").slice(0, 160)}
                 </small>
+                {twin && <small className="error-text">与「{twin.payload?.name}」的另一份提案疑似同一患者，请核对后只确认一份。</small>}
               </div>
               <div className="hub-risk-actions">
                 <button
@@ -465,8 +480,8 @@ export function PatientsView({
                   忽略
                 </button>
               </div>
-            </div>
-          ))}
+            </div>;
+          })}
         </div>
       )}
       {busy && (
@@ -629,7 +644,7 @@ export function PatientsView({
           {tab === "tracking" && <CareTasksPanel key={detail.id} patient={detail} onChanged={onChanged} />}
           {tab === "appointments" && <AppointmentsPanel key={detail.id} patient={detail} />}
           {(tab === "overview" || tab === "labs") && <NewLabsNotice key={`${detail.id}-${detail.revision}`} patientId={detail.id} onOpenLabs={tab === "labs" ? null : () => setTab("labs")} />}
-          {isRecordTab(tab) && <div className="detail-panel"><PatientDashboard key={`${detail.id}-${tab}`} patient={detail} session={session} view={tab === "clinical" ? "diagnoses" : tab} onClinical={setTab} onChanged={refreshPatient} onError={setError} onOpenWorkspace={onOpenWorkspace}/></div>}
+          {isRecordTab(tab) && <div className="detail-panel"><PatientDashboard key={`${detail.id}-${tab}`} patient={detail} session={session} view={tab === "clinical" ? "diagnoses" : tab} focusFile={sourceFocus} onClinical={openRecordTab} onChanged={refreshPatient} onError={setError} onOpenWorkspace={onOpenWorkspace}/></div>}
           {tab === "assistance" && <ClinicalAssistance key={detail.id} patient={detail} session={session} onNavigate={setTab} onOpenTask={onOpenWorkspace}/>}
           {tab === "overview" && (
             <div className="detail-panel">

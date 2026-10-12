@@ -12,6 +12,11 @@ import { ClinicalPanel } from './patient-clinical';
 function Source({ value }) {
   return value ? <details className="chart-source"><summary>资料来源</summary><p>{value}</p></details> : <small className="muted">来源未记录</small>;
 }
+// 从病程/诊断备注里提取引用的原文文件名（与「查看原文」跳转共用）。
+export function citedFileName(text) {
+  const m = String(text || '').match(/([^\s,，、;；:：()（）\[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/i);
+  return m ? m[1] : '';
+}
 function LabPlot({ group }) {
   const points = group.points, values = points.map(p=>p.value);
   const min = Math.min(...values), max = Math.max(...values), pad = (max-min || Math.abs(max) || 1)*.15;
@@ -26,7 +31,7 @@ function LabPlot({ group }) {
     <text x="60" y="182">{points[0].date}</text><text x="660" y="182" textAnchor="end">{points.at(-1).date}</text>
   </svg>;
 }
-export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", onChanged, onError }) {
+export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", focusFile = null, onChanged, onError }) {
   const [editing, setEditing] = useState(false);
   const titles = {overview:'患者概览',diagnoses:'诊断与病史',medications:'用药与过敏',labs:'检验趋势',visits:'就诊经过',sources:'原始资料',library:'资料库'};
   const [selected, setSelected] = useState('');
@@ -88,21 +93,26 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
     } catch (error) { onError?.(error.message); }
   };
   const reviewFiles = files.map(file => ({ file, level: materialQualityLevel(file) })).filter(x => x.level && x.level !== 'good');
-  const poorFiles = reviewFiles.filter(x => x.level === 'poor').map(x => x.file);
+  const poorCount = reviewFiles.filter(x => x.level === 'poor').length;
+  const fairCount = reviewFiles.length - poorCount;
+  // 统计评分对"页眉完整+正文乱码"的页面会误判良好，所以整批重识别覆盖全部
+  // 图片材料，而不只是评分不佳的子集——乱码页恰恰藏在那批"良好"里。
+  const imageFiles = files.filter(f => f.extraction && (f.extraction.type === 'image' ? f.extraction.artifactId : f.extraction.pageImages?.length));
   const handleMaterialsChanged = (message) => { setOcrNotice(typeof message === 'string' ? message : ''); onChanged?.(); };
-  const repreparePoor = async () => {
-    for (const file of poorFiles) {
-      setOcrBulk(`正在用视觉模型重新识别「${file.name}」…`);
+  const reprepareFiles = async (targets, reason) => {
+    for (const file of targets) {
+      setOcrBulk(`正在用识别模型重新识别「${file.name}」…`);
       try { await api(`/api/sessions/${session.id}/files/${file.id}/prepare`, 'POST', { force: true, preferVision: true }); }
       catch (error) { setOcrBulk(''); onError?.(error.message); return; }
     }
     setOcrBulk('');
     try {
-      await api(`/api/sessions/${session.id}/record-refresh`, 'POST', { fileIds: poorFiles.map(file => file.id), reason: '视觉模型重新识别' });
-      setOcrNotice(`已重新识别 ${poorFiles.length} 份资料，正在按新文本重新整理病历，完成后可在资料工作区查看更新提案。`);
+      await api(`/api/sessions/${session.id}/record-refresh`, 'POST', { fileIds: targets.map(file => file.id), reason });
+      setOcrNotice(`已重新识别 ${targets.length} 份资料，正在按新文本重新整理病历，完成后可在资料工作区查看更新提案。`);
       onChanged?.();
     } catch (error) { onError?.(`重新识别完成，但发起病历重新整理失败：${error.message}`); }
   };
+  const reprepareAll = () => reprepareFiles(imageFiles, '识别模型整批重新识别');
   return <section className="patient-dashboard" aria-label="患者资料面板">
     <header className="chart-heading"><div><span className="eyebrow">患者档案</span><h2>{titles[view]}</h2><p>已保存的档案记录 · 更新于 {patient.updatedAt ? new Date(patient.updatedAt).toLocaleDateString('zh-CN') : '日期未记录'}</p></div>{!['overview','sources'].includes(view) && <button className="secondary" onClick={()=>setEditing(!editing)}>{editing ? '返回记录' : '核对与编辑'} <ArrowUpRight size={15}/></button>}</header>
     {editing ? <ClinicalPanel detail={patient} section={view} onChanged={onChanged} onError={onError}/> : <>
@@ -164,17 +174,21 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       </div>}
     </section>}
     <div>
-      {view === 'visits' && <section id="chart-visits" className="chart-section" aria-label="就诊时间轴"><header><h3>就诊时间轴</h3><small>按资料中的日期排列</small></header>{visits.length ? <ol className="chart-timeline">{visitsSorted.map((v,i)=><li key={i}><time>{v.date || '日期未记录'}</time><h4>{v.reason}</h4>{v.note && <p>{v.note}</p>}</li>)}</ol> : <p className="chart-empty">暂无就诊记录。</p>}</section>}
+      {view === 'visits' && <section id="chart-visits" className="chart-section" aria-label="就诊时间轴"><header><h3>就诊时间轴</h3><small>按资料中的日期排列</small></header>{visits.length ? <ol className="chart-timeline">{visitsSorted.map((v,i)=>{
+        const cited = citedFileName(v.note) || citedFileName(v.reason);
+        const target = cited && files.find(f => f.name.toLowerCase() === cited.toLowerCase());
+        return <li key={i}><time>{v.date || '日期未记录'}</time><h4>{v.reason}</h4>{v.note && <p>{v.note}</p>}{target && <button className="text-button" onClick={()=>onClinical('sources', { focusFile: target.id })}>查看原文 {target.name}</button>}</li>;
+      })}</ol> : <p className="chart-empty">暂无就诊记录。</p>}</section>}
       {view === 'sources' && <section id="chart-sources" className="chart-section" aria-label="档案来源资料"><header><h3>来源资料</h3><button className="text-button" onClick={()=>onOpenWorkspace(session.id,{tab:'materials'})}>打开资料工作区</button></header>
-      {!!reviewFiles.length && <div className={`ocr-review-banner ${poorFiles.length ? 'poor' : ''}`} role="status">
-        <p><b>{poorFiles.length ? `${poorFiles.length} 份资料识别质量较低` : `${reviewFiles.length} 份资料识别待核对`}</b>：识别文字可能有缺字、错字或漏掉数值，会影响病历整理的准确性。建议对照原图核对，或用视觉模型重新识别。</p>
+      {!!reviewFiles.length && <div className={`ocr-review-banner ${poorCount ? 'poor' : ''}`} role="status">
+        <p><b>{poorCount && fairCount ? `${poorCount} 份资料识别质量较低、${fairCount} 份待核对` : poorCount ? `${poorCount} 份资料识别质量较低` : `${fairCount} 份资料识别待核对`}</b>：识别文字可能有缺字、错字或漏掉数值，会影响病历整理的准确性。建议对照原图核对，或用视觉模型重新识别。</p>
         <p className="muted">涉及：{reviewFiles.map(x => x.file.name).join('、')}</p>
-        {visionSupported && !!poorFiles.length && <button className="secondary" disabled={!!ocrBulk} onClick={repreparePoor}>重新识别这 {poorFiles.length} 份并整理病历</button>}
+        {visionSupported && !!imageFiles.length && <button className="secondary" disabled={!!ocrBulk} onClick={reprepareAll}>用识别模型重新识别全部 {imageFiles.length} 份并整理病历</button>}
         {!visionSupported && <small className="muted">暂无可用的图片识别模型；可在模型设置中勾选「此模型支持图片」，或在「文字识别（OCR）」中配置专用识别模型。</small>}
       </div>}
       {ocrBulk && <p role="status">{ocrBulk}</p>}
       {ocrNotice && <p role="status">{ocrNotice}</p>}
-      <label className="chart-source-search">查找文件<input value={materialQuery} onChange={e=>setMaterialQuery(e.target.value)} placeholder="输入文件名"/></label><div className="chart-files">{files.filter(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())).map(file=><details key={file.id}><summary><FileText size={15}/><span>{file.name}</span></summary><MaterialDetails file={file} sessionId={session.id} visionSupported={visionSupported} onChanged={handleMaterialsChanged} onError={onError}/></details>)}</div>{!files.length && <p className="chart-empty">尚未关联资料文件。</p>}{!!files.length && !files.some(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())) && <p className="chart-empty">没有匹配的文件。</p>}</section>}
+      <label className="chart-source-search">查找文件<input value={materialQuery} onChange={e=>setMaterialQuery(e.target.value)} placeholder="输入文件名"/></label><div className="chart-files">{files.filter(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())).map(file=><details key={file.id} open={focusFile ? focusFile === file.id : undefined} ref={el => { if (focusFile === file.id) el?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }}><summary><FileText size={15}/><span>{file.name}</span></summary><MaterialDetails file={file} sessionId={session.id} visionSupported={visionSupported} onChanged={handleMaterialsChanged} onError={onError}/></details>)}</div>{!files.length && <p className="chart-empty">尚未关联资料文件。</p>}{!!files.length && !files.some(f=>f.name.toLowerCase().includes(materialQuery.toLowerCase())) && <p className="chart-empty">没有匹配的文件。</p>}</section>}
       {view === 'library' && <section className="chart-section chart-library" aria-label="资料库">
         <header><div><h3>资料库</h3><p>按类型 × 资料日期归类；「推测」分类来自文件名与识别文本的关键词，点开资料即可确认或修改。</p></div><small>{files.length} 份资料</small></header>
         {libraryGroups.length > 1 && <nav className="library-filter" aria-label="按类型筛选">

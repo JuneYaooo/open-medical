@@ -157,7 +157,11 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
           const input = await importMaterial(file, ({ stage, done, total }) =>
             setProgress(stage === "render"
               ? `上传资料 ${index + 1}/${selected.length} · 读取扫描页 ${done + 1}/${total}：${file.name}`
-              : `上传资料 ${index + 1}/${selected.length} · 正在解析 PDF 文本：${file.name}`));
+              : stage === "compress"
+                ? `上传资料 ${index + 1}/${selected.length} · 图片较大，正在自动压缩：${file.name}`
+                : /\.pdf$/i.test(file.name)
+                  ? `上传资料 ${index + 1}/${selected.length} · 正在解析 PDF 文本：${file.name}`
+                  : `上传资料 ${index + 1}/${selected.length} · 正在读取：${file.name}`));
           signal.throwIfAborted();
           const finalized = await uploadScannedPages(sessionId.current, input, (done, total) =>
             setProgress(`上传扫描页 ${done + 1}/${total}：${file.name}`));
@@ -228,7 +232,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         </article>)}
       </section>}
       {progress && <p role="status">{busy && <Loader2 size={15} className="spin" />} {progress}{busy && `（已用时 ${elapsed} 秒）`}</p>}
-      {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份已可读取</summary><ul aria-label="已上传资料">{files.map(file => { const level = materialQualityLevel(file); return <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? ` · 已识别${level && level !== "good" ? `（${OCR_QUALITY_LABELS[level]}，建议在患者档案的原始资料里对照原图` : ""}）` : ""}</li>; })}</ul></details>}
+      {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份识别完成</summary><ul aria-label="已上传资料">{files.map(file => { const level = materialQualityLevel(file); return <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? ` · 已识别${level && level !== "good" ? `（${OCR_QUALITY_LABELS[level]}，建议在患者档案的原始资料里对照原图` : ""}）` : ""}</li>; })}</ul></details>}
       {!!skipped.length && <p>已自动跳过 {skipped.length} 份重复资料，保留已有内容，不影响解析。</p>}
       {!!failedUploads.length && <p>有 {failedUploads.length} 份资料未纳入本次整理，其余有效资料继续处理。可更换文件补充，或重试失败资料。</p>}
       {failedUploads.map(({ file, error }) => <p className="error-text" key={file.name}>{file.name}：{error}</p>)}

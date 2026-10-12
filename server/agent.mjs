@@ -259,6 +259,8 @@ export function createServer(options = {}) {
         sessionBridge.copyMaterial(sourceId, targetId, file);
       }
     },
+    flagSuspectMaterials: (sessionId, payload) =>
+      sessionBridge.flagSuspectMaterials?.(sessionId, payload),
   });
   // Each runtime instance owns an isolated vector index directory; tests
   // (:memory:) get a per-instance temp dir so tables never leak across.

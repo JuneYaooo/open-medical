@@ -3,7 +3,7 @@ import { check, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { validateClinicalInput } from "../patients.mjs";
 import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../../shared/diagnoses.mjs";
-import { normalizeGroupProposal } from "./patient-grouping.mjs";
+import { normalizeGroupProposal, scanGroupSuggestions } from "./patient-grouping.mjs";
 
 // Agent-proposed, doctor-confirmed write-backs. The model never writes
 // patient/followup/case data directly: it files a pending action with
@@ -186,6 +186,13 @@ export class PendingActions {
     if (resolvedPatientId) check(!this.patients.row(resolvedPatientId).archived, "PATIENT_ARCHIVED", "患者已归档，请先恢复档案再创建提案。", 409);
     const time = new Date().toISOString();
     const id = randomUUID();
+    // 同一资料任务的重复建档分析：新提案取代旧提案，托盘只留一张卡。
+    // 医生对同一批材料重跑建档时（换模型、修正口述），旧提案的核对工作
+    // 直接作废，两张几乎一样的卡只会让人犹豫该确认哪张。
+    if (type === "patient-create" && normalized.sourceSessionId) {
+      for (const stale of this.list({ type: "patient-create", sourceSessionId: normalized.sourceSessionId, status: "pending", limit: 50 }))
+        this.supersede(stale.id, id);
+    }
     this.store.db
       .prepare(
         "INSERT INTO pending_actions(id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -222,7 +229,7 @@ export class PendingActions {
   }
   list({ patientId, status = "pending", type, sourceSessionId, limit = 100, offset = 0 } = {}) {
     check(
-      ["pending", "applied", "rejected", undefined].includes(status),
+      ["pending", "applied", "rejected", "superseded", undefined].includes(status),
       "INVALID_INPUT",
       "提案状态无效",
     );
@@ -306,12 +313,18 @@ export class PendingActions {
         const patient = this.patients.create(action.payload);
         if (action.payload.sourceSessionId && this.services.copySourceMaterials)
           this.services.copySourceMaterials(action.payload.sourceSessionId, patient.sessionId, action.payload.sourceFileIds || [], action.payload.sourceInput);
+        // 整理完的档案若标注了读不清的原文，把对应材料质量降为待核对，
+        // 让原始资料横幅与重新识别入口接住统计评分漏掉的乱码页。
+        if (this.services.flagSuspectMaterials)
+          this.services.flagSuspectMaterials(patient.sessionId, action.payload);
         applied = this.patients.row(patient.id);
       } else if (action.type === "patient-update") {
         applied = this.patients.update(action.patientId, {
           ...action.payload,
           expectedRevision: action.baseRevision,
         });
+        if (this.services.flagSuspectMaterials)
+          this.services.flagSuspectMaterials(this.patients.row(action.patientId).sessionId, action.payload);
       } else if (action.type === "followup-create") {
         applied = this.followups.create(action.patientId, action.payload);
       } else if (action.type === "patient-group-suggest") {
@@ -393,6 +406,18 @@ export class PendingActions {
       )
       .run(new Date().toISOString(), id);
     return { ok: true, action: this.row(id) };
+  }
+  // 被更新的提案取代（同一资料任务重新分析）。不算医生拒绝：审计里保留
+  // supersededBy 指向取代它的提案，列表/计数把它当已处理。
+  supersede(id, byId) {
+    const stale = this.row(id);
+    if (stale.status !== "pending") return;
+    const payload = JSON.stringify({ ...stale.payload, supersededBy: byId });
+    this.store.db
+      .prepare(
+        "UPDATE pending_actions SET status='superseded',payload=?,updated_at=? WHERE id=?",
+      )
+      .run(payload, new Date().toISOString(), id);
   }
   counts({ patientId } = {}) {
     const one = (sql, ...args) =>
@@ -680,6 +705,78 @@ const diagnosisItemsDef = {
           patientId,
           payload,
           summary: args.summary,
+        });
+      },
+    },
+    {
+      definition: definition(
+        "patient_query",
+        "查询在管患者名单与档案概要。医生问「我有几个患者」「某患者的基本情况」「哪些人属于某分组」时必须先调用本工具，不要凭当前会话内容断言没有患者。支持按姓名/编号/电话/标签模糊筛选，可含已归档。",
+        {
+          query: { type: "string", description: "姓名、患者编号、电话或标签的模糊关键字；留空列出全部" },
+          group: textDef,
+          includeArchived: { type: "boolean" },
+        },
+        [],
+      ),
+      execute: (args) => {
+        const rows = pending.patients.list({
+          query: args.query || "",
+          group: args.group || "",
+          includeArchived: args.includeArchived === true,
+        });
+        return {
+          total: rows.length,
+          patients: rows.slice(0, 50).map((p) => ({
+            id: p.id,
+            name: p.name,
+            gender: p.gender || "unknown",
+            birthYear: p.birthYear || null,
+            groups: p.groups || [],
+            tags: p.tags || [],
+            archived: !!p.archived,
+            diagnosisCount: (p.diagnoses || []).length,
+            mainDiagnoses: (p.diagnoses || []).slice(0, 3).map((d) => (typeof d === "string" ? d : d.name)),
+            activeFollowups: p.counts?.activeFollowups ?? 0,
+            updatedAt: p.updatedAt,
+          })),
+          note: rows.length > 50 ? `共 ${rows.length} 位，仅返回最近更新的 50 位；可用 query/group 缩小范围。` : "",
+        };
+      },
+    },
+    {
+      definition: definition(
+        "patient_group_propose",
+        "按诊断规律为在管患者生成疾病分组建议（内置 ICD-10/诊断名规则，也可指定分组名与名单）。只创建待确认提案，医生在「待确认」面板核对后才写入档案。医生说「帮患者分组」「把某类患者归到一组」时使用；先 patient_query 拿到名单再提交。",
+        {
+          groupName: textDef,
+          patientIds: { type: "array", items: textDef, description: "要归组的患者 id（来自 patient_query）；留空则由规则引擎按诊断自动扫描全部在管患者" },
+          reason: textDef,
+        },
+        [],
+      ),
+      execute: (args) => {
+        const groupName = args.groupName ? string(args.groupName, "分组名称", 40) : "";
+        let patientIds = Array.isArray(args.patientIds) ? args.patientIds.filter(Boolean) : [];
+        if (!patientIds.length) {
+          // 规则引擎按诊断扫描：返回按患者的 addTags，按目标分组名过滤。
+          const scanned = scanGroupSuggestions(pending.patients)
+            .map((s) => ({ patientId: s.patientId, addTags: s.addTags || [] }))
+            .filter((s) => !groupName || s.addTags.includes(groupName));
+          if (!scanned.length) return { status: "no_suggestion", note: "规则引擎没有给出匹配的诊断分组建议；请提供 patientIds 或换个分组名。" };
+          return pending.propose({
+            type: "patient-group-suggest",
+            payload: { assignments: scanned },
+            summary: `分组建议：为 ${scanned.length} 位患者追加疾病分组（依据诊断 ICD-10/名称）`,
+          });
+        }
+        check(groupName, "INVALID_INPUT", "指定名单时需要提供分组名称");
+        return pending.propose({
+          type: "patient-group-suggest",
+          payload: {
+            assignments: patientIds.map((id) => ({ patientId: id, addTags: [groupName] })),
+          },
+          summary: `分组建议：把 ${patientIds.length} 位患者加入「${groupName}」`,
         });
       },
     },
