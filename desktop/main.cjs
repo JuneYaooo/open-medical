@@ -75,6 +75,10 @@ let runtime,
   quitting = false;
 
 function openWindow() {
+  // Windows 上隐藏系统标题栏和菜单条，改用页面顶栏作为标题栏（可拖拽），
+  // 只保留系统绘制的最小化/最大化/关闭按钮（titleBarOverlay）。
+  // 颜色取自 .topbar 的背景（#fcfdfb）与文字色，按钮区与页面融为一体。
+  const overlayTitleBar = process.platform === "win32";
   window = new BrowserWindow({
     title: `${productName} · 工作台`,
     width: 1440,
@@ -83,6 +87,10 @@ function openWindow() {
     minHeight: 650,
     backgroundColor: "#191919",
     show: !smokeTest,
+    titleBarStyle: overlayTitleBar ? "hidden" : "default",
+    titleBarOverlay: overlayTitleBar
+      ? { color: "#fcfdfb", symbolColor: "#263831", height: 44 }
+      : undefined,
     icon: process.platform === "win32" ? icon("icon.ico") : undefined,
     webPreferences: {
       contextIsolation: true,
@@ -107,6 +115,21 @@ function openWindow() {
   window.webContents.on("will-attach-webview", (event) =>
     event.preventDefault(),
   );
+  // Windows/Linux 去掉应用菜单后，刷新与开发者工具的原生快捷键随菜单消失，
+  // 这里手动补上；macOS 保留系统菜单栏，由菜单角色负责，不重复注册。
+  if (process.platform !== "darwin")
+    window.webContents.on("before-input-event", (_event, input) => {
+      if (input.type !== "keyDown") return;
+      const key = input.key.toLowerCase();
+      const devtools =
+        input.key === "F12" || (input.control && input.shift && key === "i");
+      const reload =
+        input.key === "F5" ||
+        ((input.control || input.metaKey) && key === "r" && !input.shift);
+      if (devtools) window.webContents.toggleDevTools();
+      else if (reload) window.webContents.reload();
+      if (devtools || reload) event.preventDefault();
+    });
   window.on("closed", () => {
     window = null;
   });
@@ -334,6 +357,36 @@ async function start() {
     });
     return result.canceled ? null : result.filePaths[0];
   });
+  // 菜单栏迁入「设置 → 桌面应用」后的窄接口：只暴露固定动作，不传任意路径。
+  ipcMain.handle("omw:open-data-directory", () => shell.openPath(dataDirectory));
+  ipcMain.handle("omw:edit-model-config", () => {
+    const editor = spawn(
+      process.platform === "win32" ? "notepad.exe" : "/usr/bin/open",
+      process.platform === "win32"
+        ? [configuration]
+        : ["-a", "TextEdit", configuration],
+      { stdio: "ignore" },
+    );
+    editor.on("error", () =>
+      dialog.showErrorBox(
+        "无法打开配置",
+        `请用文本编辑器打开：${configuration}`,
+      ),
+    );
+  });
+  ipcMain.handle("omw:login-item", () => app.getLoginItemSettings().openAtLogin);
+  ipcMain.handle("omw:set-login-item", (_event, open) => {
+    app.setLoginItemSettings({
+      openAtLogin: Boolean(open),
+      path: process.execPath,
+      args: app.isPackaged ? [] : [join(root, "desktop/main.cjs")],
+    });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+  ipcMain.handle("omw:relaunch", () => {
+    app.relaunch();
+    app.quit();
+  });
   const showWorkspace = () => {
     if (window) {
       window.show();
@@ -363,96 +416,102 @@ async function start() {
       tray.on("click", showWorkspace);
     } catch {}
   }
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: productName,
-        submenu: [
-          { role: "about", label: `关于 ${productName}` },
-          { type: "separator" },
-          { role: "hide", label: "隐藏" },
-          { role: "unhide", label: "显示" },
-          { type: "separator" },
-          { label: "退出并停止后台服务", click: stopDaemonAndQuit },
-          { role: "quit", label: "退出应用" },
-        ],
-      },
-      {
-        label: "编辑",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
-        ],
-      },
-      {
-        label: "工作台",
-        submenu: [
-          {
-            label: "打开工作窗口",
-            click: () => {
-              if (window) window.show();
-              else openWindow();
+  // macOS 的应用菜单在屏幕顶部系统菜单栏里，是标准体验，保留完整菜单；
+  // Windows 上同样的菜单会渲染成窗口里一条灰色菜单条（观感差且功能入口
+  // 已迁入「设置 → 桌面应用」），这里不再注册。编辑快捷键由 Chromium 在
+  // 可编辑区域内原生处理，刷新/DevTools 由 before-input-event 兜底。
+  if (process.platform === "darwin")
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        {
+          label: productName,
+          submenu: [
+            { role: "about", label: `关于 ${productName}` },
+            { type: "separator" },
+            { role: "hide", label: "隐藏" },
+            { role: "unhide", label: "显示" },
+            { type: "separator" },
+            { label: "退出并停止后台服务", click: stopDaemonAndQuit },
+            { role: "quit", label: "退出应用" },
+          ],
+        },
+        {
+          label: "编辑",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" },
+          ],
+        },
+        {
+          label: "工作台",
+          submenu: [
+            {
+              label: "打开工作窗口",
+              click: () => {
+                if (window) window.show();
+                else openWindow();
+              },
             },
-          },
-          {
-            label: "编辑模型配置…",
-            click: () => {
-              const editor = spawn(
-                process.platform === "win32" ? "notepad.exe" : "/usr/bin/open",
-                process.platform === "win32"
-                  ? [configuration]
-                  : ["-a", "TextEdit", configuration],
-                { stdio: "ignore" },
-              );
-              editor.on("error", () =>
-                dialog.showErrorBox(
-                  "无法打开配置",
-                  `请用文本编辑器打开：${configuration}`,
-                ),
-              );
+            {
+              label: "编辑模型配置…",
+              click: () => {
+                const editor = spawn(
+                  process.platform === "win32" ? "notepad.exe" : "/usr/bin/open",
+                  process.platform === "win32"
+                    ? [configuration]
+                    : ["-a", "TextEdit", configuration],
+                  { stdio: "ignore" },
+                );
+                editor.on("error", () =>
+                  dialog.showErrorBox(
+                    "无法打开配置",
+                    `请用文本编辑器打开：${configuration}`,
+                  ),
+                );
+              },
             },
-          },
-          ...(smokeTest
-            ? []
-            : [
-                {
-                  label: "登录时自动启动",
-                  type: "checkbox",
-                  checked: app.getLoginItemSettings().openAtLogin,
-                  click: (item) =>
-                    app.setLoginItemSettings({
-                      openAtLogin: item.checked,
-                      path: process.execPath,
-                      args: app.isPackaged
-                        ? []
-                        : [join(root, "desktop/main.cjs")],
-                    }),
-                },
-              ]),
-          { label: "打开数据目录", click: () => shell.openPath(dataDirectory) },
-          {
-            label: "重启以应用配置",
-            click: () => {
-              app.relaunch();
-              app.quit();
+            ...(smokeTest
+              ? []
+              : [
+                  {
+                    label: "登录时自动启动",
+                    type: "checkbox",
+                    checked: app.getLoginItemSettings().openAtLogin,
+                    click: (item) =>
+                      app.setLoginItemSettings({
+                        openAtLogin: item.checked,
+                        path: process.execPath,
+                        args: app.isPackaged
+                          ? []
+                          : [join(root, "desktop/main.cjs")],
+                      }),
+                  },
+                ]),
+            { label: "打开数据目录", click: () => shell.openPath(dataDirectory) },
+            {
+              label: "重启以应用配置",
+              click: () => {
+                app.relaunch();
+                app.quit();
+              },
             },
-          },
-          { type: "separator" },
-          { role: "reload", label: "刷新页面" },
-          { role: "toggleDevTools", label: "开发者工具" },
-        ],
-      },
-      {
-        label: "窗口",
-        submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }],
-      },
-    ]),
-  );
+            { type: "separator" },
+            { role: "reload", label: "刷新页面" },
+            { role: "toggleDevTools", label: "开发者工具" },
+          ],
+        },
+        {
+          label: "窗口",
+          submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }],
+        },
+      ]),
+    );
+  else Menu.setApplicationMenu(null);
   await session.defaultSession.setProxy({ mode: "direct" });
   await openWindow();
   if (smokeTest) await verify();

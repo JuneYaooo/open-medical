@@ -1338,6 +1338,20 @@ function App() {
         ? `${VIEW_LABELS[view] || "医疗工作台"} · Open Medical`
         : `${VIEW_LABELS[view] || "通用工作台"} · Open Agent`;
   }, [config, medical, view]);
+  // 桌面壳(Windows)用系统窗口按钮覆盖层时,顶栏兼作窗口拖拽区;类名挂在
+  // html 上供 v6-layout.css 门控,浏览器与 macOS(无覆盖层)不会有该类。
+  useEffect(() => {
+    const overlay = navigator.windowControlsOverlay;
+    if (!overlay) return undefined;
+    const apply = () =>
+      document.documentElement.classList.toggle(
+        "desktop-overlay-titlebar",
+        overlay.visible,
+      );
+    apply();
+    overlay.addEventListener("geometrychange", apply);
+    return () => overlay.removeEventListener("geometrychange", apply);
+  }, []);
   useEffect(() => { if(inspector) setDisplayMode(mode => mode === "chat" ? "work" : mode); }, [inspector]);
   useEffect(() => {
     if (!inspector) return;

@@ -599,3 +599,16 @@
   .app-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .app-settings-layout > nav { flex-direction: row; }
 }
+/* 桌面壳(Electron/Windows)隐藏原生标题栏后,顶栏兼任窗口拖拽区,右上角为
+   系统最小化/最大化/关闭按钮预留宽度;仅window-controls-overlay显示模式下
+   生效,浏览器与macOS(保留系统标题栏)不受影响,env回退值即无变化。 */
+/* 生效条件由 main.jsx 依据 navigator.windowControlsOverlay.visible 加/去 desktop-overlay-titlebar 类 */
+html.desktop-overlay-titlebar .topbar { -webkit-app-region: drag; padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 22px); }
+html.desktop-overlay-titlebar .topbar :is(button, a, input, select, textarea, label, [role="status"]) { -webkit-app-region: no-drag; }
+/* 保留媒体查询等价形态,双保险 */
+@media (display-mode: window-controls-overlay) {
+  .topbar { -webkit-app-region: drag; padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 22px); }
+  .topbar :is(button, a, input, select, textarea, label, [role="status"]) { -webkit-app-region: no-drag; }
+}
+.settings-login-item { display: flex; align-items: center; gap: 8px; margin: 0; }
+.settings-desktop-note { color: #68786e; font-size: 14px; margin: 8px 0 0; }

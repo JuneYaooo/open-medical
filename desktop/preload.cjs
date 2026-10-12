@@ -6,4 +6,9 @@ contextBridge.exposeInMainWorld("omwDesktop", {
   openPermissionSettings: kind => ipcRenderer.invoke('omw:permission-settings',kind),
   showInstalledApp: () => ipcRenderer.invoke('omw:show-installed-app'),
   chooseDirectory: () => ipcRenderer.invoke("omw:choose-directory"),
+  openDataDirectory: () => ipcRenderer.invoke("omw:open-data-directory"),
+  editModelConfig: () => ipcRenderer.invoke("omw:edit-model-config"),
+  loginItemAtLogin: () => ipcRenderer.invoke("omw:login-item"),
+  setLoginItemAtLogin: (open) => ipcRenderer.invoke("omw:set-login-item", open),
+  relaunchApp: () => ipcRenderer.invoke("omw:relaunch"),
 });
