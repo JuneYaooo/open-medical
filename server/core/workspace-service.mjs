@@ -774,10 +774,19 @@ export class WorkspaceService {
       "INVALID_INPUT",
       "写入授权必须为布尔值",
     );
+    // 联网读取（network / browser.read）不在本调用管理的开关里：归扩展
+    // 授权面板管（create 默认放开、面板显式关闭）。这里必须沿用当前值，
+    // 否则每次改运行模式（含建会话后的第一次 update）都会把它们静默打回
+    // profile 默认 false，web_search 摘要之外的一切联网读取（web_fetch）
+    // 被掐断；minimal 档仍强制关闭。
+    const previous = this.store.get(id)?.permissions?.grants ?? {};
+    const networkOpen = profile !== "minimal" && previous.network === true;
     const grants = {
       "filesystem.write": profile !== "minimal" && body.allowWrite,
       "git.write": profile !== "minimal" && body.allowGit === true,
       "model.external": true,
+      network: networkOpen,
+      "browser.read": profile !== "minimal" && previous["browser.read"] === true,
     };
     const approvalPolicy = body.approvalPolicy || "review";
     check(
