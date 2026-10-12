@@ -643,7 +643,13 @@ export function createServer(options = {}) {
     provider: () => providerConfigured(workspaces.provider) ? workspaces.provider : null,
     ...options.care,
   });
-  const extensions = new Extensions({ store, patients, schedule, skillsDir: userSkillsDir, care: () => care, sessions: sessionBridge });
+  const extensions = new Extensions({
+    store, patients, schedule, skillsDir: userSkillsDir, care: () => care, sessions: sessionBridge,
+    // Imported skill packs must not shadow existing skills; the shared
+    // registry is the authority on what is already installed.
+    skillExists: (id) => { try { skills.get(id); return true; } catch { return false; } },
+    importer: options.skillImporter,
+  });
   sessionBridge.evolution = extensions;
   const wechat = new WeChatMacBridge({
     patients,
@@ -1782,7 +1788,14 @@ export function createServer(options = {}) {
         if (parts.length === 4 && parts[2] === "items" && req.method === "POST") return send(res, 200, extensions.resolveItem(parts[3], (await body(req)).status));
         if (parts.length === 4 && parts[2] === "suggestions" && req.method === "POST") return send(res, 200, extensions.resolveSuggestion(parts[3], (await body(req)).status));
         if (parts.length === 5 && parts[2] === "changes" && parts[4] === "undo" && req.method === "POST") return send(res, 200, extensions.undoChange(parts[3]));
+        if (parts.length === 3 && parts[2] === "import" && req.method === "POST") {
+          const b = await body(req);
+          const staged = await extensions.stageImport({ url: b.url, select: b.skills });
+          const action = pending.propose({ type: "ext-install", payload: { install: { source: staged.source, skills: staged.skills }, ...(b.reason ? { reason: b.reason } : {}) }, summary: staged.summary });
+          return send(res, 201, { action, staged: { source: staged.source, preview: staged.preview, skipped: staged.skipped } });
+        }
         if (parts.length === 3 && req.method === "GET") return send(res, 200, extensions.detail(parts[2]));
+        if (parts.length === 3 && req.method === "DELETE") return send(res, 200, extensions.remove(parts[2]));
         if (parts.length === 3 && req.method === "PUT") { const b = await body(req); const ext = extensions.row(parts[2]); return send(res, 200, extensions.save({ id: ext.id, kind: ext.kind, spec: b.spec, source: { via: "manual" } })); }
         if (parts.length === 4 && parts[3] === "status" && req.method === "POST") return send(res, 200, extensions.setStatus(parts[2], (await body(req)).status));
         if (parts.length === 4 && parts[3] === "rollback" && req.method === "POST") return send(res, 200, extensions.rollback(parts[2], (await body(req)).version));

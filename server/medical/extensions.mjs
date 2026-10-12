@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import yaml from "js-yaml";
 import { check, identifier, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { labKey } from "./patient-schedule.mjs";
+import { stageSkillImport } from "./skill-import.mjs";
 
 // The doctor's own building blocks. Every change is data with a version
 // history and a source (chat, evolution suggestion, manual), so the
@@ -17,10 +18,21 @@ export const KINDS = ["skill", "automation"];
 export const TRIGGERS = { daily: "每天", weekly: "每周", lab: "新检验结果", appointment: "复诊前" };
 export const ACTIONS = { agenda: "加入今日待办", draft_message: "起草给患者的消息", report: "生成汇总" };
 const OPS = { gt: (a, b) => a > b, gte: (a, b) => a >= b, lt: (a, b) => a < b, lte: (a, b) => a <= b, eq: (a, b) => a === b };
+// Imported skill directory ids share the SkillRegistry namespace; "my-" is
+// reserved for doctor-authored skills so the two stay distinguishable.
+const SKILL_ID = /^(?!my-)[-a-z0-9_]+$/;
+const rawString = (value, label, max) => {
+  check(typeof value === "string" && value.length <= max, "INVALID_INPUT", `${label} 必须是不超过 ${max} 字符的文本`);
+  return value;
+};
 const OP_TEXT = { gt: ">", gte: "≥", lt: "<", lte: "≤", eq: "=" };
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DAY = 86400000;
 const localDate = (ms) => { const d = new Date(ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+// Imported packs carry full file content; public shapes expose only a
+// manifest so listings and extension_get never push megabytes into a prompt.
+const fileManifest = (files) => files?.map((f) => ({ path: f.path, encoding: f.encoding, bytes: f.encoding === "base64" ? Math.ceil(f.content.length * 0.75) : f.content.length }));
+const publicShape = (ext) => (ext.files ? { ...ext, files: fileManifest(ext.files) } : ext);
 const localTime = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const iso = (ms) => new Date(ms).toISOString();
 const text = (value, label, max) => (value === undefined || value === null || value === "" ? "" : string(value, label, max));
@@ -31,8 +43,8 @@ const USAGE_MIN = 5;
 const EDIT_SUGGEST = 3;
 
 export class Extensions {
-  constructor({ store, patients, schedule, skillsDir, care = () => null, sessions = null, now = Date.now }) {
-    Object.assign(this, { store, patients, schedule, skillsDir, care, sessions, now });
+  constructor({ store, patients, schedule, skillsDir, care = () => null, sessions = null, now = Date.now, skillExists = null, importer = null }) {
+    Object.assign(this, { store, patients, schedule, skillsDir, care, sessions, now, skillExists, importer: importer || stageSkillImport });
     this.db = store.db;
     mkdirSync(skillsDir, { recursive: true });
     this.db.exec(`
@@ -61,13 +73,13 @@ export class Extensions {
       .map((row) => ({ id: row.id, kind: row.kind, status: row.status, ...JSON.parse(row.data) }));
   }
   publicList({ kind } = {}) {
-    return { extensions: this.list({ kind }).map((e) => ({ ...e, stats: e.kind === "automation" ? this.stats(e.id) : undefined })), triggers: TRIGGERS, actions: ACTIONS };
+    return { extensions: this.list({ kind }).map((e) => ({ ...publicShape(e), stats: e.kind === "automation" ? this.stats(e.id) : undefined })), triggers: TRIGGERS, actions: ACTIONS };
   }
   detail(id) {
     const ext = this.row(id);
     const versions = this.db.prepare("SELECT version, source, created_at, data FROM extension_versions WHERE extension_id=? ORDER BY version DESC").all(ext.id)
-      .map((v) => ({ version: v.version, source: JSON.parse(v.source), createdAt: v.created_at, spec: JSON.parse(v.data) }));
-    return { ...ext, versions, stats: ext.kind === "automation" ? this.stats(ext.id) : undefined };
+      .map((v) => ({ version: v.version, source: JSON.parse(v.source), createdAt: v.created_at, spec: publicShape(JSON.parse(v.data)) }));
+    return { ...publicShape(ext), versions, stats: ext.kind === "automation" ? this.stats(ext.id) : undefined };
   }
 
   // Validates a spec and returns the stored shape plus a readable summary.
@@ -75,6 +87,7 @@ export class Extensions {
     check(KINDS.includes(kind), "INVALID_INPUT", "扩展类型须为 skill 或 automation");
     check(spec && typeof spec === "object", "INVALID_INPUT", "扩展内容必须是对象");
     if (kind === "skill") {
+      if (spec.imported) return this.normalizeImportedSkill(spec);
       const appliesTo = typeof spec.appliesTo === "string" ? [spec.appliesTo] : spec.appliesTo ?? [];
       check(Array.isArray(appliesTo), "INVALID_INPUT", "适用文书须为名称数组或单个名称");
       const value = {
@@ -111,13 +124,41 @@ export class Extensions {
     const value = { name: string(spec.name, "规则名称", 60), trigger, condition, action };
     return { ...value, summary: describe(value) };
   }
+  // A skill imported from an external archive: id comes from the pack
+  // (frontmatter name === directory id), files ship verbatim, origin records
+  // where it came from so re-imports can version and the UI can link back.
+  normalizeImportedSkill(spec) {
+    const id = string(spec.id, "技能编号", 80);
+    check(SKILL_ID.test(id), "INVALID_INPUT", "导入技能编号须为小写字母/数字/-/_，且不以 my- 开头");
+    const name = string(spec.name, "技能名称", 100);
+    check(name === id, "INVALID_INPUT", "导入技能的 name 必须与编号一致");
+    const description = string(spec.description, "何时使用（description）", 4000);
+    const body = rawString(spec.body ?? "", "技能说明", 100000);
+    check(Array.isArray(spec.files) && spec.files.length >= 1 && spec.files.length <= 400, "INVALID_INPUT", "导入技能文件清单无效");
+    let bytes = 0;
+    const files = spec.files.map((file) => {
+      check(file && typeof file === "object", "INVALID_INPUT", "导入技能文件无效");
+      const path = string(file.path, "文件路径", 200);
+      check(!path.includes("\\") && !path.startsWith("/") && !path.split("/").includes(".."), "INVALID_INPUT", "导入技能文件路径越界");
+      const encoding = file.encoding === "base64" ? "base64" : "utf8";
+      const content = rawString(file.content, `文件 ${path}`, encoding === "base64" ? 1_400_000 : 1_050_000);
+      bytes += encoding === "base64" ? Math.ceil(content.length * 0.75) : content.length;
+      return { path, encoding, content };
+    });
+    check(bytes <= 12_000_000, "INVALID_INPUT", "导入技能总大小超过 12MB");
+    const url = string(spec.origin?.url || "", "来源地址", 500);
+    check(/^https:\/\//.test(url), "INVALID_INPUT", "导入技能必须带有 HTTPS 来源地址");
+    const origin = { url, repo: text(spec.origin?.repo, "仓库", 200), ref: text(spec.origin?.ref, "分支", 100), hash: text(spec.origin?.hash, "校验值", 80) };
+    return { imported: true, id, name, title: text(spec.title, "标题", 200), description, body, files, origin,
+      summary: `技能「${name}」（来自 ${new URL(url).host}）：${description.slice(0, 80)}` };
+  }
   save({ id, kind, spec, source = { via: "manual" } }) {
     let writtenId;
     try { return sqliteTransaction(this.db, () => {
       const existing = id ? this.row(id) : null;
       if (existing) check(existing.kind === kind, "INVALID_INPUT", "不能改变扩展类型");
       const value = this.normalize(kind, spec);
-      const extId = existing?.id || (kind === "skill" ? `my-${randomUUID().slice(0, 8)}` : randomUUID());
+      const extId = existing?.id || (value.imported ? value.id : kind === "skill" ? `my-${randomUUID().slice(0, 8)}` : randomUUID());
       const version = (existing?.version || 0) + 1, at = this.iso();
       const data = { ...value, version, source, createdAt: existing?.createdAt || at, updatedAt: at };
       if (existing) this.db.prepare("UPDATE extensions SET data=? WHERE id=?").run(JSON.stringify(data), extId);
@@ -162,6 +203,19 @@ export class Extensions {
   }
   writeSkill(ext) {
     const dir = join(this.skillsDir, ext.id);
+    if (ext.imported && ext.files?.length) {
+      // Imported packs ship verbatim (frontmatter included), so the registry
+      // sees exactly what upstream published; the directory is rebuilt from
+      // the committed database state on every write.
+      rmSync(dir, { recursive: true, force: true });
+      mkdirSync(dir, { recursive: true });
+      for (const file of ext.files) {
+        const target = join(dir, ...file.path.split("/"));
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, file.encoding === "base64" ? Buffer.from(file.content, "base64") : file.content);
+      }
+      return;
+    }
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "SKILL.md"), this.skillFile(ext));
   }
@@ -246,6 +300,10 @@ export class Extensions {
   // What the rule would produce against current data, without doing it.
   preview(kind, spec) {
     const value = this.normalize(kind, spec);
+    if (kind === "skill" && value.imported) {
+      const bytes = value.files.reduce((n, f) => n + (f.encoding === "base64" ? Math.ceil(f.content.length * 0.75) : f.content.length), 0);
+      return { summary: value.summary, fileCount: value.files.length, bytes, files: value.files.slice(0, 30).map((f) => f.path), origin: value.origin };
+    }
     if (kind === "skill") return { summary: value.summary, skill: this.skillFile({ id: "my-preview", version: 1, ...value }) };
     const firings = this.firings({ id: "preview", ...value }, { dryRun: true });
     const label = (f) => value.action.type === "report" ? `${value.action.title}：${f.patients.length} 位患者` : `${f.patient.name}：${value.action.type === "agenda" ? this.fill(value.action.title, f) : this.fill(value.action.text, f).slice(0, 60)}`;
@@ -427,6 +485,25 @@ export class Extensions {
 
   // ---------- proposals (chat) ----------
   normalizeProposal(type, payload = {}) {
+    if (type === "ext-install") {
+      const install = payload.install || {};
+      check(install.source && typeof install.source.url === "string" && Array.isArray(install.skills) && install.skills.length >= 1,
+        "INVALID_INPUT", "安装提案缺少来源或技能清单");
+      check(install.skills.length <= 8, "INVALID_INPUT", "一次最多安装 8 个技能");
+      const values = install.skills.map((spec) => this.normalize("skill", spec));
+      const conflicts = values.filter((value) => {
+        const existing = this.findImported(value.id);
+        return existing ? !(existing.kind === "skill" && existing.imported && existing.version === (install.skills.find((s) => s.id === value.id)?.previousVersion ?? -1)) : false;
+      });
+      return {
+        install: { source: install.source, skills: install.skills },
+        reason: text(payload.reason, "原因", 500),
+        summary: `安装 ${values.length} 个技能：${values.map((v) => v.name).join("、")}`.slice(0, 300),
+        preview: { skills: values.map((value, index) => ({ id: value.id, name: value.name, title: value.title, description: value.description.slice(0, 200),
+          files: value.files.length, bytes: value.files.reduce((n, f) => n + (f.encoding === "base64" ? Math.ceil(f.content.length * 0.75) : f.content.length), 0),
+          update: install.skills[index].previousVersion || null })), stale: conflicts.map((value) => value.id) },
+      };
+    }
     check(type === "ext-change", "INVALID_INPUT", "未知的扩展提案");
     const existing = payload.id ? this.row(payload.id) : null;
     const kind = existing?.kind || payload.kind;
@@ -437,11 +514,72 @@ export class Extensions {
   }
   applyProposal(action) {
     const p = action.payload;
+    if (p.install) return this.applyInstall(action);
     if (p.id) check(Number.isSafeInteger(p.previousVersion) && this.row(p.id).version === p.previousVersion,
       "ACTION_CONFLICT", "扩展在提案生成后已变化，请读取最新版本并重新生成提案。", 409);
     const ext = this.save({ id: p.id, kind: p.kind, spec: p.spec, source: { via: p.suggestionId ? "evolution" : "chat", proposalId: action.id, reason: p.reason } });
     if (p.suggestionId) try { this.resolveSuggestion(p.suggestionId, "accepted"); } catch { /* already handled */ }
     return ext;
+  }
+  // Confirming an install applies each staged skill through save() so version
+  // history, disk materialization and audit stay on one path. Re-importing an
+  // already-installed skill is an update guarded by its staged version.
+  applyInstall(action) {
+    const install = action.payload.install;
+    const appliedIds = [];
+    try {
+      for (const spec of install.skills) {
+        const value = this.normalize("skill", spec);
+        const existing = this.findImported(value.id);
+        if (existing) {
+          check(existing.kind === "skill" && existing.imported && Number.isSafeInteger(spec.previousVersion) && existing.version === spec.previousVersion,
+            "ACTION_CONFLICT", `技能 ${value.id} 在提案生成后已变化，请重新生成安装提案。`, 409);
+        } else {
+          const taken = (() => { try { return this.skillExists ? this.skillExists(value.id) : false; } catch { return false; } })();
+          check(!taken, "INVALID_INPUT", `技能 ${value.id} 与内置技能重名，未安装。`);
+        }
+        const ext = this.save({ id: existing?.id || null, kind: "skill", spec, source: { via: "import", url: value.origin.url, proposalId: action.id, reason: action.payload.reason } });
+        appliedIds.push(ext.id);
+      }
+      return { kind: "skill", ids: appliedIds, extensions: appliedIds.map((id) => this.row(id)) };
+    } catch (error) {
+      for (const id of appliedIds) this.restoreSkill(id);
+      throw error;
+    }
+  }
+  // Download, validate and stage a skill pack for a proposal. Network and
+  // parsing happen here so the pending payload carries exactly what was
+  // previewed — confirming an install never re-fetches anything.
+  async stageImport({ url, select }) {
+    check(typeof url === "string" && url.trim(), "INVALID_INPUT", "请提供 GitHub 仓库或 tar.gz 压缩包地址");
+    const chosen = [...new Set((Array.isArray(select) ? select : []).map((id) => string(id, "技能名", 80)))];
+    return this.importer({
+      url,
+      select: chosen,
+      skillExists: (id) => { try { return this.skillExists ? this.skillExists(id) : false; } catch { return false; } },
+      lookupExtension: (id) => this.findImported(id),
+    });
+  }
+  findImported(id) {
+    try {
+      return this.row(id);
+    } catch (error) {
+      if (error.code === "NOT_FOUND") return null;
+      throw error;
+    }
+  }
+  // Hard delete of a skill extension (row, history, files). Automations stay
+  // toggle-only: their历史 preserves what was produced while active.
+  remove(id) {
+    const ext = this.row(id);
+    check(ext.kind === "skill", "INVALID_INPUT", "规则不能删除，只能停用");
+    return sqliteTransaction(this.db, () => {
+      this.db.prepare("DELETE FROM extension_versions WHERE extension_id=?").run(ext.id);
+      this.db.prepare("DELETE FROM extensions WHERE id=?").run(ext.id);
+      this.removeSkill(ext.id);
+      this.store.audit(null, "extension.deleted", { id: ext.id, via: ext.source?.via, imported: Boolean(ext.imported) });
+      return { ok: true, id: ext.id };
+    });
   }
 }
 

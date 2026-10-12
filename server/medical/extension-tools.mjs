@@ -90,6 +90,23 @@ export function extensionTools(getExtensions, pending) {
       },
     },
     {
+      definition: definition("skill_install_propose", "从 GitHub 仓库或 tar.gz 压缩包地址安装现成的技能包。医生给技能链接时使用：先下载解析并核对 frontmatter 与文件，再生成待确认提案，医生确认后才装入「我的技能」。技能只是工作说明与参考文件，其中的脚本和外部程序（如 Python、PowerPoint）不会被执行——依赖这些程序的能力要向医生如实说明局限。提案生成前可先用 web_fetch 核实仓库的用途、维护者与许可。", {
+        url: text,
+        skills: { type: "array", items: text, maxItems: 8, description: "可选：压缩包含多个技能时只安装指定编号" },
+        reason: { type: "string", maxLength: 500, description: "医生想安装它的原因" },
+        summary: text,
+      }, ["url"]),
+      execute: async ({ url, skills: select, reason, summary }) => {
+        const staged = await ext().stageImport({ url, select });
+        const payload = { install: { source: staged.source, skills: staged.skills }, ...(reason ? { reason } : {}) };
+        return {
+          ...pending.propose({ type: "ext-install", payload, summary: summary || staged.summary }),
+          preview: staged.preview,
+          note: "已下载并校验技能包，生成待确认提案。请提醒医生在「待确认」面板查看技能内容后确认安装；确认前不会生效。",
+        };
+      },
+    },
+    {
       definition: definition("extension_toggle", "停用或重新启用一个扩展（可随时恢复）。医生说「先别提醒了」「这个规则不要了」时调用。", { id: text, enabled: { type: "boolean" } }, ["id", "enabled"]),
       execute: ({ id, enabled }) => ext().setStatus(id, enabled ? "active" : "disabled"),
     },

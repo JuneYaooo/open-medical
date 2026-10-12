@@ -26,6 +26,7 @@ const TYPES = [
   "trial-batch",
   "trial-enrollment",
   "ext-change",
+  "ext-install",
 ];
 const isCare = (type) => type.startsWith("care-");
 const isTrial = (type) => type.startsWith("trial-");
@@ -288,7 +289,7 @@ export class PendingActions {
       } else if (isExt(action.type)) {
         check(this.extensions, "EXTENSIONS_UNAVAILABLE", "扩展中心未启用", 503);
         applied = this.extensions.applyProposal(action);
-        if (applied?.kind === "skill") writtenSkill = applied.id;
+        if (applied?.kind === "skill") writtenSkill = applied.id ?? applied.ids;
       } else if (isTrial(action.type)) {
         check(this.trials, "TRIAL_UNAVAILABLE", "临床试验模块未启用", 503);
         applied = this.trials.applyProposal(action);
@@ -371,7 +372,9 @@ export class PendingActions {
       );
       return { ok: true, action: this.row(id), applied };
     }); } catch (error) {
-      if (writtenSkill) this.extensions.restoreSkill(writtenSkill);
+      // Installs return a list of ids; restore every skill file the rolled
+      // back transaction had materialized.
+      if (writtenSkill) for (const id of [].concat(writtenSkill)) this.extensions.restoreSkill(id);
       throw error;
     }
   }
