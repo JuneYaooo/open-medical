@@ -205,6 +205,24 @@ test("导入技能的停用/回退/删除与磁盘文件同步", async (t) => {
   assert.equal(existsSync(join(extensions.skillsDir, "flow")), false);
 });
 
+test("extension_remove 工具彻底删除技能;规则删除被拒绝", async (t) => {
+  const { extensions, pending } = setup(t, { fetchImpl: async () => ({ ok: true, status: 200, url: "https://codeload.github.com/o/r/tar.gz/HEAD", body: Readable.from([await tarBuffer([{ name: "d/SKILL.md", data: Buffer.from(SKILL_MD("d")) }])]) }) });
+  const tools = extensionTools(() => extensions, pending);
+  const remove = tools.find((x) => x.definition.function.name === "extension_remove");
+  const install = () => {
+    const action = pending.propose({ type: "ext-install", payload: { install: { source: { url: "https://github.com/o/d", repo: "o/d", ref: null, hash: "a".repeat(64) }, skills: [{ imported: true, id: "d", name: "d", title: "d", description: "测试。", body: "正文", files: [{ path: "SKILL.md", encoding: "utf8", content: SKILL_MD("d") }], origin: { url: "https://github.com/o/d", repo: "o/d", ref: null, hash: "a".repeat(64) } }] } }, summary: "安装技能：d" });
+    return pending.confirm(action.id);
+  };
+  install();
+  assert.equal(existsSync(join(extensions.skillsDir, "d")), true);
+  const removed = remove.execute({ id: "d" });
+  assert.equal(removed.ok, true);
+  assert.equal(existsSync(join(extensions.skillsDir, "d")), false);
+  assert.throws(() => extensions.row("d"), (error) => error.code === "NOT_FOUND");
+  extensions.save({ kind: "automation", spec: { name: "周报", trigger: { type: "weekly", weekday: 1, time: "08:00" }, action: { type: "report", title: "周报" } } });
+  assert.throws(() => remove.execute({ id: extensions.list({ kind: "automation" })[0].id }), /只能停用/);
+});
+
 test("skill_install_propose 工具下载并生成待确认提案", async (t) => {
   const { extensions, pending } = setup(t);
   const tool = extensionTools(() => extensions, pending).find((x) => x.definition.function.name === "skill_install_propose");

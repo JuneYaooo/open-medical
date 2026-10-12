@@ -107,6 +107,10 @@ export function extensionTools(getExtensions, pending) {
       },
     },
     {
+      definition: definition("extension_remove", "彻底删除一个技能：连同全部历史版本和技能文件一起清掉，不可恢复。只在医生明确说「删除/删掉」这个技能时调用；医生只是说「先别用了、停一下」时改用 extension_toggle（停用可随时恢复）。自动化规则不能删除，只能停用。", { id: text }, ["id"]),
+      execute: ({ id }) => ext().remove(id),
+    },
+    {
       definition: definition("extension_toggle", "停用或重新启用一个扩展（可随时恢复）。医生说「先别提醒了」「这个规则不要了」时调用。", { id: text, enabled: { type: "boolean" } }, ["id", "enabled"]),
       execute: ({ id, enabled }) => ext().setStatus(id, enabled ? "active" : "disabled"),
     },
