@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { check } from "../errors.mjs";
+import { check, AppError } from "../errors.mjs";
 import { createProvider } from "./providers.mjs";
 import { visionTranscriber } from "./image-text.mjs";
 import { localOcrAvailable, recognizeImage } from "./image-ocr.mjs";
 import { recognizeWindowsImage, windowsOcrAvailable } from "./windows-ocr.mjs";
+import { recognizeViaService, serviceUrl } from "./paddle-ocr.mjs";
 
 const KEY = "platform:ocr-settings:v1";
 
@@ -36,6 +37,41 @@ const flat = (text) => String(text || "").replace(/\s+/g, "");
 const hits = (text) =>
   OCR_TEST_BASELINE.filter((item) => flat(text).includes(flat(item)));
 
+// 本机识别服务（PaddleOCR / medagent-gpu-worker）：仅允许 https 或回环/内网
+// http 由部署方自担——这里沿用主模型连接的口径，http 仅回环；GPU Worker 常见
+// 经 HTTP 代理映射出公网，应使用 https 或隧道。API Key 对应 worker 的
+// WORKER_API_KEY，服务端未启用鉴权时可留空。
+function serviceCandidate(previous, body) {
+  const input = body && typeof body === "object" ? body : {};
+  const rawBase = String(input.baseUrl ?? previous?.baseUrl ?? "").trim();
+  check(rawBase.length > 0 && rawBase.length <= 500, "OCR_SETTINGS", "请填写 OCR 服务的接口地址");
+  let url;
+  try {
+    url = new URL(rawBase);
+  } catch {
+    throw new AppError("OCR_SETTINGS", "OCR 服务地址格式无效", 400);
+  }
+  check(
+    !url.username && !url.password && !url.search && !url.hash,
+    "OCR_SETTINGS",
+    "OCR 服务地址不能包含账号、密码、查询参数或片段",
+  );
+  check(
+    url.protocol === "https:" ||
+      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)),
+    "OCR_SETTINGS",
+    "OCR 服务地址需使用 HTTPS；本机服务允许回环 HTTP 地址",
+  );
+  const config = { baseUrl: serviceUrl(rawBase, "") };
+  const apiKey = input.apiKey !== undefined ? String(input.apiKey || "").trim() : previous?.apiKey || "";
+  check(apiKey.length <= 8192, "OCR_SETTINGS", "API Key 格式无效");
+  if (apiKey) config.apiKey = apiKey;
+  const timeout = Number(input.timeoutMs ?? previous?.timeoutMs ?? 60000);
+  check(Number.isInteger(timeout) && timeout >= 5000 && timeout <= 300000, "OCR_SETTINGS", "超时须为 5000–300000 毫秒");
+  config.timeoutMs = timeout;
+  return config;
+}
+
 export class OcrSettings {
   constructor(vault, profiles, fetchImpl = fetch) {
     this.vault = vault;
@@ -58,7 +94,17 @@ export class OcrSettings {
     }
   }
   localAvailable() {
-    return localOcrAvailable() || windowsOcrAvailable();
+    return Boolean(this.service()) || localOcrAvailable() || windowsOcrAvailable();
+  }
+  // 本机识别服务配置（PaddleOCR / GPU Worker）；未配置返回 null，本机识别层
+  // 退回 macOS 原生 / Windows 系统组件。
+  service() {
+    const saved = this.vault.get(KEY).service;
+    return saved && saved.baseUrl ? saved : null;
+  }
+  // 校验并返回服务配置（不落盘）——「测试本机识别」支持先测未保存的表单值。
+  candidateService(body) {
+    return serviceCandidate(null, body);
   }
   save(body = {}) {
     check(
@@ -66,14 +112,20 @@ export class OcrSettings {
       "OCR_SETTINGS",
       "需要配置对象",
     );
+    // 同一 vault 键下合并写入，避免策略与服务配置互相覆盖。
+    const next = { ...this.vault.get(KEY) };
     if (body.strategy !== undefined) {
       check(
         typeof body.strategy === "string" && OCR_STRATEGIES[body.strategy],
         "OCR_SETTINGS",
         "识别策略无效",
       );
-      this.vault.set(KEY, { strategy: body.strategy });
+      next.strategy = body.strategy;
     }
+    if (body.clearService === true) next.service = null;
+    else if (body.service !== undefined && body.service !== null)
+      next.service = serviceCandidate(this.service(), body.service);
+    this.vault.set(KEY, next);
     if (body.clearModel === true) this.profiles.remove(OCR_MODEL_PROFILE_ID);
     else if (body.model !== undefined && body.model !== null) {
       // 复用 ModelProfiles 的完整校验（地址、密钥、上下文预算）；识别模型
@@ -89,9 +141,13 @@ export class OcrSettings {
   }
   public(extra = {}) {
     const saved = this.modelConfig();
+    const service = this.service();
     return {
       strategy: this.strategy(),
       strategies: OCR_STRATEGIES,
+      service: service
+        ? { baseUrl: service.baseUrl, hasKey: Boolean(service.apiKey), timeoutMs: service.timeoutMs }
+        : null,
       model: saved
         ? {
             provider: saved.provider,
@@ -140,12 +196,37 @@ export class OcrSettings {
         : `模型已返回文字，但与基准样张匹配较少（命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项），请确认所用模型适合中文文档转录。`,
     };
   }
-  // 用同一张样张实测本机识别组件（Windows 需已安装中文文本识别）。
-  async testLocal() {
+  // 用同一张样张实测本机识别：优先实测指定/已配置的 PaddleOCR 服务（真实
+  // 网络往返），否则实测操作系统识别组件（Windows 需已安装中文文本识别）。
+  async testLocal(override = null) {
+    const service = override || this.service();
+    if (service) {
+      const bytes = this.testImage();
+      const lines = await recognizeViaService(service, bytes, AbortSignal.timeout(60000));
+      const text = lines.map((line) => line.text).join("\n");
+      check(
+        flat(text).length > 0,
+        "OCR_EMPTY",
+        "OCR 服务已连通，但未能读出样张文字，请确认服务端模型加载正常",
+        422,
+      );
+      const matched = hits(text);
+      const ok = matched.length >= 2;
+      return {
+        scope: "local",
+        engine: "paddle-service",
+        ok,
+        matched,
+        text: text.slice(0, 400),
+        message: ok
+          ? `OCR 服务可用：基准样张命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项（${lines.length} 行文字）。`
+          : `OCR 服务已返回 ${lines.length} 行文字，但与基准样张匹配较少（命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项），请确认服务端使用的是中文识别模型。`,
+      };
+    }
     check(
       this.localAvailable(),
       "OCR_UNAVAILABLE",
-      "此平台没有本机识别组件。Windows 需在系统「时间和语言→语言」中安装中文文本识别；macOS 为内置组件",
+      "此平台没有本机识别组件，也未配置 OCR 服务。可在「本机识别服务」中填入 PaddleOCR 服务地址；Windows 也可在系统「时间和语言→语言」中安装中文文本识别",
       503,
     );
     const bytes = this.testImage();
@@ -163,12 +244,13 @@ export class OcrSettings {
     const ok = matched.length >= 2;
     return {
       scope: "local",
+      engine: "system",
       ok,
       matched,
       text: text.slice(0, 400),
       message: ok
         ? `本机识别可用：基准样张命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项。本机 OCR 对小数点、单位与表格线容易出错，重要数值请保留核对原图的习惯。`
-        : `本机识别已返回文字，但与基准样张匹配较少（命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项），中文识别组件可能不完整，建议在系统设置中补装中文文本识别。`,
+        : `本机识别已返回文字，但与基准样张匹配较少（命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项），中文识别组件可能不完整，建议配置「本机识别服务」（PaddleOCR）。`,
     };
   }
   // 探测本机模型服务（Ollama / LM Studio / vLLM），返回可直接填入识别模型

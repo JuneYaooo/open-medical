@@ -1,19 +1,45 @@
 import { localOcrAvailable, recognizeImage } from "./image-ocr.mjs";
 import { recognizeWindowsImage, windowsOcrAvailable } from "./windows-ocr.mjs";
 import { check } from "../errors.mjs";
+import { recognizeViaService } from "./paddle-ocr.mjs";
 
-// 本机识别一层：macOS 原生 OCR → Windows 系统识别（Windows.Media.Ocr）。
-// 返回 { available, lines }；组件级失败（WINDOWS_OCR）折算为不可用，由调用方
-// 决定下一步，其他错误原样抛出。
+// 本机识别服务（PaddleOCR / GPU Worker）由 agent.mjs 在启动时注入，避免
+// 本模块反向依赖设置存储。返回服务配置或 null。
+let localServiceResolver = null;
+export function configureLocalOcrService(resolver) {
+  localServiceResolver = typeof resolver === "function" ? resolver : null;
+}
+export function localOcrService() {
+  try {
+    return localServiceResolver?.() || null;
+  } catch {
+    return null;
+  }
+}
+
+// 本机识别一层：PaddleOCR 服务（如已配置）→ macOS 原生 OCR → Windows 系统
+// 识别（Windows.Media.Ocr）。返回 { available, lines, engine? }；服务不可达
+// 时自动落回系统组件，组件级失败（WINDOWS_OCR）折算为不可用，由调用方决定
+// 下一步，其他错误原样抛出。
 export async function localOcrLines(bytes, signal) {
+  const service = localOcrService();
+  if (service) {
+    try {
+      const lines = await recognizeViaService(service, bytes, signal);
+      return { available: true, lines, engine: "paddle-service" };
+    } catch (error) {
+      signal?.throwIfAborted();
+      // 服务失败不阻断识别：落回系统组件，由质量评分提示核对。
+    }
+  }
   if (localOcrAvailable()) {
     const result = await recognizeImage(bytes, signal);
-    return { available: true, lines: result.lines };
+    return { available: true, lines: result.lines, engine: "system" };
   }
   if (windowsOcrAvailable()) {
     try {
       const result = await recognizeWindowsImage(bytes, signal, { scale: 2 });
-      return { available: true, lines: result.lines };
+      return { available: true, lines: result.lines, engine: "system" };
     } catch (error) {
       signal?.throwIfAborted();
       if (error?.code !== "WINDOWS_OCR") throw error;

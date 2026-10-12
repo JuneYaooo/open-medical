@@ -87,7 +87,7 @@ import { MaterialLibrary, materialSearchTools } from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 import { JevSettings } from "./core/jev-settings.mjs";
 import { OcrSettings, OCR_MODEL_PROFILE_ID } from "./core/ocr-settings.mjs";
-import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
+import { configureLocalOcrService, imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -295,6 +295,9 @@ export function createServer(options = {}) {
   };
   const ocrSettings = new OcrSettings(models.vault, knowledgeProfiles);
   const ocrStrategyResolver = () => ocrSettings.strategy();
+  // 本机识别层（image-text.localOcrLines）据此优先走 PaddleOCR 服务，
+  // 服务不可达时自动落回 macOS/Windows 系统组件。
+  configureLocalOcrService(() => ocrSettings.service());
   const knowledgeOrganizer = new KnowledgeOrganizer({
     store, library: guidelines, root: knowledgeRoot, getProvider: () => provider,
     getTranscription: () => knowledgeProfiles.all()["knowledge-transcription"],
@@ -1588,11 +1591,13 @@ export function createServer(options = {}) {
       }
       if (path === "/api/ocr-settings/test" && req.method === "POST") {
         const input = await body(req).catch(() => ({}));
-        // 带模型参数时只验证不保存（复用主配置的地址/密钥/预算校验）；
-        // 不带参数则实测已保存的专用模型。
+        // 带参数时只验证不保存（模型复用主配置校验，服务走独立校验）；
+        // 不带参数则实测已保存的配置。
         const result =
           input.scope === "local"
-            ? await ocrSettings.testLocal()
+            ? await ocrSettings.testLocal(
+                input.service ? ocrSettings.candidateService(input.service) : null,
+              )
             : await ocrSettings.testModel(
                 input.model
                   ? models.candidate({ ...input.model, vision: true })
