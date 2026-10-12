@@ -43,8 +43,8 @@ const USAGE_MIN = 5;
 const EDIT_SUGGEST = 3;
 
 export class Extensions {
-  constructor({ store, patients, schedule, skillsDir, care = () => null, sessions = null, now = Date.now, skillExists = null, importer = null }) {
-    Object.assign(this, { store, patients, schedule, skillsDir, care, sessions, now, skillExists, importer: importer || stageSkillImport });
+  constructor({ store, patients, schedule, skillsDir, care = () => null, sessions = null, now = Date.now, skillExists = null, importer = null, proxyResolver = null }) {
+    Object.assign(this, { store, patients, schedule, skillsDir, care, sessions, now, skillExists, importer: importer || stageSkillImport, proxyResolver });
     this.db = store.db;
     mkdirSync(skillsDir, { recursive: true });
     this.db.exec(`
@@ -134,18 +134,18 @@ export class Extensions {
     check(name === id, "INVALID_INPUT", "导入技能的 name 必须与编号一致");
     const description = string(spec.description, "何时使用（description）", 4000);
     const body = rawString(spec.body ?? "", "技能说明", 100000);
-    check(Array.isArray(spec.files) && spec.files.length >= 1 && spec.files.length <= 400, "INVALID_INPUT", "导入技能文件清单无效");
+    check(Array.isArray(spec.files) && spec.files.length >= 1 && spec.files.length <= 700, "INVALID_INPUT", "导入技能文件清单无效");
     let bytes = 0;
     const files = spec.files.map((file) => {
       check(file && typeof file === "object", "INVALID_INPUT", "导入技能文件无效");
       const path = string(file.path, "文件路径", 200);
       check(!path.includes("\\") && !path.startsWith("/") && !path.split("/").includes(".."), "INVALID_INPUT", "导入技能文件路径越界");
       const encoding = file.encoding === "base64" ? "base64" : "utf8";
-      const content = rawString(file.content, `文件 ${path}`, encoding === "base64" ? 1_400_000 : 1_050_000);
+      const content = rawString(file.content, `文件 ${path}`, encoding === "base64" ? 5_400_000 : 4_050_000);
       bytes += encoding === "base64" ? Math.ceil(content.length * 0.75) : content.length;
       return { path, encoding, content };
     });
-    check(bytes <= 12_000_000, "INVALID_INPUT", "导入技能总大小超过 12MB");
+    check(bytes <= 40_000_000, "INVALID_INPUT", "导入技能总大小超过 40MB");
     const url = string(spec.origin?.url || "", "来源地址", 500);
     check(/^https:\/\//.test(url), "INVALID_INPUT", "导入技能必须带有 HTTPS 来源地址");
     const origin = { url, repo: text(spec.origin?.repo, "仓库", 200), ref: text(spec.origin?.ref, "分支", 100), hash: text(spec.origin?.hash, "校验值", 80) };
@@ -558,6 +558,7 @@ export class Extensions {
       select: chosen,
       skillExists: (id) => { try { return this.skillExists ? this.skillExists(id) : false; } catch { return false; } },
       lookupExtension: (id) => this.findImported(id),
+      ...(this.proxyResolver ? { resolveProxy: this.proxyResolver } : {}),
     });
   }
   findImported(id) {

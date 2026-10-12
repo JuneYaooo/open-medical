@@ -97,7 +97,7 @@ export function ExtensionCenter({ onAsk }) {
       {skills.length ? skills.map(card) : <p className="muted">还没有自建技能。医院文书格式、写作习惯、质控必写项都可以做成技能。</p>}
       <div className="ext-install">
         <h4>从外部安装技能包</h4>
-        <p className="muted">粘贴 GitHub 仓库或 tar.gz 压缩包地址（技能须包含 SKILL.md）。安装的技能只作为 AI 的工作说明与参考文件，其中的脚本不会被执行。</p>
+        <p className="muted">粘贴 GitHub 仓库或 tar.gz 压缩包地址（技能须包含 SKILL.md）。大技能包下载可能需要几分钟，会自动走系统代理。安装的技能只作为 AI 的工作说明与参考文件，其中的脚本不会被执行。</p>
         {install ? <div className="ext-suggestion" role="status">
           <div><b>待安装（{install.staged.preview.skills.length} 个）· {install.staged.source.url}</b>
             <ul className="care-hint">{install.staged.preview.skills.map((s) => <li key={s.id}><b>{s.title}</b>（{s.id}{s.update ? `，更新第 ${s.update} 版` : ""}，{s.files} 个文件）：{s.description}</li>)}</ul>

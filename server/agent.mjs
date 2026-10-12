@@ -649,6 +649,7 @@ export function createServer(options = {}) {
     // registry is the authority on what is already installed.
     skillExists: (id) => { try { skills.get(id); return true; } catch { return false; } },
     importer: options.skillImporter,
+    proxyResolver: options.skillProxyResolver,
   });
   sessionBridge.evolution = extensions;
   const wechat = new WeChatMacBridge({

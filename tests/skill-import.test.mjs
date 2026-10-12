@@ -11,8 +11,10 @@ import { Extensions } from "../server/medical/extensions.mjs";
 import { GenericDomain } from "../server/core/domain-adapter.mjs";
 import { SkillRegistry } from "../server/core/skills.mjs";
 import { extensionTools } from "../server/medical/extension-tools.mjs";
-import { parseGitHubTarget, stageSkillImport } from "../server/medical/skill-import.mjs";
+import { parseGitHubTarget, resolveProxyFor, stageSkillImport } from "../server/medical/skill-import.mjs";
 import { fixture } from "./helpers.mjs";
+
+const noProxy = async () => null;
 
 const SKILL_MD = (name, description = "用 gpt-image-2 生成演示文稿。") =>
   `---\nname: ${name}\ntitle: ${name}\ndescription: ${description}\n---\n\n# 步骤\n\n按 styles/ 里的模板生成幻灯片。\n`;
@@ -40,7 +42,8 @@ function setup(t, { skillExists, fetchImpl } = {}) {
     schedule: {},
     skillsDir: join(dir, "my-skills"),
     skillExists: skillExists || (() => false),
-    importer: fetchImpl ? (args) => stageSkillImport({ ...args, fetchImpl }) : undefined,
+    importer: fetchImpl ? (args) => stageSkillImport({ ...args, fetchImpl, resolveProxy: noProxy }) : undefined,
+    proxyResolver: noProxy,
   });
   const pending = new PendingActions(store, { extensions: () => extensions, patients: () => null, followups: () => null, cases: () => null });
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -100,27 +103,29 @@ test("多技能包按编号选择;重名、内置冲突与坏 frontmatter 跳过
     { name: "pack/b/SKILL.md", data: Buffer.from(SKILL_MD("b")) },
     { name: "pack/README.md", data: Buffer.from("说明") },
   ]);
-  const staged = await stageSkillImport({ url, fetchImpl: fetchServing(archive) });
+  const staged = await stageSkillImport({ url, fetchImpl: fetchServing(archive), resolveProxy: noProxy });
   assert.deepEqual(staged.skills.map((s) => s.id), ["a", "b"]);
-  const onlyB = await stageSkillImport({ url, select: ["b"], fetchImpl: fetchServing(archive) });
+  const onlyB = await stageSkillImport({ url, select: ["b"], fetchImpl: fetchServing(archive), resolveProxy: noProxy });
   assert.deepEqual(onlyB.skills.map((s) => s.id), ["b"]);
   assert.deepEqual(onlyB.skipped, [{ id: "a", reason: "未选择" }]);
   await assert.rejects(
-    () => stageSkillImport({ url, select: ["zzz"], fetchImpl: fetchServing(archive) }),
+    () => stageSkillImport({ url, select: ["zzz"], fetchImpl: fetchServing(archive), resolveProxy: noProxy }),
     (error) => error.code === "INVALID_INPUT" && /没有这些技能/.test(error.message),
   );
-  const reserved = await stageSkillImport({ url, skillExists: (id) => id === "a", fetchImpl: fetchServing(archive) });
+  const reserved = await stageSkillImport({ url, skillExists: (id) => id === "a", fetchImpl: fetchServing(archive), resolveProxy: noProxy });
   assert.deepEqual(reserved.skills.map((s) => s.id), ["b"]);
   assert.deepEqual(reserved.skipped, [{ id: "a", reason: "与内置技能重名" }]);
   const authored = await stageSkillImport({
     url,
     fetchImpl: fetchServing(archive),
+    resolveProxy: noProxy,
     lookupExtension: (id) => (id === "a" ? { id: "a", kind: "skill", name: "a", version: 3 } : null),
   });
   assert.match(authored.skipped[0].reason, /重名/);
   const updatable = await stageSkillImport({
     url,
     fetchImpl: fetchServing(archive),
+    resolveProxy: noProxy,
     lookupExtension: (id) => (id === "a" ? { id: "a", kind: "skill", imported: true, name: "a", version: 3 } : null),
   });
   assert.equal(updatable.skills[0].previousVersion, 3);
@@ -131,28 +136,28 @@ test("超限文件与坏 frontmatter 被跳过;超过 8 个技能必须选择", 
   const mixed = await tarBuffer([
     { name: "ok/SKILL.md", data: Buffer.from(SKILL_MD("ok")) },
     { name: "big/SKILL.md", data: Buffer.from(SKILL_MD("big")) },
-    { name: "big/huge.bin", data: Buffer.alloc(1_100_000, 97) },
+    { name: "big/huge.bin", data: Buffer.alloc(4_100_000, 97) },
     { name: "bad/SKILL.md", data: Buffer.from("---\nname: bad\ndescription: !!js/function \"x()\"\n---\nnope") },
   ]);
-  const staged = await stageSkillImport({ url, fetchImpl: fetchServing(mixed) });
+  const staged = await stageSkillImport({ url, fetchImpl: fetchServing(mixed), resolveProxy: noProxy });
   assert.deepEqual(staged.skills.map((s) => s.id), ["ok"]);
   assert.equal(staged.skipped.length, 2);
-  assert.match(staged.skipped.find((s) => s.id === "big").reason, /1MB/);
+  assert.match(staged.skipped.find((s) => s.id === "big").reason, /4MB/);
 
   const many = Array.from({ length: 9 }, (_, i) => ({ name: `s${i}/SKILL.md`, data: Buffer.from(SKILL_MD(`s${i}`)) }));
   const packed = await tarBuffer(many);
-  await assert.rejects(() => stageSkillImport({ url, fetchImpl: fetchServing(packed) }), /最多安装/);
-  const picked = await stageSkillImport({ url, select: ["s0", "s1"], fetchImpl: fetchServing(packed) });
+  await assert.rejects(() => stageSkillImport({ url, fetchImpl: fetchServing(packed), resolveProxy: noProxy }), /最多安装/);
+  const picked = await stageSkillImport({ url, select: ["s0", "s1"], fetchImpl: fetchServing(packed), resolveProxy: noProxy });
   assert.deepEqual(picked.skills.map((s) => s.id), ["s0", "s1"]);
 });
 
 test("只接受 HTTPS 地址;404 与坏包错误可读", async (t) => {
-  await assert.rejects(() => stageSkillImport({ url: "http://github.com/o/r", fetchImpl: fetchServing(Buffer.alloc(8)) }), /GitHub 仓库链接/);
-  await assert.rejects(() => stageSkillImport({ url: "https://example.com/pack.zip", fetchImpl: fetchServing(Buffer.alloc(8)) }), /压缩包/);
+  await assert.rejects(() => stageSkillImport({ url: "http://github.com/o/r", fetchImpl: fetchServing(Buffer.alloc(8)), resolveProxy: noProxy }), /GitHub 仓库链接/);
+  await assert.rejects(() => stageSkillImport({ url: "https://example.com/pack.zip", fetchImpl: fetchServing(Buffer.alloc(8)), resolveProxy: noProxy }), /压缩包/);
   const missing = async () => ({ ok: false, status: 404, url: "x" });
-  await assert.rejects(() => stageSkillImport({ url: "https://github.com/o/missing", fetchImpl: missing }), /不存在/);
+  await assert.rejects(() => stageSkillImport({ url: "https://github.com/o/missing", fetchImpl: missing, resolveProxy: noProxy }), /不存在/);
   const garbage = await tarBuffer([{ name: "just/a/file.txt", data: Buffer.from("没有技能") }]);
-  await assert.rejects(() => stageSkillImport({ url: "https://github.com/o/empty", fetchImpl: fetchServing(garbage) }), /没有找到技能/);
+  await assert.rejects(() => stageSkillImport({ url: "https://github.com/o/empty", fetchImpl: fetchServing(garbage), resolveProxy: noProxy }), /没有找到技能/);
 });
 
 test("导入技能的停用/回退/删除与磁盘文件同步", async (t) => {
@@ -189,6 +194,7 @@ test("导入技能的停用/回退/删除与磁盘文件同步", async (t) => {
   const staged = await stageSkillImport({
     url: "https://github.com/o/flow",
     fetchImpl: fetchServing(v1),
+    resolveProxy: noProxy,
     lookupExtension: () => null,
   });
   const stale = pending.propose({ type: "ext-install", payload: { install: { source: staged.source, skills: staged.skills } }, summary: staged.summary });
@@ -227,6 +233,7 @@ test("HTTP 安装与删除路由端到端;公开形状不携带文件内容", as
   const f = await fixture(t, {
     userSkillsDir: join(dir, "my-skills"),
     skillImporter: (args) => stageSkillImport({ ...args, fetchImpl: fetchServing(archive) }),
+    skillProxyResolver: noProxy,
   });
   const boot = (await f.json("/api/bootstrap")).data;
   assert.ok(boot.tools.includes("skill_install_propose"));
@@ -256,4 +263,21 @@ test("HTTP 安装与删除路由端到端;公开形状不携带文件内容", as
 test("域提示词要求先核实再提案安装技能,而不是拒绝", () => {
   assert.match(GenericDomain.system, /skill_install_propose/);
   assert.match(GenericDomain.system, /不要因为技能来自外部仓库就直接拒绝安装请求/);
+});
+
+test("系统代理解析:环境变量优先,本机地址直连,Windows 注册表与 macOS scutil 均可读", async () => {
+  assert.equal(await resolveProxyFor("https://codeload.github.com", { env: { HTTPS_PROXY: "http://127.0.0.1:10808" }, platform: "linux" }), "http://127.0.0.1:10808");
+  assert.equal(await resolveProxyFor("https://127.0.0.1:8912/pack.tar.gz", { env: { HTTPS_PROXY: "http://127.0.0.1:10808" }, platform: "linux" }), null);
+  const registry = (stdout) => async (_command, args, done) => {
+    if (args.includes("ProxyEnable")) done(null, stdout.enable);
+    else done(null, stdout.server);
+  };
+  const on = await resolveProxyFor("https://github.com/o/r", { env: {}, platform: "win32", run: registry({ enable: "\nProxyEnable    REG_DWORD    0x1\n", server: "\nProxyServer    REG_SZ    127.0.0.1:10808\n" }) });
+  assert.equal(on, "http://127.0.0.1:10808");
+  const off = await resolveProxyFor("https://github.com/o/r", { env: {}, platform: "win32", run: registry({ enable: "\nProxyEnable    REG_DWORD    0x0\n", server: "x" }) });
+  assert.equal(off, null);
+  const perScheme = await resolveProxyFor("https://github.com/o/r", { env: {}, platform: "win32", run: registry({ enable: "ProxyEnable    REG_DWORD    0x1", server: "ProxyServer    REG_SZ    https=127.0.0.1:10809;http=127.0.0.1:10808" }) });
+  assert.equal(perScheme, "http://127.0.0.1:10809");
+  const mac = await resolveProxyFor("https://github.com/o/r", { env: {}, platform: "darwin", run: (_command, _args, done) => done(null, "<dictionary> {\n  HTTPSEnable : 1\n  HTTPSProxy : 127.0.0.1\n  HTTPSPort : 10808\n}") });
+  assert.equal(mac, "http://127.0.0.1:10808");
 });
