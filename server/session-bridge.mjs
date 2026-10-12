@@ -73,7 +73,7 @@ const resolveMode = (mode) => {
 export class SessionBridge {
   // store：旧医疗会话存储；runtime：旧医疗引擎；service：统一内核；
   // sessionsRoot：会话工作区自动目录的父目录（数据库目录下）。
-  constructor(store, runtime, service, { sessionsRoot, skills = null, doctor = null, plugins = [], contextBudget = 80000, maxRounds = 512, onMaterialIngest, onMaterialReingest } = {}) {
+  constructor(store, runtime, service, { sessionsRoot, skills = null, doctor = null, plugins = [], contextBudget = 80000, maxRounds = 512, onMaterialIngest, onMaterialReingest, ocrModel = null, ocrStrategy = null } = {}) {
     Object.assign(this, {
       store,
       runtime,
@@ -86,6 +86,10 @@ export class SessionBridge {
       maxRounds,
       onMaterialIngest,
       onMaterialReingest,
+      // OCR 设置挂钩：ocrModel() 返回专用识别模型 provider 或 null；
+      // ocrStrategy() 返回 auto|model|local（见 core/ocr-settings.mjs）。
+      ocrModel,
+      ocrStrategy,
     });
   }
 
@@ -147,7 +151,12 @@ export class SessionBridge {
             origins: [],
             terminal: true,
             image,
-            browser: false,
+            // configure 会按 browser/mcp/terminalNetwork 重算 network 并覆写
+            // browser.read；这里必须沿用 create 的默认放开值（联网读取对所有
+            // 工作区默认可用），传 false 会把新会话的 web_search/web_fetch
+            // 静默掐断。交互式浏览器本来要求显式配置来源（空 origins 时
+            // browser_open 直接 412），放开 browser.read 不绕过来源授权。
+            browser: true,
             plugins: false,
             mcp: false,
             memoryRead: false,
@@ -340,14 +349,34 @@ export class SessionBridge {
     // 纯文本/表格材料没有可识别页：无需 OCR，原样返回。
     if (!images.length) return file;
     if (!force && file.extraction?.ocr?.status === "ready") return file;
-    // 回退链:macOS 本地 OCR → Windows 本地 OCR → 当前配置的视觉模型(若支持图片)。
-    const analyzeImage = visionTranscriber(this.service.provider);
+    // 识别引擎选择（策略来自 OCR 设置，见 core/ocr-settings.mjs）：
+    //   auto  本机 OCR → 专用识别模型或主模型视觉转录，质量差自动升级
+    //   model 识别模型先行，失败回本机 OCR
+    //   local 仅本机 OCR，图片字节不发往任何模型
+    // 医生手动「重新识别」（preferVision）视为明确同意用模型，越过策略开关。
+    const strategy = preferVision ? "model" : this.ocrStrategy?.() || "auto";
+    const mainProvider = this.service.provider;
+    const visionProvider =
+      this.ocrModel?.() || (mainProvider?.vision === true ? mainProvider : null);
+    const analyzeImage = visionTranscriber(visionProvider);
     if (preferVision) {
       check(typeof analyzeImage === "function", "OCR_UNAVAILABLE",
-        "当前模型不支持图片读取。请在模型设置中切换为多模态（视觉）模型后重试", 503);
+        "当前没有可用的多模态（视觉）模型。请在模型设置中勾选「此模型支持图片」，或在文字识别（OCR）设置中配置专用识别模型", 503);
     }
     const transcribe = async (data) => {
-      if (preferVision) return { kind: "vision", text: await analyzeImage(data, signal) };
+      if (strategy === "local")
+        return imageTextWithFallback(data, signal, null, { strategy: "local" });
+      if (strategy === "model") {
+        if (typeof analyzeImage === "function") {
+          try {
+            return { kind: "vision", text: await analyzeImage(data, signal) };
+          } catch (error) {
+            signal?.throwIfAborted();
+            // 识别模型失败：落到本机识别，不再重复请求模型。
+          }
+        }
+        return imageTextWithFallback(data, signal, analyzeImage, { strategy: "model", modelFailed: true });
+      }
       return imageTextWithFallback(data, signal, analyzeImage);
     };
     const pages = [];
@@ -357,10 +386,10 @@ export class SessionBridge {
       signal?.throwIfAborted();
       const original = this.service.artifacts.read(id, image.artifactId);
       let result = await transcribe(original.data);
-      // 本地 OCR 质量过差且视觉模型可用时自动升级重转录，避免垃圾文本流入病历。
+      // 本地 OCR 质量过差且识别模型可用时自动升级重转录，避免垃圾文本流入病历。
       // 干净的模板页（标签重复但常用字规整，如系统导出的无数值清单）升级也读不出
-      // 原文没有的数值，跳过以省去无效的视觉调用。
-      if (result.kind !== "vision" && typeof analyzeImage === "function") {
+      // 原文没有的数值，跳过以省去无效的视觉调用。「仅本机」策略绝不外发。
+      if (strategy !== "local" && result.kind !== "vision" && typeof analyzeImage === "function") {
         const quality = assessOcrQuality(result.text);
         const templateLike =
           (quality.signals.dedupRatio ?? 0) > 0.15 &&
@@ -425,7 +454,7 @@ export class SessionBridge {
       prepared = target;
     });
     this.reingestMaterial(prepared);
-    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind, quality: quality.level, upgraded });
+    this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind, quality: quality.level, upgraded, strategy });
     return prepared;
   }
   // 材料文本变化后同步检索索引，否则助手检索到的仍是旧识别文本。

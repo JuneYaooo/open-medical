@@ -57,7 +57,7 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
     try {
       const outcome = await api(`/api/sessions/${sessionId}/files/${file.id}/prepare`, 'POST', { force: true, preferVision: true, refreshRecord: true });
       if (outcome.refreshError) onError?.(`重新识别完成，但发起病历重新整理失败：${outcome.refreshError}`);
-      else if (outcome.refresh) onChanged?.(`已用视觉模型重新识别「${file.name}」，正在按新文本重新整理病历，完成后可在工作区查看提案。`);
+      else if (outcome.refresh) onChanged?.(`已用识别模型重新识别「${file.name}」，正在按新文本重新整理病历，完成后可在工作区查看提案。`);
       else onChanged?.();
     } catch (error) { onError?.(error.message); }
     finally { setBusy(false); }
@@ -139,8 +139,8 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
     </details>}
     {canReprepare && visionSupported !== null && <div className="ocr-actions">
       {visionSupported
-        ? <button className="secondary" disabled={busy} onClick={reprepare}>视觉模型重新识别并整理</button>
-        : <small className="muted">当前模型不支持图片识别；要在模型设置中更换多模态模型后重新识别。</small>}
+        ? <button className="secondary" disabled={busy} onClick={reprepare}>用识别模型重新识别并整理</button>
+        : <small className="muted">暂无可用的图片识别模型；可在模型设置中勾选「此模型支持图片」，或在「文字识别（OCR）」中配置专用识别模型后重新识别。</small>}
       {!editing && <button className="text-button" disabled={busy} onClick={() => { setDraftText(file.text || ''); setEditing(true); }}>修正文字</button>}
     </div>}
     {zoom && <div className="ocr-lightbox" role="dialog" aria-label={`查看 ${zoom.name} 原图`} onClick={() => { setZoom(null); setZoomScale(1); }}

@@ -8,7 +8,6 @@ import { KnowledgeOrganizer } from "./medical/knowledge-organizer.mjs";
 import { ModelProfiles } from "./core/model-profiles.mjs";
 import { createReadStream } from "node:fs";
 import {TrialEligibilityJobs} from './medical/trial-eligibility-jobs.mjs';
-import { recognizeImage } from "./core/image-ocr.mjs";
 import { TrialRegistry } from "./medical/trial-registry.mjs";
 import { TrialScreening } from "./medical/trial-screening.mjs";
 import { TrialCandidates } from "./medical/trial-candidates.mjs";
@@ -87,6 +86,8 @@ import { LanceVectorStore } from "./medical/vector-store.mjs";
 import { MaterialLibrary, materialSearchTools } from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 import { JevSettings } from "./core/jev-settings.mjs";
+import { OcrSettings, OCR_MODEL_PROFILE_ID } from "./core/ocr-settings.mjs";
+import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -282,9 +283,23 @@ export function createServer(options = {}) {
     options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
   const knowledgeRoot = databasePath === ":memory:" ? mkdtempSync(join(tmpdir(), "omw-knowledge-")) : join(dirname(databasePath), "knowledge-uploads");
   const knowledgeProfiles = new ModelProfiles(models);
+  // OCR 设置：识别策略 + 可选专用识别模型（存团队模型配置 ocr-vision 条目，
+  // 支持本机 Ollama/LM Studio 视觉模型）。材料建档、知识库导入、inspect_image
+  // 统一经这两个访问器取引擎。
+  const ocrModelResolver = () => {
+    try {
+      return knowledgeProfiles.resolve(OCR_MODEL_PROFILE_ID);
+    } catch {
+      return null;
+    }
+  };
+  const ocrSettings = new OcrSettings(models.vault, knowledgeProfiles);
+  const ocrStrategyResolver = () => ocrSettings.strategy();
   const knowledgeOrganizer = new KnowledgeOrganizer({
     store, library: guidelines, root: knowledgeRoot, getProvider: () => provider,
     getTranscription: () => knowledgeProfiles.all()["knowledge-transcription"],
+    getOcrModel: ocrModelResolver,
+    getOcrStrategy: ocrStrategyResolver,
     ...options.knowledgeOrganizerOptions,
   });
   guidelines.beforeRemoveCollection = name => knowledgeOrganizer.assertRemovable(name);
@@ -468,6 +483,7 @@ export function createServer(options = {}) {
   });
   const workspaces = new WorkspaceService(store.db, provider, {
     jev,
+    getOcrModel: ocrModelResolver,
     domain: createMedicalWorkspaceDomain({
       trialJobs: {load:id=>trialJobs.get(id),save:(id,checks)=>trialJobs.save(id,checks)},
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
@@ -539,6 +555,8 @@ export function createServer(options = {}) {
       materials.remove(file.id).catch(() => {});
       materials.ingest(file).catch(() => {});
     },
+    ocrModel: ocrModelResolver,
+    ocrStrategy: ocrStrategyResolver,
   });
   const intakeJobs = new IntakeJobs(sessionBridge, pending);
   const agentRuntime = sessionBridge.dispatcher;
@@ -1554,6 +1572,43 @@ export function createServer(options = {}) {
           await track(models.test(models.candidate(input))),
         );
       }
+      // OCR 设置：识别策略 + 可选专用识别模型；test 用基准样张实测引擎，
+      // detect-local 探测本机 Ollama/LM Studio 等 OpenAI 兼容服务。
+      if (path === "/api/ocr-settings") {
+        const extra = () => ({
+          localAvailable: ocrSettings.localAvailable(),
+          imageCapable: Boolean(ocrModelResolver()) || provider?.vision === true,
+        });
+        if (req.method === "GET")
+          return send(res, 200, ocrSettings.public(extra()));
+        if (req.method === "PUT") {
+          ocrSettings.save(await body(req));
+          return send(res, 200, ocrSettings.public(extra()));
+        }
+      }
+      if (path === "/api/ocr-settings/test" && req.method === "POST") {
+        const input = await body(req).catch(() => ({}));
+        // 带模型参数时只验证不保存（复用主配置的地址/密钥/预算校验）；
+        // 不带参数则实测已保存的专用模型。
+        const result =
+          input.scope === "local"
+            ? await ocrSettings.testLocal()
+            : await ocrSettings.testModel(
+                input.model
+                  ? models.candidate({ ...input.model, vision: true })
+                  : ocrSettings.modelConfig(),
+              );
+        return send(res, 200, result);
+      }
+      if (path === "/api/ocr-settings/detect-local" && req.method === "POST")
+        return send(
+          res,
+          200,
+          await ocrSettings.detectLocal(
+            (await body(req).catch(() => ({}))).endpoints ||
+              options.ocrLocalEndpoints,
+          ),
+        );
       if (path === "/api/scales" && req.method === "GET")
         return send(res, 200, { scales: listScales() });
       if (
@@ -1968,9 +2023,13 @@ export function createServer(options = {}) {
         if (sub.length === 1 && sub[0] === "ocr" && req.method === "POST") {
           const input=await body(req);
           check(typeof input?.image === "string" && input.image.length>0 && input.image.length<=5400000 && /^[A-Za-z0-9+/=]+$/.test(input.image),"INVALID_INPUT","图片数据无效或超过容量");
-          const result=await recognizeImage(Buffer.from(input.image,"base64"));
-          check(result.lines?.some(line=>line.text?.trim()),"OCR_EMPTY","未识别到文字，请使用更清晰的资料",422);
-          return send(res,200,{text:result.lines.map(line=>line.text+(line.confidence<0.7?" [识别置信度低，请核对原图]":"")).join("\n"),method:"local-ocr"});
+          // 知识库页内 OCR：本机识别优先，读不出时回专用识别模型/主模型视觉
+          //（与 OCR 设置一致），不再只依赖本机组件。
+          const bytes=Buffer.from(input.image,"base64");
+          const analyzeImage=visionTranscriber(ocrModelResolver() || (providerConfigured(provider) && provider.vision === true ? provider : null));
+          const result=await imageTextWithFallback(bytes, undefined, analyzeImage);
+          check(result.text.trim(),"OCR_EMPTY","未识别到文字，请使用更清晰的资料",422);
+          return send(res,200,{text:result.text,method:result.kind === "vision" ? "vision" : "local-ocr"});
         }
         if (sub[0] === "collections") {
           if (sub.length === 2 && req.method === "DELETE") return send(res,200,await guidelines.removeCollection(decodeURIComponent(sub[1]),await body(req)));

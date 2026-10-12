@@ -153,6 +153,8 @@ export class KnowledgeOrganizer {
     root,
     getProvider,
     getTranscription,
+    getOcrModel = null,
+    getOcrStrategy = null,
     extract = extractDocument,
     media = nativeJson,
     transcribeImpl = transcribe,
@@ -165,6 +167,8 @@ export class KnowledgeOrganizer {
       root,
       getProvider,
       getTranscription,
+      getOcrModel,
+      getOcrStrategy,
       extract,
       media,
       transcribeImpl,
@@ -565,12 +569,16 @@ export class KnowledgeOrganizer {
         }
         job.parts.sort((a, b) => (a.start || 0) - (b.start || 0));
       } else {
-        // 图片资料回退链的最后一级:本机 OCR 都不可用时,用当前配置的视觉模型转录文字。
-        const analyzeImage = visionTranscriber(
-          providerConfigured(this.getProvider()) ? this.getProvider() : null,
-        );
+        // 图片资料的模型层：OCR 设置里的专用识别模型优先，未配置时用当前
+        // 主模型（若支持图片）；策略（含「仅本机」）由 OCR 设置决定。
+        const mainProvider = this.getProvider();
+        const ocrProvider =
+          this.getOcrModel?.() ||
+          (providerConfigured(mainProvider) ? mainProvider : null);
+        const analyzeImage = visionTranscriber(ocrProvider);
         job.parts = await this.extract(job.sourcePath, job.fileName, signal, {
           analyzeImage,
+          ocrStrategy: this.getOcrStrategy?.() || "auto",
         });
       }
       check(

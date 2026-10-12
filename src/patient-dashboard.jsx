@@ -47,7 +47,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   const libraryGroups = useMemo(()=>groupMaterials(files),[files]);
   const visitsSorted=[...visits].sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')));
   const status={active:'正在使用',stopped:'已停用',unknown:'状态待核对'};
-  useEffect(() => { api('/api/model-settings').then(s => setVisionSupported(s.vision === true)).catch(() => {}); }, []);
+  useEffect(() => { api('/api/ocr-settings').then(s => setVisionSupported(s.imageCapable === true)).catch(() => {}); }, []);
   const loadMonitors = () => {
     api(`/api/patients/${patient.id}/lab-monitors`).then(s => setMonitors(s.monitors || [])).catch(() => {});
     api(`/api/risk-alerts?patientId=${patient.id}`).then(s => {
@@ -170,7 +170,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
         <p><b>{poorFiles.length ? `${poorFiles.length} 份资料识别质量较低` : `${reviewFiles.length} 份资料识别待核对`}</b>：识别文字可能有缺字、错字或漏掉数值，会影响病历整理的准确性。建议对照原图核对，或用视觉模型重新识别。</p>
         <p className="muted">涉及：{reviewFiles.map(x => x.file.name).join('、')}</p>
         {visionSupported && !!poorFiles.length && <button className="secondary" disabled={!!ocrBulk} onClick={repreparePoor}>重新识别这 {poorFiles.length} 份并整理病历</button>}
-        {!visionSupported && <small className="muted">当前模型不支持图片识别；在模型设置中更换为多模态（视觉）模型后可重新识别。</small>}
+        {!visionSupported && <small className="muted">暂无可用的图片识别模型；可在模型设置中勾选「此模型支持图片」，或在「文字识别（OCR）」中配置专用识别模型。</small>}
       </div>}
       {ocrBulk && <p role="status">{ocrBulk}</p>}
       {ocrNotice && <p role="status">{ocrNotice}</p>}

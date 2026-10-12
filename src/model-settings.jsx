@@ -2,6 +2,7 @@ import { ModelBudgetFields } from './model-budget-fields';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './agent-runtime';
 import { JevSettings } from './jev-settings';
+import { OcrSettingsSection } from './ocr-settings';
 import { MODEL_PRESETS, presetById, presetFor } from '../shared/model-presets.mjs';
 const CUSTOM_MODEL = '__custom__';
 export function ModelSettings({ onClose, onSaved }) {
@@ -37,7 +38,7 @@ export function ModelSettings({ onClose, onSaved }) {
           {preset.models.length > 0 && <label>模型<select value={customModel ? CUSTOM_MODEL : form.model} onChange={(e) => update({ model: e.target.value === CUSTOM_MODEL ? '' : e.target.value, contextWindow: null })}>{preset.models.map((m) => <option value={m} key={m}>{m}</option>)}<option value={CUSTOM_MODEL}>自定义…</option></select></label>}
           {customModel && <label>模型 ID<input required value={form.model} onChange={(e) => update({ model:e.target.value, contextWindow:null })} placeholder="填写服务商提供的模型 ID" /></label>}
           <label>API Key <span>{form.hasKey ? '已保存 · 留空保留现有密钥' : form.provider === 'local' ? '本地服务可不填写' : '必填'}{preset.keyUrl && <> · <a href={preset.keyUrl} target="_blank" rel="noreferrer">获取 Key</a></>}</span><input type="password" autoComplete="new-password" value={form.apiKey} onChange={(e) => update({ apiKey:e.target.value })} placeholder={form.hasKey ? '••••••••（已保存）' : '粘贴 API Key'} required={!form.hasKey && form.provider !== 'local'} /></label>
-          <label className="model-check"><input type="checkbox" checked={form.vision === true} onChange={(e) => update({ vision: e.target.checked })}/>此模型支持图片（多模态/视觉）——勾选后，上传的图片资料会直接交给它读取，不再仅依赖本机 OCR</label>
+          <label className="model-check"><input type="checkbox" checked={form.vision === true} onChange={(e) => update({ vision: e.target.checked })}/>此模型支持图片（多模态/视觉）——勾选后，上传的图片资料会直接交给它读取；也可在下方「文字识别（OCR）」中配置专用识别模型</label>
           <details className="model-advanced" open={preset.id === 'custom' || undefined}><summary>高级选项</summary>
             <label>接口地址<input type="url" required value={form.baseUrl} onChange={(e) => update({ baseUrl:e.target.value, contextWindow:null, apiKey:'', hasKey:false })} placeholder="https://your-provider.example/v1" /></label>
             <ModelBudgetFields form={form} onChange={update} />
@@ -50,6 +51,7 @@ export function ModelSettings({ onClose, onSaved }) {
       {checks && <ul className="model-checks" aria-label="能力检测结果">{checks.map((c) => <li key={c.id} className={c.ok ? 'ok' : 'failed'}><span aria-hidden="true">{c.ok ? '✓' : '✗'}</span><strong>{{ text: '文本回复', tools: '工具调用', json: 'JSON 输出' }[c.id] || c.id}</strong><em>{c.message} · {(c.durationMs / 1000).toFixed(1)} 秒</em></li>)}</ul>}
       {busy && <p role="status">正在处理，请稍候…</p>}{error && <p role="alert" className="model-settings-error">{error}{!form && <button type="button" onClick={() => { setError(''); api('/api/model-settings').then(load).catch(e => setError(e.message)); }}>重新读取配置</button>}</p>}{status && <p role="status" className="model-settings-success">{status}</p>}
       <details className="model-jev-section"><summary>其他连接 · Jev</summary><JevSettings /></details>
+      <details className="model-jev-section"><summary>文字识别（OCR）</summary><OcrSettingsSection /></details>
     </section></div>
   </dialog>;
 }

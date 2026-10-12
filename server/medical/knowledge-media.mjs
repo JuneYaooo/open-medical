@@ -152,9 +152,11 @@ export async function extractDocument(path, name, signal, options = {}) {
         kind: "text",
       },
     ];
-  // 图片文字读取走共享回退链(见 core/image-text.mjs)。
+  // 图片文字读取走共享回退链(见 core/image-text.mjs)，策略由 OCR 设置驱动。
   if ([".jpg", ".jpeg", ".png", ".webp"].includes(ext)) {
-    const result = await imageTextWithFallback(bytes, signal, options.analyzeImage);
+    const result = await imageTextWithFallback(bytes, signal, options.analyzeImage, {
+      strategy: options.ocrStrategy || "auto",
+    });
     return [{ text: result.text, kind: result.kind }];
   }
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
