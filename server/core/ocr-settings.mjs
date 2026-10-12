@@ -73,10 +73,9 @@ function serviceCandidate(previous, body) {
 }
 
 export class OcrSettings {
-  constructor(vault, profiles, fetchImpl = fetch) {
+  constructor(vault, profiles) {
     this.vault = vault;
     this.profiles = profiles;
-    this.fetch = fetchImpl;
   }
   strategy() {
     const saved = this.vault.get(KEY).strategy;
@@ -252,65 +251,5 @@ export class OcrSettings {
         ? `本机识别可用：基准样张命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项。本机 OCR 对小数点、单位与表格线容易出错，重要数值请保留核对原图的习惯。`
         : `本机识别已返回文字，但与基准样张匹配较少（命中 ${matched.length}/${OCR_TEST_BASELINE.length} 项），中文识别组件可能不完整，建议配置「本机识别服务」（PaddleOCR）。`,
     };
-  }
-  // 探测本机模型服务（Ollama / LM Studio / vLLM），返回可直接填入识别模型
-  // 表单的 OpenAI 兼容地址与模型列表——“本机安装 OCR 专用模型”的入口。
-  async detectLocal(endpoints) {
-    const list = (Array.isArray(endpoints) && endpoints.length
-      ? endpoints
-      : ["http://127.0.0.1:11434", "http://127.0.0.1:1234"]
-    )
-      .map((item) => String(item || "").trim().replace(/\/+$/, ""))
-      .filter((item) =>
-        /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(item),
-      );
-    const sources = [];
-    for (const base of list) {
-      const found = await this.probeLocalBase(base);
-      if (found) sources.push(found);
-    }
-    return {
-      ok: sources.length > 0,
-      sources,
-      message: sources.length
-        ? `检测到本机模型服务：${sources.map((s) => `${s.source}（${s.models.length} 个模型）`).join("、")}。选择视觉类模型（名称含 vl/vision 的优先）填入即可。`
-        : "未检测到本机模型服务。可安装 Ollama 后拉取视觉模型（如 qwen2.5vl），装好再点「检测本机模型」。",
-    };
-  }
-  async probeLocalBase(base) {
-    // Ollama：GET /api/tags → { models: [{ name }] }，对话接口在 base + /v1。
-    try {
-      const r = await this.fetch(base + "/api/tags", {
-        signal: AbortSignal.timeout(1500),
-      });
-      if (r.ok) {
-        const data = await r.json();
-        const models = (data.models || [])
-          .map((m) => m.name)
-          .filter(Boolean)
-          .slice(0, 30);
-        if (models.length) return { source: "ollama", baseUrl: base + "/v1", models };
-      }
-    } catch {}
-    // OpenAI 兼容（LM Studio / vLLM）：GET /v1/models → { data: [{ id }] }。
-    for (const [modelsUrl, chatUrl] of [
-      [base + "/v1/models", base + "/v1"],
-      [base + "/models", base],
-    ]) {
-      try {
-        const r = await this.fetch(modelsUrl, {
-          signal: AbortSignal.timeout(1500),
-        });
-        if (!r.ok) continue;
-        const data = await r.json();
-        const models = (data.data || [])
-          .map((m) => m.id)
-          .filter(Boolean)
-          .slice(0, 30);
-        if (models.length)
-          return { source: "openai-compatible", baseUrl: chatUrl, models };
-      } catch {}
-    }
-    return null;
   }
 }

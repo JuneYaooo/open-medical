@@ -203,27 +203,6 @@ test('OCR 测试端点用内置基准样张实测识别模型', async (t) => {
   assert.match(missing.data.error, /识别模型/);
 });
 
-test('检测本机模型服务：Ollama /api/tags 转成可填入的 OpenAI 兼容配置', async (t) => {
-  const server = http.createServer((req, res) => {
-    if (req.url === '/api/tags') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ models: [{ name: 'qwen2.5vl:7b' }, { name: 'llama3:8b' }] }));
-      return;
-    }
-    res.writeHead(404);
-    res.end();
-  });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const f = await fixture(t, { ocrLocalEndpoints: [base] });
-  const detected = (await f.json('/api/ocr-settings/detect-local', 'POST', {})).data;
-  assert.equal(detected.ok, true);
-  assert.equal(detected.sources[0].source, 'ollama');
-  assert.equal(detected.sources[0].baseUrl, `${base}/v1`);
-  assert.ok(detected.sources[0].models.includes('qwen2.5vl:7b'));
-});
-
 test('inspect_image 在纯文本主模型下改由专用识别模型读图', async (t) => {
   const up = await upstream(t);
   const f = await fixture(t);

@@ -4,6 +4,13 @@ import { MODEL_PRESETS, presetById, presetFor } from '../shared/model-presets.mj
 
 const NONE = '__none__';
 const CUSTOM_MODEL = '__custom__';
+// OCR 难例兜底模型走云端视觉服务即可；本机识别由 PaddleOCR 服务承担，
+// 不在本面板提供 Ollama 预设（主模型设置里的本地模型不受影响）。
+const OCR_MODEL_PRESETS = MODEL_PRESETS.filter(p => p.id !== 'ollama');
+const presetIdFor = (provider, baseUrl) => {
+  const id = presetFor(provider, baseUrl).id;
+  return id === 'ollama' ? CUSTOM_MODEL : id;
+};
 
 // 文字识别（OCR）设置：识别策略 + 本机识别服务（PaddleOCR）+ 可选专用识别
 // 模型。挂在模型设置对话框里（见 model-settings.jsx），与 Jev 设置同一布局
@@ -20,7 +27,6 @@ export function OcrSettingsSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [detected, setDetected] = useState(null);
   useEffect(() => {
     let alive = true;
     api('/api/ocr-settings').then(d => {
@@ -29,7 +35,7 @@ export function OcrSettingsSection() {
       setStrategy(d.strategy || 'auto');
       if (d.service) setServiceForm({ baseUrl: d.service.baseUrl, apiKey: '' });
       if (d.model) {
-        setPreset(presetFor(d.model.provider, d.model.baseUrl).id);
+        setPreset(presetIdFor(d.model.provider, d.model.baseUrl));
         setForm({ model: d.model.model, baseUrl: d.model.baseUrl, apiKey: '' });
       }
     }).catch(e => { if (alive) setError(e.message); });
@@ -46,7 +52,7 @@ export function OcrSettingsSection() {
     const target = presetById(id);
     setPreset(id);
     setModelDirty(true);
-    setError(''); setStatus(''); setDetected(null);
+    setError(''); setStatus('');
     setForm(f => ({ ...f, model: target.models[0] || '', baseUrl: target.baseUrl, apiKey: '' }));
   }
   function modelPayload() {
@@ -79,7 +85,7 @@ export function OcrSettingsSection() {
       setServiceForm(saved.service ? { baseUrl: saved.service.baseUrl, apiKey: '' } : { baseUrl: '', apiKey: '' });
       setModelDirty(false);
       if (saved.model) {
-        setPreset(presetFor(saved.model.provider, saved.model.baseUrl).id);
+        setPreset(presetIdFor(saved.model.provider, saved.model.baseUrl));
         setForm({ model: saved.model.model, baseUrl: saved.model.baseUrl, apiKey: '' });
       }
       setStatus(`已保存（本机服务：${saved.service ? '已配置' : '未配置'}；识别模型：${saved.model ? saved.model.model : '未配置'}）。新上传的图片资料立即按此配置识别，无需重启。`);
@@ -95,25 +101,8 @@ export function OcrSettingsSection() {
       setStatus(`${result.message}${result.matched?.length ? ` 命中：${result.matched.join('、')}。` : ''}`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
-  async function detect() {
-    setBusy(true); setError(''); setStatus('');
-    try {
-      const result = await api('/api/ocr-settings/detect-local', 'POST', {});
-      setDetected(result);
-      setStatus(result.message);
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-  function fillFromDetected(value) {
-    const source = detected?.sources?.find(s => s.models.includes(value));
-    if (!source) return;
-    setPreset(source.source === 'ollama' ? 'ollama' : 'custom');
-    setForm(f => ({ ...f, model: value, baseUrl: source.baseUrl, apiKey: '' }));
-    setModelDirty(true);
-    setStatus(`已填入本机模型 ${value}，保存后生效。`);
-  }
   const spec = preset === NONE ? null : presetById(preset);
   const customModel = spec && spec.models.length > 0 && !spec.models.includes(form.model);
-  const detectedModels = detected?.sources?.flatMap(s => s.models.map(m => ({ model: m, inForm: Boolean(spec && s.baseUrl === form.baseUrl) }))) || [];
   return <details className="model-jev-section">
     <summary>文字识别（OCR）</summary>
     <p>扫描件、拍照资料读文字的引擎与顺序：本机识别（PaddleOCR 服务或系统组件）优先，质量差时自动改用识别模型重试；「仅本机」策略下图片不会发给任何大模型。微信聊天窗口的读取始终用系统本机识别，不受这里影响。</p>
@@ -139,10 +128,10 @@ export function OcrSettingsSection() {
         </fieldset>
         <fieldset>
           <legend>专用识别模型（可选，难例兜底）</legend>
-          <p>盖章、手写、复杂表格等 PaddleOCR 读不好的页面，质量差时会自动升级到这个视觉模型重转录；「模型优先」策略则直接用它。可以是云端视觉模型，也可以是本机 Ollama 视觉模型（<code>ollama pull qwen2.5vl:7b</code> 后点「检测本机模型」）。不配置时沿用主模型（需勾选支持图片）。</p>
+          <p>盖章、手写、复杂表格等本机识别读不好的页面，质量差时会自动升级到这个视觉模型重转录；「模型优先」策略则直接用它。填云端视觉模型服务商即可；不配置时沿用主模型（需勾选支持图片）。</p>
           <label>服务商<select value={preset} onChange={e => choosePreset(e.target.value)}>
             <option value={NONE}>不使用（主模型需支持图片）</option>
-            {MODEL_PRESETS.map(p => <option value={p.id} key={p.id}>{p.label}</option>)}
+            {OCR_MODEL_PRESETS.map(p => <option value={p.id} key={p.id}>{p.label}</option>)}
           </select></label>
           {spec && <>
             {spec.models.length > 0 && <label>模型<select value={customModel ? CUSTOM_MODEL : form.model} onChange={e => { setModelDirty(true); update({ model: e.target.value === CUSTOM_MODEL ? '' : e.target.value }); }}>
@@ -155,11 +144,6 @@ export function OcrSettingsSection() {
               <input type="password" autoComplete="new-password" value={form.apiKey} onChange={e => { setModelDirty(true); update({ apiKey: e.target.value }); }} placeholder={data.model?.hasKey && !modelDirty ? '••••••••（已保存）' : '粘贴 API Key'} required={!data.model?.hasKey || modelDirty ? spec.provider !== 'local' && !form.apiKey : false} />
             </label>
             <label>接口地址<input type="url" required value={form.baseUrl} onChange={e => { setModelDirty(true); update({ baseUrl: e.target.value }); }} placeholder={spec.baseUrl || 'https://your-provider.example/v1'} /></label>
-            <button type="button" onClick={detect}>检测本机模型（Ollama / LM Studio）</button>
-            {detectedModels.length > 0 && <label>本机检测到的模型<select value="" onChange={e => fillFromDetected(e.target.value)}>
-              <option value="">选择以填入…</option>
-              {detectedModels.map(item => <option value={item.model} key={item.model}>{item.model}{item.inForm ? '（当前）' : ''}</option>)}
-            </select></label>}
           </>}
         </fieldset>
         <p className="model-privacy">「测试本机识别」会用一张内置的中文检验单样张实测引擎——配置了服务时向服务发一次真实请求（可用未保存的表单值先测），未配置时离线测系统组件。「测试识别模型」向所填服务发一次极小的图片请求。密钥加密保存在本机。</p>

@@ -283,9 +283,9 @@ export function createServer(options = {}) {
     options.guidelines || new GuidelineLibrary(store, embedder, vectorStore);
   const knowledgeRoot = databasePath === ":memory:" ? mkdtempSync(join(tmpdir(), "omw-knowledge-")) : join(dirname(databasePath), "knowledge-uploads");
   const knowledgeProfiles = new ModelProfiles(models);
-  // OCR 设置：识别策略 + 可选专用识别模型（存团队模型配置 ocr-vision 条目，
-  // 支持本机 Ollama/LM Studio 视觉模型）。材料建档、知识库导入、inspect_image
-  // 统一经这两个访问器取引擎。
+  // OCR 设置：识别策略 + 本机识别服务（PaddleOCR）+ 可选难例兜底视觉模型
+  // （存团队模型配置 ocr-vision 条目，任意 OpenAI 兼容服务均可）。材料建档、
+  // 知识库导入、inspect_image 统一经这两个访问器取引擎。
   const ocrModelResolver = () => {
     try {
       return knowledgeProfiles.resolve(OCR_MODEL_PROFILE_ID);
@@ -1575,8 +1575,8 @@ export function createServer(options = {}) {
           await track(models.test(models.candidate(input))),
         );
       }
-      // OCR 设置：识别策略 + 可选专用识别模型；test 用基准样张实测引擎，
-      // detect-local 探测本机 Ollama/LM Studio 等 OpenAI 兼容服务。
+      // OCR 设置：识别策略 + 本机识别服务（PaddleOCR）+ 可选专用识别模型；
+      // test 用基准样张实测引擎，可用未保存的表单值先测。
       if (path === "/api/ocr-settings") {
         const extra = () => ({
           localAvailable: ocrSettings.localAvailable(),
@@ -1605,15 +1605,6 @@ export function createServer(options = {}) {
               );
         return send(res, 200, result);
       }
-      if (path === "/api/ocr-settings/detect-local" && req.method === "POST")
-        return send(
-          res,
-          200,
-          await ocrSettings.detectLocal(
-            (await body(req).catch(() => ({}))).endpoints ||
-              options.ocrLocalEndpoints,
-          ),
-        );
       if (path === "/api/scales" && req.method === "GET")
         return send(res, 200, { scales: listScales() });
       if (

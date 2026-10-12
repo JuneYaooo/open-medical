@@ -89,21 +89,3 @@ export async function recognizeViaService(config, bytes, signal) {
     .map((text) => ({ text: text.trim(), confidence: 1 }))
     .filter((line) => line.text);
 }
-
-// 免鉴权探活：GET /health。返回 { ok, detail? }，探测失败不抛错。
-export async function probeService(config, fetchImpl = fetch) {
-  try {
-    const response = await fetchImpl(serviceUrl(config.baseUrl, "/health"), {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return { ok: false, detail: `HTTP ${response.status}` };
-    let body = null;
-    try {
-      body = await response.json();
-    } catch {}
-    const engine = body?.paddle_version || body?.version;
-    return { ok: true, ...(engine ? { engine } : {}) };
-  } catch {
-    return { ok: false, detail: "无法连接" };
-  }
-}
