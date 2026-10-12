@@ -163,7 +163,3 @@
 .ext-versions { margin:8px 0 0; padding-left:18px; font-size:13px; }
 .ext-versions li { margin:6px 0; }
 .ext-versions small { display:block; color:var(--muted,#68786e); }
-.ext-install { margin-top:10px; }
-.ext-install h4 { margin:0 0 4px; font-size:14px; }
-.ext-install input[type="url"] { flex:1; min-width:260px; border:1px solid var(--border,#d8e1d7); border-radius:8px; padding:7px 10px; font-size:14px; }
-.ext-install .toolbar-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }

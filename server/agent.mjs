@@ -1789,12 +1789,6 @@ export function createServer(options = {}) {
         if (parts.length === 4 && parts[2] === "items" && req.method === "POST") return send(res, 200, extensions.resolveItem(parts[3], (await body(req)).status));
         if (parts.length === 4 && parts[2] === "suggestions" && req.method === "POST") return send(res, 200, extensions.resolveSuggestion(parts[3], (await body(req)).status));
         if (parts.length === 5 && parts[2] === "changes" && parts[4] === "undo" && req.method === "POST") return send(res, 200, extensions.undoChange(parts[3]));
-        if (parts.length === 3 && parts[2] === "import" && req.method === "POST") {
-          const b = await body(req);
-          const staged = await extensions.stageImport({ url: b.url, select: b.skills });
-          const action = pending.propose({ type: "ext-install", payload: { install: { source: staged.source, skills: staged.skills }, ...(b.reason ? { reason: b.reason } : {}) }, summary: staged.summary });
-          return send(res, 201, { action, staged: { source: staged.source, preview: staged.preview, skipped: staged.skipped } });
-        }
         if (parts.length === 3 && req.method === "GET") return send(res, 200, extensions.detail(parts[2]));
         if (parts.length === 3 && req.method === "DELETE") return send(res, 200, extensions.remove(parts[2]));
         if (parts.length === 3 && req.method === "PUT") { const b = await body(req); const ext = extensions.row(parts[2]); return send(res, 200, extensions.save({ id: ext.id, kind: ext.kind, spec: b.spec, source: { via: "manual" } })); }

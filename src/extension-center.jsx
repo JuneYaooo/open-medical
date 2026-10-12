@@ -10,6 +10,10 @@ export const EXAMPLES = [
   ["复诊前一天起草提醒消息", "患者复诊前一天，自动起草一条提醒消息（写明时间和事项），我核对后再发。"],
   ["每周一生成术后患者周报", "每周一早上 8 点，把标签为「术后」的患者汇总成一份周报。"],
 ];
+const SKILL_EXAMPLES = [
+  ["按医院模板自建技能", EXAMPLES[0][1]],
+  ["安装外部技能包", "帮我安装这个技能包：https://github.com/用户名/仓库。先核实仓库内容和许可，再给我预览确认。"],
+];
 const fmt = (value) => value ? new Date(value).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const SETTINGS_TAB_KEY = "omw-settings-tab";
 // Lets the agenda open settings on this section.
@@ -17,30 +21,22 @@ export function requestSettingsTab(tab) { try { sessionStorage.setItem(SETTINGS_
 export function takeSettingsTab() { try { const tab = sessionStorage.getItem(SETTINGS_TAB_KEY); sessionStorage.removeItem(SETTINGS_TAB_KEY); return tab; } catch { return null; } }
 
 // 我的工作台: the doctor's own skills and rules, what the workbench learned
-// from use, and every automatic adjustment with an undo.
-export function ExtensionCenter({ onAsk }) {
+// from use, and every automatic adjustment with an undo. Skills have their
+// own top-level settings section; this component renders both views.
+export function ExtensionCenter({ onAsk, view = "workbench" }) {
   const [data, setData] = useState(null), [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState("");
   const [open, setOpen] = useState(null);
-  const [installUrl, setInstallUrl] = useState(""), [install, setInstall] = useState(null), [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const load = useCallback(() => api("/api/extensions").then((v) => { setData(v); setError(""); }).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
   const act = async (key, fn, message) => {
     setBusy(key); setError(""); setNotice("");
     try { await fn(); if (message) setNotice(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(""); }
   };
-  // 外部技能包：先下载校验生成提案预览，医生在这里或右下角「待确认」面板确认后安装。
-  const stageInstall = () => act("install", async () => {
-    const r = await api("/api/extensions/import", "POST", { url: installUrl });
-    setInstall(r);
-  }, "");
-  const resolveInstall = (decision) => act(`install-${install.action.id}`, async () => {
-    await api(`/api/pending-actions/${install.action.id}/${decision}`, "POST", {});
-    setInstall(null);
-    setInstallUrl("");
-  }, decision === "confirm" ? `已安装 ${install.staged.preview.skills.length} 个技能，下一轮对话即可使用。` : "已取消这次安装。");
   if (!data) return error ? <p role="alert" className="form-error">{error}</p> : <p role="status">正在读取…</p>;
   const skills = data.extensions.filter((e) => e.kind === "skill"), rules = data.extensions.filter((e) => e.kind === "automation");
   const applied = data.changes.filter((c) => c.status === "applied");
+  const notices = <>{error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status" className="form-notice">{notice}</p>}</>;
 
   const card = (e) => <article key={e.id} className={`ext-card ${e.status}`} aria-label={e.name}>
     <header><b>{e.name}</b><span className={`ext-status ${e.status}`}>{e.status === "active" ? "生效中" : "已停用"}</span><small>第 {e.version} 版 · {SOURCE[e.source?.via] || "手动建立"} · {fmt(e.updatedAt)}</small></header>
@@ -63,11 +59,25 @@ export function ExtensionCenter({ onAsk }) {
     </li>)}</ol>}
   </article>;
 
+  if (view === "skills") return <section className="ext-center" aria-label="技能">
+    <h2>技能</h2>
+    <p className="muted">技能决定 AI 怎么写、怎么做：医院文书格式、写作习惯、质控必写项，或从外部安装的现成技能包。安装和自建都在对话里完成——说出要求即可自建，把 GitHub 仓库地址发给 AI 即可安装；生效前会在「待确认」面板等你核对。技能只是工作说明与参考文件，里面的脚本不会被执行。</p>
+    {notices}
+    <div className="ext-block">
+      <h3>新建或安装</h3>
+      <div className="ext-examples">{SKILL_EXAMPLES.map(([label, prompt]) => <button key={label} className="secondary" onClick={() => onAsk?.(prompt)}>{label}</button>)}</div>
+    </div>
+    <div className="ext-block">
+      <h3>我的技能 <small>{skills.length}</small></h3>
+      {skills.length ? skills.map(card) : <p className="muted">还没有技能。自建或安装第一个后，这里会列出全部技能，随时停用、删除或回退。</p>}
+    </div>
+    <p className="muted">安全规则不会被定制改变：红旗症状提醒、发给患者前的确认、知情同意和引用出处始终有效。</p>
+  </section>;
+
   return <section className="ext-center" aria-label="我的工作台">
     <h2>我的工作台</h2>
-    <p className="muted">这里是按你的习惯和医院要求长出来的能力：技能决定 AI 怎么写、怎么做；规则决定什么时候提醒你、替你准备什么。直接在对话里说出要求就能新建或修改，确认后生效，每一版都能恢复。系统也会根据你的使用情况提出建议。</p>
-    {error && <p role="alert" className="form-error">{error}</p>}
-    {notice && <p role="status" className="form-notice">{notice}</p>}
+    <p className="muted">这里是按你的习惯和医院要求长出来的能力：规则决定什么时候提醒你、替你准备什么；技能在「技能」栏目管理。直接在对话里说出要求就能新建或修改，确认后生效，每一版都能恢复。系统也会根据你的使用情况提出建议。</p>
+    {notices}
 
     {data.suggestions.length > 0 && <div className="ext-block">
       <h3><Sparkles size={16} />进化建议</h3>
@@ -92,28 +102,6 @@ export function ExtensionCenter({ onAsk }) {
       <div className="ext-examples">{EXAMPLES.map(([label, prompt]) => <button key={label} className="secondary" onClick={() => onAsk?.(prompt)}>{label}</button>)}</div>
     </div>
 
-    <div className="ext-block">
-      <h3>我的技能 <small>{skills.length}</small></h3>
-      {skills.length ? skills.map(card) : <p className="muted">还没有自建技能。医院文书格式、写作习惯、质控必写项都可以做成技能。</p>}
-      <div className="ext-install">
-        <h4>从外部安装技能包</h4>
-        <p className="muted">粘贴 GitHub 仓库或 tar.gz 压缩包地址（技能须包含 SKILL.md）。大技能包下载可能需要几分钟，会自动走系统代理。安装的技能只作为 AI 的工作说明与参考文件，其中的脚本不会被执行。</p>
-        {install ? <div className="ext-suggestion" role="status">
-          <div><b>待安装（{install.staged.preview.skills.length} 个）· {install.staged.source.url}</b>
-            <ul className="care-hint">{install.staged.preview.skills.map((s) => <li key={s.id}><b>{s.title}</b>（{s.id}{s.update ? `，更新第 ${s.update} 版` : ""}，{s.files} 个文件）：{s.description}</li>)}</ul>
-            {install.staged.skipped.length > 0 && <p className="muted">跳过：{install.staged.skipped.map((s) => `${s.id}（${s.reason}）`).join("；")}</p>}
-          </div>
-          <div className="toolbar-actions">
-            <button className="primary" disabled={Boolean(busy)} onClick={() => resolveInstall("confirm")}>{busy ? "处理中…" : "确认安装"}</button>
-            <button className="text-button" disabled={Boolean(busy)} onClick={() => resolveInstall("reject")}>取消</button>
-          </div>
-        </div>
-        : <div className="toolbar-actions">
-          <input type="url" value={installUrl} onChange={(e) => setInstallUrl(e.target.value)} placeholder="https://github.com/用户名/仓库" aria-label="技能包地址" />
-          <button className="secondary" disabled={!installUrl.trim() || Boolean(busy)} onClick={stageInstall}>{busy === "install" ? "正在下载校验…" : "获取并预览"}</button>
-        </div>}
-      </div>
-    </div>
     <div className="ext-block">
       <h3>我的规则 <small>{rules.length}</small></h3>
       {rules.length ? rules.map(card) : <p className="muted">还没有自动化规则。定时提醒、检验阈值提醒、复诊前起草消息、定期汇总都可以做成规则。</p>}

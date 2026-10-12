@@ -241,7 +241,7 @@ test("skill_install_propose 工具下载并生成待确认提案", async (t) => 
   assert.equal(existsSync(join(extensions.skillsDir, "t", "SKILL.md")), true);
 });
 
-test("HTTP 安装与删除路由端到端;公开形状不携带文件内容", async (t) => {
+test("对话工具安装提案 + HTTP 删除路由端到端;公开形状不携带文件内容", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "omw-import-http-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const archive = await tarBuffer([
@@ -256,10 +256,12 @@ test("HTTP 安装与删除路由端到端;公开形状不携带文件内容", as
   const boot = (await f.json("/api/bootstrap")).data;
   assert.ok(boot.tools.includes("skill_install_propose"));
 
-  const imported = await f.json("/api/extensions/import", "POST", { url: "https://github.com/o/pack" });
-  assert.equal(imported.status, 201);
-  assert.equal(imported.data.staged.preview.skills[0].id, "pack");
-  const confirmed = await f.json(`/api/pending-actions/${imported.data.action.id}/confirm`, "POST", {});
+  // 安装只走聊天：运行时工具生成待确认提案，医生经既有 confirm 接口采纳。
+  const install = f.server.runtime.toolPlugins.get("skill_install_propose");
+  const proposal = await install.execute({ url: "https://github.com/o/pack", reason: "医生提供了仓库地址" });
+  assert.equal(proposal.type, "ext-install");
+  assert.equal(proposal.preview.skills[0].id, "pack");
+  const confirmed = await f.json(`/api/pending-actions/${proposal.id}/confirm`, "POST", {});
   assert.equal(confirmed.status, 200);
   assert.equal(existsSync(join(dir, "my-skills", "pack", "SKILL.md")), true);
 

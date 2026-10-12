@@ -70,13 +70,14 @@ export function AppSettingsView({ config, onModel, onDoctor, onProjects, onAsk }
       <nav aria-label="设置分类">
         <button aria-pressed={section === "general"} onClick={() => setSection("general")}>模型与运行</button>
         {window.omwDesktop && <button aria-pressed={section === "desktop"} onClick={() => setSection("desktop")}>桌面应用</button>}
+        {medicalEnabled(config) && <button aria-pressed={section === "skills"} onClick={() => setSection("skills")}>技能</button>}
         {medicalEnabled(config) && <button aria-pressed={section === "workbench"} onClick={() => setSection("workbench")}>我的工作台</button>}
         {medicalEnabled(config) && <button aria-pressed={section === "followup"} onClick={() => setSection("followup")}>随访连接</button>}
         {medicalEnabled(config) && <button aria-pressed={section === "plugins"} onClick={() => setSection("plugins")}>插件</button>}
         <button aria-pressed={section === "connections"} onClick={() => setSection("connections")}>工具与连接</button>
       </nav>
       <div className="app-settings-content">
-        {window.omwDesktop && section === "desktop" ? <DesktopAppPanel desktop={window.omwDesktop} /> : section === "workbench" ? <ExtensionCenter onAsk={onAsk} /> : section === "plugins" ? <PluginCenter /> : section === "general" ? <section><h2>模型与运行</h2><p>{config?.modelConfigured ? `当前模型：${config.provider} · ${config.model}` : "尚未配置模型"}</p><div className="toolbar-actions"><button onClick={onModel}>配置模型</button>{medicalEnabled(config) && <button onClick={onDoctor}>医生档案与记忆</button>}</div></section> : section === "followup" ? <ChatConnectionSettings /> : <section>
+        {window.omwDesktop && section === "desktop" ? <DesktopAppPanel desktop={window.omwDesktop} /> : section === "skills" ? <ExtensionCenter view="skills" onAsk={onAsk} /> : section === "workbench" ? <ExtensionCenter onAsk={onAsk} /> : section === "plugins" ? <PluginCenter /> : section === "general" ? <section><h2>模型与运行</h2><p>{config?.modelConfigured ? `当前模型：${config.provider} · ${config.model}` : "尚未配置模型"}</p><div className="toolbar-actions"><button onClick={onModel}>配置模型</button>{medicalEnabled(config) && <button onClick={onDoctor}>医生档案与记忆</button>}</div></section> : section === "followup" ? <ChatConnectionSettings /> : <section>
           <h2>工具与连接</h2><p>浏览器、隔离终端、插件与 MCP 在这里配置。访问范围和授权按项目保存。</p>
           {error && <div role="alert"><p>{error}</p><button onClick={() => setReload(v => v + 1)}>重新加载设置</button></div>}
           {loading && <p role="status">正在读取项目…</p>}
