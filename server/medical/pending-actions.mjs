@@ -214,6 +214,12 @@ export class PendingActions {
       note: isCare(type) || type === "patient-grouping" ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
     };
   }
+  // ext-install 载荷内嵌整包技能文件（几十 MB）；列表每 20 秒被托盘轮询，
+  // 只回元数据，完整文件内容仅在 row(id)（确认时）读取。
+  slimPayload(type, payload) {
+    if (type !== "ext-install" || !payload?.install) return payload;
+    return { ...payload, install: { ...payload.install, skills: (payload.install.skills || []).map(({ files, body, ...meta }) => ({ ...meta, fileCount: Array.isArray(files) ? files.length : files })) } };
+  }
   list({ patientId, status = "pending", type, sourceSessionId, limit = 100, offset = 0 } = {}) {
     check(
       ["pending", "applied", "rejected", undefined].includes(status),
@@ -248,7 +254,7 @@ export class PendingActions {
         patientId: row.patient_id,
         baseRevision: row.base_revision,
         status: row.status,
-        payload: JSON.parse(row.payload),
+        payload: this.slimPayload(row.type, JSON.parse(row.payload)),
         summary: row.summary,
         createdAt: row.created_at,
         updatedAt: row.updated_at,

@@ -227,7 +227,10 @@ test("skill_install_propose 工具下载并生成待确认提案", async (t) => 
   const { extensions, pending } = setup(t);
   const tool = extensionTools(() => extensions, pending).find((x) => x.definition.function.name === "skill_install_propose");
   assert.ok(tool);
-  const archive = await tarBuffer([{ name: "t/SKILL.md", data: Buffer.from(SKILL_MD("t")) }]);
+  const archive = await tarBuffer([
+    { name: "t/SKILL.md", data: Buffer.from(SKILL_MD("t")) },
+    { name: "t/assets/big.bin", data: Buffer.alloc(300_000, 7) },
+  ]);
   const savedFetch = globalThis.fetch;
   globalThis.fetch = fetchServing(archive);
   t.after(() => { globalThis.fetch = savedFetch; });
@@ -235,10 +238,21 @@ test("skill_install_propose 工具下载并生成待确认提案", async (t) => 
   assert.equal(result.type, "ext-install");
   assert.equal(result.preview.skills[0].id, "t");
   assert.match(result.note, /待确认/);
+  // 回执绝不携带载荷：工具结果一旦超过医疗插件 12 万字符上限就会整笔失败
+  //（载荷其实已入库，模型却以为没生成）。
+  assert.equal(result.payload, undefined);
+  assert.ok(JSON.stringify(result).length < 100_000, `tool receipt too large: ${JSON.stringify(result).length}`);
   // 确认前不落盘。
   assert.equal(existsSync(join(extensions.skillsDir, "t")), false);
-  pending.confirm(result.id);
+  // 列表（托盘每 20 秒轮询）只回元数据；确认路径读完整载荷。
+  const listed = pending.list({ type: "ext-install" })[0];
+  const skill = listed.payload.install.skills[0];
+  assert.equal(skill.fileCount, 2);
+  assert.equal(skill.files, undefined);
+  assert.equal(skill.body, undefined);
+  pending.confirm(listed.id);
   assert.equal(existsSync(join(extensions.skillsDir, "t", "SKILL.md")), true);
+  assert.ok(JSON.stringify(result).length < 100_000);
 });
 
 test("对话工具安装提案 + HTTP 删除路由端到端;公开形状不携带文件内容", async (t) => {

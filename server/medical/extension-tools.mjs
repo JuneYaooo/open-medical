@@ -99,8 +99,11 @@ export function extensionTools(getExtensions, pending) {
       execute: async ({ url, skills: select, reason, summary }) => {
         const staged = await ext().stageImport({ url, select });
         const payload = { install: { source: staged.source, skills: staged.skills }, ...(reason ? { reason } : {}) };
+        const proposal = pending.propose({ type: "ext-install", payload, summary: summary || staged.summary });
+        // 提案载荷内嵌技能文件（可达几十 MB），绝不能回流给模型——只返回元数据。
+        const { payload: _payload, ...receipt } = proposal;
         return {
-          ...pending.propose({ type: "ext-install", payload, summary: summary || staged.summary }),
+          ...receipt,
           preview: staged.preview,
           note: "已下载并校验技能包，生成待确认提案。请提醒医生在「待确认」面板查看技能内容后确认安装；确认前不会生效。",
         };

@@ -15,7 +15,7 @@ function Preview({ action }) {
   if (action.type === "ext-change") return <><p className="care-hint">{p.id ? `修改（当前第 ${p.previousVersion} 版）` : "新建"}{p.kind === "skill" ? "技能" : "自动化规则"}：{p.summary}{p.reason ? ` · 原因：${p.reason}` : ""}</p>
     {p.preview?.samples ? <><p className="care-hint">试算：{p.preview.note} 现在会产生 {p.preview.count} 条</p>{p.preview.samples.length > 0 && <ul className="care-hint">{p.preview.samples.map((x, i) => <li key={i}>{x}</li>)}</ul>}</> : p.preview?.skill && <pre>{p.preview.skill}</pre>}</>;
   if (action.type === "ext-install") return <><p className="care-hint">来自 {p.install?.source?.url}{p.reason ? ` · 原因：${p.reason}` : ""}</p>
-    <ul className="care-hint">{(p.install?.skills || []).map((s) => <li key={s.id}><b>{s.title || s.name}</b>（{s.id}，{s.files} 个文件）：{String(s.description || "").slice(0, 160)}{s.update ? `（更新已装的技能，当前第 ${s.update} 版）` : ""}</li>)}</ul>
+    <ul className="care-hint">{(p.install?.skills || []).map((s) => <li key={s.id}><b>{s.title || s.name}</b>（{s.id}，{s.fileCount ?? s.files ?? 0} 个文件）：{String(s.description || "").slice(0, 160)}{s.update ? `（更新已装的技能，当前第 ${s.update} 版）` : ""}</li>)}</ul>
     {(p.preview?.stale || []).length > 0 && <p className="care-hint">注意：{p.preview.stale.join("、")}在提案生成后有变化，确认时会要求重新生成。</p>}
     <p className="care-hint">技能装入后只作为 AI 的工作说明与参考资料，其中的脚本和外部程序不会被执行。</p></>;
   if (action.type === "trial-batch") return <p className="care-hint">「{p.trialTitle}」· 确认后把以下 {p.patientIds?.length} 位患者的病历交给当前模型逐条核对纳排条件：{(p.patientNames || []).join("、")}</p>;

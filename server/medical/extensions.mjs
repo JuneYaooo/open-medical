@@ -490,6 +490,8 @@ export class Extensions {
       check(install.source && typeof install.source.url === "string" && Array.isArray(install.skills) && install.skills.length >= 1,
         "INVALID_INPUT", "安装提案缺少来源或技能清单");
       check(install.skills.length <= 8, "INVALID_INPUT", "一次最多安装 8 个技能");
+      const totalBytes = install.skills.reduce((n, s) => n + (s.files || []).reduce((m, f) => m + (f.encoding === "base64" ? Math.ceil((f.content || "").length * 0.75) : (f.content || "").length), 0), 0);
+      check(totalBytes <= 48_000_000, "INVALID_INPUT", `技能包总量 ${Math.round(totalBytes / 1_000_000)}MB 超过 48MB 单次安装上限，请分批或精选安装`);
       const values = install.skills.map((spec) => this.normalize("skill", spec));
       const conflicts = values.filter((value) => {
         const existing = this.findImported(value.id);
