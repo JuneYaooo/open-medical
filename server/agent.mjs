@@ -487,6 +487,7 @@ export function createServer(options = {}) {
   const workspaces = new WorkspaceService(store.db, provider, {
     jev,
     getOcrModel: ocrModelResolver,
+    imageShrink: options.imageShrink || null,
     domain: createMedicalWorkspaceDomain({
       trialJobs: {load:id=>trialJobs.get(id),save:(id,checks)=>trialJobs.save(id,checks)},
       saveIntakeNotes: (id, runId, notes) => workspaces.store.update(id, w => { w.runs.find(run => run.id === runId).intakeNotes = notes; }),
