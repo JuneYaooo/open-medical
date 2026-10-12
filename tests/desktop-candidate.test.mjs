@@ -88,3 +88,11 @@ fs.writeFileSync(path.join(process.env.MEDICAL_DESKTOP_TEST_DIR,'desktop-report.
   assert.notEqual(observed.home, process.env.HOME);
   await assert.rejects(readFile(join(observed.home, 'desktop-report.json')), { code: 'ENOENT' });
 });
+test('inventory 相对候选根剥前缀：随包 .env.example 白名单生效，嵌套 .env 仍禁运', async (t) => {
+  const { directory, app } = await candidate(t);
+  await writeFile(join(app, '.env.example'), 'MEDICAL_DATABASE=');
+  const files = await inventory(directory);
+  assert.ok(files.some((file) => file.path === 'resources/app/.env.example'), '打包内 .env.example 不再误判禁运');
+  await writeFile(join(app, 'server/.env'), 'SECRET=1');
+  await assert.rejects(inventory(directory), /Prohibited packaged path: resources\/app\/server\/\.env/);
+});

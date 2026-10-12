@@ -58,7 +58,10 @@ export async function inventory(root, { source = false, entries, exclude = [] } 
     const name = normalize(relative(root, path));
     if (exclude.includes(name)) return;
     if (source && (name === 'server/data' || name.startsWith('server/data/'))) return;
-    const relativeApp = name.includes('/Resources/app/') ? name.split('/Resources/app/')[1] : name.includes('/resources/app/') ? name.split('/resources/app/')[1] : name;
+    // 剥出 app 目录内的相对路径再判禁运：name 相对候选根、无前导斜杠，
+    // includes('/resources/app/') 对顶层 resources/app/… 永远不命中，导致
+    // 白名单里的 .env.example（sourceEntries 刻意随包携带）被误判禁运。
+    const relativeApp = name.includes('/Resources/app/') ? name.split('/Resources/app/')[1] : name.includes('/resources/app/') ? name.split('/resources/app/')[1] : name.replace(/^resources\/app\//, '');
     if (prohibited(relativeApp)) {
       if (source) return; // Do not open secrets merely to calculate source hashes.
       throw new Error(`Prohibited packaged path: ${name}`);
