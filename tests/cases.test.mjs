@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./helpers.mjs";
+import { PermissionEngine } from "../server/core/permissions.mjs";
 
 const sampleCase = (overrides = {}) => ({
   diagnosis: "2 型糖尿病合并糖尿病肾病",
@@ -115,4 +116,91 @@ test("similar_case_search agent tool registered", async (t) => {
   const boot = (await f.json("/api/bootstrap")).data;
   assert.ok(boot.tools.includes("similar_case_search"));
   assert.equal(boot.cases.cases, 0);
+});
+
+test("case curation: lessons/tags/starred, patch and featured weighting", async (t) => {
+  const f = await fixture(t);
+  const created = (await f.json("/api/cases", "POST", sampleCase({
+    lessons: "蛋白尿升高的糖尿病患者要尽早加 SGLT2 抑制剂，同时盯尿蛋白趋势",
+    tags: ["糖尿病", "SGLT2"],
+    starred: true,
+  }))).data;
+  assert.equal(created.starred, true);
+  assert.match(created.lessons, /SGLT2/);
+  assert.deepEqual(created.tags, ["糖尿病", "SGLT2"]);
+
+  const featured = (await f.json("/api/cases?starred=1")).data;
+  assert.equal(featured.count, 1);
+  assert.equal((await f.json("/api/cases")).data.count, 1);
+
+  // 精选加权：两份病例同诊断时，精选的排在前面且带可读理由。
+  await f.json("/api/cases", "POST", sampleCase({
+    summary: "另一位 2 型糖尿病患者的降糖方案调整记录",
+  }));
+  const similar = (await f.json("/api/cases/similar", "POST", {
+    caseText: "2 型糖尿病 蛋白尿 降糖方案调整",
+    diagnosis: "糖尿病",
+  })).data;
+  assert.ok(similar.count >= 2);
+  assert.equal(similar.matches[0].starred, true);
+  assert.ok(similar.matches[0].reasons.some((reason) => reason.includes("精选")));
+  assert.ok(similar.matches.some((match) => match.starred === false));
+
+  // 精选不凭空入场：与检索毫无交集的病例不因星标出现。
+  await f.json("/api/cases", "POST", sampleCase({
+    diagnosis: "社区获得性肺炎",
+    summary: "老年肺炎抗感染治疗",
+    lessons: "肺炎经验",
+    tags: ["肺炎"],
+    starred: true,
+    keyLabs: [{ item: "白细胞", value: 12.1, unit: "10^9/L", date: "2025-05-01" }],
+    treatments: ["莫西沙星"],
+  }));
+  const noOverlap = (await f.json("/api/cases/similar", "POST", {
+    caseText: "2 型糖尿病 蛋白尿 降糖方案调整",
+    diagnosis: "糖尿病",
+  })).data;
+  assert.ok(noOverlap.matches.every((match) => !/肺炎/.test(match.diagnosis)));
+
+  // PATCH：编辑经验教训与标签、取消精选。
+  const patched = (await f.json(`/api/cases/${created.id}`, "PATCH", {
+    lessons: "改成：先查尿微量白蛋白再调方案",
+    tags: ["糖尿病"],
+    starred: false,
+  })).data;
+  assert.equal(patched.starred, false);
+  assert.match(patched.lessons, /尿微量白蛋白/);
+  assert.deepEqual(patched.tags, ["糖尿病"]);
+  assert.equal((await f.json("/api/cases?starred=1")).data.count, 1);
+  assert.match((await f.json(`/api/cases/${created.id}`)).data.text, /尿微量白蛋白/);
+
+  const invalid = await f.json(`/api/cases/${created.id}`, "PATCH", { tags: "不是数组" });
+  assert.equal(invalid.status, 400);
+});
+
+test("case_save_propose carries lessons/tags into the library on confirm", async (t) => {
+  const f = await fixture(t);
+  const session = await f.session("精选案例");
+  const registry = f.server.workspaces.registry(session.id);
+  const permissions = new PermissionEngine({ profile: "standard" });
+  const patient = (await f.json("/api/patients", "POST", {
+    name: "精选提案患者",
+    diagnoses: [{ code: "I10", name: "原发性高血压" }],
+  })).data;
+  const proposal = await registry.execute("case_save_propose", {
+    patientId: patient.id,
+    summary: "难治性高血压，加用螺内酯后达标",
+    lessons: "三药达标无效时先查继发性原因，再考虑螺内酯",
+    tags: ["高血压", "螺内酯"],
+  }, {}, permissions);
+  assert.ok(proposal.id, "应生成待确认提案");
+  assert.equal((await f.json("/api/cases")).data.count, 0);
+  assert.equal((await f.json(`/api/pending-actions/${proposal.id}/confirm`, "POST", {})).status, 200);
+  const all = (await f.json("/api/cases")).data;
+  const saved = all.cases.find((item) => item.patientId === patient.id);
+  assert.ok(saved, "提案确认后病例应入库");
+  assert.match(saved.lessons, /螺内酯/);
+  assert.deepEqual(saved.tags, ["高血压", "螺内酯"]);
+  // 提案入库不自动加星：精选与否由医生在案例库里决定。
+  assert.equal(saved.starred, false);
 });

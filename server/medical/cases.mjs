@@ -19,7 +19,7 @@ export class CaseLibrary {
     check(row, "NOT_FOUND", "病例不存在", 404);
     return JSON.parse(row.data);
   }
-  list({ query, diagnosis, limit = 30 } = {}) {
+  list({ query, diagnosis, starredOnly, limit = 30 } = {}) {
     check(
       Number.isInteger(limit) && limit >= 1 && limit <= 100,
       "INVALID_INPUT",
@@ -29,6 +29,7 @@ export class CaseLibrary {
       .prepare("SELECT data FROM case_library")
       .all()
       .map((row) => JSON.parse(row.data));
+    if (starredOnly) cases = cases.filter((item) => item.starred);
     if (diagnosis)
       cases = cases.filter((item) =>
         (item.diagnosis || "").toLowerCase().includes(String(diagnosis).toLowerCase()),
@@ -55,6 +56,28 @@ export class CaseLibrary {
   get(id) {
     return this.row(id);
   }
+  // Doctor-side curation: edit the teachable parts of a saved case (lessons,
+  // tags, summary, outcome) or toggle its "featured" mark. Only these fields
+  // are patchable — the clinical snapshot itself stays point-in-time.
+  update(id, patch = {}) {
+    const record = this.row(id);
+    const next = { ...record };
+    if (patch.summary !== undefined)
+      next.summary = string(patch.summary, "病例摘要", 5000);
+    if (patch.lessons !== undefined)
+      next.lessons = string(patch.lessons, "经验教训", 2000);
+    if (patch.outcome !== undefined)
+      next.outcome = string(patch.outcome, "结局", 500);
+    if (patch.tags !== undefined)
+      next.tags = stringsList(patch.tags, "标签", 8, 30);
+    if (patch.starred !== undefined) next.starred = Boolean(patch.starred);
+    next.revision = (record.revision || 0) + 1;
+    next.text = composeText(next);
+    this.store.db
+      .prepare("UPDATE case_library SET data=? WHERE id=?")
+      .run(JSON.stringify(next), id);
+    return next;
+  }
   addCase(input = {}) {
     const diagnosis = string(input.diagnosis, "主要诊断", 200);
     const summary = input.summary ? string(input.summary, "病例摘要", 5000) : "";
@@ -70,6 +93,9 @@ export class CaseLibrary {
       keyLabs: structuredKeyLabs(input.keyLabs),
       treatments: stringsList(input.treatments, "治疗", 20, 200),
       outcome: input.outcome ? string(input.outcome, "结局", 500) : "",
+      lessons: input.lessons ? string(input.lessons, "经验教训", 2000) : "",
+      tags: stringsList(input.tags, "标签", 8, 30),
+      starred: Boolean(input.starred),
       summary,
       createdAt: Date.now(),
       revision: 0,
@@ -82,7 +108,7 @@ export class CaseLibrary {
   }
   // Build a case from the patient's structured record. The snapshot keeps a
   // point-in-time copy; identity stays limited to a display name.
-  fromPatient(patient, { summary, outcome } = {}) {
+  fromPatient(patient, { summary, outcome, lessons, tags, starred } = {}) {
     // The case library keys similarity on the primary diagnosis, so an
     // incidental imaging finding must not outrank the confirmed disease.
     const primary = sortDiagnoses(patient.diagnoses || [])[0];
@@ -104,6 +130,9 @@ export class CaseLibrary {
       ),
       outcome: outcome || "",
       summary,
+      lessons,
+      tags,
+      starred,
     });
   }
   removeCase(id) {
@@ -160,6 +189,12 @@ export class CaseLibrary {
           score += 5;
           reasons.push(`诊断匹配：${item.diagnosis}`);
         }
+        // 精选案例只在已有临床信号时加权：把医生亲自标记过的经验排到同类
+        // 候选前面，但不让一个毫无交集的收藏凭空出现在结果里。
+        if (item.starred && score > 0) {
+          score += 3;
+          reasons.push("你的精选案例（医生标记）");
+        }
         // Demographic affinity only ranks candidates that already share a
         // clinical signal (text or diagnosis) — never admits on its own.
         if (score > 0) {
@@ -195,11 +230,14 @@ export class CaseLibrary {
         treatments: item.treatments,
         outcome: item.outcome,
         summary: item.summary,
+        lessons: item.lessons || "",
+        tags: item.tags || [],
+        starred: Boolean(item.starred),
         createdAt: item.createdAt,
         score,
         reasons,
       })),
-      note: "相似病例为本地确定性检索（诊断加权 + 术语重合）。主轴核验优先：先确认候选与患者为同一主要疾病/综合征，症状或检验的相似不能弥补主轴不符；文本缺失视为未知而非不匹配。仅用于提出假设，不构成诊疗建议。",
+      note: "相似病例为本地确定性检索（诊断加权 + 术语重合；医生标记的精选案例在同等相关时优先）。主轴核验优先：先确认候选与患者为同一主要疾病/综合征，症状或检验的相似不能弥补主轴不符；文本缺失视为未知而非不匹配。仅用于提出假设，不构成诊疗建议。",
     };
   }
   counts() {
@@ -273,7 +311,7 @@ export function caseTools(cases) {
     {
       definition: definition(
         "similar_case_search",
-        "在本地病例库中搜索相似病例（诊断加权 + 术语重合的确定性检索），返回带匹配理由的参考病例。",
+        "在本地病例库中搜索相似病例（诊断加权 + 术语重合的确定性检索，医生标记的精选案例优先），返回带匹配理由的参考病例。",
         {
           caseText: textDef,
           diagnosis: textDef,

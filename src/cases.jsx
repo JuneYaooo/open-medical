@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "./agent-runtime";
-import { Loader2, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
+import { Loader2, Plus, Search, Star, Trash2, UserPlus, X } from "lucide-react";
 
 // Case library view: browse/search local cases, run similar-case search,
-// and snapshot patients into the library for future reference.
+// and snapshot patients into the library for future reference. Curated
+// cases (starred + lessons) are the doctor's own experience layer.
 export function CasesView() {
   const [cases, setCases] = useState([]);
   const [patients, setPatients] = useState([]);
   const [query, setQuery] = useState("");
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [similarText, setSimilarText] = useState("");
   const [similarDiagnosis, setSimilarDiagnosis] = useState("");
   const [similarMatches, setSimilarMatches] = useState(null);
@@ -19,12 +22,14 @@ export function CasesView() {
     patientId: "",
     summary: "",
     diagnosis: "",
+    lessons: "",
+    tags: "",
   });
   const [expanded, setExpanded] = useState({});
 
   const refresh = async () => {
     const [list, people] = await Promise.all([
-      api("/api/cases"),
+      api(`/api/cases${starredOnly ? "?starred=1" : ""}`),
       api("/api/patients?summary=1"),
     ]);
     setCases(list.cases);
@@ -32,7 +37,7 @@ export function CasesView() {
   };
   useEffect(() => {
     refresh().catch((err) => setError(err.message));
-  }, []);
+  }, [starredOnly]);
 
   const runSearch = async (event) => {
     event?.preventDefault();
@@ -78,10 +83,39 @@ export function CasesView() {
         ...(newCase.patientId
           ? { summary: newCase.summary || undefined }
           : { diagnosis: newCase.diagnosis, summary: newCase.summary || undefined }),
+        lessons: newCase.lessons || undefined,
+        tags: newCase.tags.split(/[,，、\s]+/).filter(Boolean),
+        starred: true,
       });
       setAdding(false);
-      setNewCase({ patientId: "", summary: "", diagnosis: "" });
-      setNotice("病例已收入本地病例库。");
+      setNewCase({ patientId: "", summary: "", diagnosis: "", lessons: "", tags: "" });
+      setNotice("病例已收入案例库（精选）。下次遇到相似患者，检索会优先翻出它。");
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggleStar = async (item) => {
+    setError("");
+    try {
+      await api(`/api/cases/${item.id}`, "PATCH", { starred: !item.starred });
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  const saveCuration = async () => {
+    if (!editing) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/cases/${editing.id}`, "PATCH", {
+        lessons: editing.lessons,
+        tags: editing.tags.split(/[,，、\s]+/).filter(Boolean),
+      });
+      setEditing(null);
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -104,8 +138,8 @@ export function CasesView() {
       <section className="module-card cases-view">
         <div className="module-head">
           <div>
-            <h1>病例库</h1>
-            <p className="module-phase">本地病例快照 · 相似病例检索 · 仅作参考</p>
+            <h1>案例库</h1>
+            <p className="module-phase">本地病例快照 · 精选经验 · 相似检索 · 仅作参考</p>
           </div>
           <button className="secondary" onClick={() => setAdding((v) => !v)}>
             {adding ? <X size={14} /> : <Plus size={14} />}
@@ -153,9 +187,21 @@ export function CasesView() {
               placeholder="病例摘要：病史要点、处理经过与转归（可选）"
               onChange={(e) => setNewCase({ ...newCase, summary: e.target.value })}
             />
+            <textarea
+              className="case-summary"
+              rows={2}
+              value={newCase.lessons}
+              placeholder="经验教训：这次最有价值的点、下次遇到类似患者怎么用（可选）"
+              onChange={(e) => setNewCase({ ...newCase, lessons: e.target.value })}
+            />
+            <input
+              value={newCase.tags}
+              placeholder="标签（如：糖尿病、胰岛素方案），逗号分隔（可选）"
+              onChange={(e) => setNewCase({ ...newCase, tags: e.target.value })}
+            />
             <div className="guideline-import-actions">
               <button onClick={addCase} disabled={busy || (!newCase.patientId && !newCase.diagnosis.trim())}>
-                <UserPlus size={14} /> 收入病例库
+                <UserPlus size={14} /> 收入案例库
               </button>
             </div>
           </div>
@@ -228,6 +274,14 @@ export function CasesView() {
 
         <h3 className="guidelines-list-title">
           病例列表 <span className="muted">{cases.length} 份</span>
+          <button
+            className="text-button"
+            aria-pressed={starredOnly}
+            style={{ marginLeft: 12 }}
+            onClick={() => setStarredOnly((v) => !v)}
+          >
+            {starredOnly ? "⭐ 只看精选（点击看全部）" : "只看我的精选"}
+          </button>
         </h3>
         <ul className="literature-results">
           {cases.map((item) => (
@@ -240,6 +294,7 @@ export function CasesView() {
                   }
                 >
                   {item.diagnosis}
+                  {item.starred ? " ⭐" : ""}
                 </button>
                 <span className="literature-journal">
                   {[
@@ -275,9 +330,71 @@ export function CasesView() {
                       {item.outcome}
                     </p>
                   )}
+                  {item.lessons && (
+                    <p>
+                      <b>⭐ 经验教训：</b>
+                      {item.lessons}
+                    </p>
+                  )}
+                  {item.tags?.length > 0 && (
+                    <p>
+                      <b>标签：</b>
+                      {item.tags.join("、")}
+                    </p>
+                  )}
+                  {editing?.id === item.id ? (
+                    <div>
+                      <textarea
+                        rows={2}
+                        aria-label="经验教训"
+                        placeholder="这次最有价值的点、下次遇到类似患者怎么用"
+                        value={editing.lessons}
+                        onChange={(e) =>
+                          setEditing({ ...editing, lessons: e.target.value })
+                        }
+                      />
+                      <input
+                        aria-label="标签"
+                        placeholder="标签，逗号分隔"
+                        value={editing.tags}
+                        onChange={(e) =>
+                          setEditing({ ...editing, tags: e.target.value })
+                        }
+                      />
+                      <div className="guideline-import-actions">
+                        <button onClick={saveCuration} disabled={busy}>
+                          保存
+                        </button>
+                        <button className="secondary" onClick={() => setEditing(null)}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        setEditing({
+                          id: item.id,
+                          lessons: item.lessons || "",
+                          tags: (item.tags || []).join("、"),
+                        })
+                      }
+                    >
+                      补经验教训 / 标签
+                    </button>
+                  )}
                 </div>
               )}
               <div className="literature-actions">
+                <button
+                  className="icon-button"
+                  title={item.starred ? "取消精选" : "标记为精选案例"}
+                  aria-pressed={item.starred}
+                  onClick={() => toggleStar(item)}
+                >
+                  <Star size={13} fill={item.starred ? "currentColor" : "none"} />
+                </button>
                 <button className="icon-button danger" title="删除病例" onClick={() => removeCase(item.id)}>
                   <Trash2 size={13} />
                 </button>
@@ -286,7 +403,7 @@ export function CasesView() {
           ))}
           {!cases.length && (
             <li className="memory-empty">
-              病例库为空。可从患者档案快照收入病例，或在会话中用 similar_case_search 工具检索。
+              {starredOnly ? "还没有精选案例。展开一份病例，补上经验教训并点星标，它就会在相似患者出现时优先被翻出来。" : "案例库为空。可在患者档案点「收进案例库」，把有价值的病例连同经验一起留下。"}
             </li>
           )}
         </ul>

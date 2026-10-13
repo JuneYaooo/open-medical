@@ -11,7 +11,8 @@ function caseTitle(item,index) {
   return disease?.candidateQuote?disease.candidate:/[\u4e00-\u9fff]/.test(item.title)?item.title:`${sourceOf(item)==='local'?'本地':'网上'}病例${index===undefined?'':` ${index+1}`}`;
 }
 function caseEyebrow(item,result) {
-  return `${sourceOf(item)==='local'?'本地患者':'网上病例'} · ${result.clueOnly?'疾病不同 · 文献线索':item.evidence?.type==='metadata'?'仅题录':item.evidence?.type==='abstract'?'摘要已取得':'本地记录'}`;
+  const base=`${sourceOf(item)==='local'?'本地患者':'网上病例'} · ${result.clueOnly?'疾病不同 · 文献线索':item.evidence?.type==='metadata'?'仅题录':item.evidence?.type==='abstract'?'摘要已取得':'本地记录'}`;
+  return item.starred?`⭐ 你的精选案例 · ${base}`:base;
 }
 function Score({result}) {
   if(result.clueOnly)return <div className="case-score"><strong>—</strong><span>疾病不同 · 文献线索</span><small>不作为相似患者评分</small></div>;
@@ -48,6 +49,7 @@ export function SimilarCases({artifact,onRefresh,onOpen,variant}) {
       <p className="case-pending-fields">{[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].length>0 && `尚待整理：${[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].join("、")}。`}</p>
       {item.comparisonWarnings?.length>0 && <p className="case-pending-fields">部分对照未能核实原文，已保留可读取资料；未核实的项目不计入分数。</p>}
       <div className="case-findings"><section><h4>相同的地方</h4><p>{item.reason}</p></section><section><h4>需要注意的不同</h4><p>{item.differences}</p></section></div>
+      {item.starred && item.lessons ? <div className="case-findings"><section><h4>⭐ 你当时记下的经验</h4><p>{item.lessons}</p></section></div> : null}
       {result.known>0 ? <details className="case-comparison-disclosure"><summary>逐项比较与原文依据</summary>
       <div className="case-comparison" role="table" aria-label="患者逐项对照">
         <div className="case-compare-head" role="row"><span role="columnheader">比较项目</span><span role="columnheader">当前患者</span><span role="columnheader">这个病例</span></div>

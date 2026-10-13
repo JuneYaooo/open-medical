@@ -26,7 +26,7 @@ function Preview({ action }) {
       {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}</>;
   }
   if (action.type === "followup-create") return <p className="care-hint">随访「{p.name}」{p.firstDueAt ? ` · 首次到期 ${p.firstDueAt}` : ""}{p.intervalDays ? ` · 每 ${p.intervalDays} 天` : ""}{p.once ? " · 单次" : " · 周期"}</p>;
-  if (action.type === "case-save") return <>{p.diagnosis && <p className="care-hint">诊断：{p.diagnosis}</p>}{p.summary && <pre>{p.summary}</pre>}</>;
+  if (action.type === "case-save") return <>{p.diagnosis && <p className="care-hint">诊断：{p.diagnosis}</p>}{p.summary && <pre>{p.summary}</pre>}{p.lessons && <p className="care-hint">经验教训：{p.lessons}</p>}{(p.tags || []).length > 0 && <p className="care-hint">标签：{p.tags.join("、")}</p>}</>;
   if (action.type === "care-message") return <><p className="care-hint">渠道：{p.channel || "默认渠道"}</p><pre>{p.text}</pre></>;
   if (action.type === "care-campaign") return <><p className="care-hint">{p.name} · 开始 {p.startDate}</p>
     <ol className="care-steps">{(p.steps || []).map((s, i) => <li key={s.id || i}><div><b>第 {s.dayOffset} 天</b>{s.time ? ` ${s.time}` : ""}</div><p>{s.text}</p></li>)}</ol></>;

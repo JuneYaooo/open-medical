@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { localCalendarDate } from "../shared/calendar-date.mjs";
 import { DIAGNOSIS_STATUS_SHORT } from "../shared/diagnoses.mjs";
-import { Download, Plus, X, Loader2, Search } from "lucide-react";
+import { Download, Plus, X, Loader2, Search, Star } from "lucide-react";
 
 const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
 
@@ -131,6 +131,30 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
     anchor.download = `${data.pseudoId}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+  // 收进案例库：医生主动策展动作，点击即入库（精选标记），不再套一层确认。
+  const [casePanel, setCasePanel] = useState(false);
+  const [caseDraft, setCaseDraft] = useState({ summary: "", lessons: "", tags: "" });
+  const [caseSaving, setCaseSaving] = useState(false);
+  const [caseNote, setCaseNote] = useState("");
+  const saveToCaseLibrary = async () => {
+    setCaseSaving(true);
+    try {
+      await api("/api/cases", "POST", {
+        patientId: detail.id,
+        ...(caseDraft.summary.trim() ? { summary: caseDraft.summary.trim() } : {}),
+        ...(caseDraft.lessons.trim() ? { lessons: caseDraft.lessons.trim() } : {}),
+        tags: caseDraft.tags.split(/[,，、\s]+/).filter(Boolean),
+        starred: true,
+      });
+      setCasePanel(false);
+      setCaseDraft({ summary: "", lessons: "", tags: "" });
+      setCaseNote("已收进案例库（精选）。下次遇到相似患者，检索会优先翻出这份经验。");
+    } catch (err) {
+      onError?.(err.message);
+    } finally {
+      setCaseSaving(false);
+    }
   };
 
   return (
@@ -415,6 +439,12 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       <div className="clinical-actions">
         <button
           className="secondary"
+          onClick={() => setCasePanel((v) => !v)}
+        >
+          <Star size={14} /> {casePanel ? "取消收藏" : "收进案例库"}
+        </button>
+        <button
+          className="secondary"
           onClick={() =>
             exportDeidentified().catch((err) => onError?.(err.message))
           }
@@ -425,6 +455,37 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           每处修改立即保存；导出文件不含姓名、电话与确切年龄。
         </span>
       </div>
+      {casePanel && <div className="clinical-case-save">
+        <p className="muted">
+          把这位患者当前的情况快照收进案例库，并写两句你最想记住的经验。快照只保留姓名与病情要点，不含电话与证件信息；下次遇到相似患者，检索会优先翻出精选案例。
+        </p>
+        <textarea
+          rows={2}
+          aria-label="病例摘要（可选）"
+          placeholder="病例摘要：病史要点、处理经过与转归（可选）"
+          value={caseDraft.summary}
+          onChange={(e) => setCaseDraft({ ...caseDraft, summary: e.target.value })}
+        />
+        <textarea
+          rows={2}
+          aria-label="经验教训"
+          placeholder="经验教训：这次最有价值的点、下次遇到类似患者怎么用"
+          value={caseDraft.lessons}
+          onChange={(e) => setCaseDraft({ ...caseDraft, lessons: e.target.value })}
+        />
+        <input
+          aria-label="案例标签"
+          placeholder="标签（如：糖尿病、胰岛素方案），逗号分隔（可选）"
+          value={caseDraft.tags}
+          onChange={(e) => setCaseDraft({ ...caseDraft, tags: e.target.value })}
+        />
+        <div className="toolbar-actions">
+          <button className="secondary" onClick={saveToCaseLibrary} disabled={caseSaving}>
+            {caseSaving ? <Loader2 className="spin" size={13} /> : <Star size={13} />} 收入案例库
+          </button>
+        </div>
+      </div>}
+      {caseNote && <p className="form-notice" role="status">{caseNote}</p>}
     </fieldset>
   );
 }

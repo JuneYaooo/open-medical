@@ -1539,6 +1539,7 @@ export function createServer(options = {}) {
           cases.list({
             query: url.searchParams.get("query") || undefined,
             diagnosis: url.searchParams.get("diagnosis") || undefined,
+            starredOnly: url.searchParams.get("starred") === "1",
             limit: url.searchParams.get("limit")
               ? Number(url.searchParams.get("limit"))
               : undefined,
@@ -1756,6 +1757,8 @@ export function createServer(options = {}) {
         return send(res, 200, cases.similar(await body(req)));
       if (parts[0] === "api" && parts[1] === "cases" && parts.length === 3) {
         if (req.method === "GET") return send(res, 200, cases.get(parts[2]));
+        if (req.method === "PATCH")
+          return send(res, 200, cases.update(parts[2], await body(req)));
         if (req.method === "DELETE")
           return send(res, 200, cases.removeCase(parts[2]));
       }

@@ -385,6 +385,8 @@ export class PendingActions {
           applied = this.cases.fromPatient(patient, {
             summary: action.payload.summary,
             outcome: action.payload.outcome,
+            lessons: action.payload.lessons,
+            tags: action.payload.tags,
           });
         } else {
           applied = this.cases.addCase(action.payload);
@@ -711,11 +713,13 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "case_save_propose",
-        "提议把当前病例收入本地病例库（可关联患者快照）。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 入库。",
+        "提议把当前病例收入本地病例库（可关联患者快照）。医生说「这个病例有价值/典型/收进案例库」时主动提议；lessons 写两句这次病例最值得记住的经验（为什么有价值、下次遇到类似患者怎么用），不要照抄摘要。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 入库。",
         {
           patientId: textDef,
           diagnosis: textDef,
           summary: textDef,
+          lessons: textDef,
+          tags: { type: "array", items: textDef, maxItems: 8 },
           outcome: textDef,
         },
         ["summary"],
