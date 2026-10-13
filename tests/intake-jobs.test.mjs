@@ -53,6 +53,24 @@ test('background model failure is visible in job status and can be retried witho
   assert.equal((await f.json(`/api/sessions/${s.id}`)).data.files.length,1);
 });
 
+test('a textual claim of a submitted draft cannot become a confirmation-ready intake', async t => {
+  const provider=new DeepSeekProvider({apiKey:'synthetic',model:'false-completion-test'});
+  provider.complete=async()=>({message:{role:'assistant',content:'已调用 patient_create_propose 生成待核对草稿。提案已提交，请确认是否建档？'}});
+  const f=await fixture(t,{provider}),s=await f.session('上传资料建档');
+  await f.json(`/api/sessions/${s.id}/files`,'POST',{name:'source.txt',text:'合成患者，资料记录高血压。'});
+  await f.json(`/api/sessions/${s.id}/intake-job`,'POST',{externalConsent:true});
+  const job=await terminal(f,s.id);
+  assert.equal(job.status,'failed');
+  assert.match(job.error,/未生成可核对/);
+  assert.equal(job.reply,'');
+  assert.equal((await f.json(`/api/sessions/${s.id}`)).data.files.length,1);
+  provider.complete=async()=>({message:{role:'assistant',content:'已读完资料，但未生成提案，请补充患者姓名。'}});
+  await f.json(`/api/sessions/${s.id}/intake-job`,'POST',{externalConsent:true});
+  const question=await terminal(f,s.id);
+  assert.equal(question.status,'needs_input');
+  assert.match(question.reply,/补充患者姓名/);
+});
+
 test('a repeated proposal in one intake keeps the complete draft and finalizes without another model call', async t => {
   const provider = new DeepSeekProvider({apiKey:'synthetic',model:'duplicate-proposal-test'});
   let round = 0;

@@ -1,0 +1,17 @@
+{
+  "status": "failed",
+  "model": {
+    "provider": "local",
+    "model": "open-medical-eval-qwen3-4b-instruct-64k"
+  },
+  "calls": 12,
+  "completed": 0,
+  "version": "0.9.124",
+  "mode": "preflight",
+  "plannedIntakes": 2,
+  "contextWindow": 65536,
+  "kvCache": "q8_0",
+  "residentBytesObserved": 8004430724,
+  "failure": "Both cells produced textual completion claims without executing patient_create_propose.",
+  "nextChange": "Reject unbacked completion claims in the intake job status; test a newer local model."
+}

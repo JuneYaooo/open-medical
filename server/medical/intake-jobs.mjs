@@ -69,6 +69,8 @@ export class IntakeJobs {
       // 后者该直接重试，别让医生对着一句英文叙述猜要补什么。
       const asksQuestion = /[?？]\s*["」』']?\s*$/.test((reply || '').trim())
         || /请补充|需要补充|请提供|请告知|请确认|请说明/.test(reply || '');
+      const claimsDraft = /(?:已(?:经)?(?:成功|为您|为你|一次性){0,2}(?:调用\s*`?patient_create_propose|提交|生成|创建)[\s\S]{0,50}(?:草稿|提案))|(?:草稿|提案)已(?:经)?(?:成功)?(?:提交|生成|创建)/.test(reply);
+      check(hasDraft || !claimsDraft, 'INTAKE_DRAFT_MISSING', '未生成可核对的档案草稿。资料已保存，请重试。');
       this.save(id, {status:'needs_input', reply, progress:hasDraft
         ? '档案草稿已生成，等待你核对确认'
         : asksQuestion
