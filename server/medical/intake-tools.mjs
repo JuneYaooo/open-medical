@@ -35,7 +35,7 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
     } },
     execute: (args, context) => {
       const sources = selected(context);
-      if (awaitingNotes) return { awaitingNotes: true, batchId: awaitingNotes.batchId, instruction: '先调用 save_intake_notes 保存刚读批次的患者身份、临床事实和来源，再继续读取。' };
+      if (awaitingNotes) return { ...awaitingNotes, awaitingNotes: true, instruction: '这批资料尚未保存笔记，原文再次列出以便恢复。先调用 save_intake_notes 保存本批患者身份、临床事实和来源，再继续读取。' };
       if (sources.length && sources.every(source => seen.get(source.id)?.size === source.text.split('\n').length)) return { complete: true, nextCursor: null, instruction: '全部资料已经读完且各批笔记已保存。不要重复读取，调用 read_intake_notes 取回事实笔记后立即生成 patient_create_propose。需要核对个别原文时用 read_source。' };
       // The server owns the cursor. A compacted model must not reread the first
       // batch or skip a later file simply because it forgot the returned cursor.

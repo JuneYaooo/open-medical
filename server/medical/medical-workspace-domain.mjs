@@ -123,7 +123,7 @@ export function createMedicalWorkspaceDomain({
               ...(s.extraction.ocr.quality ? { quality: s.extraction.ocr.quality.level } : {}),
             }
           : {}),
-        ...(sources.length <= 8 ? { preview: s.text.slice(0, 1000) } : {}),
+        ...(sources.length <= 8 && run.policy?.workflow !== "patient-intake" ? { preview: s.text.slice(0, 1000) } : {}),
       }));
       const unreliable = sources.filter(
         (s) => s.extraction?.ocr?.quality && s.extraction.ocr.quality.level !== "good",

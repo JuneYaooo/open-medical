@@ -319,3 +319,17 @@ test('soft compaction threshold cannot reject an intact request that fits near a
   assert.deepEqual(result.messages, messages);
   assert.ok(result.budget.fits);
 });
+
+test('large fixed policy retains the latest whole tool batch within the remaining history budget', async () => {
+  const policy={role:'system',content:'immutable policy '.repeat(720)};
+  const user={role:'user',name:TASK_INPUT_MESSAGE,content:'Read the selected records and save source-grounded notes. '.repeat(12)};
+  const call={role:'assistant',content:null,tool_calls:[{id:'current-batch',type:'function',function:{name:'read_intake_batch',arguments:'{}'}}]};
+  const result={role:'tool',tool_call_id:'current-batch',content:JSON.stringify({materials:[{sourceId:'current',text:'A current diagnosis and its source lines.'}],instruction:'save_intake_notes next'})};
+  const provider={model:'small-local',contextWindow:20000,maxTokens:1024,complete:async()=>({message:{role:'assistant',content:'Older facts remain archived; save the latest source batch next.'}})};
+  const messages=[policy,user,{role:'assistant',content:'old history '.repeat(2000)},call,result];
+  const compact=await compactContext({provider,messages,archive:async()=>({id:'fixed-policy-test'})});
+  assert.ok(compact.budget.fits);
+  assert.ok(compact.messages.some(m=>m.content===policy.content));
+  assert.ok(compact.messages.some(m=>m.content===user.content));
+  assert.deepEqual(compact.messages.slice(-2),[call,result]);
+});

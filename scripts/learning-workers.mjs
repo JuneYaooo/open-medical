@@ -21,3 +21,19 @@ export async function runLearningCells(cells, concurrency, run) {
   );
   return results;
 }
+
+// A slow model load can coincide with a closed localhost keep-alive socket.
+// Retry read-only polling; mutations must never be replayed here.
+export async function retryLearningRead(
+  read,
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      if (!(error instanceof TypeError) || attempt >= 2) throw error;
+      await wait(250 * 2 ** attempt);
+    }
+  }
+}

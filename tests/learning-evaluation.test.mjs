@@ -229,3 +229,43 @@ test("completed matrix cells resume only from complete ordered patient evidence"
   await writeFile(join(dir, "C-D1-17-run.json"), JSON.stringify(run));
   await assert.rejects(completedLearningCell(dir, cell, 2), /顺序不一致/);
 });
+
+test("local evaluation polling retries transient transport failures but preserves application errors", async () => {
+  const { retryLearningRead } = await import("../scripts/learning-workers.mjs");
+  let calls = 0;
+  const delays = [];
+  const value = await retryLearningRead(
+    async () => {
+      if (++calls < 3) throw new TypeError("fetch failed");
+      return { status: "running" };
+    },
+    async (ms) => delays.push(ms),
+  );
+  assert.deepEqual(value, { status: "running" });
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [250, 500]);
+  calls = 0;
+  await assert.rejects(
+    retryLearningRead(
+      async () => {
+        calls++;
+        throw new Error("403");
+      },
+      async () => {},
+    ),
+    /403/,
+  );
+  assert.equal(calls, 1);
+  calls = 0;
+  await assert.rejects(
+    retryLearningRead(
+      async () => {
+        calls++;
+        throw new TypeError("fetch failed");
+      },
+      async () => {},
+    ),
+    /fetch failed/,
+  );
+  assert.equal(calls, 3);
+});

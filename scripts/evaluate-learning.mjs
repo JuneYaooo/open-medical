@@ -2,7 +2,7 @@ import {
   learningFingerprint,
   completedLearningCell,
 } from "./learning-checkpoints.mjs";
-import { runLearningCells } from "./learning-workers.mjs";
+import { runLearningCells, retryLearningRead } from "./learning-workers.mjs";
 import { createHash } from "node:crypto";
 import { calibrateStyleJudge } from "./learning-style-judge.mjs";
 import { selfHealingProbe } from "./learning-probes.mjs";
@@ -208,7 +208,7 @@ if (!configPath) {
         const server = createServer({ database: ":memory:", provider });
         await new Promise((r) => server.listen(0, "127.0.0.1", r));
         const origin = `http://127.0.0.1:${server.address().port}`;
-        const request = async (path, method = "GET", data) => {
+        const requestOnce = async (path, method = "GET", data) => {
           const response = await fetch(origin + path, {
             method,
             headers: {
@@ -222,6 +222,10 @@ if (!configPath) {
             throw new Error(`${path}: ${JSON.stringify(value)}`);
           return value;
         };
+        const request = (path, method = "GET", data) =>
+          method === "GET"
+            ? retryLearningRead(() => requestOnce(path, method, data))
+            : requestOnce(path, method, data);
         let replaySample;
         const run = {
           persona: personaId,

@@ -55,3 +55,17 @@ test('saved batch checkpoints resume at the first unread material and preserve e
  resumed.get('save_intake_notes').execute({notes:'第六份来源事实'});
  assert.deepEqual(resumed.get('patient_create_propose').execute({}, {sources:materials}),{ok:true});
 });
+
+test('an unsaved intake batch can be recovered verbatim after model context compaction', () => {
+  const sources=[{id:'source',name:'record.txt',text:'姓名合成。\n高血压，待核对。'}];
+  const registry=new ToolRegistry(['read_source','patient_create_propose'].map(name=>({definition:{type:'function',function:{name,parameters:{type:'object',properties:{}}}},execute:()=>({ok:true})})));
+  configureIntakeTools(registry,{materials:sources});
+  const read=registry.get('read_intake_batch').execute;
+  const first=read({}, {sources}),recovered=read({}, {sources});
+  assert.equal(recovered.awaitingNotes,true);
+  assert.equal(recovered.batchId,first.batchId);
+  assert.deepEqual(recovered.materials,first.materials);
+  registry.get('save_intake_notes').execute({notes:'记录高血压，待核对。'});
+  assert.equal(read({}, {sources}).complete,true);
+  assert.equal(registry.get('read_intake_notes').execute({}).batchesSaved,1);
+});

@@ -60,7 +60,12 @@ export async function compactContext({
   let reference, inputCompaction;
   const exactLatest = latestUser && size(latestUser) < Math.min(maxChars * 0.1,
     requestBudget.inputLimit / (30 * requestBudget.calibration)) ? latestUser : null;
-  const fixedBudget = measureResult([...system, ...(exactLatest ? [exactLatest] : [])]);
+  const protectedBudget = measureResult([...system, ...userInputs]);
+  const protectedRoom = protectedBudget.inputLimit - protectedBudget.schemaTokens - protectedBudget.messageTokens - protectedBudget.mediaTokens;
+  // When the current request fits with useful summary room, keep it exact.
+  // Reserving against policy alone needlessly summarized ordinary intake requests.
+  const fixedBudget = protectedBudget.fits && protectedRoom >= 1536 * protectedBudget.calibration && maxChars - protectedBudget.chars >= 512
+    ? protectedBudget : measureResult([...system, ...(exactLatest ? [exactLatest] : [])]);
   const summaryRoom = Math.max(0, Math.min(2500, Math.floor(maxChars * 0.25), Math.floor((maxChars - fixedBudget.chars) / 2),
     Math.floor((fixedBudget.inputLimit - fixedBudget.schemaTokens - fixedBudget.messageTokens - fixedBudget.mediaTokens) / (6 * fixedBudget.calibration))));
   // Compaction is triggered before the hard limit. If protected content leaves
@@ -95,10 +100,16 @@ export async function compactContext({
   }
   const requiredMessages = (tail) => [...system, ...userInputs.filter((m) => !tail.includes(m)), ...tail];
   const tail = [];
+  const base = measureResult(requiredMessages([]));
+  const tokens = value => value.messageTokens + value.schemaTokens + value.mediaTokens;
   for (const group of batches(history).reverse()) {
-    if (!withRoom(requiredMessages([...group, ...tail]), 0, 0.45) ||
-      !withRoom(requiredMessages([...group, ...tail]), summaryRoom))
-      break;
+    const candidate = requiredMessages([...group, ...tail]);
+    if (!withRoom(candidate, summaryRoom)) break;
+    const measured = measureResult(candidate);
+    const hasRecentHistory = tail.some(message => !userInputs.includes(message));
+    // Apply the history share to remaining space, not to immutable policy.
+    // Always keep the newest complete batch when it fits beside the summary.
+    if (hasRecentHistory && (tokens(measured) - tokens(base) > (base.inputLimit - tokens(base)) * 0.45 || measured.chars - base.chars > (maxChars - base.chars) * 0.45)) break;
     tail.unshift(...group);
   }
   const keep = new Set([...tail, ...userInputs]);
