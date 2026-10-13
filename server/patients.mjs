@@ -600,13 +600,21 @@ function structuredList(value, label, maxCount, build) {
     "INVALID_INPUT",
     `${label}最多 ${maxCount} 条`,
   );
-  return value.map((item) => {
+  return value.map((item, index) => {
     check(
       item && typeof item === "object" && !Array.isArray(item),
       "INVALID_INPUT",
       `${label}格式无效`,
     );
-    return build(item);
+    try {
+      return build(item);
+    } catch (error) {
+      // Prefix the entry index, otherwise an over-long note deep inside the
+      // list reads as just "备注 too long" and the agent retries blind.
+      if (error instanceof AppError && error.code === "INVALID_INPUT")
+        error.message = `${label}[${index + 1}] ${error.message}`;
+      throw error;
+    }
   });
 }
 // Normalized clinical-field validation shared with the agent proposal flow.
@@ -670,7 +678,7 @@ function optionalMedications(value) {
     ...(item.frequency
       ? { frequency: string(item.frequency, "频次", 60) }
       : {}),
-    ...(item.note ? { note: string(item.note, "备注", 200) } : {}),
+    ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
   }));
 }
