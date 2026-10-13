@@ -1,0 +1,85 @@
+{
+  "version": "0.9.127",
+  "status": "incomplete",
+  "mode": "preflight",
+  "model": {
+    "provider": "local",
+    "model": "open-medical-eval-qwen35-9b-64k-t02"
+  },
+  "configuration": {
+    "model": "open-medical-eval-qwen35-9b-64k-t02",
+    "base": "qwen3.5:9b-q4_K_M",
+    "parameters": {
+      "num_ctx": 65536,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "presence_penalty": 0
+    },
+    "kvCache": "q8_0",
+    "flashAttention": true,
+    "digest": "25caef077eb87699476e9f284ab0ee58907d87ff242655e2f076f2ffdd5e14bf",
+    "runner": "llamacpp"
+  },
+  "thinking": "disabled via reasoning_effort=none",
+  "plannedIntakes": 2,
+  "completedIntakes": 2,
+  "calls": 12,
+  "scoring": {
+    "revision": 2,
+    "names": "Review alignment normalization: NFKC, case, whitespace, known aliases",
+    "source": "Recomputed from preserved actual drafts; no model calls or clinical thresholds changed"
+  },
+  "metrics": [
+    {
+      "group": "A",
+      "persona": "D1",
+      "seed": 17,
+      "patient": "P013",
+      "sequence": 1,
+      "split": "learning",
+      "ser": 0.3333333333333333,
+      "fer": 0.6666666666666666,
+      "f1": 0.4615384615384615,
+      "precision": 0.42857142857142855,
+      "recall": 0.5,
+      "summaryDistance": 0.7563025210084033,
+      "editRate": 0.6666666666666666,
+      "aiItems": 12,
+      "durationMs": 185369,
+      "inputChars": 78377,
+      "inputTokens": 46281,
+      "contextChars": 0,
+      "originalStrictNameF1": 0.30769230769230765
+    },
+    {
+      "group": "C",
+      "persona": "D1",
+      "seed": 17,
+      "patient": "P013",
+      "sequence": 1,
+      "split": "learning",
+      "ser": 0.2727272727272727,
+      "fer": 0.9090909090909091,
+      "f1": 0.16666666666666666,
+      "precision": 0.16666666666666666,
+      "recall": 0.16666666666666666,
+      "summaryDistance": 0.7534246575342466,
+      "editRate": 0.8181818181818182,
+      "aiItems": 11,
+      "durationMs": 171013,
+      "inputChars": 80229,
+      "inputTokens": 47132,
+      "contextChars": 310,
+      "originalStrictNameF1": 0
+    }
+  ],
+  "observedQualityGaps": [
+    "Diagnosis dates omitted",
+    "Lab units omitted in C",
+    "Visits omitted in C"
+  ],
+  "limitations": [
+    "Two one-patient runs do not establish learning effectiveness.",
+    "Full local matrix, reviewed gold and style calibration remain outstanding."
+  ]
+}

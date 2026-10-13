@@ -4,9 +4,12 @@ import {
   reviewCounts,
   TERM_GROUPS,
   normalizedEditDistance,
+  normalizeReviewText,
 } from "../shared/review-diff.mjs";
 import { classifyDiff } from "../server/medical/habit-learner.mjs";
-const canonical = (x) => TERM_GROUPS.find((g) => g.includes(x))?.[0] || x;
+const canonical = (x) => normalizeReviewText(
+  TERM_GROUPS.find((g) => g.some((term) => normalizeReviewText(term) === normalizeReviewText(x)))?.[0] ?? x,
+);
 export function renderLearningGold(gold, persona, { traps = true } = {}) {
   const final = structuredClone(gold);
   final.diagnoses = final.diagnoses

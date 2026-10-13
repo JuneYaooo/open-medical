@@ -1,0 +1,318 @@
+{
+  "status": "incomplete",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "mode": "development",
+  "calls": 84,
+  "concurrency": 2,
+  "reusedIntakes": 0,
+  "callsScope": "current-invocation",
+  "rows": 20,
+  "summary": {
+    "groups": {
+      "A": {
+        "overall": {
+          "count": 10,
+          "ser": 0.284047619047619,
+          "fer": 0.67,
+          "f1": 0.646153846153846,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.284047619047619,
+          "fer": 0.67,
+          "f1": 0.646153846153846,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "C": {
+        "overall": {
+          "count": 10,
+          "ser": 0.09883449883449882,
+          "fer": 0.6266899766899767,
+          "f1": 0.8551282051282051,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.09883449883449882,
+          "fer": 0.6266899766899767,
+          "f1": 0.8551282051282051,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      }
+    },
+    "paired": {
+      "C": {
+        "overall": {
+          "difference": -0.1852131202131202,
+          "ci95": null,
+          "pairs": 10
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      }
+    },
+    "pairedLateDifference": null,
+    "pairedLateCI95": null
+  },
+  "gates": {
+    "G1": {
+      "status": "unverified"
+    },
+    "G3": {
+      "status": "unverified"
+    },
+    "G4": {
+      "status": "unverified"
+    },
+    "G5": {
+      "status": "unverified"
+    },
+    "G6": {
+      "status": "unverified"
+    },
+    "G6b": {
+      "status": "unverified"
+    },
+    "G7": {
+      "status": "unverified"
+    },
+    "G8": {
+      "status": "unverified"
+    },
+    "G9": {
+      "status": "unverified"
+    },
+    "G2": {
+      "status": "unverified"
+    },
+    "G10": {
+      "status": "unverified"
+    }
+  },
+  "runs": [
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D1-17-P013.json",
+        "A-D1-17-P018.json",
+        "A-D1-17-P038.json",
+        "A-D1-17-P027.json",
+        "A-D1-17-P026.json",
+        "A-D1-17-P033.json",
+        "A-D1-17-P023.json",
+        "A-D1-17-P021.json",
+        "A-D1-17-P001.json",
+        "A-D1-17-P003.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 1,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D1-17-P013.json",
+        "C-D1-17-P018.json",
+        "C-D1-17-P038.json",
+        "C-D1-17-P027.json",
+        "C-D1-17-P026.json",
+        "C-D1-17-P033.json",
+        "C-D1-17-P023.json",
+        "C-D1-17-P021.json",
+        "C-D1-17-P001.json",
+        "C-D1-17-P003.json"
+      ],
+      "completed": true
+    }
+  ],
+  "limitations": [
+    "金标准尚待独立逐份核对",
+    "style 评审尚需人工校准",
+    "发版需另一个模型档结果及全部门槛证据",
+    "Q3 需要真实医生试点"
+  ],
+  "scoring": {
+    "revision": 2,
+    "names": "Review alignment normalization: NFKC, case, whitespace, known aliases",
+    "source": "Recomputed from preserved actual drafts; no model calls or clinical thresholds changed"
+  },
+  "version": "0.9.127",
+  "runtime": {
+    "electron": "44.2.0",
+    "node": "24.20.0",
+    "undici": "7.29.0"
+  }
+}

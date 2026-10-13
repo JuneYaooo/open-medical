@@ -270,3 +270,27 @@ test("local evaluation polling retries transient transport failures but preserve
   );
   assert.equal(calls, 3);
 });
+
+test('factual scoring normalizes aligned names but still rejects changed values, units, dates and statuses', () => {
+  const gold = {
+    diagnoses: [{ name: '高血压', status: 'confirmed', date: '2026-09-13' }],
+    medications: [{ name: '合成药A', dose: '5mg', frequency: 'bid', status: 'active' }],
+    labs: [{ item: '肌酐', value: 78, unit: 'μmol/L', date: '2026-09-13' }],
+  };
+  const draft = structuredClone(gold);
+  draft.diagnoses[0].name = ' ｈｔｎ ';
+  draft.medications[0].name = '合成药 Ａ';
+  assert.equal(learningMetrics(draft, gold, gold).f1, 1);
+  for (const [section, field, value] of [
+    ['medications', 'name', '合成药B'],
+    ['medications', 'dose', '10mg'],
+    ['labs', 'value', 79],
+    ['labs', 'unit', 'mmol/L'],
+    ['diagnoses', 'date', '2026-09-14'],
+    ['diagnoses', 'status', 'suspected'],
+  ]) {
+    const wrong = structuredClone(draft);
+    wrong[section][0][field] = value;
+    assert.ok(learningMetrics(wrong, gold, gold).f1 < 1, `${section}.${field} must remain a factual error`);
+  }
+});
