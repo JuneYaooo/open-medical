@@ -19,10 +19,13 @@ import { AppError, check } from "../errors.mjs";
 
 const PINNED_PACKAGES = ["paddleocr==2.7.3", "paddlepaddle==2.6.2", "numpy<2"];
 // 国内网络下 pypi 官方源常不可达；镜像逐个试，最后回退官方。
+// 末档是明文 http 镜像：部分机器的 TLS 中间设备会掐断 python 旧版 OpenSSL
+// 的 https 握手（实测 SSLEOFError），http + trusted-host 是那类机器的生路。
 const PIP_MIRRORS = [
-  "https://pypi.tuna.tsinghua.edu.cn/simple",
-  "https://mirrors.aliyun.com/pypi/simple",
-  "",
+  { url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
+  { url: "https://mirrors.aliyun.com/pypi/simple" },
+  { url: "" },
+  { url: "http://mirrors.aliyun.com/pypi/simple/", trustedHosts: ["mirrors.aliyun.com"] },
 ];
 const HEALTH_TIMEOUT = 300000; // 首次启动要下载识别模型，给足 5 分钟
 const PYTHON_SCRIPT = "import sys,platform;print(platform.python_version())";
@@ -72,6 +75,7 @@ export class PaddleLocal {
           const child = spawn(spec.cmd, spec.args, {
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
+            ...(options.env ? { env: options.env } : {}),
           });
           let stdout = "", stderr = "";
           const timer = setTimeout(() => child.kill(), options.timeoutMs || 600000);
@@ -234,14 +238,20 @@ export class PaddleLocal {
     // ③ 依赖：固定版本 + 逐镜像尝试；失败把 pip 的尾巴带出来。
     let pipError = null;
     for (const mirror of PIP_MIRRORS) {
-      step("安装 PaddleOCR 依赖", mirror ? `镜像 ${new URL(mirror).host}` : "官方 pypi（约 300MB，视网络可能要几分钟）");
+      step("安装 PaddleOCR 依赖", mirror.url ? `镜像 ${new URL(mirror.url).host}${mirror.trustedHosts ? "（明文 http，仅信任该镜像域）" : ""}` : "官方 pypi（约 300MB，视网络可能要几分钟）");
       try {
         await this.run(
           {
             cmd: venvPython,
-            args: ["-m", "pip", "install", "--disable-pip-version-check", ...PINNED_PACKAGES, ...(mirror ? ["-i", mirror] : [])],
+            args: [
+              "-m", "pip", "install", "--disable-pip-version-check",
+              "--timeout", "30", "--retries", "1",
+              ...PINNED_PACKAGES,
+              ...(mirror.url ? ["-i", mirror.url] : []),
+              ...(mirror.trustedHosts ? mirror.trustedHosts.flatMap((host) => ["--trusted-host", host]) : []),
+            ],
           },
-          { timeoutMs: 3600000, onOutput: () => {} },
+          { timeoutMs: 3600000, onOutput: () => {}, env: directChildEnv() },
         );
         pipError = null;
         break;
@@ -283,6 +293,7 @@ export class PaddleLocal {
     this.child = this.spawner(venvPython, [this.workerPath(), String(port)], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      env: directChildEnv(),
     });
     let stderrTail = "";
     this.child.stderr.on("data", (part) => {
@@ -331,6 +342,17 @@ export class PaddleLocal {
 
 function join2(base, path) {
   return `${String(base).replace(/\/+$/, "")}${path}`;
+}
+
+// pip 与 worker 子进程的网络环境：python 的 requests/urllib 在 Windows 上会
+// 自动读注册表系统代理，而那常是浏览器代理切换器留下的死端口（实测把 pip
+// 的 https 和 Paddle 模型下载全部拖死成 SSLEOF/ProxyError）。医生显式设置
+// 了环境代理时尊重之；否则压掉代理直连——镜像与 bcebos 模型源都是国内
+// CDN，直连可达。
+function directChildEnv(env = process.env) {
+  const explicit = env.HTTPS_PROXY || env.https_proxy || env.ALL_PROXY || env.all_proxy;
+  if (explicit) return env;
+  return { ...env, NO_PROXY: "*", no_proxy: "*" };
 }
 
 // 识别服务本体：stdlib HTTP + PaddleOCR，无 FastAPI 依赖。首次运行在构造
