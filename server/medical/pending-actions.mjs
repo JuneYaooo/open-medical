@@ -31,6 +31,16 @@ const TYPES = [
 const isCare = (type) => type.startsWith("care-");
 const isTrial = (type) => type.startsWith("trial-");
 const isExt = (type) => type.startsWith("ext-");
+// 医生在聊天里口头同意即可经 proposal_confirm 执行的本地档案类提案；
+// care-/trial-/ext- 涉及对外发送或安装代码，仍只走「待确认」面板。
+const CHAT_CONFIRM_TYPES = [
+  "patient-create",
+  "patient-update",
+  "followup-create",
+  "case-save",
+  "patient-group-suggest",
+  "patient-grouping",
+];
 
 export class PendingActions {
   // services are accessor functions (e.g. () => patients) so the registry
@@ -218,7 +228,7 @@ export class PendingActions {
       summary: title,
       createdAt: time,
       updatedAt: time,
-      note: isCare(type) || type === "patient-grouping" ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，需医生在患者档案（或随访/病例库）中确认后才会生效。",
+      note: isCare(type) || type === "patient-grouping" ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建。医生在对话中明确同意后用 proposal_confirm 执行；也可在患者档案或「待确认」面板核对确认。",
     };
   }
   // ext-install 载荷内嵌整包技能文件（几十 MB）；列表每 20 秒被托盘轮询，
@@ -501,7 +511,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_create_propose",
-        "从上传材料中识别出新患者时，提议创建患者档案（姓名等基本信息 + 可选的临床字段）。只创建待确认提案，医生确认后才真正建档；材料中找不到姓名时先向医生询问。",
+        "从上传材料中识别出新患者时，提议创建患者档案（姓名等基本信息 + 可选的临床字段）。只创建待确认提案；医生在对话中明确同意（如「确认建档」）后用 proposal_confirm 立即建档并返回患者编号，也可到患者管理页核对确认；材料中找不到姓名时先向医生询问。",
         {
           name: textDef,
           gender: { type: "string", enum: ["male", "female"] },
@@ -579,7 +589,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_record_propose",
-        "提议更新患者临床档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。只创建待确认提案，医生对照复核后才落库。",
+        "提议更新患者临床档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 落库。",
         {
           patientId: textDef,
           clinicalSummary: clinicalSummaryDef,
@@ -664,7 +674,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "followup_create_propose",
-        "提议为患者创建本机随访提醒（单次或周期），到期提醒医生本人联系患者，不会给患者发消息。若要定时给患者发问题并自动收集回复，用 care_campaign_propose。只创建待确认提案，医生确认后才生效。",
+        "提议为患者创建本机随访提醒（单次或周期），到期提醒医生本人联系患者，不会给患者发消息。若要定时给患者发问题并自动收集回复，用 care_campaign_propose。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 生效。",
         {
           patientId: textDef,
           name: textDef,
@@ -689,7 +699,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "case_save_propose",
-        "提议把当前病例收入本地病例库（可关联患者快照）。只创建待确认提案，医生确认后才入库。",
+        "提议把当前病例收入本地病例库（可关联患者快照）。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 入库。",
         {
           patientId: textDef,
           diagnosis: textDef,
@@ -747,7 +757,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_group_propose",
-        "按诊断规律为在管患者生成疾病分组建议（内置 ICD-10/诊断名规则，也可指定分组名与名单）。只创建待确认提案，医生在「待确认」面板核对后才写入档案。医生说「帮患者分组」「把某类患者归到一组」时使用；先 patient_query 拿到名单再提交。",
+        "按诊断规律为在管患者生成疾病分组建议（内置 ICD-10/诊断名规则，也可指定分组名与名单）。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 写入，或在「待确认」面板核对确认。医生说「帮患者分组」「把某类患者归到一组」时使用；先 patient_query 拿到名单再提交。",
         {
           groupName: textDef,
           patientIds: { type: "array", items: textDef, description: "要归组的患者 id（来自 patient_query）；留空则由规则引擎按诊断自动扫描全部在管患者" },
@@ -778,6 +788,45 @@ const diagnosisItemsDef = {
           },
           summary: `分组建议：把 ${patientIds.length} 位患者加入「${groupName}」`,
         });
+      },
+    },
+    {
+      definition: definition(
+        "proposal_confirm",
+        "医生在对话中明确同意某条待确认提案（如回复「确认建档」「同意」「就按这个写」）后，用它执行该提案，效果与在面板点确认相同：本机档案立即落库，建档提案会返回新患者编号。仅限建档/档案更新/随访/病例/分组类本地提案；给患者发消息、临床试验、扩展安装类提案影响外部或安装代码，仍须医生到「待确认」面板点击确认。医生意见不明确时，先复述提案要点请医生核对，不要替医生决定。",
+        {
+          proposalId: { type: "string", description: "提案编号（patient_create_propose / patient_record_propose 等工具返回的 id）" },
+        },
+        ["proposalId"],
+      ),
+      execute: (args) => {
+        const action = pending.row(args.proposalId);
+        check(
+          CHAT_CONFIRM_TYPES.includes(action.type),
+          "PROPOSAL_TYPE_FORBIDDEN",
+          "该类提案涉及对外发送或扩展安装，请医生到「待确认」面板核对后点击确认。",
+          403,
+        );
+        check(
+          action.status === "pending",
+          "ACTION_RESOLVED",
+          "该提案已处理，无需重复确认；建档提案如已执行，用 patient_query 按姓名查患者编号。",
+          409,
+        );
+        const result = pending.confirm(action.id);
+        return {
+          ok: true,
+          proposalId: action.id,
+          type: action.type,
+          status: "applied",
+          applied: result.applied,
+          ...(action.type === "patient-create"
+            ? {
+                patientId: result.applied.id,
+                note: `已建档，患者编号 ${result.applied.id}。补诊断/检验/用药/就诊明细用 patient_record_propose 提交，医生同意后再 proposal_confirm。`,
+              }
+            : { note: "提案已执行落库。" }),
+        };
       },
     },
   ];

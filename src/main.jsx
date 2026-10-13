@@ -1027,7 +1027,7 @@ function App() {
         },
         (event) => {
           started = true;
-          if (event.type === "tool.complete" && /^care_/.test(event.payload?.tool || ""))
+          if (event.type === "tool.complete" && /^(care_|[a-z_]+_propose$|proposal_confirm$)/.test(event.payload?.tool || ""))
             window.dispatchEvent(new Event(PENDING_REFRESH_EVENT));
           if (
             event.type === "tool.complete" &&

@@ -208,6 +208,78 @@ test("patient-create proposal: chat registration propose -> confirm creates pati
   assert.ok(made.sessionId, "建档应同时创建病例工作区");
 });
 
+test("proposal_confirm: chat-verbal consent applies patient-create and returns the new patient id", async (t) => {
+  const f = await fixture(t);
+  const create = f.server.runtime.toolPlugins.get("patient_create_propose");
+  const confirmTool = f.server.runtime.toolPlugins.get("proposal_confirm");
+  assert.ok(confirmTool, "proposal_confirm 应注册为 agent 工具");
+
+  const created = create.execute({
+    name: "熊猫",
+    birthYear: 1968,
+    note: "姓名由医生提供",
+    summary: "上传材料识别出的新患者，医生已同意建档",
+  });
+  assert.equal(created.status, "pending");
+
+  const done = confirmTool.execute({ proposalId: created.id });
+  assert.equal(done.status, "applied");
+  assert.ok(done.patientId, "聊天确认建档必须返回新患者编号");
+  assert.equal(done.applied.id, done.patientId);
+  assert.ok(done.note.includes("patient_record_propose"));
+
+  const list = (await f.json("/api/patients")).data;
+  const made = list.patients.find((p) => p.name === "熊猫");
+  assert.ok(made, "聊天口头确认后患者应已落库");
+  assert.equal(made.id, done.patientId);
+
+  // 重复确认（或提案已被面板处理）给出可行动的错误，而不是静默失败。
+  assert.throws(
+    () => confirmTool.execute({ proposalId: created.id }),
+    (err) => err.code === "ACTION_RESOLVED",
+  );
+
+  // 拿提案编号当患者编号提交档案更新，仍然是明确的「患者不存在」。
+  assert.throws(
+    () => f.server.patients.row(created.id),
+    (err) => err.code === "NOT_FOUND",
+  );
+});
+
+test("proposal_confirm: record-update proposal confirms in chat; external-effect types are refused", async (t) => {
+  const f = await fixture(t);
+  const patient = (await f.json("/api/patients", "POST", { name: "聊确患者" }))
+    .data;
+  const record = f.server.runtime.toolPlugins.get("patient_record_propose");
+  const confirmTool = f.server.runtime.toolPlugins.get("proposal_confirm");
+
+  const created = record.execute({
+    patientId: patient.id,
+    diagnoses: [{ code: "C34", name: "肺癌", date: "2026-01-01" }],
+    summary: "追加诊断",
+  });
+  const done = confirmTool.execute({ proposalId: created.id });
+  assert.equal(done.status, "applied");
+  const after = (await f.json(`/api/patients/${patient.id}`)).data;
+  assert.equal(after.diagnoses[0].name, "肺癌");
+
+  // 对外发送类提案不能经聊天确认，必须走「待确认」面板。
+  const careTools = (await import("../server/care/tools.mjs")).careTools;
+  const send = careTools(() => f.server.care, f.server.pendingActions)
+    .find((x) => x.definition.function.name === "care_send_propose");
+  const careProposal = await send.execute({
+    patientId: patient.id,
+    text: "明天记得复查。",
+  });
+  assert.equal(careProposal.status, "pending");
+  assert.throws(
+    () => confirmTool.execute({ proposalId: careProposal.id }),
+    (err) => err.code === "PROPOSAL_TYPE_FORBIDDEN",
+  );
+  const queued = f.server.care.replies({ status: "queued,sent" }).replies;
+  assert.equal(queued.length, 0, "被拒绝的聊天确认不得触发任何外发");
+});
+
 test("doctor_memory_propose: model-proposed memory starts pending and injects after confirm", async (t) => {
   const f = await fixture(t);
   const service = f.server.runtime.toolPlugins.get("doctor_memory_propose");

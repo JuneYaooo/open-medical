@@ -3,11 +3,19 @@ import { ClipboardCheck, X } from "lucide-react";
 import { api } from "./agent-runtime";
 import "./care.css";
 
-const TYPES = { "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展", "ext-install": "技能安装" };
+const TYPES = { "patient-create": "建档提案", "patient-update": "档案更新", "followup-create": "随访提醒", "case-save": "病例入库", "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展", "ext-install": "技能安装" };
 export const PENDING_REFRESH_EVENT = "care-pending-refresh";
 
 function Preview({ action }) {
   const p = action.payload || {};
+  if (action.type === "patient-create") return <><p className="care-hint">新建患者：<b>{p.name}</b> · {({ male: "男", female: "女" })[p.gender] || "性别待补"}{p.birthYear ? ` · ${p.birthYear} 年生` : ""} · 过敏：{({ none_known: "无已知过敏", recorded: "已记录过敏原" })[p.allergyStatus] || "待核对"}</p>
+    {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}
+    {(p.diagnoses?.length || p.medications?.length || p.labs?.length || p.visits?.length) ? <p className="care-hint">诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 次</p> : null}
+    {p.note && <p className="care-hint">备注：{p.note}</p></>;
+  if (action.type === "patient-update") return <><p className="care-hint">写入内容：诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 过敏 {p.allergies?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 条</p>
+    {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}</>;
+  if (action.type === "followup-create") return <p className="care-hint">随访「{p.name}」{p.firstDueAt ? ` · 首次到期 ${p.firstDueAt}` : ""}{p.intervalDays ? ` · 每 ${p.intervalDays} 天` : ""}{p.once ? " · 单次" : " · 周期"}</p>;
+  if (action.type === "case-save") return <>{p.diagnosis && <p className="care-hint">诊断：{p.diagnosis}</p>}{p.summary && <pre>{p.summary}</pre>}</>;
   if (action.type === "care-message") return <><p className="care-hint">渠道：{p.channel || "默认渠道"}</p><pre>{p.text}</pre></>;
   if (action.type === "care-campaign") return <><p className="care-hint">{p.name} · 开始 {p.startDate}</p>
     <ol className="care-steps">{(p.steps || []).map((s, i) => <li key={s.id || i}><div><b>第 {s.dayOffset} 天</b>{s.time ? ` ${s.time}` : ""}</div><p>{s.text}</p></li>)}</ol></>;
@@ -35,7 +43,7 @@ export function PendingTray() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const load = useCallback(() => api("/api/pending-actions?status=pending")
-    .then((data) => setActions((data.actions || []).filter((a) => a.type === "patient-grouping" || a.type === "patient-group-suggest" || a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
+    .then((data) => setActions((data.actions || []).filter((a) => ["patient-create", "patient-update", "followup-create", "case-save"].includes(a.type) || a.type === "patient-grouping" || a.type === "patient-group-suggest" || a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
     .catch(() => {}), []);
   useEffect(() => {
     load();
