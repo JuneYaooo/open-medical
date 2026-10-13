@@ -315,6 +315,8 @@ export class WecomAibotChannel {
   noteSeen(body) {
     const id = body.chattype === "group" ? (body.chatid ? `room:${body.chatid}` : null) : body?.from?.userid;
     if (!id) return;
+    // Preserve receipt order when multiple messages arrive in the same millisecond.
+    this.seen.delete(id);
     this.seen.set(id, { id, title: id, lastMessageAt: this.now() });
     while (this.seen.size > SEEN_LIMIT) {
       const oldest = [...this.seen.values()].sort((a, b) => String(a.lastMessageAt).localeCompare(String(b.lastMessageAt)))[0];
@@ -322,7 +324,7 @@ export class WecomAibotChannel {
     }
   }
   seenList() {
-    return [...this.seen.values()].sort((a, b) => String(b.lastMessageAt).localeCompare(String(a.lastMessageAt)));
+    return [...this.seen.values()].reverse().sort((a, b) => String(b.lastMessageAt).localeCompare(String(a.lastMessageAt)));
   }
   // 一次性探测:真实建立一次长连接完成认证即断开。已在线且密钥未变时直接短路,
   // 避免探测连接把在线连接踢下线。

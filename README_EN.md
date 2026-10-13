@@ -2,11 +2,13 @@
 
 [English](./README_EN.md) | [中文](./README.md)
 
-**A local-first, open-source agent workbench for Windows and macOS.** Open Medical Workbench bundles a general-purpose agent runtime (file tools, sandboxed terminal, sub-agents, MCP client, skills) with a medical domain adapter (patient-note agents, follow-up planning, document drafting) into a desktop app you fully own.
+**A local patient-management assistant for doctors, on Windows and macOS.** Connect patient status, follow-up tasks, personal knowledge collections, case references and working preferences. Reviewed sources and reusable context make everyday retrieval and preparation more useful over time; this does not automatically train the model.
+
+Use Settings to configure daily doctor reminders through WeChat or a Feishu webhook. The Feishu knowledge bot can search selected, reviewed collections when mentioned in an approved group and return source excerpts with citations. See the [connection guide](docs/doctor-assistant-channels.md).
 
 ## Principles
 
-- **Local-only.** All data stays on your machine in SQLite. There is no cloud account, no login, no telemetry, and the servers bind to `127.0.0.1` only.
+- **Configurable processing.** The desktop server binds to `127.0.0.1`. Choose a local model or an external provider; configured external model and messaging services receive the content needed for the enabled operation.
 - **Bring your own model.** Configure any provider — DeepSeek, OpenAI, Anthropic, any OpenAI-compatible endpoint, or a fully offline Ollama/vLLM server — with your own API key. Keys are stored encrypted (AES-256-GCM) in a local vault.
 - **You stay in control.** File edits are proposals by default; choose per-task approval, workspace auto-apply, or full authorization. Every applied change keeps an auditable original.
 

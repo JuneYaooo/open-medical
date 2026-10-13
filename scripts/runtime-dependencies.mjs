@@ -5,6 +5,8 @@ import { dirname, join, relative } from "node:path";
 
 export const runtimeDependencies = [
   "ws",
+  "qrcode",
+  "@larksuiteoapi/node-sdk",
   "wecom",
   "@wecom/crypto",
   "fast-xml-parser",

@@ -1,7 +1,7 @@
 {
   "name": "open-medical-agent",
   "private": true,
-  "version": "0.9.113",
+  "version": "0.9.114",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.38.0",
+    "@larksuiteoapi/node-sdk": "^1.75.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@vitejs/plugin-react": "^6.1.1",
     "@wecom/crypto": "1.0.1",
@@ -64,6 +65,7 @@
     "ml-matrix": "^6.15.0",
     "pdfjs-dist": "^6.3.289",
     "playwright-core": "^1.63.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

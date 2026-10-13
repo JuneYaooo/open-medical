@@ -37,7 +37,7 @@ test('toChatMessage maps group/single frames and strips the @-mention prefix', (
 
 test('channel ingests pushed frames into chat followups and records seen conversations', () => {
   const ingested = [];
-  const channel = new WecomAibotChannel();
+  const channel = new WecomAibotChannel({ now: () => "2026-10-13T00:00:00.000Z" });
   channel.attach({
     config: () => ({ channel:AIBOT_CHANNEL, enabled:true, accountId:'bot', revision:1 }),
     secret: () => ({ token:'sec' }),
@@ -50,6 +50,8 @@ test('channel ingests pushed frames into chat followups and records seen convers
   channel.onMessage(groupFrame({ msgid:'m2', chattype:'single', chatid:undefined, from:{userid:'woP'}, text:{content:'直接咨询'} }));
   assert.equal(ingested[1].conversationId, 'woP');
   assert.deepEqual(channel.seenList().map(s => s.id), ['woP', 'room:wrAbc123']);
+  channel.onMessage(groupFrame({ msgid: 'm3' }));
+  assert.deepEqual(channel.seenList().map(s => s.id), ['room:wrAbc123', 'woP']);
   // 未启用时只记录 seen,不入库。
   const disabled = new WecomAibotChannel();
   let calls = 0;

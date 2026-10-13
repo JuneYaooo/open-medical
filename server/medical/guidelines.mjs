@@ -319,7 +319,7 @@ export class GuidelineLibrary {
   // Deterministic local search: every term must appear inside the chunk;
   // score is the total occurrence count. Works for Chinese without a
   // tokenizer (substring matching over a small local corpus).
-  async search({ query, org, year, kind, collection, reviewStatus, limit = 8 } = {}) {
+  async search({ query, org, year, kind, collection, reviewStatus, limit = 8, localOnly = false } = {}) {
     check(!reviewStatus || reviewStatus === "all" || KNOWLEDGE_STATES.includes(reviewStatus), "INVALID_INPUT", "来源复核状态无效");
     const text = string(query, "检索词", 200);
     const cjk = /[\u4e00-\u9fff]/;
@@ -357,7 +357,7 @@ export class GuidelineLibrary {
     // with the text score. Unavailable embeddings degrade silently.
     const vectorScores = new Map();
     let vectorStale = false;
-    if (this.embedder?.available() && this.vectorStore) {
+    if (!localOnly && this.embedder?.available() && this.vectorStore) {
       try {
         const [queryVector] = await this.embedder.embed([text]);
         const rag = await this.vectorStore.stats();

@@ -2,7 +2,13 @@
 
 [中文](./README.md) | [English](./README_EN.md) · License: [MIT](./LICENSE)
 
-本地优先的开源桌面 Agent 工作台（Windows / macOS）：无需云端账户、业务数据本机保存（使用外部模型时按授权发送所选内容）、模型自行配置（DeepSeek / OpenAI / Anthropic / 任意 OpenAI 兼容接口 / 本地 Ollama），密钥本地加密存储。桌面打包见 `npm run package:mac` / `npm run package:win`，构建流程由 GitHub Actions（`.github/workflows/build-desktop.yml`）双平台验证。
+**医生的本地患者管理智能助手。** 把患者状态、随访待办、个人知识库和案例积累串联起来，随着资料、来源复核和工作偏好的积累，让日常查找、整理与跟进越来越顺手。支持 Windows / macOS，可配置本地 Ollama 或 DeepSeek、OpenAI、Anthropic 等模型；提供资料去隐私化工具，模型密钥加密保存。
+
+在「知识库」建立按用途组织的资料库，导入材料并复核来源；在「医生档案与记忆」管理工作偏好。已整理的知识、案例和偏好可以供后续任务复用。这些积累不会自动训练模型，输出仍需医生核对。
+
+在「设置 → 医生提醒」连接医生微信或飞书群机器人，按日接收待随访、待跟进数量。在「设置 → 飞书知识库机器人」连接自建应用，选择可分享的资料库并授权群，群成员 @ 机器人即可查询已复核资料的原文与出处。接入步骤与运行条件见 [提醒与知识库机器人](docs/doctor-assistant-channels.md)。
+
+桌面打包：`npm run package:mac` / `npm run package:win`。使用外部模型或消息渠道时，相应内容会发送到所配置服务；本地模型可在设置中选择。
 
 ## 医生工作台闭环（2026-09-22）
 

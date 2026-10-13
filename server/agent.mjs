@@ -54,6 +54,8 @@ import { searchIcd10 } from "./medical/icd10.mjs";
 import { PatientBrief } from "./medical/patient-brief.mjs";
 import { PatientImporter } from "./medical/patient-import.mjs";
 import { CareTasks } from "./medical/care-tasks.mjs";
+import { FeishuKnowledgeBot } from "./medical/feishu-knowledge-bot.mjs";
+import { DoctorNotifications } from "./medical/doctor-notifications.mjs";
 import { PatientSchedule } from "./medical/patient-schedule.mjs";
 import { Extensions } from "./medical/extensions.mjs";
 import { extensionTools } from "./medical/extension-tools.mjs";
@@ -644,6 +646,8 @@ export function createServer(options = {}) {
   const trialRegistry = new TrialRegistry(options.trialRegistryOptions);
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
+  const knowledgeBot = new FeishuKnowledgeBot(store, models.vault, guidelines, options.knowledgeBotOptions);
+  const doctorNotifications = new DoctorNotifications(store, models.vault, options.doctorNotificationOptions);
   const patientImporter = new PatientImporter(store, patients);
   runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending), ...trialTools(() => trialCandidates, pending), ...scheduleTools(() => schedule), ...extensionTools(() => extensions, pending)]);
   const swapProvider = (next) => {
@@ -1463,6 +1467,18 @@ export function createServer(options = {}) {
         return send(res, 200, { enabled: false, available: false, retired: true, reason: "请使用随访 → 聊天随访中的会话核验与读取" });
       if (["/api/wechat/read", "/api/wechat/send"].includes(path) && req.method === "POST")
         throw new AppError("WECHAT_LEGACY_RETIRED", "旧微信桥接已停用。请在随访 → 聊天随访中核验并关联会话；发送请在微信中完成。", 410);
+      if (path === "/api/knowledge-bot" && req.method === "GET") return send(res, 200, knowledgeBot.settings());
+      if (path === "/api/knowledge-bot" && req.method === "PUT") return send(res, 200, await track(knowledgeBot.save(await body(req))));
+      if (path === "/api/doctor-notifications" && req.method === "GET") return send(res, 200, doctorNotifications.settings());
+      if (parts[0] === "api" && parts[1] === "doctor-notifications" && parts.length === 3 && req.method === "PUT") return send(res, 200, doctorNotifications.save(parts[2], await body(req)));
+      if (parts[0] === "api" && parts[1] === "doctor-notifications" && parts.length === 4 && req.method === "POST") {
+        const channel = parts[2], action = parts[3], input = await body(req);
+        if (action === "test") return send(res, 200, await track(doctorNotifications.test(channel)));
+        if (action === "send") return send(res, 200, await track(doctorNotifications.send(channel, input)));
+        if (action === "disconnect") return send(res, 200, doctorNotifications.disconnect(channel, input.expectedRevision));
+        if (channel === "wechat" && action === "qrcode") return send(res, 200, await track(doctorNotifications.startQr()));
+        if (channel === "wechat" && action === "qrcode-status") return send(res, 200, await track(doctorNotifications.pollQr(input.id)));
+      }
       if (path === "/api/doctor/overview" && req.method === "GET")
         return send(res, 200, doctorOverview.read({
           kind: url.searchParams.get("kind") || "all", query: url.searchParams.get("q") || "",
@@ -2381,6 +2397,8 @@ export function createServer(options = {}) {
   server.followups = followups;
   server.surveys = surveys;
   server.doctor = runtime.doctor;
+  server.knowledgeBot = knowledgeBot;
+  server.doctorNotifications = doctorNotifications;
   server.literature = literature;
   server.guidelines = guidelines;
   server.knowledgeOrganizer = knowledgeOrganizer;
@@ -2401,6 +2419,8 @@ export function createServer(options = {}) {
     workspaces.scheduler.start();
     workspaces.recovery.start();
     followups.start();
+    doctorNotifications.start();
+    knowledgeBot.start();
     chatFollowups.start();
     care.start();
     extensions.start();
@@ -2412,6 +2432,8 @@ export function createServer(options = {}) {
     workspaces.scheduler.stop();
     workspaces.recovery.stop();
     followups.stop();
+    await doctorNotifications.stop();
+    await knowledgeBot.stop();
     await chatFollowups.stop();
     wecomAibot.stop();
     wechatExp.stop();

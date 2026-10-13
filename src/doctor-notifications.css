@@ -1,0 +1,25 @@
+.doctor-notifications { max-width: 850px; }
+.notification-channel { border: 1px solid #d9e3d8; border-radius: 12px; padding: 24px; margin: 24px 0; background: #fff; }
+.notification-channel h3 { margin: 0 0 16px; }
+.notification-channel h3 small { font-size: 13px; font-weight: 400; color: #617366; margin-left: 12px; }
+.notification-channel fieldset { border: 0; padding: 0; margin: 18px 0; min-width: 0; }
+.notification-channel label { display: grid; gap: 7px; margin: 14px 0; }
+.notification-channel input:not([type=checkbox]) { width: 100%; min-width: 0; }
+.notification-channel .notification-check { display: flex; align-items: center; gap: 10px; }
+.notification-schedule { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.notification-channel details { margin: 14px 0; }
+.notification-preview { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 16px; border-radius: 8px; background: #f3f6f0; }
+.notification-qr { margin: 20px 0; }
+.notification-qr img { width: 240px; max-width: 100%; }
+.notification-receipt button { display: block; margin-top: 10px; }
+@media(max-width:700px) { .notification-schedule { grid-template-columns: 1fr; gap: 0; } .notification-channel { padding: 16px; } .app-settings-layout > nav { flex-wrap: wrap; } }
+.notification-fields { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
+.notification-fields > label { display: grid; gap: 7px; margin: 14px 0; }
+.notification-fields input:not([type=checkbox]) { width: 100%; min-width: 0; }
+.notification-fields .notification-checkbox { display: flex; gap: 10px; align-items: center; }
+.doctor-notifications li { margin: 10px 0; }
+.doctor-notifications button { padding: 8px 13px; border: 1px solid #cedbce; border-radius: 8px; background: #f7faf6; color: #244e3c; cursor: pointer; font: inherit; }
+.doctor-notifications button[type=submit] { background: #286449; border-color: #286449; color: white; }
+.doctor-notifications button:disabled { opacity: .5; cursor: default; }
+.doctor-notifications input[type=checkbox] { accent-color: #286449; }
+.doctor-notifications summary { font-size: 14px; cursor: pointer; }
