@@ -1,6 +1,7 @@
 import { ChatConnectionSettings } from "./chat-followups";
 import { useEffect, useRef, useState } from "react";
 import { api, medicalEnabled } from "./agent-runtime";
+import { dueNotifyEnabled, setDueNotifyEnabled } from "./due-notify";
 import { WorkspaceExtensionsPanel } from "./workspace-extensions";
 import { ExtensionCenter, takeSettingsTab } from "./extension-center";
 import { PluginCenter } from "./plugin-center";
@@ -11,6 +12,7 @@ import { DoctorNotificationSettings } from "./doctor-notifications";
 // 编辑模型配置/重启」迁到这里。浏览器里没有 window.omwDesktop,整个分区不渲染。
 function DesktopAppPanel({ desktop }) {
   const [autoLogin, setAutoLogin] = useState(null);
+  const [dueNotify, setDueNotify] = useState(() => dueNotifyEnabled());
   const [note, setNote] = useState("");
   useEffect(() => {
     desktop.loginItemAtLogin?.().then(setAutoLogin).catch(() => setAutoLogin(false));
@@ -26,12 +28,19 @@ function DesktopAppPanel({ desktop }) {
       setNote(`设置失败：${error.message}`);
     }
   }
+  function toggleDueNotify(event) {
+    const on = event.target.checked;
+    setDueNotifyEnabled(on);
+    setDueNotify(on);
+    setNote(on ? "已开启到期提醒：随访、复诊、新结果等新待办出现且窗口不在前台时，系统会通知你。" : "已关闭到期提醒，到期的事项仍会列在「今日待办」页里。");
+  }
   return <section aria-label="桌面应用">
     <h2>桌面应用</h2>
     <p>启动行为与维护操作在这里管理；手动改过配置文件后，用「重启应用」生效。</p>
     {note && <p className="settings-desktop-note" role="status">{note}</p>}
     <div className="toolbar-actions">
       {desktop.loginItemAtLogin && <label className="settings-login-item"><input type="checkbox" checked={autoLogin === true} disabled={autoLogin === null} onChange={toggleAutoLogin} />登录时自动启动</label>}
+      {desktop.showNotification && <label className="settings-login-item"><input type="checkbox" checked={dueNotify} onChange={toggleDueNotify} />到期事项系统提醒</label>}
       {desktop.openDataDirectory && <button onClick={() => desktop.openDataDirectory().catch(() => {})}>打开数据目录</button>}
       {desktop.editModelConfig && <button onClick={() => desktop.editModelConfig().catch(() => {})}>编辑高级配置文件（model.env）…</button>}
       {desktop.relaunchApp && <button onClick={() => desktop.relaunchApp().catch(() => {})}>重启应用</button>}

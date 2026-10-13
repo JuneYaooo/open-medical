@@ -3,6 +3,7 @@ import { CareInbox } from "./care-inbox";
 import { PendingTray, PENDING_REFRESH_EVENT } from "./pending-tray";
 import { AppSettingsView } from "./app-settings";
 import { readLocation, writeLocation, VIEW_LABELS } from "./navigation";
+import { DueNotifyWatcher } from "./due-notify";
 import { conversationRunIds } from "../shared/patient-conversations.mjs";
 import { PatientConversationNav } from "./patient-conversation-nav";
 import { TaskResult, hasTaskResult } from "./task-result";
@@ -1367,6 +1368,7 @@ function App() {
   return (
     <div className={`agent-app v6-shell mode-${view === "workspaces" ? workspaceDisplay : displayMode} ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
       {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
+      {medicalEnabled(config) && window.omwDesktop && <DueNotifyWatcher api={api} onNavigate={navigate} />}
       <a href="#main-content" className="skip-link">
         跳到工作区
       </a>

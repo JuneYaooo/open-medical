@@ -393,6 +393,22 @@ async function start() {
       window.focus();
     } else if (origin) openWindow();
   };
+  // 渲染进程的到期待办提醒（随访到期、新检验结果等）：窗口不在前台时也由
+  // 主进程弹系统通知，点击通知把窗口带回前台并切到对应视图。文案只取字符
+  // 串字段并截断，内容全部来自本机数据。
+  ipcMain.handle("omw:show-notification", (_event, options) => {
+    if (!Notification.isSupported()) return false;
+    const title = typeof options?.title === "string" && options.title ? options.title.slice(0, 80) : "Open Medical";
+    const body = typeof options?.body === "string" ? options.body.slice(0, 180) : "";
+    const view = typeof options?.view === "string" && options.view ? options.view.slice(0, 40) : "";
+    const notification = new Notification({ title, body });
+    notification.on("click", () => {
+      showWorkspace();
+      if (view && window) window.webContents.send("omw:open-view", view);
+    });
+    notification.show();
+    return true;
+  });
   // The app hosts its own runtime; before-quit shuts it down. The generic
   // daemon (platform.mjs), if running, is independent and stays untouched.
   const stopDaemonAndQuit = async () => {
