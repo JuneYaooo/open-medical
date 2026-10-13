@@ -87,6 +87,7 @@ import { MaterialLibrary, materialSearchTools } from "./medical/materials.mjs";
 import { ModelSettings } from "./core/model-settings.mjs";
 import { JevSettings } from "./core/jev-settings.mjs";
 import { OcrSettings, OCR_MODEL_PROFILE_ID } from "./core/ocr-settings.mjs";
+import { PaddleLocal } from "./core/paddle-local.mjs";
 import { configureLocalOcrService, imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -300,6 +301,18 @@ export function createServer(options = {}) {
   // 本机识别层（image-text.localOcrLines）据此优先走 PaddleOCR 服务，
   // 服务不可达时自动落回 macOS/Windows 系统组件。
   configureLocalOcrService(() => ocrSettings.service());
+  // 本机 PaddleOCR 引擎（用户在 OCR 设置里点「在本机安装」才会装；装好后
+  // 服务配置自动指向它，重启时若配置仍指向本机就拉起/收养残留进程）。
+  const paddleLocal =
+    options.paddleLocal ||
+    new PaddleLocal({
+      dataDir: databasePath === ":memory:" ? mkdtempSync(join(tmpdir(), "omw-paddle-")) : dirname(databasePath),
+    });
+  // 装过本机引擎且服务配置仍指向它时，拉起/收养残留进程；后台兜底动作，
+  // 失败不阻塞启动（识别层自动落回系统组件）。
+  paddleLocal
+    .resume({ wantsService: (url) => ocrSettings.service()?.baseUrl === url })
+    .catch(() => {});
   const knowledgeOrganizer = new KnowledgeOrganizer({
     store, library: guidelines, root: knowledgeRoot, getProvider: () => provider,
     getTranscription: () => knowledgeProfiles.all()["knowledge-transcription"],
@@ -1615,6 +1628,32 @@ export function createServer(options = {}) {
               );
         return send(res, 200, result);
       }
+      // 本机 PaddleOCR 引擎：状态 / 安装 / 启停。安装只在用户点击后进行，
+      // 长任务返回 202 由前端轮询 status；失败原因（缺 Python、pip 网络、
+      // 启动超时）都会带可执行的下一步建议。
+      if (path === "/api/ocr-settings/local-engine" && req.method === "GET")
+        return send(res, 200, paddleLocal.status());
+      if (path === "/api/ocr-settings/local-engine/install" && req.method === "POST") {
+        paddleLocal.startInstall().then(async () => {
+          // 装好即接管本机识别：服务配置指向本机引擎（合并写入，不动策略）。
+          ocrSettings.save({ service: { baseUrl: paddleLocal.status().baseUrl } });
+        }).catch(() => {});
+        return send(res, 202, paddleLocal.status());
+      }
+      if (path === "/api/ocr-settings/local-engine/start" && req.method === "POST") {
+        const manifest = paddleLocal.manifest();
+        check(manifest?.ready, "OCR_LOCAL_PYTHON", "本机引擎尚未安装，请先安装", 400);
+        const baseUrl = await paddleLocal.startWorker(manifest.port);
+        ocrSettings.save({ service: { baseUrl } });
+        return send(res, 200, paddleLocal.status());
+      }
+      if (path === "/api/ocr-settings/local-engine/stop" && req.method === "POST") {
+        // 停引擎的同时把服务配置一并清掉，本机识别落回系统组件，不留暗桩。
+        paddleLocal.stop();
+        if (paddleLocal.ownsBaseUrl(ocrSettings.service()?.baseUrl))
+          ocrSettings.save({ clearService: true });
+        return send(res, 200, paddleLocal.status());
+      }
       if (path === "/api/scales" && req.method === "GET")
         return send(res, 200, { scales: listScales() });
       if (
@@ -2367,6 +2406,7 @@ export function createServer(options = {}) {
   server.shutdown = async () => {
     workspaces.stopping = true;
     scheduler.stop();
+    paddleLocal.stop();
     workspaces.scheduler.stop();
     workspaces.recovery.stop();
     followups.stop();

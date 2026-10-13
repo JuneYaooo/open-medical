@@ -27,6 +27,12 @@ export function OcrSettingsSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+  // 本机 PaddleOCR 引擎：状态轮询 + 安装/启停。安装只在医生点击确认后进行。
+  const [engine, setEngine] = useState(null);
+  const [engineBusy, setEngineBusy] = useState(false);
+  const [confirmInstall, setConfirmInstall] = useState(false);
+  const pollEngine = () => api('/api/ocr-settings/local-engine').then(d => { setEngine(d); return d; }).catch(() => null);
+  useEffect(() => { pollEngine(); }, []);
   useEffect(() => {
     let alive = true;
     api('/api/ocr-settings').then(d => {
@@ -41,6 +47,47 @@ export function OcrSettingsSection() {
     }).catch(e => { if (alive) setError(e.message); });
     return () => { alive = false; };
   }, []);
+  async function adoptEngine(d) {
+    // 装好/启动后把服务配置指向本机引擎，识别立即生效（不动策略与模型）。
+    const saved = await api('/api/ocr-settings', 'PUT', { service: { baseUrl: d.baseUrl } });
+    setData(saved);
+    setServiceDirty(false);
+    setServiceForm({ baseUrl: d.baseUrl, apiKey: '' });
+  }
+  async function installEngine() {
+    setEngineBusy(true); setError(''); setStatus(''); setConfirmInstall(false);
+    try {
+      await api('/api/ocr-settings/local-engine/install', 'POST');
+      let d = await pollEngine();
+      while (d?.installing) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        d = await pollEngine();
+      }
+      if (d?.error) setError(d.error);
+      else if (d?.baseUrl) {
+        await adoptEngine(d);
+        setStatus(`本机 PaddleOCR 已装好并运行（${d.baseUrl}），本机识别现在优先走它。新上传的图片资料立即生效。`);
+      }
+    } catch (e) { setError(e.message); } finally { setEngineBusy(false); pollEngine(); }
+  }
+  async function startEngine() {
+    setEngineBusy(true); setError(''); setStatus('');
+    try {
+      const d = await api('/api/ocr-settings/local-engine/start', 'POST');
+      await adoptEngine(d);
+      setStatus(`本机引擎已启动（${d.baseUrl}），本机识别现在优先走它。`);
+    } catch (e) { setError(e.message); } finally { setEngineBusy(false); pollEngine(); }
+  }
+  async function stopEngine() {
+    setEngineBusy(true); setError(''); setStatus('');
+    try {
+      const d = await api('/api/ocr-settings/local-engine/stop', 'POST');
+      const saved = await api('/api/ocr-settings');
+      setData(saved);
+      setStatus('本机引擎已停止；本机识别落回系统组件。需要时点「启动本机引擎」或重新安装。');
+      void d;
+    } catch (e) { setError(e.message); } finally { setEngineBusy(false); pollEngine(); }
+  }
   function update(changes) { setForm(f => ({ ...f, ...changes })); setError(''); setStatus(''); }
   function updateService(changes) { setServiceForm(f => ({ ...f, ...changes })); setServiceDirty(true); setError(''); setStatus(''); }
   function servicePayload() {
@@ -103,8 +150,9 @@ export function OcrSettingsSection() {
   }
   const spec = preset === NONE ? null : presetById(preset);
   const customModel = spec && spec.models.length > 0 && !spec.models.includes(form.model);
-  return <details className="model-jev-section">
-    <summary>文字识别（OCR）</summary>
+  // 外层的 details 折叠由 model-settings.jsx 提供；这里只渲染内容，
+  // 否则医生点开「文字识别（OCR）」看到的又是同一个标题的空折叠。
+  return <div className="model-jev-section-body">
     <p>扫描件、拍照资料读文字的引擎与顺序：本机识别（PaddleOCR 服务或系统组件）优先，质量差时自动改用识别模型重试；「仅本机」策略下图片不会发给任何大模型。微信聊天窗口的读取始终用系统本机识别，不受这里影响。</p>
     {!data && !error && <p role="status">正在读取 OCR 配置…</p>}
     {data && <form onSubmit={save}>
@@ -125,6 +173,19 @@ export function OcrSettingsSection() {
           <label>API Key <span>{data.service?.hasKey && !serviceDirty ? '已保存 · 留空保留现有密钥' : '服务未启用鉴权时可留空'}</span>
             <input type="password" autoComplete="new-password" value={serviceForm.apiKey} onChange={e => updateService({ apiKey: e.target.value })} placeholder={data.service?.hasKey && !serviceDirty ? '••••••••（已保存）' : '粘贴 WORKER_API_KEY'} />
           </label>
+          <div className="ocr-local-engine">
+            <p className="muted">没有现成的 PaddleOCR 服务？可以让工作台在本机装一个（独立的虚拟环境，不影响系统 Python；只在下面点确认后才下载，约 300MB，装不上会提示原因，不会后台强装）。</p>
+            {engine?.installing && <p role="status">正在安装本机引擎：{engine.step}{engine.detail ? ` · ${engine.detail}` : ''}…（可关闭此窗口，安装继续）</p>}
+            {!engine?.installing && !engine?.installed && !confirmInstall && <button type="button" disabled={engineBusy} onClick={() => setConfirmInstall(true)}>在本机安装 PaddleOCR 识别引擎…</button>}
+            {!engine?.installing && confirmInstall && <div role="group" aria-label="确认安装">
+              <p className="muted">即将在本机安装 PaddleOCR：创建独立虚拟环境 → 下载并安装约 300MB 依赖（自动尝试清华/阿里镜像）→ 下载识别模型（约 20MB）→ 在本机 <code>{engine?.port ? `127.0.0.1:${engine.port}` : '127.0.0.1'}</code> 启动识别服务并设为本机识别。需要 Python 3.9–3.12（未检测到会直接提示，不会替你装 Python）。整个过程几分钟到半小时，取决于网络；任何一步失败都会说明原因，已下载内容保留、重试续用。</p>
+              <button className="model-save" type="button" disabled={engineBusy} onClick={installEngine}>确认安装</button>
+              <button type="button" disabled={engineBusy} onClick={() => setConfirmInstall(false)}>取消</button>
+            </div>}
+            {engine?.installed && !engine?.running && !engine?.installing && <button type="button" disabled={engineBusy} onClick={startEngine}>启动本机引擎（{engine.baseUrl}）</button>}
+            {engine?.running && <p className="muted">本机引擎运行中：<code>{engine.baseUrl}</code> <button className="text-button" type="button" disabled={engineBusy} onClick={stopEngine}>停止</button>（停止后本机识别落回系统组件）</p>}
+            {!!engine?.python && !engine?.installing && <p className="muted">检测到 Python {engine.python.version}；安装位置 <code>{engine.root}</code></p>}
+          </div>
         </fieldset>
         <fieldset>
           <legend>专用识别模型（可选，难例兜底）</legend>
@@ -157,5 +218,5 @@ export function OcrSettingsSection() {
     {busy && <p role="status">正在处理，请稍候…</p>}
     {error && <p role="alert" className="model-settings-error">{error}</p>}
     {status && <p role="status" className="model-settings-success">{status}</p>}
-  </details>;
+  </div>;
 }
