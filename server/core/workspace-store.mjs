@@ -149,7 +149,9 @@ export class WorkspaceStore {
     check(row, "NOT_FOUND", "工作区不存在", 404);
     return JSON.parse(row.data);
   }
-  update(id, callback, revision) {
+  // touch:false 供配置类回写（默认授权迁移等）使用：这类写入不是用户
+  // 活动，改动 updatedAt 会伪造「最近对话」的排序依据。
+  update(id, callback, revision, { touch = true } = {}) {
     return sqliteTransaction(this.db, () => {
       const workspace = this.get(id);
       if (revision !== undefined)
@@ -161,7 +163,7 @@ export class WorkspaceStore {
         );
       callback(workspace);
       workspace.revision++;
-      workspace.updatedAt = Date.now();
+      if (touch) workspace.updatedAt = Date.now();
       this.db
         .prepare("UPDATE agent_workspaces SET data=? WHERE id=?")
         .run(JSON.stringify(workspace), id);

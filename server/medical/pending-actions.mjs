@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { check, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
-import { validateClinicalInput } from "../patients.mjs";
+import { validateClinicalInput, validateIdentityInput } from "../patients.mjs";
 import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../../shared/diagnoses.mjs";
 import { normalizeGroupProposal, scanGroupSuggestions } from "./patient-grouping.mjs";
 
@@ -125,11 +125,14 @@ export class PendingActions {
       if (normalized.patientId) resolvedPatientId = normalized.patientId;
     }
     if (type === "patient-update") {
-      const fields = validateClinicalInput(payload);
+      const fields = {
+        ...validateIdentityInput(payload),
+        ...validateClinicalInput(payload),
+      };
       check(
         Object.keys(fields).length >= 1,
         "INVALID_INPUT",
-        "患者档案提案至少包含一项变更（诊断/用药/过敏/检验/就诊）",
+        "患者档案提案至少包含一项变更（姓名/性别/出生年等身份信息或诊断/用药/过敏/检验/就诊）",
       );
       normalized = fields;
     }
@@ -589,9 +592,14 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_record_propose",
-        "提议更新患者临床档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 落库。",
+        "提议更新患者档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。医生在对话中明确给出或更正姓名/性别/出生年等身份信息时（如更正建档时的占位姓名），把 name 等字段一并提交。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 落库。",
         {
           patientId: textDef,
+          name: { ...textDef, description: "患者姓名。仅用医生本人在对话中明确说出的姓名，不得从模糊图片猜测" },
+          gender: { type: "string", enum: ["male", "female", "unknown"], description: "性别" },
+          birthYear: { type: "integer", description: "出生年份（4 位）" },
+          patientNumber: { ...textDef, description: "病历号/患者编号" },
+          phone: { ...textDef, description: "联系电话" },
           clinicalSummary: clinicalSummaryDef,
           updateMode: { type: "string", enum: ["append", "replace"], description: "append 保留旧记录；replace 须提供所更改字段完整列表，遗漏的字段不变" },
           diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；append 时同名诊断自动与原档案合并来源" },
@@ -649,7 +657,11 @@ const diagnosisItemsDef = {
         const { patientId, summary, updateMode = "append", ...input } = args;
         check(["append", "replace"].includes(updateMode), "INVALID_INPUT", "档案更新模式无效");
         const current = pending.patients.row(patientId);
-        const updates = validateClinicalInput(input);
+        // 身份字段（姓名等）是标量覆盖：append/replace 语义相同，直接进提案。
+        const updates = {
+          ...validateIdentityInput(input),
+          ...validateClinicalInput(input),
+        };
         if (updateMode === "append") for (const key of ["diagnoses", "medications", "allergies", "labs", "visits"]) {
           if (!Array.isArray(updates[key])) continue;
           const previous = validateClinicalInput({ [key]: current[key] || [] })[key];

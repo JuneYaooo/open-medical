@@ -1,6 +1,13 @@
 import { Modal } from "./components";
 
 const fields = { clinicalSummary: "病史摘要", diagnoses: "诊断", medications: "用药", allergies: "过敏原", allergyStatus: "过敏史核对状态", labs: "检验", visits: "就诊" };
+// 身份字段是标量覆盖（姓名等），没有列表 diff，单独渲染当前值 → 采纳值。
+const identityFields = [["name", "姓名"], ["gender", "性别"], ["birthYear", "出生年"], ["patientNumber", "病历号"], ["phone", "联系电话"]];
+const genderText = { male: "男", female: "女", unknown: "未知" };
+const identityText = (value) =>
+  value === undefined || value === null || value === ""
+    ? "未填写"
+    : genderText[value] || String(value);
 const states = { active: "正在使用", stopped: "已停用", unknown: "待核对", none_known: "已核对无已知过敏", recorded: "已记录过敏原" };
 const label = (value) => {
   if (typeof value === "string") return states[value] || value;
@@ -12,6 +19,10 @@ export function PatientProposalModal({ patient, proposal, busy, error, onClose, 
   const stale = patient.revision !== proposal.baseRevision;
   return <Modal title="核对档案变更" wide onClose={() => { if (!busy) onClose(); }}>
     <section className="patient-proposal-review"><p><b>{patient.name}</b> · {proposal.summary}</p><p className="muted">左侧为当前档案，右侧为采纳后的完整内容。未列出的字段保持原记录。</p>
+      {identityFields.filter(([key]) => proposal.payload[key] !== undefined).map(([key, name]) => {
+        const changed = identityText(patient[key]) !== identityText(proposal.payload[key]);
+        return <section key={key}><h4>{name}</h4><div className="proposal-comparison"><div><b>当前记录</b><p className={changed ? "proposal-removed" : ""}>{changed && <small>将移除 / 改写</small>}{identityText(patient[key])}</p></div><div><b>采纳后</b><p className={changed ? "proposal-added" : ""}>{changed && <small>新增 / 变更</small>}{identityText(proposal.payload[key])}</p></div></div></section>;
+      })}
       {Object.entries(fields).filter(([key]) => proposal.payload[key] !== undefined).map(([key, name]) => {
         const before = values(patient[key]), after = values(proposal.payload[key]);
         const beforeLabels = before.map(label), afterLabels = after.map(label);

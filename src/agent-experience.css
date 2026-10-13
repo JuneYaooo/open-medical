@@ -17,7 +17,7 @@
 /* 最近对话的患者分组小标题(非按钮,保证列表第一个可点元素是会话本身) */
 .agent-recents-group { margin-top: 10px; }
 .agent-recents-group:first-child { margin-top: 0; }
-.agent-recents-group-label { margin: 0 0 2px; padding: 0 12px; font-size: 11px; color: #8a988e; }
+.agent-recents-group-label { margin: 0 0 2px; padding: 0 12px; font-size: 11px; color: #8a988e; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* 最近对话紧挨「新建任务」,医疗模式下就是侧栏主体:列表吃掉剩余高度、
    内部滚动(≈top15),「任务记录/项目文件」降为尾部两个链接,不再占导航位。 */
 .agent-recents { margin-top: 14px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }

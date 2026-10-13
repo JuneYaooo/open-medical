@@ -12,8 +12,19 @@ function Preview({ action }) {
     {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}
     {(p.diagnoses?.length || p.medications?.length || p.labs?.length || p.visits?.length) ? <p className="care-hint">诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 次</p> : null}
     {p.note && <p className="care-hint">备注：{p.note}</p>}</>;
-  if (action.type === "patient-update") return <><p className="care-hint">写入内容：诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 过敏 {p.allergies?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 条</p>
-    {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}</>;
+  if (action.type === "patient-update") {
+    const genderLabel = { male: "男", female: "女", unknown: "未知" };
+    const identity = [
+      p.name !== undefined && `姓名改为「${p.name}」`,
+      p.gender !== undefined && `性别改为${genderLabel[p.gender] || p.gender}`,
+      p.birthYear !== undefined && `出生年改为 ${p.birthYear}`,
+      p.patientNumber !== undefined && `病历号改为「${p.patientNumber || "（清空）"}」`,
+      p.phone !== undefined && `电话改为「${p.phone || "（清空）"}」`,
+    ].filter(Boolean);
+    return <><p className="care-hint">写入内容：{identity.length ? `身份信息 ${identity.length} 项 · ` : ""}诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 过敏 {p.allergies?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 条</p>
+      {identity.length > 0 && <ul className="care-hint">{identity.map((text, i) => <li key={i}>{text}</li>)}</ul>}
+      {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}</>;
+  }
   if (action.type === "followup-create") return <p className="care-hint">随访「{p.name}」{p.firstDueAt ? ` · 首次到期 ${p.firstDueAt}` : ""}{p.intervalDays ? ` · 每 ${p.intervalDays} 天` : ""}{p.once ? " · 单次" : " · 周期"}</p>;
   if (action.type === "case-save") return <>{p.diagnosis && <p className="care-hint">诊断：{p.diagnosis}</p>}{p.summary && <pre>{p.summary}</pre>}</>;
   if (action.type === "care-message") return <><p className="care-hint">渠道：{p.channel || "默认渠道"}</p><pre>{p.text}</pre></>;

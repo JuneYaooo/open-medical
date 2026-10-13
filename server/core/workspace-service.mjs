@@ -139,13 +139,25 @@ export class WorkspaceService {
   // 保存过扩展配置（无 w.extensions 记录）且非 minimal 档的工作区开启
   // browser.read / network（含医疗会话工作区：模型外发确认是独立闸门）；
   // 用户显式配置过扩展的工作区保持其选择。
+  // 守卫必须幂等：0.9.4–0.9.10x 版本只看「有无 extensions」，而桌面端
+  // 无容器镜像时 configure 从不执行、extensions 永远不落库，导致这里
+  // 每次启动都把全部会话改写一遍并顺手 touch updatedAt——「最近对话」
+  // 的排序与时间全部失真（同一毫秒簇）。现在 grants 已是目标值即跳过，
+  // 且配置回写不 touch updatedAt（touch:false，见 WorkspaceStore.update）。
   migrateNetworkDefaults() {
     for (const w of this.store.list()) {
       if (w.extensions || w.permissions?.profile === "minimal") continue;
-      this.store.update(w.id, (current) => {
-        current.permissions.grants["browser.read"] = true;
-        current.permissions.grants.network = true;
-      });
+      const grants = w.permissions?.grants || {};
+      if (grants["browser.read"] === true && grants.network === true) continue;
+      this.store.update(
+        w.id,
+        (current) => {
+          current.permissions.grants["browser.read"] = true;
+          current.permissions.grants.network = true;
+        },
+        undefined,
+        { touch: false },
+      );
     }
   }
   list() {

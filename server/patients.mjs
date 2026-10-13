@@ -639,6 +639,27 @@ export function validateClinicalInput(input = {}) {
       : {}),
   };
 }
+// Identity fields (name 等) for the agent proposal flow — same rules as the
+// profile-page edit path in update(), so a name the doctor states in chat can
+// land on the record instead of being dumped into a note.
+export function validateIdentityInput(input = {}) {
+  const fields = {};
+  if (input.name !== undefined) {
+    const name = string(input.name, "患者姓名", 80);
+    check(name.trim(), "INVALID_INPUT", "患者姓名不能为空");
+    fields.name = name.trim();
+  }
+  if (input.patientNumber !== undefined)
+    fields.patientNumber =
+      input.patientNumber === "" ? "" : string(input.patientNumber, "患者编号", 40);
+  if (input.gender !== undefined)
+    fields.gender = optionalChoice(input.gender, ["male", "female", "unknown"]);
+  if (input.birthYear !== undefined)
+    fields.birthYear = optionalInt(input.birthYear, 1900, new Date().getFullYear());
+  if (input.phone !== undefined)
+    fields.phone = input.phone === "" ? "" : string(input.phone, "联系电话", 20);
+  return fields;
+}
 function allergyState(patient, input) {
   const status = input.allergyStatus;
   check(status === undefined || ["unknown", "none_known", "recorded"].includes(status), "INVALID_INPUT", "过敏史核对状态无效");
