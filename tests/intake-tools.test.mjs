@@ -69,3 +69,19 @@ test('an unsaved intake batch can be recovered verbatim after model context comp
   assert.equal(read({}, {sources}).complete,true);
   assert.equal(registry.get('read_intake_notes').execute({}).batchesSaved,1);
 });
+
+test('intake guidance advances after personal context and resets for newly saved facts', async () => {
+  const sources=Array.from({length:6},(_,i)=>({id:`s${i}`,name:`record${i}.txt`,text:'合成来源事实'}));
+  const registry=new ToolRegistry(['read_source','patient_create_propose'].map(name=>({definition:{type:'function',function:{name,parameters:{type:'object',properties:{}}}},execute:()=>({ok:true})})));
+  configureIntakeTools(registry,{materials:sources});
+  registry.get('read_intake_batch').execute({}, {sources});
+  registry.get('save_intake_notes').execute({notes:'前五份事实'});
+  const notes=registry.get('read_intake_notes').execute;
+  assert.match(notes({}).instruction,/read_personal_context/);
+  const personal=await registry.get('read_personal_context').execute();
+  assert.equal(personal.nextTool,'patient_create_propose');
+  assert.match(notes({}).instruction,/patient_create_propose/);
+  registry.get('read_intake_batch').execute({}, {sources});
+  registry.get('save_intake_notes').execute({notes:'最后一份事实'});
+  assert.match(notes({index:1}).instruction,/read_personal_context/);
+});

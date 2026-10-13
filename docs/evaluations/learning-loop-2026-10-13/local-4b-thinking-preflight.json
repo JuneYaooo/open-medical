@@ -1,0 +1,23 @@
+{
+  "version": "0.9.122",
+  "mode": "preflight",
+  "model": {
+    "provider": "local",
+    "name": "open-medical-eval-qwen3-4b",
+    "base": "qwen3:4b",
+    "configuredContext": 40960,
+    "maxTokens": 4096
+  },
+  "status": "failed",
+  "completedIntakes": 0,
+  "deadlineSeconds": 600,
+  "observedToolSequence": [
+    "read_intake_batch",
+    "save_intake_notes",
+    "read_intake_notes",
+    "read_personal_context",
+    "patient_create_propose"
+  ],
+  "failure": "Proposal rejected for missing required summary; no valid proposal before the intake deadline. Remaining cell stopped.",
+  "interpretation": "Batch progression recovered after context compaction fix; model workflow and latency did not pass. This preflight does not measure learning effectiveness."
+}

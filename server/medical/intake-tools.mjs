@@ -10,7 +10,9 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
   const getPersonal = async () => { if (!personalValue) personalValue = personal ? await personal.build(notes) : { text: '' }; return personalValue; };
   registry.register({ permission: 'tools.execute', capability: { backend: 'local' }, definition: { type: 'function', function: { name: 'read_personal_context', description: '读取本次建档适用的医生习惯、去标识化范例、知识和技能。先读完并保存资料笔记，再调用本工具。', parameters: { type: 'object', properties: {}, additionalProperties: false } } }, execute: async () => {
     check(!awaitingNotes && notes.length, 'INTAKE_NOTES_REQUIRED', '请先读取并保存资料笔记');
-    const value = await getPersonal(); personalRead = true; return personal ? personal.modelView(value) : { text: '', readOnly: true };
+    const value = await getPersonal(); personalRead = true;
+    return { ...(personal ? personal.modelView(value) : { text: '', readOnly: true }),
+      nextTool: 'patient_create_propose', instruction: '本次个人参考已读取。资料笔记齐全时，立即调用 patient_create_propose 一次提交完整待核对草稿（包括必填 summary）；不要重新开始读取流程。只有确实缺少某项原文事实时再核对对应来源。' };
   } });
   const selected = context => (context.sources || []).filter(source => workspace.materials.some(file => file.id === source.id));
   const record = (id, line) => { if (!seen.has(id)) seen.set(id, new Set()); seen.get(id).add(line); };
@@ -81,7 +83,7 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
   registry.register({
     permission: 'tools.execute', capability: { backend: 'local' },
     definition: { type: 'function', function: { name: 'read_intake_notes', description: '读取已保存的建档事实笔记。每次读取1批；按 nextIndex 继续，完整核对后生成提案。笔记是提取结果，必要时按 sourceId 和行号核对原文。', parameters: { type: 'object', properties: { index: { type: 'integer', minimum: 0 } }, additionalProperties: false } } },
-    execute: args => { const index = args.index || 0; return { notes: notes.slice(index, index + 1), nextIndex: index + 1 < notes.length ? index + 1 : null, batchesSaved: notes.length, instruction: index + 1 < notes.length ? "继续读取下一批笔记" : "下一步调用 read_personal_context" }; },
+    execute: args => { const index = args.index || 0; return { notes: notes.slice(index, index + 1), nextIndex: index + 1 < notes.length ? index + 1 : null, batchesSaved: notes.length, instruction: index + 1 < notes.length ? "继续读取下一批笔记" : personalRead ? "个人参考已读取，下一步调用 patient_create_propose 提交完整草稿，不要重新读取资料或参考" : "下一步调用 read_personal_context" }; },
   });
   const proposal = registry.get('patient_create_propose'), propose = proposal.execute;
   proposal.execute = (args, context) => {

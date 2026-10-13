@@ -226,7 +226,7 @@ if (!configPath) {
           method === "GET"
             ? retryLearningRead(() => requestOnce(path, method, data))
             : requestOnce(path, method, data);
-        let replaySample;
+        let replaySample, activeSessionId;
         const run = {
           persona: personaId,
           seed,
@@ -290,6 +290,7 @@ if (!configPath) {
             const session = await request("/api/sessions", "POST", {
               title: "上传资料建档",
             });
+            activeSessionId = session.id;
             for (const filename of item.materials) {
               const buffer = await readFile(
                 join(root, "patients", item.id, "materials", filename),
@@ -478,6 +479,23 @@ if (!configPath) {
             config.apiKey || "\u0000",
             "[redacted]",
           );
+          // Preserve failed real-model evidence before the isolated store closes.
+          // These raw synthetic-case traces stay in the local output directory.
+          const failureTrace = `${group}-${personaId}-${seed}-failure.json`;
+          try {
+            const session = activeSessionId
+              ? await request(`/api/sessions/${activeSessionId}`).catch(() => ({ unavailable: true }))
+              : null;
+            await writeFile(join(output, failureTrace), JSON.stringify({
+              patient: tracking.activePatient,
+              error: run.error,
+              requests: requests.filter(r => r.patient === tracking.activePatient),
+              session,
+            }, null, 2));
+            run.failureTrace = failureTrace;
+          } catch {
+            run.failureTraceUnavailable = true;
+          }
           throw error;
         } finally {
           await writeFile(

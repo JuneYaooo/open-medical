@@ -1,0 +1,17 @@
+{
+  "version": "0.9.122",
+  "mode": "preflight",
+  "model": {
+    "provider": "local",
+    "name": "open-medical-eval-qwen3-4b-instruct",
+    "base": "qwen3:4b-instruct-2507-q4_K_M",
+    "configuredContext": 40960,
+    "maxTokens": 4096
+  },
+  "status": "stopped-for-fix",
+  "completedIntakes": 0,
+  "baseline": "Model finished without a proposal.",
+  "learning": "Repeated notes → personal context → batch sequence; stopped after observing repeated cycles.",
+  "nextChange": "Return stage-aware guidance from notes and personal context tools.",
+  "interpretation": "Workflow preflight failed; no learning-effect conclusion."
+}
