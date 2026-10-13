@@ -4,12 +4,12 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { fixture } from './helpers.mjs';
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const out = 'output/playwright/doctor-assistant-features-20261013';
+const out = 'output/playwright/feishu-assistant-20261013';
 
 test('doctor configures reminder channels and approves a Feishu knowledge group through the UI', { skip: !existsSync(chrome), timeout: 60000 }, async t => {
   mkdirSync(out + '/screenshots', { recursive: true });
   mkdirSync(out + '/raw', { recursive: true });
-  const sent = [], replies = []; let handler;
+  const sent = [], replies = [], modelInputs = []; let handler;
   const response = data => ({ ok: true, status: 200, json: async () => data });
   const now = Date.now();
   const f = await fixture(t, { followupOptions: { autoStart: false }, doctorNotificationOptions: { autoStart: false,
@@ -18,9 +18,11 @@ test('doctor configures reminder channels and approves a Feishu knowledge group 
       if (url.includes('get_qrcode_status')) return response({ status: 'confirmed', bot_token: 'test-token', ilink_user_id: 'test-doctor', ilink_bot_id: 'test-bot' });
       sent.push(JSON.parse(init.body)); return response({ code: 0, ret: 0 });
     } }, knowledgeBotOptions: {
+    getProvider: () => ({ local: true, provider: '本地演示模型', model: '知识库助手', complete: async messages => { const input = JSON.parse(messages[1].content); modelInputs.push(input); return { message: { content: input.history.length ? '可按两步整理：先核对日期和来源，再列出待补充材料。[1]' : '复诊前需要核对资料日期和来源，并整理反馈与待补充材料。[1]' } }; } }),
     fetchImpl: async (url, init) => {
       if (url.endsWith('/internal')) return response({ code: 0, tenant_access_token: 'test-access', expire: 7200 });
       if (url.endsWith('/info')) return response({ code: 0, bot: { open_id: 'ou_bot' } });
+      if (url.includes('/contact/v3/users/')) return response({ code: 0, data: { user: { name: '熊猫' } } });
       if (url.includes('/chats/')) return response({ code: 0, data: { name: '熊猫学习群' } });
       replies.push(JSON.parse(init.body)); return response({ code: 0 });
     }, createSocket: (options, receive) => ({ start: async () => { handler = receive; options.onReady(); }, close() {} }),
@@ -52,17 +54,29 @@ test('doctor configures reminder channels and approves a Feishu knowledge group 
   await page.getByLabel('App ID', { exact: true }).fill('cli_1234567890abcdef'); await page.getByLabel('App Secret', { exact: true }).fill('test-app-secret');
   await page.getByLabel(/门诊工作资料 · 1 篇已复核/).check(); await page.getByLabel('启用飞书知识库机器人', { exact: true }).check();
   await page.getByRole('button', { name: '保存机器人配置' }).click(); await page.getByText(/配置已保存。启用后/).waitFor(); await f.server.knowledgeBot.connection;
-  const event = id => ({ sender: { sender_type: 'user' }, message: { chat_type: 'group', chat_id: 'oc_testgroup', message_id: `om_${id}`, create_time: String(Date.now()), message_type: 'text', mentions: [{ key: '@_user_1', id: { open_id: 'ou_bot' } }], content: JSON.stringify({ text: '@_user_1 复诊' }) } });
+  const event = id => ({ sender: { sender_type: 'user', sender_id: { open_id: 'ou_panda' } }, message: { chat_type: 'group', chat_id: 'oc_testgroup', message_id: `om_${id}`, create_time: String(Date.now()), message_type: 'text', mentions: [{ key: '@_user_1', id: { open_id: 'ou_bot' } }], content: JSON.stringify({ text: '@_user_1 复诊' }) } });
   handler(event('discover')); await Promise.all([...f.server.knowledgeBot.jobs]); assert.equal(replies.length, 0);
   await page.getByRole('button', { name: '刷新群与连接状态' }).click(); await page.getByLabel(/熊猫学习群/).check();
   await page.getByRole('button', { name: '保存机器人配置' }).click(); await page.getByText(/配置已保存。启用后/).waitFor(); await f.server.knowledgeBot.connection;
   handler(event('answer')); await Promise.all([...f.server.knowledgeBot.jobs]); assert.equal(replies.length, 1); assert.match(JSON.parse(replies[0].content).text, /出处：第/);
   await page.getByRole('button', { name: '刷新群与连接状态' }).click(); await page.getByText(/最近一次知识库回复已被飞书接受/).waitFor();
   await page.screenshot({ path: out + '/screenshots/03-飞书知识库机器人.png', fullPage: true });
+  const direct = (id, text) => { const e = event(id); e.message = { ...e.message, chat_type: 'p2p', chat_id: 'oc_private', mentions: [], content: JSON.stringify({ text }) }; return e; };
+  handler(direct('privateDiscover', '复诊')); await Promise.all([...f.server.knowledgeBot.jobs]); assert.equal(replies.length, 1);
+  await page.getByRole('button', { name: '刷新群与连接状态' }).click(); await page.getByLabel(/熊猫 · 单聊/).check();
+  await page.getByLabel('使用当前模型整理回答与连续追问', { exact: true }).check();
+  await page.getByRole('button', { name: '保存机器人配置' }).click(); await page.getByText(/配置已保存。启用后/).waitFor(); await f.server.knowledgeBot.connection;
+  handler(direct('privateFirst', '复诊')); await Promise.all([...f.server.knowledgeBot.jobs]);
+  handler(direct('privateFollow', '请列成要点')); await Promise.all([...f.server.knowledgeBot.jobs]);
+  assert.equal(modelInputs.length, 2); assert.equal(modelInputs[1].history.length, 1); assert.match(JSON.parse(replies.at(-1).content).text, /两步整理/);
+  await page.getByRole('heading', { name: '允许使用的单聊', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: out + '/screenshots/04-单聊与连续追问.png', fullPage: true });
+  await page.getByRole('button', { name: '清空所有对话上下文' }).click(); await page.getByText('对话上下文已清空，飞书中已发送的消息不受影响。').waitFor();
+  assert.equal(f.server.knowledgeBot.contexts.size, 0);
   await page.reload(); await page.getByRole('button', { name: '飞书知识库机器人', exact: true }).click(); await page.getByLabel(/熊猫学习群/).waitFor(); assert.equal(await page.getByLabel(/熊猫学习群/).isChecked(), true);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.locator('.app-settings-content').evaluate(e => e.scrollWidth <= e.clientWidth + 2), true);
   await page.screenshot({ path: out + '/screenshots/04-窄屏配置.png', fullPage: true });
   assert.deepEqual(errors, []);
-  writeFileSync(out + '/ui-verification.json', JSON.stringify({ mockExternalTransport: true, syntheticPatients: ['熊猫'], reminder: sent[0].content.text, knowledgeReply: JSON.parse(replies[0].content).text, errors }, null, 2));
+  writeFileSync(out + '/ui-verification.json', JSON.stringify({ mockExternalTransport: true, syntheticPatients: ['熊猫'], reminder: sent[0].content.text, knowledgeReply: JSON.parse(replies[0].content).text, privateAnswer: JSON.parse(replies[1].content).text, followupAnswer: JSON.parse(replies[2].content).text, mockModel: true, errors }, null, 2));
 });

@@ -4,7 +4,7 @@
 
 **A local patient-management assistant for doctors, on Windows and macOS.** Connect patient status, follow-up tasks, personal knowledge collections, case references and working preferences. Reviewed sources and reusable context make everyday retrieval and preparation more useful over time; this does not automatically train the model.
 
-Use Settings to configure daily doctor reminders through WeChat or a Feishu webhook. The Feishu knowledge bot can search selected, reviewed collections when mentioned in an approved group and return source excerpts with citations. See the [connection guide](docs/doctor-assistant-channels.md).
+Use Settings to configure daily doctor reminders through WeChat or a Feishu webhook. The Feishu knowledge bot can search selected, reviewed collections when mentioned in an approved group or messaged in an approved direct chat. It supports isolated follow-up context, source excerpts with citations, and optional answers composed by the configured model. See the [connection guide](docs/doctor-assistant-channels.md).
 
 ## Principles
 

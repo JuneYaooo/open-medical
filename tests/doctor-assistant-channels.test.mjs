@@ -80,13 +80,14 @@ test('WeChat QR binds only confirmed doctor account and no credentials appear in
 });
 
 const APP = 'cli_1234567890abcdef';
-async function botFixture(t) {
+async function botFixture(t, { getProvider } = {}) {
   const replies = [], sockets = []; let clock = NOW;
   const f = await fixture(t, { followupOptions: { autoStart: false }, doctorNotificationOptions: { autoStart: false }, knowledgeBotOptions: {
-    now: () => clock,
+    now: () => clock, getProvider,
     fetchImpl: async (url, init) => {
       if (url.endsWith('/auth/v3/tenant_access_token/internal')) return ok({ code: 0, tenant_access_token: 'synthetic-access-token', expire: 7200 });
       if (url.endsWith('/bot/v3/info')) return ok({ code: 0, bot: { open_id: 'ou_bot' } });
+      if (url.includes('/contact/v3/users/')) return ok({ code: 0, data: { user: { name: '熊猫' } } });
       if (url.includes('/chats/')) return ok({ code: 0, data: { name: '熊猫学习群' } });
       replies.push({ url, body: JSON.parse(init.body) }); return ok({ code: 0 });
     },
@@ -102,7 +103,7 @@ async function botFixture(t) {
     const result = await f.json('/api/knowledge-bot', 'PUT', { ...current, appId: APP, appSecret: 'synthetic-app-secret', enabled: true, collections: ['开放库'], groups: [], ...extra, expectedRevision: current.revision });
     await f.server.knowledgeBot.connection; return result;
   };
-  const event = (id, overrides = {}) => ({ sender: { sender_type: 'user' }, message: { chat_type: 'group', chat_id: 'oc_group1', message_id: `om_${id}`, create_time: String(clock), message_type: 'text', mentions: [{ key: '@_user_1', id: { open_id: 'ou_bot' } }], content: JSON.stringify({ text: '@_user_1 复诊' }), ...overrides } });
+  const event = (id, overrides = {}) => ({ sender: { sender_type: 'user', sender_id: { open_id: 'ou_panda' } }, message: { chat_type: 'group', chat_id: 'oc_group1', message_id: `om_${id}`, create_time: String(clock), message_type: 'text', mentions: [{ key: '@_user_1', id: { open_id: 'ou_bot' } }], content: JSON.stringify({ text: '@_user_1 复诊' }), ...overrides } });
   const receive = async e => { clock += 4000; f.server.knowledgeBot.receive(e); await Promise.all([...f.server.knowledgeBot.jobs]); };
   return { ...f, replies, sockets, save, event, receive };
 }
@@ -147,4 +148,66 @@ test('Feishu changes cancel an in-flight search before external reply', async t 
   f.server.knowledgeBot.receive(f.event('slow')); await ready;
   const stopping = f.server.knowledgeBot.save({ ...f.server.knowledgeBot.config(), enabled: false, expectedRevision: f.server.knowledgeBot.config().revision });
   release(); await stopping; assert.equal(f.replies.length, 0);
+});
+
+test('authorized Feishu single chat answers directly and keeps follow-ups apart from groups and other users', async t => {
+  const inputs = [];
+  const provider = { provider: 'local-test', model: 'knowledge-assistant', local: true, complete: async messages => { const input = JSON.parse(messages[1].content); inputs.push(input); return { message: { content: '核对资料日期与来源，再整理需要补充的资料。[1]' } }; } };
+  const f = await botFixture(t, { getProvider: () => provider }); await f.save({ answerMode: 'assistant' });
+  const direct = id => f.event(id, { chat_type: 'p2p', chat_id: 'oc_private', mentions: [], content: JSON.stringify({ text: '复诊' }) });
+  await f.receive(direct('discovery')); assert.equal(f.replies.length, 0); assert.equal(inputs.length, 0);
+  const chat = f.server.knowledgeBot.settings().discoveredGroups[0]; assert.equal(chat.chatType, 'p2p'); assert.equal(chat.senderId, 'ou_panda');
+  assert.equal((await f.save({ groups: ['oc_private'] })).status, 400);
+  await f.save({ privateChats: ['oc_private'], answerMode: 'assistant' });
+  await f.receive(direct('first')); assert.equal(inputs.length, 1); assert.equal(inputs[0].history.length, 0);
+  assert.match(JSON.parse(f.replies[0].body.content).text, /AI 整理/);
+  await f.receive({ ...direct('followup'), message: { ...direct('followup').message, content: JSON.stringify({ text: '请列成要点' }) } });
+  assert.equal(inputs[1].history.length, 1); assert.equal(inputs[1].history[0].question, '复诊');
+  const foreign = direct('foreign'); foreign.sender.sender_id.open_id = 'ou_giraffe'; await f.receive(foreign); assert.equal(inputs.length, 2);
+  // Discover and approve the group. Saving configuration intentionally clears old context.
+  await f.receive(f.event('groupdiscovery')); await f.save({ privateChats: ['oc_private'], groups: ['oc_group1'], answerMode: 'assistant' });
+  await f.receive(direct('newprivate')); await f.receive(f.event('groupfirst')); assert.equal(inputs.at(-1).history.length, 0);
+  const other = f.event('otheruser'); other.sender.sender_id.open_id = 'ou_giraffe'; await f.receive(other); assert.equal(inputs.at(-1).history.length, 0);
+  await f.receive(f.event('groupfollow')); assert.equal(inputs.at(-1).history.length, 1);
+  await f.receive(f.event('threadfollow', { root_id: 'om_groupfirst' })); assert.equal(inputs.at(-1).history.length, 1);
+  await f.receive(f.event('otherthread', { root_id: 'om_unknownroot' })); assert.equal(inputs.at(-1).history.length, 0);
+  await f.receive({ ...direct('reset'), message: { ...direct('reset').message, content: JSON.stringify({ text: '/new' }) } });
+  assert.match(JSON.parse(f.replies.at(-1).body.content).text, /已开启新话题/);
+  await f.receive(direct('afterreset')); assert.equal(inputs.at(-1).history.length, 0);
+  const before = f.replies.length;
+  await f.save({ answerMode: 'assistant', groups: [], privateChats: [] }); await f.receive(direct('revoked')); assert.equal(f.replies.length, before);
+});
+
+test('same Feishu conversation queues rapid follow-ups in order; authorization changes abort pending model answers', async t => {
+  let release, started;
+  const entered = new Promise(r => { started = r; });
+  const inputs = [];
+  const f = await botFixture(t, { getProvider: () => ({ complete: async messages => { inputs.push(JSON.parse(messages[1].content)); if (inputs.length === 1) { started(); await new Promise(r => { release = r; }); } return { message: { content: '资料核对要点。[1]' } }; } }) });
+  await f.save({ answerMode: 'assistant' }); await f.receive(f.event('discover')); await f.save({ groups: ['oc_group1'], answerMode: 'assistant' });
+  f.server.knowledgeBot.receive(f.event('rapid1')); await entered;
+  f.server.knowledgeBot.receive(f.event('rapid2', { content: JSON.stringify({ text: '继续说明' }) }));
+  assert.equal(inputs.length, 1); release(); await Promise.all([...f.server.knowledgeBot.jobs]);
+  assert.equal(inputs.length, 2); assert.equal(inputs[1].history.length, 1); assert.equal(f.replies.length, 2);
+  let pending;
+  const ready = new Promise(r => { pending = r; });
+  f.server.knowledgeBot.getProvider = () => ({ complete: () => { pending(); return new Promise(() => {}); } });
+  f.server.knowledgeBot.receive(f.event('slow')); await ready;
+  await f.save({ enabled: false, answerMode: 'assistant', groups: ['oc_group1'] });
+  assert.equal(f.replies.length, 2); assert.equal(f.server.knowledgeBot.contexts.size, 0);
+});
+
+test('model failures return honest excerpts; retired evidence is never posted after generation', async t => {
+  let mode = 'fail';
+  const f = await botFixture(t, { getProvider: () => ({ complete: async () => {
+    if (mode === 'fail') throw new Error('secret provider detail');
+    const doc = f.server.guidelines.list({ collection: '开放库', reviewStatus: 'reviewed' })[0];
+    f.server.guidelines.updateMetadata(doc.id, { expectedRevision: doc.revision, reviewStatus: 'retired', reviewNote: '资料需重新核对' });
+    return { message: { content: '不能发送的旧资料结论' } };
+  } }) });
+  await f.save({ answerMode: 'assistant' }); await f.receive(f.event('discover')); await f.save({ groups: ['oc_group1'], answerMode: 'assistant' });
+  await f.receive(f.event('fallback')); const answer = JSON.parse(f.replies[0].body.content).text;
+  assert.match(answer, /本次模型整理未完成/); assert.match(answer, /资料日期/); assert.doesNotMatch(answer, /secret provider/);
+  mode = 'retire'; await f.receive(f.event('retire')); assert.equal(f.replies.length, 1);
+  assert.equal((await f.json('/api/knowledge-bot/reset-context', 'POST', { expectedRevision: f.server.knowledgeBot.config().revision })).status, 200);
+  assert.equal(f.server.knowledgeBot.contexts.size, 0);
 });

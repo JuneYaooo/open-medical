@@ -15,7 +15,7 @@
 @media(max-width:700px) { .notification-schedule { grid-template-columns: 1fr; gap: 0; } .notification-channel { padding: 16px; } .app-settings-layout > nav { flex-wrap: wrap; } }
 .notification-fields { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
 .notification-fields > label { display: grid; gap: 7px; margin: 14px 0; }
-.notification-fields input:not([type=checkbox]) { width: 100%; min-width: 0; }
+.notification-fields input:not([type=checkbox]):not([type=radio]) { width: 100%; min-width: 0; }
 .notification-fields .notification-checkbox { display: flex; gap: 10px; align-items: center; }
 .doctor-notifications li { margin: 10px 0; }
 .doctor-notifications button { padding: 8px 13px; border: 1px solid #cedbce; border-radius: 8px; background: #f7faf6; color: #244e3c; cursor: pointer; font: inherit; }

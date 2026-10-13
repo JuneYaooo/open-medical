@@ -646,7 +646,7 @@ export function createServer(options = {}) {
   const trialRegistry = new TrialRegistry(options.trialRegistryOptions);
   const patientBrief = new PatientBrief(store, patients);
   const careTasks = new CareTasks(store, patients, followups);
-  const knowledgeBot = new FeishuKnowledgeBot(store, models.vault, guidelines, options.knowledgeBotOptions);
+  const knowledgeBot = new FeishuKnowledgeBot(store, models.vault, guidelines, { getProvider: () => providerConfigured(provider) ? provider : null, ...options.knowledgeBotOptions });
   const doctorNotifications = new DoctorNotifications(store, models.vault, options.doctorNotificationOptions);
   const patientImporter = new PatientImporter(store, patients);
   runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending), ...trialTools(() => trialCandidates, pending), ...scheduleTools(() => schedule), ...extensionTools(() => extensions, pending)]);
@@ -1467,6 +1467,7 @@ export function createServer(options = {}) {
         return send(res, 200, { enabled: false, available: false, retired: true, reason: "请使用随访 → 聊天随访中的会话核验与读取" });
       if (["/api/wechat/read", "/api/wechat/send"].includes(path) && req.method === "POST")
         throw new AppError("WECHAT_LEGACY_RETIRED", "旧微信桥接已停用。请在随访 → 聊天随访中核验并关联会话；发送请在微信中完成。", 410);
+      if (path === "/api/knowledge-bot/reset-context" && req.method === "POST") return send(res, 200, await track(knowledgeBot.resetContext((await body(req)).expectedRevision)));
       if (path === "/api/knowledge-bot" && req.method === "GET") return send(res, 200, knowledgeBot.settings());
       if (path === "/api/knowledge-bot" && req.method === "PUT") return send(res, 200, await track(knowledgeBot.save(await body(req))));
       if (path === "/api/doctor-notifications" && req.method === "GET") return send(res, 200, doctorNotifications.settings());
