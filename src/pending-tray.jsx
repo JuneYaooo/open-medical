@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, X } from "lucide-react";
-import { api } from "./agent-runtime";
+import { api, PENDING_REFRESH_EVENT } from "./agent-runtime";
 import "./care.css";
 
 const TYPES = { "patient-create": "建档提案", "patient-update": "档案更新", "followup-create": "随访提醒", "case-save": "病例入库", "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展", "ext-install": "技能安装" };
-export const PENDING_REFRESH_EVENT = "care-pending-refresh";
+export { PENDING_REFRESH_EVENT } from "./agent-runtime";
 
 function Preview({ action }) {
   const p = action.payload || {};

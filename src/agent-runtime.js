@@ -1,5 +1,6 @@
 import { sseFrames } from "../shared/sse.mjs";
 let auth;
+export const PENDING_REFRESH_EVENT = "care-pending-refresh";
 // App Shell 能力判定:优先读 bootstrap 的 capabilities(通用平台显式声明),
 // 医疗应用(旧 bootstrap 无 capabilities)回退到 patientsEnabled。
 // 返回 false 时前端不得请求 /api/sessions 等医疗接口、不渲染患者导航与医疗默认任务。
@@ -49,6 +50,8 @@ export async function api(path, options = {}, dataOrRetried = false) {
     const data = await res.json().catch(() => ({}));
     throw Object.assign(new Error(data.error || `请求失败（${res.status}）`), { code: data.code, status: res.status });
   }
+  if (options.method === "POST" && /^\/api\/pending-actions\/[^/]+\/(confirm|reject)$/.test(path) && typeof window !== "undefined")
+    window.dispatchEvent(new Event(PENDING_REFRESH_EVENT));
   return options.raw ? res : res.json();
 }
 export async function streamTurn(sessionId, body, onEvent, signal) {

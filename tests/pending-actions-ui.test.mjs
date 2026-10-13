@@ -100,5 +100,6 @@ test(
       (await f.json(`/api/pending-actions?patientId=${patient.id}&status=rejected`)).data.actions.find(a => a.id === proposal.id)?.status,
       "rejected",
     );
+    await page.locator(".pending-badge").waitFor({ state: "detached", timeout: 2000 });
   },
 );

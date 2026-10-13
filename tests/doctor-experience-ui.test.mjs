@@ -103,6 +103,7 @@ test("doctor experience: patient chart is not a project and record replacement s
   await f.page.getByRole("dialog").waitFor({ state: "hidden" });
   const saved = (await f.json(`/api/patients/${p.id}`)).data;
   assert.equal(saved.medications[0].status, "stopped"); assert.equal(saved.labs.length, 1);
+  await f.page.locator(".pending-badge").waitFor({ state: "detached", timeout: 2000 });
 });
 
 test("doctor experience: archived patient can be found and restored without losing its chart", { skip }, async (t) => {
