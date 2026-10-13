@@ -23,6 +23,9 @@
 .care-card > header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
 .care-card > header time { margin-left:auto; color:var(--muted,#68786e); font-size:13px; }
 .care-card > footer { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.pending-feedback { display:flex; flex-direction:column; gap:6px; }
+.pending-feedback input { width:100%; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:9px 12px; font:inherit; }
+.pending-feedback .care-hint-actions { display:flex; justify-content:flex-end; gap:10px; }
 .care-card textarea { width:100%; box-sizing:border-box; border:1px solid #d8e1d7; border-radius:7px; padding:10px 12px; font:inherit; line-height:1.7; resize:vertical; }
 .care-card blockquote { margin:0; padding:8px 12px; background:#f6f8f5; border-radius:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .care-list.compact .care-card { padding:10px 14px; gap:6px; }

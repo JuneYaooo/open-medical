@@ -58,6 +58,9 @@ export class PendingActions {
   get cases() {
     return this.services.cases();
   }
+  get doctor() {
+    return this.services.doctor?.();
+  }
   get care() {
     return this.services.care?.() || null;
   }
@@ -280,8 +283,28 @@ export class PendingActions {
         updatedAt: row.updated_at,
       }));
   }
-  confirm(id) {
+  // 医生处理提案时顺带写下的说明：进观察信号通道（复核拒绝、修订补充同款），
+  // 重复出现的反馈经 consolidate 归并为偏好候选，下次起草前模型可对齐。
+  feedbackNote(note) {
+    return note === undefined || note === null || note === ""
+      ? ""
+      : string(note, "反馈说明", 300);
+  }
+  recordFeedback(action, decision, note) {
+    if (!note || !this.doctor) return;
+    this.doctor.recordSignal({
+      content: `${decision === "rejected" ? "拒绝" : "确认"}${action.type === "patient-create" ? "建档" : action.type === "patient-update" ? "档案更新" : action.type === "followup-create" ? "随访" : action.type === "case-save" ? "病例入库" : "提案"}「${String(action.summary).slice(0, 200)}」时说明：${note}`,
+      topic: "提案反馈",
+      source: {
+        type: decision === "rejected" ? "proposal_rejected" : "proposal_confirmed",
+        actionId: action.id,
+        actionType: action.type,
+      },
+    });
+  }
+  confirm(id, { note } = {}) {
     let writtenSkill;
+    const feedback = this.feedbackNote(note);
     try { return sqliteTransaction(this.store.db, () => {
       const action = this.row(id);
       check(
@@ -404,6 +427,7 @@ export class PendingActions {
         "提案确认状态未写入，请刷新后重试；本次变更已回滚。",
         409,
       );
+      this.recordFeedback(action, "confirmed", feedback);
       return { ok: true, action: this.row(id), applied };
     }); } catch (error) {
       // Installs return a list of ids; restore every skill file the rolled
@@ -412,14 +436,16 @@ export class PendingActions {
       throw error;
     }
   }
-  reject(id) {
+  reject(id, { note } = {}) {
     const action = this.row(id);
+    const feedback = this.feedbackNote(note);
     check(action.status === "pending", "ACTION_RESOLVED", "该提案已处理", 409);
     this.store.db
       .prepare(
         "UPDATE pending_actions SET status='rejected',updated_at=? WHERE id=?",
       )
       .run(new Date().toISOString(), id);
+    this.recordFeedback(action, "rejected", feedback);
     return { ok: true, action: this.row(id) };
   }
   // 被更新的提案取代（同一资料任务重新分析）。不算医生拒绝：审计里保留

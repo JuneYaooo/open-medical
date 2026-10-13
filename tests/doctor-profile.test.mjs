@@ -247,3 +247,40 @@ const stubProvider = {
     };
   },
 };
+
+test("proposal tray feedback becomes observed signals and consolidates", async (t) => {
+  const { fixture } = await import("./helpers.mjs");
+  const { PermissionEngine } = await import("../server/core/permissions.mjs");
+  const f = await fixture(t);
+  const session = await f.session("提案反馈");
+  const registry = f.server.workspaces.registry(session.id);
+  const permissions = new PermissionEngine({ profile: "standard" });
+  const propose = (summary) => registry.execute("case_save_propose", { summary, diagnosis: "原发性高血压" }, {}, permissions);
+  const first = await propose("把出院小结写成表格");
+  const second = await propose("把出院小结写成表格");
+  const third = await propose("随访总结用表格");
+
+  // 拒绝并写说明 → 观察信号；相同说明合并计数而不是重复成两行。
+  assert.equal((await f.json(`/api/pending-actions/${first.id}/reject`, "POST", { note: "文风要正式，不要表格" })).status, 200);
+  assert.equal((await f.json(`/api/pending-actions/${second.id}/reject`, "POST", { note: "文风要正式，不要表格" })).status, 200);
+  // 不带说明的拒绝不产生信号。
+  assert.equal((await f.json(`/api/pending-actions/${third.id}/reject`, "POST", {})).status, 200);
+  const open = f.server.doctor.memories({ status: "open" });
+  assert.equal(open.length, 1);
+  assert.match(open[0].content, /文风要正式/);
+  assert.equal(open[0].count, 2);
+  assert.equal(open[0].topic, "提案反馈");
+
+  // 重复出现的反馈经确定性归并成为待确认偏好候选，医生确认后才生效。
+  const consolidated = f.server.doctor.consolidate();
+  assert.equal(consolidated.created.length, 1);
+  assert.equal(consolidated.created[0].status, "pending");
+  assert.match(consolidated.created[0].content, /文风要正式/);
+
+  // 确认时带的备注同样进信号。
+  const fourth = await propose("随访提醒提前一天");
+  assert.equal((await f.json(`/api/pending-actions/${fourth.id}/confirm`, "POST", { note: "好，但提醒时间改到下午三点" })).status, 200);
+  const confirmedSignal = f.server.doctor.memories({ status: "open" }).find((row) => row.source.type === "proposal_confirmed");
+  assert.ok(confirmedSignal);
+  assert.match(confirmedSignal.content, /下午三点/);
+});

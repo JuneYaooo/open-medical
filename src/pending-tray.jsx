@@ -54,6 +54,8 @@ export function PendingTray() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [rejecting, setRejecting] = useState(null);
+  const [note, setNote] = useState("");
   const load = useCallback(() => api("/api/pending-actions?status=pending")
     .then((data) => setActions((data.actions || []).filter((a) => ["patient-create", "patient-update", "followup-create", "case-save"].includes(a.type) || a.type === "patient-grouping" || a.type === "patient-group-suggest" || a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
     .catch(() => {}), []);
@@ -76,9 +78,13 @@ export function PendingTray() {
       document.removeEventListener("keydown", dismiss);
     };
   }, [open]);
-  async function resolve(action, decision) {
+  async function resolve(action, decision, withNote) {
     setBusy(action.id); setError("");
-    try { await api(`/api/pending-actions/${action.id}/${decision}`, "POST", {}); await load(); }
+    try {
+      await api(`/api/pending-actions/${action.id}/${decision}`, "POST", withNote ? { note } : {});
+      setRejecting(null); setNote("");
+      await load();
+    }
     catch (e) { setError(e.message); }
     finally { setBusy(""); }
   }
@@ -91,7 +97,20 @@ export function PendingTray() {
         <header><span className="care-tag">{TYPES[a.type] || a.type}</span><time>{new Date(a.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></header>
         <p className="care-reason">{a.summary}</p>
         <Preview action={a} />
-        <footer><button className="secondary" disabled={Boolean(busy)} onClick={() => resolve(a, "reject")}>拒绝</button><button disabled={Boolean(busy)} onClick={() => resolve(a, "confirm")}>{busy === a.id ? "处理中…" : "确认执行"}</button></footer>
+        {rejecting === a.id ? <div className="pending-feedback">
+          <input
+            aria-label={`拒绝原因（${TYPES[a.type] || a.type}）`}
+            placeholder="顺带说一句为什么拒绝（可选）。说得多了，它下次起草就更对你的路子。"
+            value={note}
+            autoFocus
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") resolve(a, "reject", true); }}
+          />
+          <div className="care-hint-actions">
+            <button className="text-button" disabled={Boolean(busy)} onClick={() => resolve(a, "reject", true)}>记录并拒绝</button>
+            <button className="text-button" disabled={Boolean(busy)} onClick={() => resolve(a, "reject", false)}>不填了，直接拒绝</button>
+          </div>
+        </div> : <footer><button className="secondary" disabled={Boolean(busy)} onClick={() => { setRejecting(a.id); setNote(""); }}>拒绝</button><button disabled={Boolean(busy)} onClick={() => resolve(a, "confirm")}>{busy === a.id ? "处理中…" : "确认执行"}</button></footer>}
       </li>)}</ul>
     </section>}
     <button className="pending-badge" aria-expanded={open} onClick={() => setOpen((v) => !v)}><ClipboardCheck size={18} />待确认<em>{actions.length}</em></button>

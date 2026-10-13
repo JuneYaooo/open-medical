@@ -253,6 +253,7 @@ export function createServer(options = {}) {
     care: () => care,
     trials: () => trialCandidates,
     extensions: () => extensions,
+    doctor: () => doctor,
     copySourceMaterials: (sourceId, targetId, fileIds, sourceInput) => {
       const source = sessionBridge.get(sourceId);
       if (sourceInput) sessionBridge.addMaterial(targetId, { name: "建档时的对话输入.txt", text: sourceInput });
@@ -1580,14 +1581,17 @@ export function createServer(options = {}) {
         parts.length === 4 &&
         ["confirm", "reject"].includes(parts[3]) &&
         req.method === "POST"
-      )
+      ) {
+        // 请求体可空：托盘普通确认发 {}，带反馈说明时发 { note }。
+        const feedback = await body(req).catch(() => ({}));
         return send(
           res,
           200,
           parts[3] === "confirm"
-            ? pending.confirm(parts[2])
-            : pending.reject(parts[2]),
+            ? pending.confirm(parts[2], feedback)
+            : pending.reject(parts[2], feedback),
         );
+      }
       if (path === "/api/med-cautions" && req.method === "POST")
         return send(res, 200, specialPopulationCautions(await body(req)));
       if (path === "/api/jev-settings") {
