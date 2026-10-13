@@ -21,16 +21,17 @@ export class Store {
     if (filename !== ":memory:") {
       this.lockPath = filename + ".lock";
       this.lockId = randomUUID();
+      // 句柄持有到进程退出、由 OS 释放：硬杀（任务管理器/打包脚本 taskkill）
+      // 后锁自动消失，不留靠 pid 校验的残锁——Windows 的 pid 会被回收复用，
+      // 只查 pid 存活会把残锁当活进程（实测：旧进程早已被杀，重启仍报
+      // 「该数据库已有运行时使用」）。EEXIST 分支只为兼容旧版本留下的
+      // 残锁文件（旧实现写完即关句柄）：pid 已死则接管，存活才是真冲突。
       const acquire = () => {
-        const fd = openSync(this.lockPath, "wx", 0o600);
-        try {
-          writeFileSync(
-            fd,
-            JSON.stringify({ pid: process.pid, id: this.lockId }),
-          );
-        } finally {
-          closeSync(fd);
-        }
+        this.lockFd = openSync(this.lockPath, "wx", 0o600);
+        writeFileSync(
+          this.lockFd,
+          JSON.stringify({ pid: process.pid, id: this.lockId }),
+        );
       };
       try {
         acquire();
@@ -42,7 +43,7 @@ export class Store {
         } catch {
           throw new AppError(
             "DATABASE_LOCK",
-            "数据库锁状态不明，请检查现有服务",
+            "数据库锁状态不明，请删除锁文件后重试",
             503,
           );
         }
@@ -53,7 +54,7 @@ export class Store {
         )
           throw new AppError(
             "DATABASE_LOCK",
-            "数据库锁记录无效，请检查现有服务",
+            "数据库锁记录无效，请删除锁文件后重试",
             503,
           );
         let alive = true;
