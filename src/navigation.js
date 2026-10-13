@@ -11,7 +11,7 @@ export function readLocation() {
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("view");
   const view = Object.hasOwn(VIEW_LABELS, requested) ? requested : "home";
-  const tabs = view === "patients" ? ["overview", "diagnoses", "clinical", "medications", "labs", "visits", "sources", "library", "assistance", "messages", "followups", "tracking"] : view === "workspaces" ? ["files", "review", "media", "browser", "terminal", "extensions", "history", "settings"] : view === "workbench" ? ["materials", "results", "runs", "knowledge"] : [];
+  const tabs = view === "patients" ? ["overview", "diagnoses", "clinical", "medications", "labs", "visits", "library", "assistance", "messages", "followups", "tracking"] : view === "workspaces" ? ["files", "review", "media", "browser", "terminal", "extensions", "history", "settings"] : view === "workbench" ? ["materials", "results", "runs", "knowledge"] : [];
   return {
     view,
     id: params.get(view === "patients" ? "patient" : view === "workspaces" ? "workspace" : "session") || "",

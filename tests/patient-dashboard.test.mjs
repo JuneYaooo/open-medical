@@ -56,12 +56,12 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   assert.equal(await panel.getByRole('table').locator('tbody tr').count(),2);
   await tabs.getByRole('button',{name:'就诊经过',exact:true}).click();
   assert.deepEqual(await panel.getByRole('region',{name:'就诊时间轴'}).locator('time').allTextContents(),['2026-02-01','2026-01-01']);
-  await tabs.getByRole('button',{name:'原始资料',exact:true}).click();
-  const source=panel.getByRole('region',{name:'档案来源资料'});
-  await source.getByText('报告.txt',{exact:true}).click();await source.getByText('查看文字内容',{exact:true}).click();
-  await source.getByText('原始报告验收文字，数值 0 U/L。',{exact:true}).waitFor();
-  await source.getByLabel('查找文件').fill('不存在');await source.getByText('没有匹配的文件。').waitFor();
-  await source.getByLabel('查找文件').fill('');
+  await tabs.getByRole('button',{name:'资料库',exact:true}).click();
+  const library=panel.getByRole('region',{name:'资料库'});
+  await library.getByText('报告.txt',{exact:true}).click();await library.getByText('查看文字内容',{exact:true}).click();
+  await library.getByText('原始报告验收文字，数值 0 U/L。',{exact:true}).waitFor();
+  await library.getByLabel('查找文件').fill('不存在');await library.getByText('没有匹配的文件。').waitFor();
+  await library.getByLabel('查找文件').fill('');
   await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
   await select.selectOption(JSON.stringify(['验收指标','U/L']));
   await panel.getByRole('heading',{name:'检验趋势',exact:true}).scrollIntoViewIfNeeded();
