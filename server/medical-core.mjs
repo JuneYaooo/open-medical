@@ -153,6 +153,7 @@ export async function runTool(
   {
     sources = [],
     sourceSessionId,
+    sourceRunId,
     sourceFileIds,
     sourceInput,
     prepareIntake,
@@ -230,6 +231,7 @@ export async function runTool(
       .get(name)
       .execute(args, {
         sourceSessionId,
+        sourceRunId,
         sourceFileIds,
         sourceInput,
         prepareIntake,

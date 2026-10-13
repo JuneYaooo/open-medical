@@ -1,0 +1,1238 @@
+{
+  "status": "incomplete",
+  "attempts": [
+    {
+      "model": {
+        "provider": "anthropic",
+        "model": "deepseek-flash"
+      },
+      "version": "0.9.121",
+      "status": "failed",
+      "concurrency": 10,
+      "calls": 92,
+      "completed": 9,
+      "completedCells": 0,
+      "error": "45 个矩阵单元运行失败；已保留各单元结果",
+      "runErrors": [
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "A",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "B",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "A",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "B",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        }
+      ],
+      "summary": {
+        "groups": {
+          "C": {
+            "overall": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.6923076923076923,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.6153846153846153,
+                0.7692307692307692
+              ]
+            },
+            "early": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.6923076923076923,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.6153846153846153,
+                0.7692307692307692
+              ]
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "B": {
+            "overall": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.7692307692307692,
+                0.7692307692307692
+              ]
+            },
+            "early": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.7692307692307692,
+                0.7692307692307692
+              ]
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "A": {
+            "overall": {
+              "count": 2,
+              "ser": 0.28205128205128205,
+              "fer": 0.5961538461538461,
+              "f1": 0.5274725274725275,
+              "serCI95": [
+                0.23076923076923078,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.6923076923076923
+              ],
+              "f1CI95": [
+                0.28571428571428575,
+                0.7692307692307692
+              ]
+            },
+            "early": {
+              "count": 2,
+              "ser": 0.28205128205128205,
+              "fer": 0.5961538461538461,
+              "f1": 0.5274725274725275,
+              "serCI95": [
+                0.23076923076923078,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.6923076923076923
+              ],
+              "f1CI95": [
+                0.28571428571428575,
+                0.7692307692307692
+              ]
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "C-no-postprocess": {
+            "overall": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.7692307692307692,
+                0.7692307692307692
+              ]
+            },
+            "early": {
+              "count": 2,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": [
+                0.3333333333333333,
+                0.3333333333333333
+              ],
+              "ferCI95": [
+                0.5,
+                0.5
+              ],
+              "f1CI95": [
+                0.7692307692307692,
+                0.7692307692307692
+              ]
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "C-no-examples": {
+            "overall": {
+              "count": 1,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 1,
+              "ser": 0.3333333333333333,
+              "fer": 0.5,
+              "f1": 0.7692307692307692,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          }
+        },
+        "paired": {
+          "C": {
+            "overall": {
+              "difference": 0.051282051282051266,
+              "ci95": [
+                0,
+                0.10256410256410253
+              ],
+              "pairs": 2
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "B": {
+            "overall": {
+              "difference": 0.051282051282051266,
+              "ci95": [
+                0,
+                0.10256410256410253
+              ],
+              "pairs": 2
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "C-no-postprocess": {
+            "overall": {
+              "difference": 0.051282051282051266,
+              "ci95": [
+                0,
+                0.10256410256410253
+              ],
+              "pairs": 2
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "C-no-examples": {
+            "overall": {
+              "difference": 0,
+              "ci95": null,
+              "pairs": 1
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          }
+        },
+        "pairedLateDifference": null,
+        "pairedLateCI95": null
+      }
+    },
+    {
+      "model": {
+        "provider": "anthropic",
+        "model": "deepseek-flash"
+      },
+      "version": "0.9.121",
+      "status": "failed",
+      "concurrency": 5,
+      "calls": 128,
+      "completed": 18,
+      "completedCells": 0,
+      "error": "45 个矩阵单元运行失败；已保留各单元结果",
+      "runErrors": [
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "B",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "执行失败，请检查模型和文件配置"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D1",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D2",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 17,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 41,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "A",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "B",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C-no-postprocess",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        },
+        {
+          "persona": "D3",
+          "seed": 83,
+          "group": "C-no-examples",
+          "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+        }
+      ],
+      "summary": {
+        "groups": {
+          "C": {
+            "overall": {
+              "count": 3,
+              "ser": 0.2533022533022533,
+              "fer": 0.6095571095571096,
+              "f1": 0.6282051282051282,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 3,
+              "ser": 0.2533022533022533,
+              "fer": 0.6095571095571096,
+              "f1": 0.6282051282051282,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "C-no-postprocess": {
+            "overall": {
+              "count": 4,
+              "ser": 0.24567099567099568,
+              "fer": 0.6504329004329005,
+              "f1": 0.8012820512820513,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 4,
+              "ser": 0.24567099567099568,
+              "fer": 0.6504329004329005,
+              "f1": 0.8012820512820513,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "A": {
+            "overall": {
+              "count": 4,
+              "ser": 0.3005952380952381,
+              "fer": 0.636904761904762,
+              "f1": 0.7307692307692307,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 4,
+              "ser": 0.3005952380952381,
+              "fer": 0.636904761904762,
+              "f1": 0.7307692307692307,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "C-no-examples": {
+            "overall": {
+              "count": 3,
+              "ser": 0.3131313131313131,
+              "fer": 0.6313131313131313,
+              "f1": 0.6794871794871794,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 3,
+              "ser": 0.3131313131313131,
+              "fer": 0.6313131313131313,
+              "f1": 0.6794871794871794,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          },
+          "B": {
+            "overall": {
+              "count": 4,
+              "ser": 0.29166666666666663,
+              "fer": 0.6458333333333334,
+              "f1": 0.6923076923076923,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "early": {
+              "count": 4,
+              "ser": 0.29166666666666663,
+              "fer": 0.6458333333333334,
+              "f1": 0.6923076923076923,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "middle": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "late": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            },
+            "holdout": {
+              "count": 0,
+              "ser": null,
+              "fer": null,
+              "f1": null,
+              "serCI95": null,
+              "ferCI95": null,
+              "f1CI95": null
+            }
+          }
+        },
+        "paired": {
+          "C": {
+            "overall": {
+              "difference": -0.06415806415806415,
+              "ci95": null,
+              "pairs": 3
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "C-no-postprocess": {
+            "overall": {
+              "difference": -0.054924242424242424,
+              "ci95": null,
+              "pairs": 4
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "C-no-examples": {
+            "overall": {
+              "difference": -0.004329004329004331,
+              "ci95": null,
+              "pairs": 3
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          },
+          "B": {
+            "overall": {
+              "difference": -0.008928571428571425,
+              "ci95": null,
+              "pairs": 4
+            },
+            "late": {
+              "difference": null,
+              "ci95": null,
+              "pairs": 0
+            }
+          }
+        },
+        "pairedLateDifference": null,
+        "pairedLateCI95": null
+      }
+    }
+  ]
+}

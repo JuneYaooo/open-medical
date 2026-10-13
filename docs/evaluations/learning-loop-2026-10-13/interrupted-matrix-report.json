@@ -1,0 +1,296 @@
+{
+  "status": "stopped-for-fix",
+  "reason": "同一次建档中重复 patient_create_propose 会以空白占位草稿取代完整草稿；修复后重新运行，当前结果不得用于放行。",
+  "completed": 73,
+  "summary": {
+    "groups": {
+      "A": {
+        "overall": {
+          "count": 16,
+          "ser": 0.3059867216117216,
+          "fer": 0.6300824175824176,
+          "f1": 0.7019230769230768,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.30047619047619045,
+          "fer": 0.6292857142857142,
+          "f1": 0.723076923076923,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 6,
+          "ser": 0.3151709401709401,
+          "fer": 0.6314102564102564,
+          "f1": 0.6666666666666666,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "B": {
+        "overall": {
+          "count": 15,
+          "ser": 0.20903540903540907,
+          "fer": 0.6226495726495728,
+          "f1": 0.7179487179487178,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.22802197802197802,
+          "fer": 0.6256410256410256,
+          "f1": 0.7076923076923076,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 5,
+          "ser": 0.17106227106227107,
+          "fer": 0.6166666666666667,
+          "f1": 0.7384615384615384,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "C": {
+        "overall": {
+          "count": 13,
+          "ser": 0.12381208535054689,
+          "fer": 0.8176438945669715,
+          "f1": 0.7879684418145957,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.10326340326340326,
+          "fer": 0.6437062937062938,
+          "f1": 0.8410256410256409,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 3,
+          "ser": 0.1923076923076923,
+          "fer": 1.3974358974358976,
+          "f1": 0.6111111111111112,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "C-no-examples": {
+        "overall": {
+          "count": 15,
+          "ser": 0.12799422799422797,
+          "fer": 0.6996753246753246,
+          "f1": 0.8525030525030526,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.14729437229437228,
+          "fer": 0.7108766233766234,
+          "f1": 0.8364468864468865,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 5,
+          "ser": 0.0893939393939394,
+          "fer": 0.6772727272727272,
+          "f1": 0.8846153846153847,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "C-no-postprocess": {
+        "overall": {
+          "count": 14,
+          "ser": 0.08549783549783549,
+          "fer": 0.6001498501498501,
+          "f1": 0.9322344322344323,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.11969696969696968,
+          "fer": 0.6235431235431236,
+          "f1": 0.9051282051282051,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 4,
+          "ser": 0,
+          "fer": 0.5416666666666666,
+          "f1": 1,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      }
+    },
+    "paired": {
+      "B": {
+        "overall": {
+          "difference": -0.09512820512820515,
+          "ci95": null,
+          "pairs": 15
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      },
+      "C": {
+        "overall": {
+          "difference": -0.18227413612028995,
+          "ci95": null,
+          "pairs": 13
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      },
+      "C-no-examples": {
+        "overall": {
+          "difference": -0.17616938616938613,
+          "ci95": null,
+          "pairs": 15
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      },
+      "C-no-postprocess": {
+        "overall": {
+          "difference": -0.22253460824889393,
+          "ci95": null,
+          "pairs": 14
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      }
+    },
+    "pairedLateDifference": null,
+    "pairedLateCI95": null
+  }
+}

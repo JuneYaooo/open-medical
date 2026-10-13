@@ -256,7 +256,9 @@ test("browser: 我的工作台 shows skills, rules and suggestions; templates re
 
   await page.getByRole("button", { name: "更多任务模板" }).click();
   await page.getByRole("button", { name: "我的模板" }).click();
+  const usageSaved = page.waitForResponse(response => new URL(response.url()).pathname === "/api/extensions/usage" && response.request().method() === "POST" && response.ok());
   await page.locator(".agent-template-grid").getByRole("button", { name: /本院出院小结/ }).click();
+  await usageSaved;
   assert.equal(await box.inputValue(), skillSpec.quickTask.prompt);
   await page.locator(".skill-chip", { hasText: skillSpec.name }).waitFor();
   assert.equal(f.ext.prefs().usage[`ext:${skill.id}`], 1);

@@ -187,3 +187,45 @@ test("learning summaries include field and fact uncertainty and pair the context
   assert.ok(summary.paired.B.overall.ci95[1] < 0);
   assert.equal(summary.pairedLateCI95, null);
 });
+
+test("completed matrix cells resume only from complete ordered patient evidence", async (t) => {
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { completedLearningCell } =
+    await import("../scripts/learning-checkpoints.mjs");
+  const dir = await mkdtemp(join(tmpdir(), "learning-checkpoint-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const cell = { group: "C", personaId: "D1", seed: 17 };
+  assert.equal(await completedLearningCell(dir, cell, 2), null);
+  const run = {
+    group: "C",
+    persona: "D1",
+    seed: 17,
+    completed: false,
+    files: ["C-D1-17-P001.json", "C-D1-17-P002.json"],
+  };
+  await writeFile(join(dir, "C-D1-17-run.json"), JSON.stringify(run));
+  assert.equal(await completedLearningCell(dir, cell, 2), null);
+  for (const [i, file] of run.files.entries())
+    await writeFile(
+      join(dir, file),
+      JSON.stringify({
+        row: {
+          group: "C",
+          persona: "D1",
+          seed: 17,
+          sequence: i + 1,
+          patient: `P00${i + 1}`,
+          ser: 0.1,
+        },
+      }),
+    );
+  run.completed = true;
+  await writeFile(join(dir, "C-D1-17-run.json"), JSON.stringify(run));
+  assert.equal((await completedLearningCell(dir, cell, 2)).rows.length, 2);
+  await assert.rejects(completedLearningCell(dir, cell, 3), /矩阵不一致/);
+  run.files.reverse();
+  await writeFile(join(dir, "C-D1-17-run.json"), JSON.stringify(run));
+  await assert.rejects(completedLearningCell(dir, cell, 2), /顺序不一致/);
+});

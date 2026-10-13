@@ -61,7 +61,7 @@ test('supplied real PDF uploads through browser and its scanned pages are readab
   const f=await fixture(t),browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage();await page.goto(f.origin + "/?view=home");
   await page.locator(".app-navigation").waitFor();
-  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'附件',exact:true}).click();
+  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'添加材料',exact:true}).click();
   await(await chooser).setFiles(process.env.MEDICAL_INTAKE_PDF);
   await page.getByText('已附加 1 份材料，将随本次任务一起发送。Enter 发送 · Shift + Enter 换行').waitFor({timeout:60000});
   const sessions=(await f.json('/api/sessions')).data.sessions;

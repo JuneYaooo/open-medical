@@ -1,3 +1,7 @@
+import {
+  learningFingerprint,
+  completedLearningCell,
+} from "./learning-checkpoints.mjs";
 import { runLearningCells } from "./learning-workers.mjs";
 import { createHash } from "node:crypto";
 import { calibrateStyleJudge } from "./learning-style-judge.mjs";
@@ -74,7 +78,46 @@ if (!configPath) {
       throw new Error("--patients 须在 1–10 之间");
     matrix.learningPatients = n;
   }
-  let calls = 0;
+  const styleLabels = arg("--style-calibration")
+    ? JSON.parse(await readFile(resolve(arg("--style-calibration")), "utf8"))
+    : null;
+  const fingerprint = await learningFingerprint(
+    config,
+    {
+      ...matrix,
+      styleCalibrationHash: styleLabels
+        ? createHash("sha256").update(JSON.stringify(styleLabels)).digest("hex")
+        : null,
+    },
+    concurrency,
+  );
+  const contextPath = join(output, "matrix-context.json");
+  const resume = args.includes("--resume");
+  if (resume) {
+    const saved = JSON.parse(await readFile(contextPath, "utf8"));
+    if (saved.fingerprint !== fingerprint)
+      throw new Error(
+        "模型、运行时代码、数据集或并发配置已改变，不能复用旧矩阵；请使用新的输出目录",
+      );
+  } else {
+    await writeFile(
+      contextPath,
+      JSON.stringify(
+        {
+          fingerprint,
+          model: config.model,
+          provider: config.provider,
+          concurrency,
+          startedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+      { flag: "wx" },
+    );
+  }
+  let calls = 0,
+    reusedIntakes = 0;
   const rows = [];
   function trackedProvider() {
     const provider = createProvider(config),
@@ -131,7 +174,7 @@ if (!configPath) {
     if (arg("--style-calibration"))
       styleCalibration = await calibrateStyleJudge(
         trackedProvider().provider,
-        JSON.parse(await readFile(resolve(arg("--style-calibration")), "utf8")),
+        styleLabels,
       );
     const cells = matrix.personas.flatMap((personaId) =>
       matrix.seeds.flatMap((seed) =>
@@ -142,6 +185,22 @@ if (!configPath) {
       cells,
       concurrency,
       async ({ personaId, seed, group }) => {
+        if (resume) {
+          const saved = await completedLearningCell(
+            output,
+            { personaId, seed, group },
+            matrix.learningPatients + (release ? matrix.holdoutPatients : 0),
+          );
+          if (saved) {
+            rows.push(...saved.rows);
+            runs.push(saved.run);
+            reusedIntakes += saved.rows.length;
+            console.log(
+              `${group} ${personaId}/${seed}: reused ${saved.rows.length} completed intakes`,
+            );
+            return;
+          }
+        }
         const { provider, requests, tracking } = trackedProvider();
         const persona = JSON.parse(
           await readFile(join(root, "personas", `${personaId}.json`)),
@@ -623,6 +682,8 @@ if (!configPath) {
       mode: release ? "release" : "development",
       calls,
       concurrency,
+      reusedIntakes,
+      callsScope: "current-invocation",
       rows: rows.length,
       summary,
       gates,
@@ -650,7 +711,12 @@ if (!configPath) {
         {
           status: "failed",
           error: error.message,
+          model: { provider: config.provider, model: config.model },
+          mode: release ? "release" : "development",
+          concurrency,
           calls,
+          callsScope: "current-invocation",
+          reusedIntakes,
           completed: rows.length,
           summary: summarizeLearning(rows),
           runs,

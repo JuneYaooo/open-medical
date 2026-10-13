@@ -7,8 +7,11 @@ export async function openPatient(page, name) {
   await page.locator('.patient-card').filter({hasText:name}).click();
 }
 export async function openIntake(page) {
-  await page.locator('.hub-composer, .patients-view').first().waitFor();
   const picker=page.getByRole('combobox',{name:'任务关联患者'});
-  if (await picker.count()) await picker.selectOption('__new');
-  else await page.locator('.patients-toolbar').getByRole('button',{name:'上传资料建档',exact:true}).click();
+  const upload=page.locator('.patients-toolbar').getByRole('button',{name:'上传资料建档',exact:true});
+  // The composer mounts before the saved medical task type is restored.
+  // Wait for an actual intake entry instead of branching on the empty shell.
+  await picker.or(upload).first().waitFor();
+  if (await picker.isVisible()) await picker.selectOption('__new');
+  else await upload.click();
 }

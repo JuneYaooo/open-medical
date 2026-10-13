@@ -52,3 +52,39 @@ test('background model failure is visible in job status and can be retried witho
   const job=await terminal(f,s.id);assert.equal(job.status,'needs_input');assert.match(job.reply,/姓名/);
   assert.equal((await f.json(`/api/sessions/${s.id}`)).data.files.length,1);
 });
+
+test('a repeated proposal in one intake keeps the complete draft and finalizes without another model call', async t => {
+  const provider = new DeepSeekProvider({apiKey:'synthetic',model:'duplicate-proposal-test'});
+  let round = 0;
+  const tool = (name, args, suffix='') => ({id:`call-${round}-${suffix}`,type:'function',function:{name,arguments:JSON.stringify(args)}});
+  provider.complete = async () => {
+    const step = round++;
+    if (step === 0) return {message:{role:'assistant',tool_calls:[tool('read_intake_batch',{})]}};
+    if (step === 1) return {message:{role:'assistant',tool_calls:[tool('save_intake_notes',{notes:'合成患者，资料记录高血压。来源 source.txt 第1行。'})]}};
+    if (step === 2) return {message:{role:'assistant',tool_calls:[tool('read_personal_context',{})]}};
+    if (step === 3) return {message:{role:'assistant',tool_calls:[
+      tool('patient_create_propose',{name:'合成患者',summary:'完整草稿',diagnoses:[{name:'高血压',status:'confirmed',source:'source.txt 第1行'}],clinicalSummary:{text:'资料记载高血压。',source:'source.txt 第1行'}},'first'),
+      tool('patient_create_propose',{name:'合成患者',summary:'占位校验'},'duplicate')
+    ]}};
+    throw new Error('the existing proposal should finish intake without another request');
+  };
+  const f=await fixture(t,{provider}),s=await f.session('上传资料建档');
+  await f.json(`/api/sessions/${s.id}/files`,'POST',{name:'source.txt',text:'合成患者，资料记录高血压。'});
+  await f.json(`/api/sessions/${s.id}/intake-job`,'POST',{externalConsent:true});
+  const job=await terminal(f,s.id);
+  assert.equal(job.status,'needs_input');
+  assert.equal(round,4);
+  const pending=(await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}`)).data.actions;
+  assert.equal(pending.length,1);
+  assert.equal(pending[0].payload.diagnoses[0].name,'高血压');
+  assert.equal(pending[0].payload.clinicalSummary.text,'资料记载高血压。');
+  const firstId=pending[0].id;
+  assert.equal((await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}&status=superseded`)).data.actions.length,0);
+  // A deliberate rerun remains able to replace the previous draft.
+  round=0;
+  await f.json(`/api/sessions/${s.id}/intake-job`,'POST',{externalConsent:true});
+  assert.equal((await terminal(f,s.id)).status,'needs_input');
+  const next=(await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}`)).data.actions;
+  assert.equal(next.length,1);
+  assert.notEqual(next[0].id,firstId);
+});

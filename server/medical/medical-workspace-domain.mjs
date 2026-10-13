@@ -89,6 +89,10 @@ export function createMedicalWorkspaceDomain({
     preparedResponse(workspace,runId) {
       if(!workspace?.runs)return null;
       const run=workspace.runs.find(r=>r.id===runId);
+      if (run?.policy?.workflow === "patient-intake") {
+        const proposal = pending?.()?.list({ type: "patient-create", sourceSessionId: workspace.id, status: "pending" }).find(action => action.payload.sourceRunId === runId);
+        if (proposal) return { message: { role: "assistant", content: "资料已整理为待核对草稿。请核对并编辑，确认后建档。" } };
+      }
       if(run?.policy?.workflow==='trial-eligibility')return run.artifacts?.some(a=>a.type==='trial_eligibility')?{message:{role:'assistant',content:trialAnswer(workspace,runId,{text:''}).text}}:null;
       const type=run?.policy?.workflow==='similar-case-search'?'similar_cases':run?.policy?.workflow==='patient-assessment'?'treatment_review':null;
       const artifact=type && run.artifacts?.find(a=>a.type===type && (type!=='treatment_review'||a.matches?.length));
@@ -170,6 +174,7 @@ export function createMedicalWorkspaceDomain({
           }
           return runTool(name, args, {
             sourceSessionId: workspace.id,
+            sourceRunId: workspace.runs?.find(run => run.id === runId)?.policy?.workflow === "patient-intake" ? runId : undefined,
             prepareIntake: context.prepareIntake,
             sourceFileIds: (context.sources || []).filter((source) => (workspace.materials || []).some((file) => file.id === source.id)).map((source) => source.id),
             sourceInput: (context.sources || []).find((source) => !(workspace.materials || []).some((file) => file.id === source.id) && source.name === "本轮输入")?.text,

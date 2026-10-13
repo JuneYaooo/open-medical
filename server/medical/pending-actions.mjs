@@ -112,6 +112,13 @@ export class PendingActions {
       "INVALID_INPUT",
       "提案内容必须是对象",
     );
+    // A model can emit the proposal twice in one round or replay a checkpoint.
+    // Keep the first successful draft; an explicit new intake run may replace it.
+    if (type === "patient-create" && payload.sourceSessionId && payload.sourceRunId) {
+      const existing = this.list({ type, sourceSessionId: payload.sourceSessionId, status: "pending" })
+        .find(action => action.payload.sourceRunId === payload.sourceRunId);
+      if (existing) return { ...existing, alreadyProposed: true };
+    }
     let resolvedPatientId = null;
     let baseRevision = null;
     if (type === "patient-update" || type === "followup-create") {
@@ -637,6 +644,7 @@ const diagnosisItemsDef = {
         const { summary, ...payload } = args;
         if (context.sourceSessionId) {
           payload.sourceSessionId = context.sourceSessionId;
+          if (context.sourceRunId) payload.sourceRunId = context.sourceRunId;
           payload.sourceFileIds = context.sourceFileIds || (context.sources || []).map((source) => source.id);
           if (context.sourceInput) payload.sourceInput = context.sourceInput;
         }
