@@ -11,7 +11,7 @@ function Preview({ action }) {
   if (action.type === "patient-create") return <><p className="care-hint">新建患者：<b>{p.name}</b> · {({ male: "男", female: "女" })[p.gender] || "性别待补"}{p.birthYear ? ` · ${p.birthYear} 年生` : ""} · 过敏：{({ none_known: "无已知过敏", recorded: "已记录过敏原" })[p.allergyStatus] || "待核对"}</p>
     {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}
     {(p.diagnoses?.length || p.medications?.length || p.labs?.length || p.visits?.length) ? <p className="care-hint">诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 次</p> : null}
-    {p.note && <p className="care-hint">备注：{p.note}</p></>;
+    {p.note && <p className="care-hint">备注：{p.note}</p>}</>;
   if (action.type === "patient-update") return <><p className="care-hint">写入内容：诊断 {p.diagnoses?.length || 0} 条 · 用药 {p.medications?.length || 0} 条 · 过敏 {p.allergies?.length || 0} 条 · 检验 {p.labs?.length || 0} 条 · 就诊 {p.visits?.length || 0} 条</p>
     {p.clinicalSummary?.text && <pre>{p.clinicalSummary.text}</pre>}</>;
   if (action.type === "followup-create") return <p className="care-hint">随访「{p.name}」{p.firstDueAt ? ` · 首次到期 ${p.firstDueAt}` : ""}{p.intervalDays ? ` · 每 ${p.intervalDays} 天` : ""}{p.once ? " · 单次" : " · 周期"}</p>;
