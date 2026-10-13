@@ -1,3 +1,4 @@
+import { LearningSettings } from "./learning-loop";
 import { ChatConnectionSettings } from "./chat-followups";
 import { useEffect, useRef, useState } from "react";
 import { api, medicalEnabled } from "./agent-runtime";
@@ -50,6 +51,7 @@ function DesktopAppPanel({ desktop }) {
 }
 
 export function AppSettingsView({ config, onModel, onDoctor, onProjects, onAsk }) {
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('doctor') === '1') onDoctor(); }, []);
   const param = new URLSearchParams(window.location.search).get("settingsTab");
   const [section, setSection] = useState(() => takeSettingsTab() || (["followup", "plugins", "notifications", "knowledge-bot"].includes(param) ? param : "general"));
   const [projects, setProjects] = useState([]), [selected, setSelected] = useState("");
@@ -90,7 +92,7 @@ export function AppSettingsView({ config, onModel, onDoctor, onProjects, onAsk }
         <button aria-pressed={section === "connections"} onClick={() => setSection("connections")}>工具与连接</button>
       </nav>
       <div className="app-settings-content">
-        {section === "knowledge-bot" ? <FeishuKnowledgeBotSettings /> : section === "notifications" ? <DoctorNotificationSettings /> : window.omwDesktop && section === "desktop" ? <DesktopAppPanel desktop={window.omwDesktop} /> : section === "skills" ? <ExtensionCenter view="skills" onAsk={onAsk} /> : section === "workbench" ? <ExtensionCenter onAsk={onAsk} /> : section === "plugins" ? <PluginCenter /> : section === "general" ? <section><h2>模型与运行</h2><p>{config?.modelConfigured ? `当前模型：${config.provider} · ${config.model}` : "尚未配置模型"}</p><div className="toolbar-actions"><button onClick={onModel}>配置模型</button>{medicalEnabled(config) && <button onClick={onDoctor}>医生档案与记忆</button>}</div></section> : section === "followup" ? <ChatConnectionSettings /> : <section>
+        {section === "knowledge-bot" ? <FeishuKnowledgeBotSettings /> : section === "notifications" ? <DoctorNotificationSettings /> : window.omwDesktop && section === "desktop" ? <DesktopAppPanel desktop={window.omwDesktop} /> : section === "skills" ? <ExtensionCenter view="skills" onAsk={onAsk} /> : section === "workbench" ? <ExtensionCenter onAsk={onAsk} /> : section === "plugins" ? <PluginCenter /> : section === "general" ? <section><h2>模型与运行</h2><p>{config?.modelConfigured ? `当前模型：${config.provider} · ${config.model}` : "尚未配置模型"}</p><div className="toolbar-actions"><button onClick={onModel}>配置模型</button>{medicalEnabled(config) && <button onClick={onDoctor}>医生档案与记忆</button>}</div>{medicalEnabled(config) && <LearningSettings />}</section> : section === "followup" ? <ChatConnectionSettings /> : <section>
           <h2>工具与连接</h2><p>浏览器、隔离终端、插件与 MCP 在这里配置。访问范围和授权按项目保存。</p>
           {error && <div role="alert"><p>{error}</p><button onClick={() => setReload(v => v + 1)}>重新加载设置</button></div>}
           {loading && <p role="status">正在读取项目…</p>}

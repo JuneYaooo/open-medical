@@ -1,3 +1,5 @@
+import { PersonalReferences, RememberedNotice } from "./learning-loop";
+import { IntakeReview } from "./intake-review";
 import { intakeUploads } from "./intake-background";
 import { useEffect, useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
@@ -6,10 +8,6 @@ import { api } from "./agent-runtime";
 import { importMaterial, uploadScannedPages, MATERIAL_ACCEPT } from "./import-material";
 import { materialQualityLevel } from "./material-details";
 import { OCR_QUALITY_LABELS } from "../shared/ocr-quality.mjs";
-
-const labels = { diagnoses: "诊断与问题", medications: "用药", allergies: "过敏记录", labs: "检验", visits: "就诊经历" };
-const DIAGNOSIS_STATUS_TEXT = { confirmed: "确诊", suspected: "疑似待排", finding: "影像/检验发现", needs_review: "待核对" };
-const describe = (item) => typeof item === "string" ? item : [item.date, item.name || item.item || item.reason, item.value, item.unit, item.dose, item.frequency, ({ active: "正在使用", stopped: "已停用", unknown: "待核对", ...DIAGNOSIS_STATUS_TEXT })[item.status], item.note, (item.sources?.length ? item.sources : [item.source].filter(Boolean)).length ? `来源：${(item.sources?.length ? item.sources : [item.source].filter(Boolean)).join("；")}` : ""].filter(v => v !== undefined && v !== "").join(" · ");
 
 async function intakeActions(status = "pending", sourceSessionId) {
   const actions = [];
@@ -25,6 +23,12 @@ async function intakeActions(status = "pending", sourceSessionId) {
 
 export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspace, configured }) {
   const chooser = useRef(null);
+  const review = useRef(null);
+  const [reviewEditing, setReviewEditing] = useState(false);
+  const [editCount, setEditCount] = useState(0);
+  const [reorganize, setReorganize] = useState(null);
+  const [remembered, setRemembered] = useState([]);
+  const [reviewMode, setReviewMode] = useState('preserve');
   const sessionId = useRef(null);
   const materials = useRef([]);
   const inFlight = useRef(false);
@@ -78,7 +82,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
   }, []);
   const clearCurrent = () => {
     sessionId.current = null; saveFiles([]); needsParse.current = false; cancelled.current = false;
-    setProposal(null); setFailedUploads([]); setSkipped([]); setAcknowledged(false);
+    setProposal(null); setEditCount(0); setFailedUploads([]); setSkipped([]); setAcknowledged(false);
     setError(""); setReply(""); setCorrection(""); setProgress(""); setElapsed(0);
   };
   const startNew = () => {
@@ -139,7 +143,9 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
       await new Promise(resolve => setTimeout(resolve, 750));
     }
   };
-  const parse = async (selected = []) => {
+  const parse = async (selected = [], resolvedMode) => {
+    if (proposal && (review.current?.count || 0) > 0 && !resolvedMode) { setReorganize(selected); return; }
+    try { await review.current?.flush(); } catch (err) { setError(err.message); return; }
     if (inFlight.current || restoring) return;
     inFlight.current = true; cancelled.current = false;
     controller.current = new AbortController();
@@ -183,7 +189,8 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
       if (!needsParse.current && !failedUploads.length && !failures.length && !correction.trim() && await loadProposal()) {
         setProgress("已恢复建档草稿，请核对后确认"); return;
       }
-      await api(`/api/sessions/${sessionId.current}/intake-job`, "POST", { correction, externalConsent: true });
+      const started = await api(`/api/sessions/${sessionId.current}/intake-job`, "POST", { correction, externalConsent: true, reviewMode: resolvedMode || "preserve" });
+      setRemembered(started.job?.remembered || []);
       intakeUploads.delete(sessionId.current);
       setProgress("已进入后台处理，你可以关闭窗口或处理其他任务。");
       await watchJob();
@@ -201,14 +208,15 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
   const confirm = async () => {
     if (inFlight.current || (failedUploads.length && !acknowledged)) return;
     inFlight.current = true; setBusy(true); setError("");
-    try { const result = await api(`/api/pending-actions/${proposal.id}/confirm`, "POST", {}); await onCreated(result.applied); }
+    try { await review.current?.flush(); const result = await api(`/api/pending-actions/${proposal.id}/confirm`, "POST", review.current?.value() || {}); if (result.habitSuggestions?.length) sessionStorage.setItem(`habit-suggestion:${result.applied.id}`, JSON.stringify(result.habitSuggestions)); if (result.pausedHabits?.length) sessionStorage.setItem(`habit-paused:${result.applied.id}`, JSON.stringify(result.pausedHabits)); await onCreated(result.applied); }
     catch (err) { setError(err.message); }
     finally { inFlight.current = false; setBusy(false); }
   };
-  return <Modal title="上传资料建档" wide onClose={onClose}>
+  const closeReview = async () => { try { await review.current?.flush(); onClose(); } catch (err) { setError(err.message); } };
+  return <Modal title="上传资料建档" wide onClose={closeReview}>
     <div className="modal-form">
       <p>上传病历、检查报告或病史描述，自动整理为患者档案。你只需核对结果。</p>
-      {busy && <><p role="status">可以关闭此窗口，任务会继续处理。资料上传完毕后，刷新页面也不会中断解析。</p><button className="secondary" onClick={onClose}>后台处理，关闭窗口</button></>}
+      {busy && <><p role="status">可以关闭此窗口，任务会继续处理。资料上传完毕后，刷新页面也不会中断解析。</p><button className="secondary" onClick={closeReview}>后台处理，关闭窗口</button></>}
       <p className="muted">支持图片、PDF、Word、Excel、TXT、Markdown、JSON；可一次选择同一患者的多份资料。选择后自动开始解析，相关内容将交由当前配置的模型处理。</p>
       <h3>{sessionId.current ? "当前患者的建档任务" : "新患者建档"}</h3>
       <p className="muted">{sessionId.current ? "补充的资料仅加入当前任务。要处理另一位患者，请先新建任务。" : "这里上传的资料会创建独立任务，不会加入之前的患者资料。"}</p>
@@ -231,6 +239,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
           <button className="secondary" disabled={busy || restoring || intakeUploads.has(task.id)} onClick={() => task.running && task.intake.job?.status !== "running" ? onOpenWorkspace(task.id) : resume(task.id)}>{task.intake.job?.status === "running" || task.running ? "查看处理进度" : task.draft ? "核对这份草稿" : (task.intake.job?.status === "needs_input" || (!task.intake.job && task.lastRunStatus === "completed")) ? "补充信息" : "继续这个任务"}</button>
         </article>)}
       </section>}
+      {!!remembered.length && <RememberedNotice key={remembered.map(m => m.id).join(",")} memories={remembered} />}
       {progress && <p role="status">{busy && <Loader2 size={15} className="spin" />} {progress}{busy && `（已用时 ${elapsed} 秒）`}</p>}
       {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份识别完成</summary><ul aria-label="已上传资料">{files.map(file => { const level = materialQualityLevel(file); return <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? ` · 已识别${level && level !== "good" ? `（${OCR_QUALITY_LABELS[level]}，建议在患者档案的资料库里对照原图` : ""}）` : ""}</li>; })}</ul></details>}
       {!!skipped.length && <p>已自动跳过 {skipped.length} 份重复资料，保留已有内容，不影响解析。</p>}
@@ -238,23 +247,17 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
       {failedUploads.map(({ file, error }) => <p className="error-text" key={file.name}>{file.name}：{error}</p>)}
       {error && <p className="error-text" role="alert">{error}</p>}
       {proposal && <section aria-label="自动解析的建档草稿">
-        <h3>核对建档草稿</h3>
-        <p><b>{proposal.payload.name}</b> · {({ male: "男", female: "女" })[proposal.payload.gender] || "性别待补充"}{proposal.payload.birthYear ? ` · ${proposal.payload.birthYear} 年生` : ""}{proposal.payload.phone ? ` · ${proposal.payload.phone}` : ""}</p>
-        <p>{proposal.summary}</p>
-        {proposal.payload.clinicalSummary && <section><h4>病史摘要</h4><p style={{whiteSpace:"pre-wrap"}}>{proposal.payload.clinicalSummary.text}</p><small>来源：{proposal.payload.clinicalSummary.source}</small></section>}
-        {proposal.payload.note && <details><summary>资料备注与待核对信息</summary><p>{proposal.payload.note}</p></details>}
-        {!!proposal.payload.groups?.length && <p>分组：{proposal.payload.groups.join("、")}</p>}
-        {!!proposal.payload.tags?.length && <p>标签：{proposal.payload.tags.join("、")}</p>}
-        <p>过敏史：{({ none_known: "已核对无已知过敏", recorded: "已记录过敏原" })[proposal.payload.allergyStatus] || "待核对"}</p>
-        {Object.entries(labels).map(([key, label]) => <div key={key}><h4>{label}</h4>{proposal.payload[key]?.length ? <ul>{proposal.payload[key].map((item, i) => <li key={i}>{describe(item)}</li>)}</ul> : <p className="muted">资料未明确提供，待补充</p>}</div>)}
+        <IntakeReview key={proposal.id} action={proposal} ref={review} onEditing={setReviewEditing} onChange={({ count }) => setEditCount(count)} />
+        <PersonalReferences action={proposal} />
         <p className="muted">确认后保存档案，并关联本次上传的资料。</p>
         {!!failedUploads.length && <label><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />我已知晓上述资料未纳入，先保存这份不完整草稿</label>}
-        <button className="primary" disabled={busy || (!!failedUploads.length && !acknowledged)} onClick={confirm}>确认建档</button>
+        <button className="primary" disabled={busy || reviewEditing || (!!failedUploads.length && !acknowledged)} onClick={confirm}>{editCount ? `确认建档（含你的 ${editCount} 处修改）` : "确认建档"}</button>
       </section>}
+      {reorganize !== null && <section role="alert" aria-label="重新整理修改处理"><p>重新整理会生成一份新草稿。你手动做的 {review.current?.count || 0} 处修改怎么处理？</p><label><input type="radio" name="reviewMode" checked={reviewMode === 'preserve'} onChange={() => setReviewMode('preserve')} />告诉 AI 我改了什么，让它在新草稿里保留</label><label><input type="radio" name="reviewMode" checked={reviewMode === 'discard'} onChange={() => setReviewMode('discard')} />丢弃我的修改</label><button className="secondary" onClick={() => setReorganize(null)}>取消</button><button onClick={() => { const files = reorganize; setReorganize(null); parse(files, reviewMode); }}>继续重新整理</button></section>}
       {!busy && reply && <p style={{ whiteSpace: "pre-wrap" }}>{reply}</p>}
       {!busy && (!!files.length || !!failedUploads.length) && <>
         <label>需要补充或纠正？直接告诉我<textarea value={correction} onChange={event => setCorrection(event.target.value)} placeholder="例如：第二份报告是术前检查；患者姓名为……" /></label>
-        <button className="secondary" disabled={busy || restoring || (proposal && !correction.trim() && !failedUploads.length)} onClick={() => parse(failedUploads.filter(item => item.stage === "upload" && item.file instanceof File).map(item => item.file))}>{failedUploads.length ? "重试读取资料" : proposal ? "按补充内容重新整理" : "继续解析"}</button>
+        <button className="secondary" disabled={busy || restoring || reviewEditing || (proposal && !correction.trim() && !failedUploads.length)} onClick={() => parse(failedUploads.filter(item => item.stage === "upload" && item.file instanceof File).map(item => item.file))}>{failedUploads.length ? "重试读取资料" : proposal ? "按补充内容重新整理" : "继续解析"}</button>
       </>}
       <div className="toolbar-actions">
         {busy && <button className="secondary" onClick={stop}>停止解析</button>}

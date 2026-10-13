@@ -1,3 +1,4 @@
+import { ReviewLog } from "./medical/review-log.mjs";
 import {taskPresentation} from '../shared/task-presentation.mjs';
 import {requestsMedicalDeliverable} from '../shared/medical-delivery.mjs';
 import { collectWorkspaceDelivery } from "./core/workspace-delivery.mjs";
@@ -1219,8 +1220,12 @@ export class SessionBridge {
     return this.findArtifact(id, artifactId);
   }
   editArtifact(id, artifactId, body) {
+    return sqliteTransaction(this.store.db, () => this.editArtifactTransaction(id, artifactId, body));
+  }
+  editArtifactTransaction(id, artifactId, body) {
     const title = string(body.title, "产物标题", 150);
     const changedNotes = [];
+    const beforeArtifact = structuredClone(this.findArtifact(id, artifactId));
     this.mutateArtifact(id, artifactId, (a) => {
       check(a.version === body.version, "REVISION_CONFLICT", "产物版本已改变", 409);
       let events, items, pico;
@@ -1308,7 +1313,10 @@ export class SessionBridge {
       }
       return a;
     });
-    try { const edited = this.findArtifact(id, artifactId); this.evolution?.recordEdit({ title: edited.title, type: edited.type, note: changedNotes[0] }); } catch { /* evolution signals are best effort */ }
+    const edited = this.findArtifact(id, artifactId);
+    const artifactText = a => a.text || (a.items ? a.items.join('\n\n') : a.events ? a.events.map(e => `${e.date} ${e.event}`).join('\n\n') : a.pico ? Object.entries(a.pico).map(([k, v]) => `${k}: ${v}`).join('\n\n') : a.title);
+    const review = new ReviewLog(this.store).record({ kind: 'artifact', patientId: this.get(id).patientId, ai: { text: artifactText(beforeArtifact) }, final: { text: artifactText(edited) } });
+    this.evolution?.recordEdit({ title: edited.title, type: edited.type, note: changedNotes[0], reviewSessionId: review.id });
     if (this.doctor && changedNotes.length)
       for (const note of changedNotes)
         this.doctor.recordSignal({

@@ -55,7 +55,6 @@ export function buildShareRecord(patient, { sections } = {}) {
     return value;
   };
   const record = scrub({
-    pseudoId: `P-${createHash("sha256").update(patient.id).digest("hex").slice(0, 8)}`,
     gender: patient.gender || "unknown",
     ageBand:
       age !== null
@@ -115,6 +114,7 @@ export function buildShareRecord(patient, { sections } = {}) {
   return {
     record: {
       ...record,
+      pseudoId: `P-${createHash("sha256").update(patient.id).digest("hex").slice(0, 8)}`,
       exportedAt: new Date().toISOString(),
       note: "去隐私化分享：姓名、电话、病历号等身份字段已移除，出生年改为年龄段；自由文本里的证件号/手机号/长编号已打码。分享前请浏览预览确认没有遗漏。",
     },

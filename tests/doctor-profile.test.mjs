@@ -139,9 +139,9 @@ test("doctor memory tools expose get/save/forget with confirmed-only visibility"
   assert.equal(get.memories.length, 1);
 
   const save = tools[1].execute({ content: "模型听到的偏好", topic: "格式" });
-  assert.equal(save.status, "pending");
+  assert.equal(save.status, "confirmed");
   const active = doctor.memories({ status: "confirmed" });
-  assert.equal(active.length, 1);
+  assert.equal(active.length, 2);
 
   const forgotten = tools[2].execute({ id: active[0].id });
   assert.equal(forgotten.status, "dismissed");

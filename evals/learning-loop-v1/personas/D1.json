@@ -1,0 +1,26 @@
+{
+  "id": "D1",
+  "termDirection": "full",
+  "frequency": "full",
+  "summary": "brief",
+  "excludeFindings": true,
+  "rules": [
+    "term",
+    "unit",
+    "format",
+    "spurious",
+    "omission",
+    "style",
+    "trap-status",
+    "trap-dose"
+  ],
+  "stated": [
+    "以后诊断都写中文全称",
+    "以后病史摘要按时间顺序整理"
+  ],
+  "patientOnly": "第二份报告是术前检查",
+  "traps": {
+    "status": "confirmed",
+    "dose": "20mg"
+  }
+}

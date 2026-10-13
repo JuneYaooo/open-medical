@@ -1,3 +1,4 @@
+import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { createHash } from "node:crypto";
 import { AppError, check, string } from "../errors.mjs";
 
@@ -153,7 +154,7 @@ export class DoctorProfile {
   }
   memories({ status, kind } = {}) {
     check(
-      ["pending", "confirmed", "dismissed", "open", "merged", undefined].includes(
+      ["pending", "confirmed", "dismissed", "paused", "deleted", "open", "merged", undefined].includes(
         status,
       ),
       "INVALID_INPUT",
@@ -176,7 +177,7 @@ export class DoctorProfile {
     }
     return this.store.db
       .prepare(
-        `SELECT id,kind,status,pinned,count,topic,content,source,created_at,updated_at
+        `SELECT id,kind,status,pinned,count,topic,content,source,origin,rule,evidence,dryrun,created_at,updated_at
          FROM doctor_memories ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY pinned DESC, updated_at DESC, id DESC LIMIT 500`,
       )
@@ -185,17 +186,18 @@ export class DoctorProfile {
         ...row,
         pinned: Boolean(row.pinned),
         source: JSON.parse(row.source),
+        rule: JSON.parse(row.rule || "null"), evidence: JSON.parse(row.evidence || "[]"), dryrun: JSON.parse(row.dryrun || "null"),
       }));
   }
   memoryRow(id) {
     check(Number.isInteger(id) && id > 0, "INVALID_INPUT", "记忆编号无效");
     const row = this.store.db
       .prepare(
-        "SELECT id,kind,status,pinned,count,topic,content,source,created_at,updated_at FROM doctor_memories WHERE id=?",
+        "SELECT id,kind,status,pinned,count,topic,content,source,origin,rule,evidence,dryrun,created_at,updated_at FROM doctor_memories WHERE id=?",
       )
       .get(id);
     check(row, "NOT_FOUND", "记忆条目不存在", 404);
-    return { ...row, pinned: Boolean(row.pinned), source: JSON.parse(row.source) };
+    return { ...row, pinned: Boolean(row.pinned), source: JSON.parse(row.source), rule: JSON.parse(row.rule || "null"), evidence: JSON.parse(row.evidence || "[]"), dryrun: JSON.parse(row.dryrun || "null") };
   }
   addMemory({
     kind = "explicit",
@@ -238,10 +240,33 @@ export class DoctorProfile {
       );
     return this.memoryRow(Number(info.lastInsertRowid));
   }
+  saveStated({ content, topic = '', source = {} }) {
+    const text = string(content, '习惯内容', 2000);
+    check(!/(?:关闭|忽略|不要|跳过|不再|省略).{0,12}(?:红旗|预警|出处|引用|知情同意|患者.{0,4}确认)|(?:无需|不用).{0,8}(?:同意|确认发送)/.test(text), 'SAFETY_BOUNDARY', '红旗预警、出处、知情同意和发送确认不能作为习惯关闭');
+    return sqliteTransaction(this.store.db, () => {
+      const old = this.memories({ status: 'confirmed' }).find(m => m.content === text);
+      if (old) return old;
+      const terminology = /诊断.{0,10}(全称|缩写)|(?:全称|缩写).{0,6}诊断/.test(text) || /(?:现在|以后).{0,6}缩写.{0,6}(?:可以|也行)/.test(text);
+      const resolvedTopic = terminology ? '诊断名称写法' : topic;
+      if (resolvedTopic) for (const prior of this.memories({ status: 'confirmed' }).filter(m => m.topic === resolvedTopic || (resolvedTopic === '诊断名称写法' && m.rule?.section === 'diagnoses' && ['term_replace', 'term_style'].includes(m.rule.type)))) {
+        this.store.db.prepare('INSERT INTO habit_history(habit_id,decision,snapshot,created_at) VALUES (?,?,?,?)').run(prior.id, 'superseded', JSON.stringify(prior), nowIso());
+        this.store.db.prepare("UPDATE doctor_memories SET status='dismissed',updated_at=? WHERE id=?").run(nowIso(), prior.id);
+      }
+      const memory = this.addMemory({ kind: 'explicit', status: 'confirmed', content: text, topic: resolvedTopic, source: { ...source, type: 'stated' } });
+      const rule = resolvedTopic === '诊断名称写法' && !/缩写.{0,6}(?:也可以|也行|可以)/.test(text) ? { type: 'term_style', section: 'diagnoses', direction: /(?:不用|不要|不使用)缩写|全称/.test(text) ? 'full' : 'short' } : null;
+      this.store.db.prepare('UPDATE doctor_memories SET rule=? WHERE id=?').run(JSON.stringify(rule), memory.id);
+      this.store.db.prepare("UPDATE doctor_memories SET origin='stated',evidence=? WHERE id=?").run(JSON.stringify([text]), memory.id);
+      this.store.db.prepare('INSERT INTO habit_history(habit_id,decision,snapshot,created_at) VALUES (?,?,?,?)').run(memory.id, 'stated', JSON.stringify(memory), nowIso());
+      return this.memoryRow(memory.id);
+    });
+  }
+  extractStated(text, source = {}) {
+    return String(text || '').split(/[。；;\n]+/).map(t => t.trim()).filter(t => t && /以后|今后|后续|现在.{0,6}缩写.{0,6}(?:可以|也行)|一律|统一|我习惯|我一般|都(?:写|用|按|记|保留)|(?:诊断|单位|摘要|病历|随访).{0,8}都/.test(t) && !/本患者|这位患者|该患者|本次|第二份|第一份|这份报告/.test(t)).map(content => this.saveStated({ content, source }));
+  }
   confirmMemory(id) {
     const row = this.memoryRow(id);
     check(
-      ["pending", "open"].includes(row.status),
+      ["pending", "open", "paused", "dismissed", "deleted"].includes(row.status),
       "INVALID_INPUT",
       "只有待确认条目和观察信号可以确认生效",
     );
@@ -279,7 +304,13 @@ export class DoctorProfile {
     return this.memoryRow(id);
   }
   deleteMemory(id) {
-    this.memoryRow(id);
+    const memory = this.memoryRow(id);
+    if (memory.rule || memory.source?.type === 'stated') return sqliteTransaction(this.store.db, () => {
+      this.store.db.prepare('INSERT INTO habit_history(habit_id,decision,snapshot,created_at) VALUES (?,?,?,?)').run(id, 'delete', JSON.stringify(memory), nowIso());
+      this.store.db.prepare("UPDATE doctor_memories SET status='deleted',updated_at=? WHERE id=?").run(nowIso(), id);
+      this.store.db.prepare('UPDATE habit_patterns SET suppressed=1 WHERE memory_id=?').run(id);
+      return { ok: true };
+    });
     this.store.db.prepare("DELETE FROM doctor_memories WHERE id=?").run(id);
     return { ok: true };
   }
@@ -471,22 +502,22 @@ export function doctorMemoryTools(doctor) {
     {
       definition: definition(
         "doctor_memory_save",
-        "记录一条从对话中听到的医生偏好（例如“以后随访总结用表格”）。只生成待确认候选，需医生在设置中确认后生效。",
+        "医生明确说出面向以后的偏好时立即记住（包括医生亲口说出的用药习惯）。不要推断患者资料中的偏好；不要记只针对本患者的事实。已记住后回复“已记下，以后整理时都会这样写”。",
         { content: memoryText, topic: memoryText },
         ["content"],
       ),
       execute: (args) => {
-        const row = doctor.addMemory({
-          kind: "consolidated",
+        const row = doctor.saveStated({
           content: args.content,
           topic: args.topic,
           source: { mode: "agent" },
         });
         return {
           saved: true,
+          notification: { type: 'remembered', id: row.id, content: row.content },
           id: row.id,
           status: row.status,
-          note: "偏好候选已记录，等待医生在设置中确认后才会生效。",
+          note: "已记下，以后整理时都会这样写。可在画像页撤销或修改。",
         };
       },
     },

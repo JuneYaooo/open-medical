@@ -1,0 +1,63 @@
+{
+  "name": "SYNTH_CANARY_P032_ce4e83b8c186",
+  "gender": "female",
+  "birthYear": 1982,
+  "phone": "",
+  "groups": [],
+  "tags": [
+    "吸烟史"
+  ],
+  "allergyStatus": "unknown",
+  "allergies": [],
+  "diagnoses": [
+    {
+      "name": "术后随访",
+      "status": "confirmed",
+      "date": "2026-09-07"
+    },
+    {
+      "name": "切口恢复中",
+      "status": "suspected",
+      "date": "2026-09-07"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026-09-07"
+    }
+  ],
+  "medications": [
+    {
+      "name": "合成药A",
+      "dose": "10mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7,
+      "unit": "mmol/L",
+      "date": "2026-09-07"
+    },
+    {
+      "item": "肌酐",
+      "value": 97,
+      "unit": "μmol/L",
+      "date": "2026-09-07"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-09-07",
+      "reason": "门诊复查",
+      "note": "资料记载吸烟史"
+    }
+  ],
+  "clinicalSummary": {
+    "text": "2026-09-07门诊复查，主要问题为术后随访，切口恢复中待排。记录吸烟史。",
+    "source": "门诊记录.txt"
+  },
+  "note": "合成测试资料，清单页未提供的数值不建条目。"
+}

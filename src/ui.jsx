@@ -1,3 +1,4 @@
+import { RememberedNotice } from './learning-loop';
 import { SimilarCases } from "./similar-cases";
 import { patientIdentityLabel, patientOptionLabel } from "./patient-labels";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -54,9 +55,11 @@ export function StepsFlow({ events, running, fallbackText }) {
   }, [events]);
   const failed = tools.some((t) => t.status === "failed");
   const visible = open ? tools : tools.slice(-4);
+  const memories = (events || []).filter(e => e.type === 'tool.complete' && e.payload?.notification?.type === 'remembered').map(e => e.payload.notification);
   if (!tools.length && !running) return null;
   return (
     <div className={`steps-flow ${running ? "running" : ""} ${failed ? "has-failed" : ""}`}>
+      {!!memories.length && <RememberedNotice key={memories.map(m => m.id).join(",")} memories={memories} />}
       <button type="button" className="steps-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         {running ? (
           <Loader2 className="spin" size={13} />

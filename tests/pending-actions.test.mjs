@@ -165,7 +165,7 @@ test("patient-create proposal: chat registration propose -> confirm creates pati
   const f = await fixture(t);
   const boot = (await f.json("/api/bootstrap")).data;
   assert.ok(boot.tools.includes("patient_create_propose"));
-  assert.ok(boot.tools.includes("doctor_memory_propose"));
+  assert.ok(boot.tools.includes("doctor_memory_save"));
 
   const service = f.server.runtime.toolPlugins.get("patient_create_propose");
   const created = service.execute({
@@ -280,26 +280,13 @@ test("proposal_confirm: record-update proposal confirms in chat; external-effect
   assert.equal(queued.length, 0, "被拒绝的聊天确认不得触发任何外发");
 });
 
-test("doctor_memory_propose: model-proposed memory starts pending and injects after confirm", async (t) => {
+test("doctor_memory_save: explicitly stated preference is active immediately", async (t) => {
   const f = await fixture(t);
-  const service = f.server.runtime.toolPlugins.get("doctor_memory_propose");
-  const proposed = service.execute({
-    content: "随访小结按科室模板第三节格式写",
-    topic: "文书格式",
-  });
-  assert.equal(proposed.status, "pending");
-
+  const service = f.server.runtime.toolPlugins.get("doctor_memory_save");
+  const saved = service.execute({ content: "以后随访小结按科室模板第三节格式写", topic: "文书格式" });
+  assert.equal(saved.status, "confirmed");
   const profile = (await f.json("/api/doctor/profile")).data;
-  assert.ok(!profile.digest.includes("随访小结按科室模板第三节格式"));
-
-  const confirmed = await f.json(
-    `/api/doctor/memories/${proposed.memoryId}/confirm`,
-    "POST",
-  );
-  assert.equal(confirmed.status, 200);
-
-  const after = (await f.json("/api/doctor/profile")).data;
-  assert.ok(after.digest.includes("随访小结按科室模板第三节格式"));
+  assert.ok(profile.digest.includes("随访小结按科室模板第三节格式"));
 });
 
 test("old patient proposal cannot overwrite doctor changes or accept caller revision", async (t) => {
@@ -457,7 +444,7 @@ test("legacy proposal migration keeps unknown baseline null and fresh baseline s
     "ALTER TABLE pending_actions DROP COLUMN base_revision; UPDATE meta SET value='6' WHERE key='schema_version'",
   );
   old
-    .prepare("INSERT INTO pending_actions VALUES (?,?,?,?,?,?,?,?)")
+    .prepare("INSERT INTO pending_actions(id,type,patient_id,status,payload,summary,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
     .run(
       "legacy-proposal",
       "patient-update",

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "groups": [
+    "A",
+    "B",
+    "C",
+    "C-no-postprocess",
+    "C-no-examples"
+  ],
+  "seeds": [
+    17,
+    41,
+    83
+  ],
+  "personas": [
+    "D1",
+    "D2",
+    "D3"
+  ],
+  "learningPatients": 30,
+  "holdoutPatients": 10,
+  "models": [
+    "cloud",
+    "local"
+  ],
+  "development": {
+    "groups": [
+      "A",
+      "C"
+    ],
+    "seeds": [
+      17
+    ],
+    "personas": [
+      "D1"
+    ],
+    "learningPatients": 10
+  },
+  "gates": {
+    "G1": {
+      "lateEarlySER": 0.5,
+      "relativeToBaseline": 0.7
+    },
+    "G3": {
+      "maxF1Loss": 0.02
+    },
+    "G4": {
+      "heldoutSER": 0.8
+    },
+    "G5": {
+      "unsafeLearnedHabits": 0
+    },
+    "G6": {
+      "precision": 0.9,
+      "recall": 0.6,
+      "statedRecall": 1,
+      "falseStatedRate": 0.05
+    },
+    "G6b": {
+      "pauseWithinPatients": 5
+    },
+    "G7": {
+      "maxPredictionError": 0.25
+    },
+    "G8": {
+      "canaryLeaks": 0
+    },
+    "G9": {
+      "maxLatencyRatio": 1.2,
+      "extraInputTokens": 8000
+    },
+    "G2": {
+      "pairedSERCI95BelowZeroOrNoninferiorF1": true
+    },
+    "G10": {
+      "crossPersonaRules": 0
+    }
+  }
+}

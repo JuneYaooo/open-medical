@@ -1,3 +1,4 @@
+import { ReviewLog } from "./medical/review-log.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
@@ -114,33 +115,8 @@ export class PatientRegistry {
         "INVALID_INPUT",
         "患者资料无效",
       );
-      const name = string(input.name, "患者姓名", 80);
-      check(name.trim().length >= 1, "INVALID_INPUT", "患者姓名不能为空");
       const nowIso = new Date().toISOString();
-      const patient = {
-        id: randomUUID(),
-        name: name.trim(),
-        patientNumber: input.patientNumber ? string(input.patientNumber, "患者编号", 40) : "",
-        gender: optionalChoice(input.gender, ["male", "female", "unknown"]),
-        birthYear: optionalInt(input.birthYear, 1900, new Date().getFullYear()),
-        phone:
-          input.phone === undefined ? "" : string(input.phone, "联系电话", 20),
-        groups: optionalStrings(input.groups, "分组", 10, 40),
-        tags: optionalStrings(input.tags, "标签", 20, 40),
-        note: input.note === undefined ? "" : string(input.note, "备注", 2000),
-        ...(input.clinicalSummary !== undefined ? { clinicalSummary: optionalClinicalSummary(input.clinicalSummary) } : {}),
-        diagnoses: optionalDiagnoses(input.diagnoses),
-        medications: optionalMedications(input.medications),
-        allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
-        labs: optionalLabs(input.labs),
-        visits: optionalVisits(input.visits),
-        archived: false,
-        sessionId: null,
-        revision: 0,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      patient.allergyStatus = allergyState(patient, input);
+      const patient = { ...normalizePatientCreate(input), id: randomUUID(), archived: false, sessionId: null, revision: 0, createdAt: nowIso, updatedAt: nowIso };
       if (input.requestId) {
         patient.creationRequestId = identifier(input.requestId);
         const stable = { ...patient };
@@ -184,6 +160,7 @@ export class PatientRegistry {
     return sqliteTransaction(this.store.db, () => {
       const patient = this.row(id);
       const previousName = patient.name;
+      const reviewBefore = structuredClone(patient);
       check(
         input && typeof input === "object" && !Array.isArray(input),
         "INVALID_INPUT",
@@ -247,6 +224,7 @@ export class PatientRegistry {
       patient.revision++;
       patient.updatedAt = new Date().toISOString();
       this.save(patient);
+      new ReviewLog(this.store).record({ kind: "chart_edit", patientId: id, ai: reviewBefore, final: patient });
       if (previousName !== patient.name) this.onIdentityChanged?.(patient, previousName);
       this.store.audit(patient.sessionId, "patient.updated", {
         patientId: id,
@@ -704,6 +682,7 @@ function optionalMedications(value) {
       : {}),
     ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
+    ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
   }));
 }
 function optionalLabs(value) {
@@ -719,7 +698,9 @@ function optionalLabs(value) {
       value: value_,
       ...(item.unit ? { unit: string(item.unit, "单位", 30) } : {}),
       date: clinicalDate(item.date, "检验日期"),
+      ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
       ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
+      ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
     };
   });
 }
@@ -727,6 +708,8 @@ function optionalVisits(value) {
   return structuredList(value, "就诊", 200, (item) => ({
     date: clinicalDate(item.date, "就诊日期"),
     reason: string(item.reason, "就诊事由", 200),
+    ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
+    ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
     ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
   }));
 }
@@ -736,4 +719,29 @@ function timestamp(value) { return typeof value === "number" ? value : Date.pars
 function optionalClinicalSummary(value) {
   check(value && typeof value === "object" && !Array.isArray(value), "INVALID_INPUT", "病史摘要须包含正文与来源");
   return {text:string(value.text,"病史摘要正文",4000), source:string(value.source,"病史摘要来源",2000)};
+}
+
+export function normalizePatientCreate(input) {
+  check(input && typeof input === "object" && !Array.isArray(input), "INVALID_INPUT", "患者资料无效");
+  const name = string(input.name, "患者姓名", 80);
+  check(name.trim(), "INVALID_INPUT", "患者姓名不能为空");
+  const patient = {
+        name: name.trim(),
+        patientNumber: input.patientNumber ? string(input.patientNumber, "患者编号", 40) : "",
+        gender: optionalChoice(input.gender, ["male", "female", "unknown"]),
+        birthYear: optionalInt(input.birthYear, 1900, new Date().getFullYear()),
+        phone:
+          input.phone === undefined || input.phone === "" ? "" : string(input.phone, "联系电话", 20),
+        groups: optionalStrings(input.groups, "分组", 10, 40),
+        tags: optionalStrings(input.tags, "标签", 20, 40),
+        note: input.note === undefined || input.note === "" ? "" : string(input.note, "备注", 2000),
+        ...(input.clinicalSummary !== undefined ? { clinicalSummary: optionalClinicalSummary(input.clinicalSummary) } : {}),
+        diagnoses: optionalDiagnoses(input.diagnoses),
+        medications: optionalMedications(input.medications),
+        allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
+        labs: optionalLabs(input.labs),
+        visits: optionalVisits(input.visits),
+  };
+  patient.allergyStatus = allergyState(patient, input);
+  return patient;
 }

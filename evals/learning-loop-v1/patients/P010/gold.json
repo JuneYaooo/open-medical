@@ -1,0 +1,63 @@
+{
+  "name": "SYNTH_CANARY_P010_aef293476726",
+  "gender": "female",
+  "birthYear": 1960,
+  "phone": "",
+  "groups": [],
+  "tags": [
+    "吸烟史"
+  ],
+  "allergyStatus": "unknown",
+  "allergies": [],
+  "diagnoses": [
+    {
+      "name": "T2DM",
+      "status": "confirmed",
+      "date": "2026-09-10"
+    },
+    {
+      "name": "HTN",
+      "status": "suspected",
+      "date": "2026-09-10"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026-09-10"
+    }
+  ],
+  "medications": [
+    {
+      "name": "合成药A",
+      "dose": "10mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 5.4,
+      "unit": "mmol/L",
+      "date": "2026-09-10"
+    },
+    {
+      "item": "肌酐",
+      "value": 75,
+      "unit": "μmol/L",
+      "date": "2026-09-10"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-09-10",
+      "reason": "门诊复查",
+      "note": "资料记载吸烟史"
+    }
+  ],
+  "clinicalSummary": {
+    "text": "2026-09-10门诊复查，主要问题为T2DM，HTN待排。记录吸烟史。",
+    "source": "门诊记录.txt"
+  },
+  "note": "合成测试资料，清单页未提供的数值不建条目。"
+}

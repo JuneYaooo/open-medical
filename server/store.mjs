@@ -1,3 +1,4 @@
+import { initializeLearning } from "./medical/learning-schema.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -107,6 +108,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS pending_actions (id TEXT PRIMARY KEY, type TEXT NOT NULL, patient_id TEXT, status TEXT NOT NULL, payload TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_actions_patient ON pending_actions(patient_id,status);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      initializeLearning(this.db);
       // Existing proposals have no trustworthy base version. Keep NULL rather
       // than backfilling today's revision: confirmation must fail closed.
       const pendingColumns = this.db.prepare("PRAGMA table_info(pending_actions)").all();

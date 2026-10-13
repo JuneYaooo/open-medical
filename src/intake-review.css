@@ -1,0 +1,76 @@
+.intake-review {
+  display: grid;
+  gap: 20px;
+}
+.intake-review section {
+  border-top: 1px solid var(--border, #ddd);
+  padding-top: 12px;
+}
+.review-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.review-heading h3,
+.review-heading h4 {
+  margin: 0;
+  flex: 1;
+}
+.review-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+.review-item p {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+.review-item small {
+  color: var(--muted, #666);
+}
+.review-item-actions {
+  display: flex;
+  gap: 12px;
+}
+.review-deleted > p {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.review-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface, #f5f5f5);
+  border-radius: 8px;
+}
+.review-form label {
+  display: grid;
+  gap: 5px;
+}
+.review-form textarea {
+  min-height: 100px;
+}
+.review-summary {
+  white-space: pre-wrap;
+}
+.review-save-warning {
+  padding: 10px;
+  color: #6c4500;
+  background: #fff2d6;
+  border-radius: 6px;
+}
+.review-habit {
+  font-size: 12px;
+  border: 1px solid #bacdc6;
+  border-radius: 6px;
+  background: #eff7f3;
+  color: #285342;
+  padding: 3px 7px;
+}
+
+.intake-review section > .text-button {
+  margin-inline-end: 12px;
+}
+.intake-review section > small + button {
+  margin-inline-start: 12px;
+}

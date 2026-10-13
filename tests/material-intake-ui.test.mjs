@@ -44,6 +44,7 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
  await page.getByText('图片 · 已保存原图 · 可本地 OCR / 视觉读取').waitFor();
   await page.getByText('查看原图与识别文字对照',{exact:true}).click();
   await page.locator('img[alt="sample.png"]').waitFor();
+  await page.waitForFunction(() => { const img=document.querySelector('img[alt="sample.png"]'); return img?.complete && img.naturalWidth>0; });
   assert.ok(await page.locator('img[alt="sample.png"]').evaluate(img=>img.complete && img.naturalWidth>0));
   await page.reload();
  await page.locator(".app-navigation").waitFor();

@@ -1,0 +1,446 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "patients": [
+    {
+      "id": "P001",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "aa13a5fa278c5e3b7a0041dad03fb691a7482b2f00496cd73a2f1a5bb0bb1a7b",
+      "humanReviewed": false
+    },
+    {
+      "id": "P002",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "51209ffa68b6f2e740b0d3a0ad8154fad30ac8c1b577639b7a50dce0a998b7b9",
+      "humanReviewed": false
+    },
+    {
+      "id": "P003",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "6e5549d058c0135b44c2f5f0465f0071347b688e3a34f7ae60a1593489e64594",
+      "humanReviewed": false
+    },
+    {
+      "id": "P004",
+      "cluster": 0,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "e9248767f518204257425faac0d55984e29c5da6859da16e29bf6e59880425bc",
+      "humanReviewed": false
+    },
+    {
+      "id": "P005",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "2bfd8ecec8b3dc094aa4a47bc84b08474a3389951ec59b0ad2df3949da10e30e",
+      "humanReviewed": false
+    },
+    {
+      "id": "P006",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "1b88a23e8454028d38209d636012536946b1463083ca50a40879c13241421553",
+      "humanReviewed": false
+    },
+    {
+      "id": "P007",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "9748472510f747c1c19297981526f91b260006b741bb21c2891898e29649490a",
+      "humanReviewed": false
+    },
+    {
+      "id": "P008",
+      "cluster": 0,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "b00cd128e5b1006d32bcd7c4f5335d0af89c85a93b70188b8f18a1f4f426b03a",
+      "humanReviewed": false
+    },
+    {
+      "id": "P009",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "ad9862d180573e9586c56254f7d9454982438d98c9a4df10b66fc15bc0ca81ad",
+      "humanReviewed": false
+    },
+    {
+      "id": "P010",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "6ed4721aa74ebcd8456a63406145da959a6fd69f776df460ac717f4977a16cf2",
+      "humanReviewed": false
+    },
+    {
+      "id": "P011",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "c921b216861fd7d99e0769523fa54bc18eef7b61f0a59c9d0ee67c9e6027a8cd",
+      "humanReviewed": false
+    },
+    {
+      "id": "P012",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "1e3ed46644ddd808b9b00bc5e2242495e3ba968984dbf7494c389c10b218fb0c",
+      "humanReviewed": false
+    },
+    {
+      "id": "P013",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "1507d1be14bc6037b2080b2fb1c0fc350843e6462170fb3003525a611fa36b65",
+      "humanReviewed": false
+    },
+    {
+      "id": "P014",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "4c81363f735b6c59889c66f5e1042915ee18705f6e7114df7ccb89cbc8d1dff4",
+      "humanReviewed": false
+    },
+    {
+      "id": "P015",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "36798f11524e17522c777c4a6b2261555f09820a3235734c8647ec9d57247752",
+      "humanReviewed": false
+    },
+    {
+      "id": "P016",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "e8c39a90f08edc086ac5faa6f95a6c8998fbf87662bc801f68e7fb8d9a26c181",
+      "humanReviewed": false
+    },
+    {
+      "id": "P017",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "34b1d73cf7590cd06f93cea6d380dcf918d9db4fe0afb2893f5deffcc7643e12",
+      "humanReviewed": false
+    },
+    {
+      "id": "P018",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "fd1bad4078c6cba8bf6c56043949ff6bca341bd3ee425f4c4eea3107365bc6d0",
+      "humanReviewed": false
+    },
+    {
+      "id": "P019",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "03ae6949e231cc0acbe65299799ca83c3368b93609bb886d630aa697a3d57339",
+      "humanReviewed": false
+    },
+    {
+      "id": "P020",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "0070d28989ac0d66d6668ac5d3ab855d48072f6143fc081f89bc3a845c91b736",
+      "humanReviewed": false
+    },
+    {
+      "id": "P021",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "a645ecd92e251741d3b8327b20022cbf52bd383e425ff709e7a2e410caabd275",
+      "humanReviewed": false
+    },
+    {
+      "id": "P022",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "349e5c17051f8318c42b5a68ae7dfc1097f47226292e185f1281a6086fa88624",
+      "humanReviewed": false
+    },
+    {
+      "id": "P023",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "869607daed8cf2929c704ed6309a063dfaa83999904febcfff9b145c7cb7efb0",
+      "humanReviewed": false
+    },
+    {
+      "id": "P024",
+      "cluster": 2,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "eb05e143f0d421d69d7a2027a02c1fa1f956ac58a09464cee493aeb87ac91301",
+      "humanReviewed": false
+    },
+    {
+      "id": "P025",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "6b3105ac1ca714221f9c696fe93b2567892b7c8f8132b57914c729a80b577b5d",
+      "humanReviewed": false
+    },
+    {
+      "id": "P026",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "401023f5278474e3d582b2b3a3b59d6bf91bacebb6e731c3f11489bc4fa2bd24",
+      "humanReviewed": false
+    },
+    {
+      "id": "P027",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "06ed4966a33e573fa04ff9f1edadda71f2d13f4e0fadc6f013e032a030704cf8",
+      "humanReviewed": false
+    },
+    {
+      "id": "P028",
+      "cluster": 2,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "3f1ba07c1e7022543978ea29da86be37741801a20d50ce834a4097fc77aa9c9b",
+      "humanReviewed": false
+    },
+    {
+      "id": "P029",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "3bfc2ac26e85f35789023c5d5f36ca35ff227d8b3b8bc203e7ccb66623ab6430",
+      "humanReviewed": false
+    },
+    {
+      "id": "P030",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "19885e1e35b1c301e8a9c893ecd8b4e0f3d12ff0251831163d711efd9730486e",
+      "humanReviewed": false
+    },
+    {
+      "id": "P031",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "63810ceb38128e138f1ba613052d701e9bdb20a485fbb4fb611c84a417f2c0d7",
+      "humanReviewed": false
+    },
+    {
+      "id": "P032",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "a441f0b4f7507f6befa5d6b3bc7565466ccb49874b7acf1d05a257fac6b5ca2c",
+      "humanReviewed": false
+    },
+    {
+      "id": "P033",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "84458dedd2bfd819f46bcbffc751fb47ef9aca49949b2b3304270f1b79c18bc1",
+      "humanReviewed": false
+    },
+    {
+      "id": "P034",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "e433e9f4dd318a5f5d32731566421b48b8094e905a028112aebe25a16338c579",
+      "humanReviewed": false
+    },
+    {
+      "id": "P035",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "8e6a22223d40cb376ae1eb0d0718c892b1de158c7e7f23c8d2607039dade64c0",
+      "humanReviewed": false
+    },
+    {
+      "id": "P036",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "0315129ced3b7f9550ef14a59f0dd341f2294a89a64ec6f06dffad3efe6616bd",
+      "humanReviewed": false
+    },
+    {
+      "id": "P037",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "6c84eca2dcc8fbe371f2760eca654b5731746dbed55737b00a18b22bc9bad68d",
+      "humanReviewed": false
+    },
+    {
+      "id": "P038",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "a63f75b034c915a32cfe0da7c8893c0903dc8f5e7bf4ce3ff9dc30e817d05a74",
+      "humanReviewed": false
+    },
+    {
+      "id": "P039",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "c6c17b2f292d6bd8232ea63cc8a6aa015bbdc252317445a21434cabc98ce9811",
+      "humanReviewed": false
+    },
+    {
+      "id": "P040",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "门诊记录.txt",
+        "检验扫描.png"
+      ],
+      "goldHash": "a5f857e01c3fec5f2a9a5748e14372b4ae167b98fb248ec75b4f3c6dd45bf18f",
+      "humanReviewed": false
+    }
+  ]
+}

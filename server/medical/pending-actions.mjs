@@ -1,7 +1,11 @@
+import { learningPrefs } from "./personal-context.mjs";
+import { ReviewLog } from "./review-log.mjs";
+import { HabitLearner } from "./habit-learner.mjs";
+import { alignReviewItems, reviewDiff, diffSummary } from "../../shared/review-diff.mjs";
 import { randomUUID } from "node:crypto";
 import { check, string } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
-import { validateClinicalInput, validateIdentityInput } from "../patients.mjs";
+import { validateClinicalInput, validateIdentityInput, normalizePatientCreate } from "../patients.mjs";
 import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../../shared/diagnoses.mjs";
 import { normalizeGroupProposal, scanGroupSuggestions } from "./patient-grouping.mjs";
 
@@ -48,6 +52,8 @@ export class PendingActions {
   constructor(store, services) {
     this.store = store;
     this.services = services;
+    this.reviewLog = new ReviewLog(store);
+    this.habitLearner = new HabitLearner(store, services.doctor?.());
   }
   get patients() {
     return this.services.patients();
@@ -74,7 +80,7 @@ export class PendingActions {
     check(typeof id === "string" && id, "INVALID_INPUT", "提案编号无效");
     const row = this.store.db
       .prepare(
-        "SELECT id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at FROM pending_actions WHERE id=?",
+        "SELECT id,type,patient_id,base_revision,status,payload,review_draft,review_revision,summary,created_at,updated_at FROM pending_actions WHERE id=?",
       )
       .get(id);
     check(row, "NOT_FOUND", "待确认提案不存在", 404);
@@ -85,12 +91,16 @@ export class PendingActions {
       baseRevision: row.base_revision,
       status: row.status,
       payload: JSON.parse(row.payload),
+      reviewDraft: JSON.parse(row.review_draft || "null"), reviewRevision: row.review_revision,
       summary: row.summary,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
-  propose({ type, patientId, payload = {}, summary } = {}) {
+  propose(input = {}) {
+    return sqliteTransaction(this.store.db, () => this.proposeTransaction(input));
+  }
+  proposeTransaction({ type, patientId, payload = {}, summary, prepare } = {}) {
     check(
       TYPES.includes(type),
       "INVALID_INPUT",
@@ -145,9 +155,9 @@ export class PendingActions {
     if (type === "patient-create") {
       normalized = {
         ...payload,
-        name: string(payload.name, "患者姓名", 80),
-        ...validateClinicalInput(payload),
+        ...normalizePatientCreate(payload),
       };
+      if (prepare) normalized = prepare(normalized);
     }
     if (type === "followup-create") {
       check(
@@ -224,6 +234,7 @@ export class PendingActions {
         time,
         time,
       );
+    if (type === "patient-create") for (const h of normalized.personalization?.habits || []) this.reviewLog.feedback(h.id, id, "applied");
     return {
       id,
       type,
@@ -267,7 +278,7 @@ export class PendingActions {
     }
     return this.store.db
       .prepare(
-        `SELECT id,type,patient_id,base_revision,status,payload,summary,created_at,updated_at FROM pending_actions
+        `SELECT id,type,patient_id,base_revision,status,payload,review_draft,review_revision,summary,created_at,updated_at FROM pending_actions
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset)
@@ -278,6 +289,7 @@ export class PendingActions {
         baseRevision: row.base_revision,
         status: row.status,
         payload: this.slimPayload(row.type, JSON.parse(row.payload)),
+        reviewDraft: JSON.parse(row.review_draft || "null"), reviewRevision: row.review_revision,
         summary: row.summary,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -302,11 +314,47 @@ export class PendingActions {
       },
     });
   }
-  confirm(id, { note } = {}) {
+  normalizeReview(action, input) {
+    const normalized = normalizePatientCreate(input);
+    // The browser can edit clinical fields, never provenance or run metadata.
+    for (const section of ['diagnoses', 'medications', 'labs', 'visits']) {
+      const original = action.payload[section] || [];
+      const incoming = normalized[section] || [];
+      for (const [i, j] of alignReviewItems(section, original, incoming)) {
+        if (j === null) continue;
+        delete incoming[j].source; delete incoming[j].sources;
+        if (i !== null) {
+          if (original[i].source) incoming[j].source = original[i].source;
+          if (original[i].sources) incoming[j].sources = original[i].sources;
+        } else incoming[j].sources = [];
+      }
+    }
+    if (normalized.clinicalSummary) normalized.clinicalSummary.source = action.payload.clinicalSummary?.source || '医生补充';
+    return { ...action.payload, ...normalized };
+  }
+  saveReview(id, { payload, reasons = {}, expectedRevision } = {}) {
+    return sqliteTransaction(this.store.db, () => {
+      const action = this.row(id);
+      check(action.type === 'patient-create' && action.status === 'pending', 'ACTION_RESOLVED', '仅可修改待确认的建档草稿', 409);
+      check(expectedRevision === undefined || expectedRevision === action.reviewRevision, 'REVISION_CONFLICT', '草稿已在其他窗口更新，请重新载入后核对', 409);
+      check(reasons && typeof reasons === 'object' && !Array.isArray(reasons) && Object.values(reasons).every(v => ['资料里没有', '重复', '不该算诊断', '不重要', '其他', ''].includes(v)), 'INVALID_INPUT', '删除原因无效');
+      const reviewDraft = { payload: this.normalizeReview(action, payload), reasons };
+      this.store.db.prepare('UPDATE pending_actions SET review_draft=?,review_revision=review_revision+1,updated_at=? WHERE id=?').run(JSON.stringify(reviewDraft), new Date().toISOString(), id);
+      return this.row(id);
+    });
+  }
+  reviewCorrection(id, mode = 'preserve') {
+    const action = this.row(id);
+    check(['preserve', 'discard'].includes(mode), 'INVALID_INPUT', '修改处理方式无效');
+    if (!action.reviewDraft) return '';
+    return mode === 'preserve' ? diffSummary(reviewDiff(action.payload, action.reviewDraft.payload, action.reviewDraft)) : '';
+  }
+  confirm(id, { note, payload, reviewMs = 0, reasons, expectedRevision } = {}) {
     let writtenSkill;
     const feedback = this.feedbackNote(note);
     try { return sqliteTransaction(this.store.db, () => {
       const action = this.row(id);
+      const eventCursor = this.store.db.prepare("SELECT COALESCE(MAX(id),0) n FROM learning_events").get().n;
       check(
         action.status === "pending",
         "ACTION_RESOLVED",
@@ -331,7 +379,7 @@ export class PendingActions {
           409,
         );
       }
-      let applied;
+      let applied, habitSuggestions = [];
       if (isCare(action.type)) {
         check(this.care, "CARE_UNAVAILABLE", "患者管理模块未启用", 503);
         applied = this.care.applyProposal(action);
@@ -346,7 +394,11 @@ export class PendingActions {
         if (action.payload.sourceSessionId) check(!this.list({ type: "patient-create", sourceSessionId: action.payload.sourceSessionId, status: "applied", limit: 1 }).length,
           "ALREADY_CREATED", "该资料任务已完成建档，请到已有患者档案查看。", 409);
         // The registry validates all supplied fields before creating any record.
-        const patient = this.patients.create(action.payload);
+        check(expectedRevision === undefined || expectedRevision === action.reviewRevision, 'REVISION_CONFLICT', '草稿已更新，请重新核对', 409);
+        const final = payload === undefined ? action.payload : this.normalizeReview(action, payload);
+        const patient = this.patients.create(final);
+        this.reviewLog.record({ action, patientId: patient.id, final, reviewMs, reasons: reasons || action.reviewDraft?.reasons || {}, materialText: this.services.intakeText?.(action.payload.sourceSessionId) || '' });
+        applied = { ...patient };
         if (action.payload.sourceSessionId && this.services.copySourceMaterials)
           this.services.copySourceMaterials(action.payload.sourceSessionId, patient.sessionId, action.payload.sourceFileIds || [], action.payload.sourceInput);
         // 整理完的档案若标注了读不清的原文，把对应材料质量降为待核对，
@@ -354,6 +406,8 @@ export class PendingActions {
         if (this.services.flagSuspectMaterials)
           this.services.flagSuspectMaterials(patient.sessionId, action.payload);
         applied = this.patients.row(patient.id);
+        if (action.payload.sourceSessionId) this.store.db.prepare('UPDATE review_sessions SET patient_id=? WHERE patient_id=? AND superseded=1').run(patient.id, action.payload.sourceSessionId);
+        if (this.doctor && learningPrefs(this.store.db).habits) habitSuggestions = this.habitLearner.aggregate();
       } else if (action.type === "patient-update") {
         applied = this.patients.update(action.patientId, {
           ...action.payload,
@@ -428,7 +482,7 @@ export class PendingActions {
         409,
       );
       this.recordFeedback(action, "confirmed", feedback);
-      return { ok: true, action: this.row(id), applied };
+      return { ok: true, action: this.row(id), applied, habitSuggestions, pausedHabits: this.store.db.prepare("SELECT subject FROM learning_events WHERE type='habit-paused' AND id>?").all(eventCursor).map(r => Number(r.subject)) };
     }); } catch (error) {
       // Installs return a list of ids; restore every skill file the rolled
       // back transaction had materialized.
@@ -453,6 +507,7 @@ export class PendingActions {
   supersede(id, byId) {
     const stale = this.row(id);
     if (stale.status !== "pending") return;
+    if (stale.type === 'patient-create' && stale.reviewDraft) this.reviewLog.record({ action: stale, final: stale.reviewDraft.payload, reasons: stale.reviewDraft.reasons, superseded: true, materialText: this.services.intakeText?.(stale.payload.sourceSessionId) || '' });
     const payload = JSON.stringify({ ...stale.payload, supersededBy: byId });
     this.store.db
       .prepare(
@@ -511,34 +566,8 @@ const diagnosisItemsDef = {
   required: ["name"],
   additionalProperties: false,
 };
-  const memoryTool = doctor
-    ? [
-        {
-          definition: definition(
-            "doctor_memory_propose",
-            "当医生在对话中明确表达偏好或习惯（随访方式、文书格式、常用检查组合、表达习惯等）时，把它存为一条待确认记忆。只创建待确认条目，医生在记忆面板确认后才会注入后续任务；不要推测或替医生总结没有说过的偏好。",
-            { content: textDef, topic: textDef },
-            ["content"],
-          ),
-          execute: (args) => {
-            const memory = doctor.addMemory({
-              kind: "explicit",
-              status: "pending",
-              content: args.content,
-              topic: args.topic || "",
-              source: { via: "chat" },
-            });
-            return {
-              memoryId: memory.id,
-              status: memory.status,
-              note: "已存为待确认记忆；医生在「医生记忆」面板确认后自动注入后续任务。",
-            };
-          },
-        },
-      ]
-    : [];
+  void doctor;
   return [
-    ...memoryTool,
     {
       definition: definition(
         "patient_create_propose",
@@ -551,6 +580,7 @@ const diagnosisItemsDef = {
           groups: { type: "array", items: textDef },
           tags: { type: "array", items: textDef },
           note: {type:"string",description:"资料备注与待核对信息：身份比对、OCR冲突、缺失项目。不是病史摘要。"},
+          personalization: { type: 'object', properties: { habitIds: { type: 'array', items: { type: 'integer' } }, exampleIds: { type: 'array', items: textDef }, kbRefs: { type: 'array', items: textDef }, skillIds: { type: 'array', items: textDef } }, additionalProperties: false },
           clinicalSummary: clinicalSummaryDef,
           diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；同名诊断合并为一条并用 sources 列全来源" },
           medications: {
@@ -612,6 +642,7 @@ const diagnosisItemsDef = {
         }
         return pending.propose({
           type: "patient-create",
+          prepare: context.prepareIntake,
           payload,
           summary,
         });

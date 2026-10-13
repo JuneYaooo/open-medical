@@ -456,7 +456,7 @@ export const SCENARIOS = [
     await openTool(page,"病例库");
     await page.locator('.module-view button:has-text("收入病例")').click();
     await page.locator('.module-view input[placeholder*="主要诊断"]').fill("社区获得性肺炎");
-    await page.locator('.module-view button:has-text("收入病例库")').click();
+    await page.locator('.module-view button:has-text("收入案例库")').click();
     await page.waitForSelector('.module-view .notice, .module-view :text("病例已收入")', { timeout: 8000 });
     await page.locator('.module-view input[placeholder*="相似病例搜索"]').fill("肺炎 咳嗽 发热");
     await page.locator('.module-view button:has-text("检索")').first().click();

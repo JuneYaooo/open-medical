@@ -1,3 +1,4 @@
+import { HabitSuggestion, SimilarCaseCard } from "./learning-loop";
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, CalendarDays, Pill, ArrowUpRight } from 'lucide-react';
 import { dashboardLabGroups, dashboardHistory } from '../shared/patient-dashboard.mjs';
@@ -140,6 +141,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   return <section className="patient-dashboard" aria-label="患者资料面板">
     <header className="chart-heading"><div><span className="eyebrow">患者档案</span><h2>{titles[view]}</h2><p>已保存的档案记录 · 更新于 {patient.updatedAt ? new Date(patient.updatedAt).toLocaleDateString('zh-CN') : '日期未记录'}</p></div>{!['overview','library'].includes(view) && <button className="secondary" onClick={()=>setEditing(!editing)}>{editing ? '返回记录' : '核对与编辑'} <ArrowUpRight size={15}/></button>}</header>
     {editing ? <ClinicalPanel detail={patient} section={view} onChanged={onChanged} onError={onError}/> : <>
+    {view === 'overview' && <><HabitSuggestion key={patient.id} patientId={patient.id} /><SimilarCaseCard key={`similar-${patient.id}`} patientId={patient.id} /></>}
     {view === 'overview' && <nav className="chart-metrics" aria-label="档案内容导航">
       {[[Activity,'诊断与问题',diagnoses.length,'problems'],[Pill,'用药记录',meds.length,'medications'],[CalendarDays,'就诊记录',visits.length,'visits'],[FileText,'资料文件',files.length,'library']].map(([Icon,label,count,id])=><a key={id} href={`#patient-${id}`} onClick={e=>{e.preventDefault();onClinical(id==='problems'?'diagnoses':id);}}><Icon size={18}/><span>{label}<b>{count}<small> 条</small></b></span></a>)}
     </nav>}

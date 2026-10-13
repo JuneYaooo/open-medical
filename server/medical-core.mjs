@@ -155,6 +155,7 @@ export async function runTool(
     sourceSessionId,
     sourceFileIds,
     sourceInput,
+    prepareIntake,
     patientId,
     intent,
     skills,
@@ -231,6 +232,7 @@ export async function runTool(
         sourceSessionId,
         sourceFileIds,
         sourceInput,
+        prepareIntake,
         patientId,
         sources: sources.map((s) => ({
           id: s.id,

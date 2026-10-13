@@ -512,6 +512,7 @@ export class AgentRuntime {
             tool: call.function.name,
             call_id: call.id,
             artifact: output?.id && output?.status === "draft" ? output : null,
+            ...(output?.notification?.type === 'remembered' && Number.isInteger(output.notification.id) && typeof output.notification.content === 'string' ? { notification: { type: 'remembered', id: output.notification.id, content: output.notification.content.slice(0, 2000) } } : {}),
           }];
         } catch (error) {
           signal.throwIfAborted();

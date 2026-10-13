@@ -1,3 +1,4 @@
+import { PersonalRegressionSettings } from './learning-loop';
 import { ModelBudgetFields } from './model-budget-fields';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './agent-runtime';
@@ -50,6 +51,7 @@ export function ModelSettings({ onClose, onSaved }) {
       </form>}
       {checks && <ul className="model-checks" aria-label="能力检测结果">{checks.map((c) => <li key={c.id} className={c.ok ? 'ok' : 'failed'}><span aria-hidden="true">{c.ok ? '✓' : '✗'}</span><strong>{{ text: '文本回复', tools: '工具调用', json: 'JSON 输出' }[c.id] || c.id}</strong><em>{c.message} · {(c.durationMs / 1000).toFixed(1)} 秒</em></li>)}</ul>}
       {busy && <p role="status">正在处理，请稍候…</p>}{error && <p role="alert" className="model-settings-error">{error}{!form && <button type="button" onClick={() => { setError(''); api('/api/model-settings').then(load).catch(e => setError(e.message)); }}>重新读取配置</button>}</p>}{status && <p role="status" className="model-settings-success">{status}</p>}
+      <PersonalRegressionSettings />
       <details className="model-jev-section"><summary>其他连接 · Jev</summary><JevSettings /></details>
       <details className="model-jev-section"><summary>文字识别（OCR）</summary><OcrSettingsSection /></details>
     </section></div>

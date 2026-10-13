@@ -110,3 +110,9 @@ test("share API: preview equals export content and carries findings", async (t) 
   const legacy = (await f.json(`/api/patients/${created.id}/export`)).data;
   assert.match(legacy.pseudoId, /^P-[0-9a-f]{8}$/);
 });
+
+test('generated pseudonym containing six consecutive digits is not mistaken for an identifier', () => {
+  const result = buildShareRecord({ id: '7', name: '合成患者', visits: [{ date: '2026-01-01', reason: '编号12345678' }] });
+  assert.equal(result.record.pseudoId, 'P-7902699b');
+  assert.doesNotMatch(result.record.visits[0].reason, /12345678/);
+});

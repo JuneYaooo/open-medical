@@ -402,10 +402,10 @@ export class Extensions {
       .run(kind, key, 1, JSON.stringify(data), at, at);
   }
   recordUsage(flowId) { this.bump("quick_task", string(flowId, "任务模板", 80)); return this.prefs(); }
-  recordEdit({ title, type, note }) {
+  recordEdit({ title, type, note, reviewSessionId }) {
     const family = docFamily(title);
     if (!family) return;
-    this.bump("doc_edit", family, { type, ...(note ? { note: String(note).slice(0, 300) } : {}) });
+    this.bump("doc_edit", family, { type, reviewSessionId, ...(note ? { note: String(note).slice(0, 300) } : {}) });
   }
   recordFailure(ext, message) { this.bump("failure", ext.id, { message: message.slice(0, 200) }); }
   prefs() {
@@ -443,9 +443,10 @@ export class Extensions {
     for (const s of this.db.prepare("SELECT * FROM evolution_signals WHERE kind='doc_edit' AND count>=?").all(EDIT_SUGGEST)) {
       if (covered.has(s.key)) continue;
       const data = JSON.parse(s.data);
+      const examples = data.reviewSessionId ? this.db.prepare('SELECT before,after FROM review_diffs WHERE session_id=? LIMIT 3').all(data.reviewSessionId).map(d => `${JSON.parse(d.before)} → ${JSON.parse(d.after)}`).join('；').slice(0, 1200) : '';
       this.suggest(`doc_edit:${s.key}:${Math.floor(s.count / EDIT_SUGGEST)}`, {
-        type: "create_skill", title: `为「${s.key}」建立你的专属写法`, evidence: `你已修改过 ${s.count} 次「${s.key}」${data.notes?.length ? `，修改依据包括：${data.notes.slice(-3).join("；")}` : ""}`,
-        prompt: `我经常修改AI生成的「${s.key}」。${data.notes?.length ? `我最近的修改依据：${data.notes.join("；")}。` : ""}请先问清我希望的结构、必写内容和措辞习惯（也可以让我上传医院模板），然后用 extension_propose 建立一个适用于「${s.key}」的技能（appliesTo 填 ${JSON.stringify([s.key])}，并设为快捷任务），给我预览后再提交。`,
+        type: "create_skill", title: `为「${s.key}」建立你的专属写法`, evidence: `${examples ? `最近修改：${examples}。` : ""}你已修改过 ${s.count} 次「${s.key}」${data.notes?.length ? `，修改依据包括：${data.notes.slice(-3).join("；")}` : ""}`,
+        prompt: `我经常修改AI生成的「${s.key}」。${examples ? `最近的真实修改：${examples}。请依据这些差异提炼写法，不需要我重新描述已有样例。` : ""}${data.notes?.length ? `我最近的修改依据：${data.notes.join("；")}。` : ""}请先问清我希望的结构、必写内容和措辞习惯（也可以让我上传医院模板），然后用 extension_propose 建立一个适用于「${s.key}」的技能（appliesTo 填 ${JSON.stringify([s.key])}，并设为快捷任务），给我预览后再提交。`,
       });
     }
     // 3. Rules whose to-dos are mostly ignored → propose to adjust or stop.

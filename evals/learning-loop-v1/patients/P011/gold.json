@@ -1,0 +1,63 @@
+{
+  "name": "SYNTH_CANARY_P011_8a2a5a3662a8",
+  "gender": "male",
+  "birthYear": 1961,
+  "phone": "",
+  "groups": [],
+  "tags": [
+    "吸烟史"
+  ],
+  "allergyStatus": "unknown",
+  "allergies": [],
+  "diagnoses": [
+    {
+      "name": "慢性胆囊炎",
+      "status": "confirmed",
+      "date": "2026-09-11"
+    },
+    {
+      "name": "脂肪肝",
+      "status": "suspected",
+      "date": "2026-09-11"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026-09-11"
+    }
+  ],
+  "medications": [
+    {
+      "name": "合成药A",
+      "dose": "5mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 5.8,
+      "unit": "mmol/L",
+      "date": "2026-09-11"
+    },
+    {
+      "item": "肌酐",
+      "value": 76,
+      "unit": "μmol/L",
+      "date": "2026-09-11"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-09-11",
+      "reason": "门诊复查",
+      "note": "资料记载吸烟史"
+    }
+  ],
+  "clinicalSummary": {
+    "text": "2026-09-11门诊复查，主要问题为慢性胆囊炎，脂肪肝待排。记录吸烟史。",
+    "source": "门诊记录.txt"
+  },
+  "note": "合成测试资料，清单页未提供的数值不建条目。"
+}

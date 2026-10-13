@@ -1,3 +1,4 @@
+import { LearningMonth } from "./learning-loop";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, CheckCheck, Search, RotateCw, UserPlus } from "lucide-react";
 import { api } from "./agent-runtime";
@@ -67,6 +68,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
   };
   return (
     <section className="doctor-agenda" aria-label="今日待办" aria-busy={loading}>
+      <LearningMonth />
       <div className="agenda-heading">
         <div><span className="hub-kicker">把后续工作接起来</span><h2>今天需要关注的患者 <span>{data?.counts.all ?? "—"}</span></h2><p>高危风险、复诊、到期随访、新检查检验结果、患者消息和入组进度，按紧急程度排列。</p></div>
         <button className="icon-button" title="刷新今日待办" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RotateCw size={16} /></button>

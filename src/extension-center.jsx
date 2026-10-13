@@ -1,3 +1,4 @@
+import { LearningChanges } from "./learning-loop";
 import { useCallback, useEffect, useState } from "react";
 import { History, MessageSquarePlus, Sparkles, Undo2 } from "lucide-react";
 import { api } from "./agent-runtime";
@@ -90,11 +91,11 @@ export function ExtensionCenter({ onAsk, view = "workbench" }) {
       </article>)}
     </div>}
 
-    {applied.length > 0 && <div className="ext-block">
-      <h3>系统自动做的调整</h3>
+    <div className="ext-block">
+      <h3>系统自动做的调整</h3><LearningChanges />
       {applied.map((c) => <p key={c.id} className="ext-change"><span>{fmt(c.createdAt)} · {c.title}{c.detail ? `（${c.detail}）` : ""}</span>
         <button className="text-button" disabled={Boolean(busy)} onClick={() => act(c.id, () => api(`/api/extensions/changes/${c.id}/undo`, "POST", {}), "已撤销，并停止自动调整这一项。")}><Undo2 size={14} />撤销</button></p>)}
-    </div>}
+    </div>
 
     <div className="ext-block">
       <h3>新建</h3>

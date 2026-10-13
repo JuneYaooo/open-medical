@@ -2,11 +2,16 @@ import { check } from '../errors.mjs';
 
 // A bounded reader for intake: compact text with stable file/line provenance,
 // explicit continuation, and a coverage gate before a clinical draft is proposed.
-export function configureIntakeTools(registry, workspace, saveNotes = () => {}, initialNotes = []) {
-  const allowed = new Set(['read_skill', 'read_source', 'read_intake_batch', 'search_materials', 'patient_create_propose', 'read_context_archive', 'save_intake_notes', 'read_intake_notes']);
+export function configureIntakeTools(registry, workspace, saveNotes = () => {}, initialNotes = [], personal = null) {
+  const allowed = new Set(['read_skill', 'read_source', 'read_intake_batch', 'search_materials', 'patient_create_propose', 'read_context_archive', 'save_intake_notes', 'read_intake_notes', 'read_personal_context']);
   for (const name of registry.tools.keys()) if (!allowed.has(name)) registry.tools.delete(name);
   const seen = new Map(), notes = structuredClone(initialNotes);
-  let awaitingNotes = null;
+  let awaitingNotes = null, personalRead = false, personalValue = null;
+  const getPersonal = async () => { if (!personalValue) personalValue = personal ? await personal.build(notes) : { text: '' }; return personalValue; };
+  registry.register({ permission: 'tools.execute', capability: { backend: 'local' }, definition: { type: 'function', function: { name: 'read_personal_context', description: '读取本次建档适用的医生习惯、去标识化范例、知识和技能。先读完并保存资料笔记，再调用本工具。', parameters: { type: 'object', properties: {}, additionalProperties: false } } }, execute: async () => {
+    check(!awaitingNotes && notes.length, 'INTAKE_NOTES_REQUIRED', '请先读取并保存资料笔记');
+    const value = await getPersonal(); personalRead = true; return personal ? personal.modelView(value) : { text: '', readOnly: true };
+  } });
   const selected = context => (context.sources || []).filter(source => workspace.materials.some(file => file.id === source.id));
   const record = (id, line) => { if (!seen.has(id)) seen.set(id, new Set()); seen.get(id).add(line); };
   for (const note of notes) for (const source of note.sources) {
@@ -68,7 +73,7 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
       const result = { intakeNotesSaved: true, complete: awaitingNotes.complete, nextCursor: awaitingNotes.nextCursor, batchesSaved: notes.length + 1 };
       const note = { batchId: awaitingNotes.batchId, sources: awaitingNotes.materials.map(({ sourceId, name, startLine, endLine }) => ({ sourceId, name, startLine, endLine })), notes: args.notes, receipt: result };
       saveNotes(structuredClone([...notes, note]));
-      notes.push(note);
+      notes.push(note); personalRead = false; personalValue = null;
       awaitingNotes = null;
       return result;
     },
@@ -76,7 +81,7 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
   registry.register({
     permission: 'tools.execute', capability: { backend: 'local' },
     definition: { type: 'function', function: { name: 'read_intake_notes', description: '读取已保存的建档事实笔记。每次读取1批；按 nextIndex 继续，完整核对后生成提案。笔记是提取结果，必要时按 sourceId 和行号核对原文。', parameters: { type: 'object', properties: { index: { type: 'integer', minimum: 0 } }, additionalProperties: false } } },
-    execute: args => { const index = args.index || 0; return { notes: notes.slice(index, index + 1), nextIndex: index + 1 < notes.length ? index + 1 : null, batchesSaved: notes.length }; },
+    execute: args => { const index = args.index || 0; return { notes: notes.slice(index, index + 1), nextIndex: index + 1 < notes.length ? index + 1 : null, batchesSaved: notes.length, instruction: index + 1 < notes.length ? "继续读取下一批笔记" : "下一步调用 read_personal_context" }; },
   });
   const proposal = registry.get('patient_create_propose'), propose = proposal.execute;
   proposal.execute = (args, context) => {
@@ -86,6 +91,10 @@ export function configureIntakeTools(registry, workspace, saveNotes = () => {}, 
       const missing = source.text.split('\n').findIndex((_, i) => !seen.get(source.id)?.has(i + 1));
       check(missing === -1, 'INTAKE_NOT_READ', `还有资料未读完，请调用 read_intake_batch，fileIndex=${index}，startLine=${missing + 1}，按 nextCursor 读完后再提交草稿`);
     }
-    return propose(args, context);
+    if (!personal) return propose(args, context);
+    return getPersonal().then(value => {
+      check(!value.text || personalRead, 'PERSONAL_CONTEXT_REQUIRED', '请先调用 read_personal_context 读取医生习惯与参考范例');
+      return propose(args, { ...context, prepareIntake: payload => personal.prepare(payload, value) });
+    });
   };
 }

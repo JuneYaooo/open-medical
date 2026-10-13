@@ -53,9 +53,9 @@ test('upload-first intake automatically runs, allows natural-language correction
   assert.equal(patients.length,1);assert.equal(patients[0].name,'纠正后样本');
   const session=(await f.json(`/api/sessions/${patients[0].sessionId}`)).data;
   assert.ok(session.files.some(file=>file.name==='history.txt'));
-  const actions=[...(await f.json('/api/pending-actions?status=applied')).data.actions,...(await f.json('/api/pending-actions?status=rejected')).data.actions];
+  const actions=[...(await f.json('/api/pending-actions?status=applied')).data.actions,...(await f.json('/api/pending-actions?status=superseded')).data.actions];
   assert.equal(actions.filter(a=>a.status==='applied').length,1);
-  assert.equal(actions.filter(a=>a.status==='rejected').length,1);
+  assert.equal(actions.filter(a=>a.status==='superseded').length,1);
   assert.equal(turns,2);assert.deepEqual(errors,[]);
 });
 
