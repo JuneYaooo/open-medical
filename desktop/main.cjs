@@ -23,6 +23,7 @@ const {
   writeFileSync,
   chmodSync,
   copyFileSync,
+  unlinkSync,
 } = require("node:fs");
 const { parseEnv } = require("node:util");
 const { spawn } = require("node:child_process");
@@ -356,6 +357,48 @@ async function start() {
       properties: ["openDirectory"],
     });
     return result.canceled ? null : result.filePaths[0];
+  });
+  // 脱敏分享 PDF：渲染进程把脱敏后的结构化记录交上来，这里用共享模板
+  // 生成打印页，隐藏窗口 printToPDF 后让医生选保存位置。内容全部来自本机
+  // 数据，模板对全部字段做 HTML 转义。
+  ipcMain.handle("omw:share-report", async (_event, report) => {
+    if (!report || !Array.isArray(report.sections))
+      return { ok: false, error: "分享内容无效" };
+    let printWindow;
+    const tempPath = join(app.getPath("temp"), `omw-share-${Date.now()}.html`);
+    try {
+      const { renderShareHtml } = await import(
+        pathToFileURL(join(root, "shared/share-report.mjs"))
+      );
+      writeFileSync(tempPath, renderShareHtml(report), "utf8");
+      printWindow = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true },
+      });
+      await printWindow.loadFile(tempPath);
+      const pdf = await printWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: "A4",
+      });
+      const target = await dialog.showSaveDialog(window, {
+        title: "保存脱敏病历（PDF）",
+        defaultPath: join(
+          app.getPath("downloads"),
+          `${report.fileName || "脱敏病历"}.pdf`,
+        ),
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (target.canceled || !target.filePath) return { ok: false, canceled: true };
+      writeFileSync(target.filePath, pdf);
+      return { ok: true, path: target.filePath };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    } finally {
+      if (printWindow) printWindow.destroy();
+      try {
+        unlinkSync(tempPath);
+      } catch {}
+    }
   });
   // 菜单栏迁入「设置 → 桌面应用」后的窄接口：只暴露固定动作，不传任意路径。
   ipcMain.handle("omw:open-data-directory", () => shell.openPath(dataDirectory));

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { localCalendarDate } from "../shared/calendar-date.mjs";
 import { DIAGNOSIS_STATUS_SHORT } from "../shared/diagnoses.mjs";
-import { Download, Plus, X, Loader2, Search, Star } from "lucide-react";
+import { Plus, X, Loader2, Search, Star, Share2 } from "lucide-react";
+import { ShareWizard } from "./share-wizard";
 
 const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
 
@@ -120,23 +121,12 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
     if (!(await saveVisits([...draft.visits, { ...newVisit }]))) return;
     setNewVisit({ date: "", reason: "" });
   };
-  const exportDeidentified = async () => {
-    const data = await api(`/api/patients/${detail.id}/export`);
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${data.pseudoId}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
   // 收进案例库：医生主动策展动作，点击即入库（精选标记），不再套一层确认。
   const [casePanel, setCasePanel] = useState(false);
   const [caseDraft, setCaseDraft] = useState({ summary: "", lessons: "", tags: "" });
   const [caseSaving, setCaseSaving] = useState(false);
   const [caseNote, setCaseNote] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
   const saveToCaseLibrary = async () => {
     setCaseSaving(true);
     try {
@@ -158,6 +148,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
   };
 
   return (
+    <>
     <fieldset
       disabled={saving || detail.archived}
       className="detail-panel clinical-panel"
@@ -445,14 +436,12 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
         </button>
         <button
           className="secondary"
-          onClick={() =>
-            exportDeidentified().catch((err) => onError?.(err.message))
-          }
+          onClick={() => setShareOpen(true)}
         >
-          <Download size={14} /> 脱敏导出（科研用 JSON）
+          <Share2 size={14} /> 脱敏分享 / 导出
         </button>
         <span className="muted">
-          每处修改立即保存；导出文件不含姓名、电话与确切年龄。
+          每处修改立即保存；「脱敏分享」先预览打码结果再导出，文件不含姓名、电话与确切年龄。
         </span>
       </div>
       {casePanel && <div className="clinical-case-save">
@@ -487,6 +476,8 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       </div>}
       {caseNote && <p className="form-notice" role="status">{caseNote}</p>}
     </fieldset>
+    {shareOpen && <ShareWizard patientId={detail.id} patientName={detail.name} onClose={() => setShareOpen(false)} onError={onError} />}
+    </>
   );
 }
 

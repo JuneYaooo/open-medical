@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("omwDesktop", {
   relaunchApp: () => ipcRenderer.invoke("omw:relaunch"),
   showNotification: (options) => ipcRenderer.invoke("omw:show-notification", options),
   onOpenView: (handler) => { ipcRenderer.on("omw:open-view", (_event, view) => handler(view)); },
+  shareReport: (report) => ipcRenderer.invoke("omw:share-report", report),
 });

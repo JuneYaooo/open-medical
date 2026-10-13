@@ -60,6 +60,7 @@ import { PatientSchedule } from "./medical/patient-schedule.mjs";
 import { Extensions } from "./medical/extensions.mjs";
 import { extensionTools } from "./medical/extension-tools.mjs";
 import { DoctorOverview } from "./medical/doctor-overview.mjs";
+import { buildShareRecord } from "./medical/deidentify.mjs";
 import { RiskEngine } from "./medical/risk-rules.mjs";
 import { onlineCaseTools } from "./medical/online-cases.mjs";
 import { CaseLibrary, caseTools } from "./medical/cases.mjs";
@@ -1906,6 +1907,8 @@ export function createServer(options = {}) {
         }
         if (parts[3] === "export" && req.method === "GET")
           return send(res, 200, patients.exportDeidentified(pid));
+        if (parts[3] === "share" && req.method === "POST")
+          return send(res, 200, buildShareRecord(patients.get(pid), await body(req)));
         if (parts.length === 3) {
           if (req.method === "GET") return send(res, 200, patients.get(pid));
           if (req.method === "PATCH") {
