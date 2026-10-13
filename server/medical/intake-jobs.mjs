@@ -63,7 +63,7 @@ export class IntakeJobs {
       });
       signal.throwIfAborted();
       check(result.status === 'completed', 'INTAKE_FAILED', result.error || '本次处理未完成，请继续处理');
-      const hasDraft = this.drafts(id).length > 0;
+      const hasDraft = this.drafts(id).some(draft => draft.payload.sourceRunId === result.runId);
       // 跑完却没有草稿分两种：模型在提问（回复以问号收尾，或明确说需要
       // 补充什么），或是输出被截断、提案工具没调用成——前者等医生补充，
       // 后者该直接重试，别让医生对着一句英文叙述猜要补什么。

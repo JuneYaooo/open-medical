@@ -106,4 +106,11 @@ test('a repeated proposal in one intake keeps the complete draft and finalizes w
   const next=(await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}`)).data.actions;
   assert.equal(next.length,1);
   assert.notEqual(next[0].id,firstId);
+  provider.complete=async()=>({message:{role:'assistant',content:'新草稿已提交，请确认。'}});
+  await f.json(`/api/sessions/${s.id}/intake-job`,'POST',{externalConsent:true});
+  assert.equal((await terminal(f,s.id)).status,'failed');
+  const retained=(await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}`)).data.actions;
+  assert.equal(retained.length,1);
+  assert.equal(retained[0].id,next[0].id);
+  assert.equal(retained[0].payload.diagnoses[0].name,'高血压');
 });

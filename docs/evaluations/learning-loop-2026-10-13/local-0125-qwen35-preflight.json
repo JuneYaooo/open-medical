@@ -1,0 +1,21 @@
+{
+  "version": "0.9.125",
+  "status": "failed",
+  "model": {
+    "provider": "local",
+    "model": "open-medical-eval-qwen35-4b-64k"
+  },
+  "mode": "preflight",
+  "plannedIntakes": 2,
+  "completed": 0,
+  "calls": 15,
+  "contextWindow": 65536,
+  "runner": "mlx",
+  "quantization": "nvfp4",
+  "residentBytesObserved": 5043525152,
+  "observedFailures": [
+    "Invalid array and enum tool parameters",
+    "Incomplete stream"
+  ],
+  "operatorStop": "Stopped C after A failed; configuration did not pass preflight."
+}
