@@ -339,3 +339,24 @@ test('a later allowance of abbreviations supersedes full-name enforcement withou
   assert.equal(learner.postprocess({diagnoses:[{name:'HTN'}]},[current.id]).changes.length,0);
   doctor.deleteMemory(current.id);assert.equal(doctor.memoryRow(current.id).status,'deleted');
 });
+
+test('style consolidation waits for five edits and reserves the short output budget for JSON', async t => {
+  const { learner, log } = setup(t);
+  let calls = 0;
+  const provider = { provider: 'anthropic', baseUrl: 'https://model.example', thinking: 'enabled', complete: async (_messages, _tools, options) => {
+    calls++;
+    assert.deepEqual(options, { maxTokens: 300, thinking: 'disabled' });
+    return { message: { content: '{"pattern":"brief"}' } };
+  } };
+  const record = i => log.record({ action: { id: `style-budget-${i}` }, patientId: `style-patient-${i}`, ai: { clinicalSummary: { text: '摘要使用多个重复句子描述相同的资料内容。摘要使用多个重复句子描述相同的资料内容。' } }, final: { clinicalSummary: { text: '摘要精简表达。' } } });
+  for (let i = 0; i < 4; i++) record(i);
+  assert.deepEqual(await learner.consolidateStyle(provider, { consent: true }), []);
+  assert.equal(calls, 0);
+  record(4);
+  assert.deepEqual(await learner.consolidateStyle(provider), []);
+  assert.equal(calls, 0);
+  const memories = await learner.consolidateStyle(provider, { consent: true });
+  assert.equal(calls, 1);
+  assert.equal(memories.length, 1);
+  assert.deepEqual(memories[0].rule, { type: 'style_rule', pattern: 'brief' });
+});

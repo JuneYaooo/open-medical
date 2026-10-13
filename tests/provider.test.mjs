@@ -442,6 +442,7 @@ test("OpenAI-compatible factory omits DeepSeek-only thinking fields and preserve
   );
   assert.equal(body.model, "gpt-test");
   assert.equal(body.thinking, undefined);
+  assert.equal(body.reasoning_effort, undefined);
   assert.ok(body.tools.length);
 });
 test("Anthropic native Messages SSE supports text and fragmented tool_use", async (t) => {
@@ -695,4 +696,42 @@ test('anthropic continues after malformed JSON tool arguments instead of crashin
   assert.equal(result.message.content, '请修正 JSON');
   assert.equal(request.messages[1].content[0].input.invalid_json_arguments, malformed);
   assert.equal(request.messages[2].content[0].tool_use_id, 'invalid');
+});
+
+test('Anthropic explicitly disables server-default thinking for a bounded JSON task', async () => {
+  const { AnthropicProvider } = await import('../server/provider.mjs');
+  const requests = [];
+  const provider = new AnthropicProvider({ apiKey: 'synthetic', baseUrl: 'https://model.example', model: 'synthetic', fetchImpl: async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    const frames = [
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '{"pattern":"brief"}' } },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+      { type: 'message_stop' },
+    ];
+    return new Response(frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
+  } });
+  const messages = [{ role: 'user', content: 'Return the style label as JSON.' }];
+  await provider.complete(messages, [], { maxTokens: 300, thinking: 'disabled' });
+  assert.deepEqual(requests[0].thinking, { type: 'disabled' });
+  assert.equal(requests[0].max_tokens, 300);
+  await provider.complete(messages, [], { maxTokens: 300, thinking: 'enabled' });
+  assert.deepEqual(requests[1].thinking, { type: 'enabled', budget_tokens: 4096 });
+  assert.equal(requests[1].max_tokens, 4396);
+});
+
+test('local Ollama compatibility maps thinking controls without DeepSeek-specific fields', async t => {
+  const { createProvider } = await import('../server/provider.mjs');
+  const requests = [];
+  const endpoint = await mockProvider(t, (payload, res) => {
+    requests.push(payload);
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(frame({ content: '合成结果' }, 'stop') + 'data: [DONE]\n\n');
+  });
+  const local = createProvider({ provider: 'local', baseUrl: endpoint.baseUrl, model: 'synthetic-local' });
+  await local.complete([{ role: 'user', content: 'test' }], []);
+  await local.complete([{ role: 'user', content: 'test' }], [], { thinking: 'enabled' });
+  assert.equal(requests[0].reasoning_effort, 'none');
+  assert.equal(requests[1].reasoning_effort, 'high');
+  assert.equal(requests[0].thinking, undefined);
+  assert.equal(requests[1].thinking, undefined);
 });

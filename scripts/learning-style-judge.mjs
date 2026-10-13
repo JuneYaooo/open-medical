@@ -35,7 +35,7 @@ export async function calibrateStyleJudge(provider, calibration) {
         },
       ],
       [],
-      { maxTokens: 300 },
+      { maxTokens: 300, thinking: "disabled" },
     );
     const value = JSON.parse(
       String(reply.message?.content || "").replace(

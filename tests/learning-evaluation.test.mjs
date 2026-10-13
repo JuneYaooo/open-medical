@@ -80,9 +80,10 @@ test("style judge cannot bypass twenty independent labels or the 90 percent agre
   const { calibrateStyleJudge } =
     await import("../scripts/learning-style-judge.mjs");
   const provider = {
-    complete: async () => ({
-      message: { content: '{"consistent":true,"clinical":false}' },
-    }),
+    complete: async (_messages, _tools, options) => {
+      assert.deepEqual(options, { maxTokens: 300, thinking: "disabled" });
+      return { message: { content: '{"consistent":true,"clinical":false}' } };
+    },
   };
   assert.equal(
     (await calibrateStyleJudge(provider, { examples: [] })).usable,

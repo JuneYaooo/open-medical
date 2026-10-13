@@ -1,4 +1,4 @@
-# 学习闭环验证记录 · 0.9.126
+# 学习闭环验证记录 · 0.9.127
 
 更新：2026-10-14。依据 2026-10-13 规格与评估方案。
 
@@ -15,7 +15,8 @@
 | 检查 | 结果 |
 |---|---|
 | ESLint / Vite 构建 | 通过；构建仍提示已有的大 chunk |
-| 全量 `MODEL_E2E=off npm test` | 1342 项：1305 通过、37 按模型/素材/平台条件跳过、0 失败 |
+| 全量 `MODEL_E2E=off npm test` | 1345 项：1308 通过、37 按模型/素材/平台条件跳过、0 失败 |
+| 思考参数与风格任务相关回归 | 105 项通过 |
 | 最后退场窗口与恢复修正相关检查 | 86 项通过 |
 | 浏览器 E1–E8 场景 | 4 个组合场景通过；包含 E3a/E3b |
 | Electron 窗口内同组 E1–E8 | 4 个组合场景通过；隔离库、模拟提供方，验证交互而非模型效果 |
@@ -74,7 +75,7 @@ FER 包含模拟医生故意更改诊断状态、剂量等差异，不等同于�
 
 原有 DeepSeek 配置完成 20 份建档、93 次模型调用，2 组并发。SER 均值 A 0.3167、C 0.1054（下降约 66.7%）；FER A 0.6167、C 0.6065；F1 A 0.7231、C 0.9128。最后五份 SER 为 A 0.3333、C 0.0182。平均耗时 A 17.30 秒、C 19.44 秒；输入 token A 6391、C 6942。仍只有一个人设和种子，不能推算发版置信区间。
 
-[最新开发档报告](evaluations/learning-loop-2026-10-13/development-0123-report.json) · [逐次指标](evaluations/learning-loop-2026-10-13/development-0123-rows.json) · [学习曲线](evaluations/learning-loop-2026-10-13/learning-curves-0123.svg)
+[0.9.123 开发档报告](evaluations/learning-loop-2026-10-13/development-0123-report.json) · [逐次指标](evaluations/learning-loop-2026-10-13/development-0123-rows.json) · [学习曲线](evaluations/learning-loop-2026-10-13/learning-curves-0123.svg)
 
 ## 0.9.124 可选空字段修正
 
@@ -94,11 +95,31 @@ Qwen3 4B 在 64k 上下文、q8_0 KV 缓存配置下不再出现先前的读取�
 
 Qwen3.5 4B（MLX/nvfp4、64k）预检未完成：出现数组和枚举参数错误，基线组随后流中断，停止后续测试。仍未降低工具 schema 约束。[预检记录](evaluations/learning-loop-2026-10-13/local-0125-qwen35-preflight.json)。
 
+Qwen3.5 9B（GGUF/Q4_K_M、64k、q8_0 KV）完成 A 组一份，SER 0.3077、FER 0.4615、F1 0.6154，耗时 244.57 秒、输入 49918 token。模型修正两次提案参数后生成有效草稿；C 组读取参数错误后返回空响应，两组共 9 次调用。观测驻留约 6.93 GB，该配置仍未通过完整闭环流程预检。[预检记录](evaluations/learning-loop-2026-10-13/local-0126-qwen35-9b-preflight.json)。
+
+## 0.9.126 DeepSeek 与运行时对照
+
+终端 Node 26.8.2 的开发档完成 5 份、27 次调用后失败，诊断通道捕获 `ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC`，随后出现流终止及连接重试失败。已确认错误发生在 TLS 层，尚不能确定错误源头。[失败记录](evaluations/learning-loop-2026-10-13/cloud-0126-node26-failure.json)。
+
+相同配置使用桌面应用自带 Electron 44.2.0 / Node 24.20.0，完成全部 20 份、85 次调用，2 组并发。SER 均值 A 0.2953、C 0.0983（下降约 66.7%）；FER A 0.6569、C 0.6056；F1 A 0.6714、C 0.8962。平均耗时 A 16.80 秒、C 21.94 秒；输入 token A 6113、C 7009。这只能说明该轮桌面运行时执行完整，不能单凭一次对照将 TLS 错误归因于 Node 版本，也不能据此替代完整矩阵放行。
+
+[开发档报告](evaluations/learning-loop-2026-10-13/development-0126-report.json) · [逐次指标](evaluations/learning-loop-2026-10-13/development-0126-rows.json) · [学习曲线](evaluations/learning-loop-2026-10-13/learning-curves-0126.svg)
+
+同一桌面运行时的完整矩阵首轮使用 12 个并发单元，完成 37/45 个完整单元、1611 份草稿、6884 次模型调用。6 个单元因连接失败、2 个单元因模型空响应未完成。补跑复用了 1480 份完整单元结果，新增 101 份、456 次调用后，因发现下述思考参数问题主动停止。[首轮记录](evaluations/learning-loop-2026-10-13/cloud-0126-electron-attempt-1.json) · [补跑及停止原因](evaluations/learning-loop-2026-10-13/cloud-0126-electron-attempt-2.json)。这些均为修正前证据，不能复用为 0.9.127 的放行结果。
+
+## 0.9.127 思考参数与短输出任务
+
+流协议诊断发现 14 次响应只产生思考内容即达到输出上限。Anthropic 适配器此前在关闭思考时省略参数，但 [DeepSeek 当前默认开启思考](https://api-docs.deepseek.com/guides/thinking_mode/)，导致 300 token 的风格归纳任务可能无法产出 JSON。现显式传递 `thinking: disabled`，风格归纳和人工校准后的风格评审均主动关闭思考；显式启用思考时保留原有预算行为。
+
+本地适配器按 [Ollama 的兼容接口说明](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx)将开关映射为 `reasoning_effort: none/high`，其他 OpenAI 兼容提供方不附加此字段。回归覆盖云端与本地请求参数、五次修改门槛、既有同意约束及短预算风格 JSON。真实 DeepSeek 300 token 小样本返回有效标签、思考输出为 0。
+
+本报告的生成耗时与输入 token 指本次评测开始建档至生成可核对草稿，不含医生核对时间及确认后的风格归纳调用；总模型调用数包含后者。
+
 ## 尚未满足的放行条件
 
 | 条件 | 当前缺口 |
 |---|---|
-| Q2 完整矩阵 | 真实开发档已完成；完整云端矩阵因连接中断未完成，本地 4B 预检也未完成，需先解决循环与开销后再运行完整模型档 |
+| Q2 完整矩阵 | 真实开发档已完成；完整云端矩阵因连接中断未完成，本地 4B/9B 配置均未通过完整闭环预检，需解决模型调用稳定性后再运行完整模型档 |
 | 金标准与风格评审 | 40 份金标准须独立逐份审核；至少 20 条风格标签须人工标注并使评审一致率达到 90% |
 | 隐私与开销效果门槛 | 默认云端隐私的功能测试通过，完整真实矩阵 G8/G9 尚未验证 |
 | Q3 | 尚无 3–5 位医生四周试用、第二位医生抽样复核及主观问卷结果 |

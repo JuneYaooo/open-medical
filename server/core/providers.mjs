@@ -114,6 +114,9 @@ export class DeepSeekProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(this.includeThinking ? { thinking: { type: thinking } } : {}),
+      ...(this.provider === "local"
+        ? { reasoning_effort: thinking === "enabled" ? "high" : "none" }
+        : {}),
       max_tokens: maxTokens,
     };
     const response = await requestProvider(this.fetch, `${this.baseUrl}/chat/completions`, {
@@ -606,9 +609,9 @@ export class AnthropicProvider {
       system: converted.system,
       messages: converted.messages,
       max_tokens: maxTokens + (thinking === "enabled" ? thinkBudget : 0),
-      ...(thinking === "enabled"
-        ? { thinking: { type: "enabled", budget_tokens: thinkBudget } }
-        : {}),
+      thinking: thinking === "enabled"
+        ? { type: "enabled", budget_tokens: thinkBudget }
+        : { type: "disabled" },
       stream: true,
       ...(tools?.length
         ? {

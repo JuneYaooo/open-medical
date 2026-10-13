@@ -1,0 +1,23 @@
+{
+  "version": "0.9.126",
+  "attempt": 2,
+  "status": "operator-interrupted",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "calls": 456,
+  "reusedIntakes": 1480,
+  "newIntakes": 101,
+  "reason": "Stopped after protocol diagnostics revealed that disabled thinking was omitted from the Anthropic payload, while the provider defaults to thinking. Small JSON classification budgets could be consumed without producing a label.",
+  "protocolObservations": {
+    "responses": 449,
+    "reasoningOnlyResponses": 14,
+    "stopReasons": {
+      "max_tokens": 14
+    }
+  },
+  "limitations": [
+    "A runtime correction is required; these checkpoints cannot establish acceptance for the corrected version."
+  ]
+}

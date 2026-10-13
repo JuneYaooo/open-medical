@@ -1,0 +1,510 @@
+{
+  "status": "incomplete",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "mode": "development",
+  "calls": 85,
+  "concurrency": 2,
+  "reusedIntakes": 0,
+  "callsScope": "current-invocation",
+  "rows": 20,
+  "summary": {
+    "groups": {
+      "C": {
+        "overall": {
+          "count": 10,
+          "ser": 0.09826839826839828,
+          "fer": 0.6055777555777556,
+          "f1": 0.8961538461538462,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.09826839826839828,
+          "fer": 0.6055777555777556,
+          "f1": 0.8961538461538462,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      },
+      "A": {
+        "overall": {
+          "count": 10,
+          "ser": 0.2953379953379954,
+          "fer": 0.6569264069264069,
+          "f1": 0.6714285714285714,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "early": {
+          "count": 10,
+          "ser": 0.2953379953379954,
+          "fer": 0.6569264069264069,
+          "f1": 0.6714285714285714,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "middle": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "late": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        },
+        "holdout": {
+          "count": 0,
+          "ser": null,
+          "fer": null,
+          "f1": null,
+          "serCI95": null,
+          "ferCI95": null,
+          "f1CI95": null
+        }
+      }
+    },
+    "paired": {
+      "C": {
+        "overall": {
+          "difference": -0.19706959706959706,
+          "ci95": null,
+          "pairs": 10
+        },
+        "late": {
+          "difference": null,
+          "ci95": null,
+          "pairs": 0
+        }
+      }
+    },
+    "pairedLateDifference": null,
+    "pairedLateCI95": null
+  },
+  "gates": {
+    "G1": {
+      "status": "unverified"
+    },
+    "G3": {
+      "status": "unverified"
+    },
+    "G4": {
+      "status": "unverified"
+    },
+    "G5": {
+      "status": "unverified"
+    },
+    "G6": {
+      "status": "unverified"
+    },
+    "G6b": {
+      "status": "unverified"
+    },
+    "G7": {
+      "status": "unverified"
+    },
+    "G8": {
+      "status": "unverified"
+    },
+    "G9": {
+      "status": "unverified"
+    },
+    "G2": {
+      "status": "unverified"
+    },
+    "G10": {
+      "status": "unverified"
+    }
+  },
+  "runs": [
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D1-17-P013.json",
+        "A-D1-17-P018.json",
+        "A-D1-17-P038.json",
+        "A-D1-17-P027.json",
+        "A-D1-17-P026.json",
+        "A-D1-17-P033.json",
+        "A-D1-17-P023.json",
+        "A-D1-17-P021.json",
+        "A-D1-17-P001.json",
+        "A-D1-17-P003.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0,
+            "examples": [
+              {
+                "sessionId": "cf2216c2-6a76-42f3-94ca-432c0eaa6e95",
+                "patientId": "84614d01-6586-4545-80c7-c38ac0fd508d",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "diagnoses",
+                    "index": 2,
+                    "before": {
+                      "code": "",
+                      "name": "肝囊肿",
+                      "date": "2026-09-18",
+                      "status": "finding",
+                      "note": "门诊记录诊断栏标注“影像偶然发现”；材料未提供影像检查名称、日期与囊肿大小，无对应的影像报告原页。"
+                    },
+                    "after": null
+                  }
+                ]
+              },
+              {
+                "sessionId": "04706bdc-97c1-46fb-ad43-ebe93988acaf",
+                "patientId": "3a9c9676-82f6-48a9-a9a3-0fd54d25a8bb",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "diagnoses",
+                    "index": 2,
+                    "before": {
+                      "code": "",
+                      "name": "肝囊肿",
+                      "date": "2026-09-13",
+                      "status": "finding",
+                      "note": "原文标注为「影像偶然发现」；该次检查的其他细节与本条无对应数值可核。"
+                    },
+                    "after": null
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1,
+            "examples": [
+              {
+                "sessionId": "43bf94c4-844e-4d35-b6be-debeb7e969ec",
+                "patientId": "13f24389-e225-46c3-b688-e90550c49acf",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "medications",
+                    "index": 0,
+                    "before": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "5mg",
+                      "frequency": "bid",
+                      "note": "原文标注「正在使用」，无停用记录。"
+                    },
+                    "after": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "5mg",
+                      "frequency": "每日两次",
+                      "note": "原文标注「正在使用」，无停用记录。"
+                    }
+                  }
+                ]
+              },
+              {
+                "sessionId": "cf2216c2-6a76-42f3-94ca-432c0eaa6e95",
+                "patientId": "84614d01-6586-4545-80c7-c38ac0fd508d",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "medications",
+                    "index": 0,
+                    "before": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "10mg",
+                      "frequency": "bid",
+                      "note": "原文记“正在使用”，未提供起始日期与用药指征；材料中无停用记录。"
+                    },
+                    "after": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "10mg",
+                      "frequency": "每日两次",
+                      "note": "原文记“正在使用”，未提供起始日期与用药指征；材料中无停用记录。"
+                    }
+                  }
+                ]
+              },
+              {
+                "sessionId": "04706bdc-97c1-46fb-ad43-ebe93988acaf",
+                "patientId": "3a9c9676-82f6-48a9-a9a3-0fd54d25a8bb",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "medications",
+                    "index": 0,
+                    "before": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "5mg",
+                      "frequency": "bid",
+                      "note": "原文标注「正在使用」。"
+                    },
+                    "after": {
+                      "name": "合成药A",
+                      "status": "active",
+                      "dose": "5mg",
+                      "frequency": "每日两次",
+                      "note": "原文标注「正在使用」。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 4,
+            "examples": []
+          }
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 3,
+            "examples": [
+              {
+                "sessionId": "8d82fec2-bf43-4f5b-b14d-a18935136f77",
+                "patientId": "03c7cfd9-e225-48ff-a06b-4ce6a6d119f8",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "labs",
+                    "index": 1,
+                    "before": {
+                      "item": "肌酐",
+                      "value": 98,
+                      "unit": "umol/L",
+                      "date": "2026-09-08"
+                    },
+                    "after": {
+                      "item": "肌酐",
+                      "value": 98,
+                      "unit": "μmol/L",
+                      "date": "2026-09-08"
+                    }
+                  }
+                ]
+              },
+              {
+                "sessionId": "cf2216c2-6a76-42f3-94ca-432c0eaa6e95",
+                "patientId": "84614d01-6586-4545-80c7-c38ac0fd508d",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "labs",
+                    "index": 1,
+                    "before": {
+                      "item": "肌酐",
+                      "value": 83,
+                      "unit": "umol/L",
+                      "date": "2026-09-18"
+                    },
+                    "after": {
+                      "item": "肌酐",
+                      "value": 83,
+                      "unit": "μmol/L",
+                      "date": "2026-09-18"
+                    }
+                  }
+                ]
+              },
+              {
+                "sessionId": "04706bdc-97c1-46fb-ad43-ebe93988acaf",
+                "patientId": "3a9c9676-82f6-48a9-a9a3-0fd54d25a8bb",
+                "correct": 1,
+                "wrong": 0,
+                "changes": [
+                  {
+                    "section": "labs",
+                    "index": 1,
+                    "before": {
+                      "item": "肌酐",
+                      "value": 78,
+                      "unit": "umol/L",
+                      "date": "2026-09-13"
+                    },
+                    "after": {
+                      "item": "肌酐",
+                      "value": 78,
+                      "unit": "μmol/L",
+                      "date": "2026-09-13"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 1,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D1-17-P013.json",
+        "C-D1-17-P018.json",
+        "C-D1-17-P038.json",
+        "C-D1-17-P027.json",
+        "C-D1-17-P026.json",
+        "C-D1-17-P033.json",
+        "C-D1-17-P023.json",
+        "C-D1-17-P021.json",
+        "C-D1-17-P001.json",
+        "C-D1-17-P003.json"
+      ],
+      "completed": true
+    }
+  ],
+  "limitations": [
+    "金标准尚待独立逐份核对",
+    "style 评审尚需人工校准",
+    "发版需另一个模型档结果及全部门槛证据",
+    "Q3 需要真实医生试点"
+  ],
+  "version": "0.9.126",
+  "runtime": {
+    "electron": "44.2.0",
+    "node": "24.20.0",
+    "undici": "7.29.0"
+  }
+}

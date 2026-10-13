@@ -1,0 +1,58 @@
+{
+  "version": "0.9.126",
+  "status": "failed",
+  "model": {
+    "provider": "local",
+    "model": "open-medical-eval-qwen35-9b-64k-t02"
+  },
+  "mode": "preflight",
+  "plannedIntakes": 2,
+  "completed": 1,
+  "calls": 9,
+  "contextWindow": 65536,
+  "configuration": {
+    "model": "open-medical-eval-qwen35-9b-64k-t02",
+    "base": "qwen3.5:9b-q4_K_M",
+    "parameters": {
+      "num_ctx": 65536,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "presence_penalty": 0
+    },
+    "kvCache": "q8_0",
+    "flashAttention": true,
+    "digest": "25caef077eb87699476e9f284ab0ee58907d87ff242655e2f076f2ffdd5e14bf",
+    "runner": "llamacpp"
+  },
+  "residentBytesObserved": 6933981429,
+  "observedFailures": [
+    "Invalid array tool argument; corrected on retry",
+    "Undefined lab note field; corrected on retry",
+    "C: invalid startLine followed by EMPTY_OUTPUT"
+  ],
+  "completedMetrics": [
+    {
+      "group": "A",
+      "persona": "D1",
+      "seed": 17,
+      "patient": "P013",
+      "sequence": 1,
+      "split": "learning",
+      "ser": 0.3076923076923077,
+      "fer": 0.46153846153846156,
+      "f1": 0.6153846153846153,
+      "precision": 0.5714285714285714,
+      "recall": 0.6666666666666666,
+      "summaryDistance": 0.8125,
+      "editRate": 0.6153846153846154,
+      "aiItems": 13,
+      "durationMs": 244565,
+      "inputChars": 86067,
+      "inputTokens": 49918,
+      "contextChars": 0
+    }
+  ],
+  "limitations": [
+    "One completed baseline intake; full-loop cell failed. This is not a local-model acceptance result."
+  ]
+}

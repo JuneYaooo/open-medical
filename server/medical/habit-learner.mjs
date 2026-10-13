@@ -584,7 +584,7 @@ export class HabitLearner {
         },
       ],
       [],
-      { maxTokens: 300 },
+      { maxTokens: 300, thinking: "disabled" },
     );
     const raw = String(response.message?.content || "").replace(
       /^```(?:json)?\s*|\s*```$/g,
