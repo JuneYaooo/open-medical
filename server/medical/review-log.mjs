@@ -135,10 +135,7 @@ export class ReviewLog {
       )
       .run(habitId, actionId, kind, new Date().toISOString());
     const ledger = this.ledger(habitId);
-    if (
-      (ledger.applied >= 5 && ledger.reverted / ledger.applied >= 0.3) ||
-      ledger.notApplicable >= 3
-    ) {
+    if (ledger.conflict) {
       const memory = this.db
         .prepare("SELECT * FROM doctor_memories WHERE id=?")
         .get(habitId);
@@ -189,6 +186,24 @@ export class ReviewLog {
         .all(id)
         .map((r) => [r.kind, r.n]),
     );
+    const restored = this.db
+      .prepare(
+        "SELECT snapshot FROM habit_history WHERE habit_id=? AND decision='restore' ORDER BY id DESC LIMIT 1",
+      )
+      .get(id);
+    const cursor = restored
+      ? JSON.parse(restored.snapshot).feedbackCursor || 0
+      : 0;
+    const recent = cursor
+      ? Object.fromEntries(
+          this.db
+            .prepare(
+              "SELECT kind,COUNT(*) n FROM habit_feedback WHERE habit_id=? AND id>? GROUP BY kind",
+            )
+            .all(id, cursor)
+            .map((r) => [r.kind, r.n]),
+        )
+      : counts;
     const memory = this.db
       .prepare("SELECT rule,created_at FROM doctor_memories WHERE id=?")
       .get(id);
@@ -232,8 +247,8 @@ export class ReviewLog {
       ...counts,
       rates,
       conflict:
-        (counts.applied >= 5 && counts.reverted / counts.applied >= 0.3) ||
-        counts.notApplicable >= 3,
+        (recent.applied >= 5 && recent.reverted / recent.applied >= 0.3) ||
+        recent.notApplicable >= 3,
     };
   }
   stats(range = "90d") {

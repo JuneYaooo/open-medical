@@ -40,3 +40,25 @@ test("three not-applicable votes pause a learned habit without deleting history"
     1,
   );
 });
+
+test("restore preserves lifetime feedback but starts a fresh automatic retirement window", async (t) => {
+  const { HabitLearner } = await import("../server/medical/habit-learner.mjs");
+  const store = new Store(":memory:");
+  t.after(() => store.close());
+  const doctor = new DoctorProfile(store),
+    log = new ReviewLog(store),
+    learner = new HabitLearner(store, doctor);
+  const m = doctor.addMemory({ content: "写法" });
+  store.db
+    .prepare("UPDATE doctor_memories SET origin='learned' WHERE id=?")
+    .run(m.id);
+  for (let i = 0; i < 3; i++) log.feedback(m.id, `old-${i}`, "notApplicable");
+  assert.equal(doctor.memoryRow(m.id).status, "paused");
+  learner.decide(m.id, "restore");
+  log.feedback(m.id, "new-1", "applied");
+  assert.equal(doctor.memoryRow(m.id).status, "confirmed");
+  assert.equal(log.ledger(m.id).notApplicable, 3);
+  assert.equal(log.ledger(m.id).conflict, false);
+  for (let i = 0; i < 3; i++) log.feedback(m.id, `new-${i}`, "notApplicable");
+  assert.equal(doctor.memoryRow(m.id).status, "paused");
+});

@@ -455,7 +455,19 @@ export class HabitLearner {
         .prepare(
           "INSERT INTO habit_history(habit_id,decision,snapshot,created_at) VALUES (?,?,?,?)",
         )
-        .run(id, decision, JSON.stringify(memory), new Date().toISOString());
+        .run(
+          id,
+          decision,
+          JSON.stringify({
+            ...memory,
+            feedbackCursor: this.db
+              .prepare(
+                "SELECT COALESCE(MAX(id),0) n FROM habit_feedback WHERE habit_id=?",
+              )
+              .get(id).n,
+          }),
+          new Date().toISOString(),
+        );
       if (["undo", "delete", "disable"].includes(decision))
         this.db
           .prepare(

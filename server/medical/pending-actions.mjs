@@ -482,7 +482,7 @@ export class PendingActions {
         409,
       );
       this.recordFeedback(action, "confirmed", feedback);
-      return { ok: true, action: this.row(id), applied, habitSuggestions, pausedHabits: this.store.db.prepare("SELECT subject FROM learning_events WHERE type='habit-paused' AND id>?").all(eventCursor).map(r => Number(r.subject)) };
+      return { ok: true, action: this.row(id), applied, habitSuggestions, pausedHabits: this.store.db.prepare("SELECT subject FROM learning_events WHERE type='habit-paused' AND id>?").all(eventCursor).map(r => Number(r.subject)).concat((action.payload.personalization?.habits || []).filter(h => this.doctor?.memoryRow(h.id).status === "paused").map(h => h.id)).filter((id,i,ids) => ids.indexOf(id) === i) };
     }); } catch (error) {
       // Installs return a list of ids; restore every skill file the rolled
       // back transaction had materialized.

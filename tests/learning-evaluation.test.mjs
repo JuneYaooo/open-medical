@@ -112,3 +112,78 @@ test("style judge cannot bypass twenty independent labels or the 90 percent agre
     false,
   );
 });
+
+test("matrix concurrency is bounded and awaits successful cells after another cell fails", async () => {
+  const { runLearningCells } = await import("../scripts/learning-workers.mjs");
+  let active = 0,
+    peak = 0;
+  const finished = [];
+  const results = await runLearningCells([0, 1, 2, 3, 4], 2, async (id) => {
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((r) => setTimeout(r, id === 0 ? 20 : 5));
+    active--;
+    finished.push(id);
+    if (id === 1) throw new Error("isolated failure");
+    return id;
+  });
+  assert.equal(peak, 2);
+  assert.equal(active, 0);
+  assert.deepEqual(finished.slice().sort(), [0, 1, 2, 3, 4]);
+  assert.deepEqual(
+    results.map((r) => r.status),
+    ["fulfilled", "rejected", "fulfilled", "fulfilled", "fulfilled"],
+  );
+  assert.deepEqual(
+    results.filter((r) => r.status === "fulfilled").map((r) => r.value),
+    [0, 2, 3, 4],
+  );
+  await assert.rejects(
+    runLearningCells([1], 0, async () => {}),
+    /concurrency/,
+  );
+});
+
+test("learning summaries include field and fact uncertainty and pair the context baseline by persona and seed", async () => {
+  const { summarizeLearning } = await import("../scripts/learning-metrics.mjs");
+  const rows = [];
+  for (const [persona, seed, ser] of [
+    ["D1", 17, 0.4],
+    ["D1", 41, 0.5],
+    ["D2", 17, 0.6],
+  ]) {
+    for (const sequence of [1, 21]) {
+      rows.push({
+        group: "A",
+        persona,
+        seed,
+        patient: `P${sequence}`,
+        sequence,
+        ser,
+        fer: 0.2,
+        f1: 0.8,
+      });
+      rows.push({
+        group: "B",
+        persona,
+        seed,
+        patient: `P${sequence}`,
+        sequence,
+        ser: ser - 0.2,
+        fer: 0.1,
+        f1: 0.9,
+      });
+    }
+  }
+  const summary = summarizeLearning(rows);
+  assert.equal(summary.groups.B.overall.count, 6);
+  assert.ok(
+    summary.groups.B.early.ferCI95.every((n) => Math.abs(n - 0.1) < 1e-12),
+  );
+  assert.ok(
+    summary.groups.B.late.f1CI95.every((n) => Math.abs(n - 0.9) < 1e-12),
+  );
+  assert.equal(summary.paired.B.overall.pairs, 6);
+  assert.ok(summary.paired.B.overall.ci95[1] < 0);
+  assert.equal(summary.pairedLateCI95, null);
+});

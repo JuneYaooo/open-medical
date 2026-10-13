@@ -1,3 +1,4 @@
+import { runLearningCells } from "./learning-workers.mjs";
 import { createHash } from "node:crypto";
 import { calibrateStyleJudge } from "./learning-style-judge.mjs";
 import { selfHealingProbe } from "./learning-probes.mjs";
@@ -29,7 +30,10 @@ const root = resolve("evals/learning-loop-v1"),
   output = resolve(arg("--output", `output/learning-loop/${Date.now()}`));
 const release = args.includes("--release"),
   configPath = arg("--model-config"),
-  maxCalls = Number(arg("--max-calls", release ? "12000" : "300"));
+  maxCalls = Number(arg("--max-calls", release ? "12000" : "300")),
+  concurrency = Number(arg("--concurrency", "1"));
+if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 12)
+  throw new Error("--concurrency 须为 1–12 的整数");
 const protocol = JSON.parse(await readFile(join(root, "protocol.json"))),
   manifest = JSON.parse(await readFile(join(root, "manifest.json")));
 if (!Number.isSafeInteger(maxCalls) || maxCalls < 1 || maxCalls > 20000)
@@ -71,42 +75,48 @@ if (!configPath) {
     matrix.learningPatients = n;
   }
   let calls = 0;
-  const rows = [],
-    requests = [];
-  let activePatient = "",
-    inputChars = 0,
-    inputTokens = 0,
-    missingUsage = 0;
-  const complete = provider.complete.bind(provider);
-  provider.complete = async (messages, tools, options) => {
-    if (calls >= maxCalls) throw new Error("评测达到模型调用预算，已停止");
-    calls++;
-    inputChars += JSON.stringify(messages).length;
-    requests.push({
-      patient: activePatient,
-      messages: structuredClone(messages),
-    });
-    let result;
-    try {
-      result = await complete(messages, tools, options);
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          call: calls,
-          code: error.code,
-          message: String(error.message).replaceAll(
-            config.apiKey || "\u0000",
-            "[redacted]",
-          ),
-        }),
-      );
-      throw error;
-    }
-    const tokens = result.usage?.prompt_tokens ?? result.usage?.input_tokens;
-    if (Number.isFinite(tokens)) inputTokens += tokens;
-    else missingUsage++;
-    return result;
-  };
+  const rows = [];
+  function trackedProvider() {
+    const provider = createProvider(config),
+      requests = [],
+      tracking = {
+        activePatient: "",
+        inputChars: 0,
+        inputTokens: 0,
+        missingUsage: 0,
+      };
+    const complete = provider.complete.bind(provider);
+    provider.complete = async (messages, tools, options) => {
+      if (calls >= maxCalls) throw new Error("评测达到模型调用预算，已停止");
+      calls++;
+      tracking.inputChars += JSON.stringify(messages).length;
+      requests.push({
+        patient: tracking.activePatient,
+        messages: structuredClone(messages),
+      });
+      let result;
+      try {
+        result = await complete(messages, tools, options);
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            call: calls,
+            code: error.code,
+            message: String(error.message).replaceAll(
+              config.apiKey || "\u0000",
+              "[redacted]",
+            ),
+          }),
+        );
+        throw error;
+      }
+      const tokens = result.usage?.prompt_tokens ?? result.usage?.input_tokens;
+      if (Number.isFinite(tokens)) tracking.inputTokens += tokens;
+      else tracking.missingUsage++;
+      return result;
+    };
+    return { provider, requests, tracking };
+  }
   const runs = [],
     canaries = await Promise.all(
       manifest.patients.map(async (p) => ({
@@ -120,284 +130,307 @@ if (!configPath) {
   try {
     if (arg("--style-calibration"))
       styleCalibration = await calibrateStyleJudge(
-        provider,
+        trackedProvider().provider,
         JSON.parse(await readFile(resolve(arg("--style-calibration")), "utf8")),
       );
-    for (const personaId of matrix.personas)
-      for (const seed of matrix.seeds)
-        for (const group of matrix.groups) {
-          const persona = JSON.parse(
-            await readFile(join(root, "personas", `${personaId}.json`)),
-          );
-          const server = createServer({ database: ":memory:", provider });
-          await new Promise((r) => server.listen(0, "127.0.0.1", r));
-          const origin = `http://127.0.0.1:${server.address().port}`;
-          const request = async (path, method = "GET", data) => {
-            const response = await fetch(origin + path, {
-              method,
-              headers: {
-                "content-type": "application/json",
-                "x-medical-token": server.token,
+    const cells = matrix.personas.flatMap((personaId) =>
+      matrix.seeds.flatMap((seed) =>
+        matrix.groups.map((group) => ({ personaId, seed, group })),
+      ),
+    );
+    const results = await runLearningCells(
+      cells,
+      concurrency,
+      async ({ personaId, seed, group }) => {
+        const { provider, requests, tracking } = trackedProvider();
+        const persona = JSON.parse(
+          await readFile(join(root, "personas", `${personaId}.json`)),
+        );
+        const server = createServer({ database: ":memory:", provider });
+        await new Promise((r) => server.listen(0, "127.0.0.1", r));
+        const origin = `http://127.0.0.1:${server.address().port}`;
+        const request = async (path, method = "GET", data) => {
+          const response = await fetch(origin + path, {
+            method,
+            headers: {
+              "content-type": "application/json",
+              "x-medical-token": server.token,
+            },
+            ...(data ? { body: JSON.stringify(data) } : {}),
+          });
+          const value = await response.json();
+          if (!response.ok)
+            throw new Error(`${path}: ${JSON.stringify(value)}`);
+          return value;
+        };
+        let replaySample;
+        const run = {
+          persona: personaId,
+          seed,
+          group,
+          habits: [],
+          unsafeLearned: 0,
+          falseStated: 0,
+          statedSaved: 0,
+          privacyLeaks: 0,
+          freshStoreEmpty: false,
+          predictionErrors: [],
+          files: [],
+        };
+        runs.push(run);
+        try {
+          saveLearningPrefs(server.store.db, {
+            personalContext: group !== "A",
+            habits: group.startsWith("C"),
+            postprocess: group !== "C-no-postprocess",
+            examples:
+              group === "C-no-examples"
+                ? localModel(provider)
+                  ? "never"
+                  : "local"
+                : "always",
+          });
+          run.freshStoreEmpty = server.doctor.memories().length === 0;
+          if (group !== "A") {
+            await server.guidelines.addDocument({
+              title: "合成整理规范",
+              text: await readFile(join(root, "kb/合成整理规范.txt"), "utf8"),
+            });
+            server.extensions.save({
+              kind: "skill",
+              spec: {
+                name: "评测建档整理",
+                description: "整理建档事实与出处",
+                appliesTo: ["建档", "病史摘要"],
+                body: "只依据本次资料整理临床事实，保留疑似限定词与原始出处。预约清单不建检验条目。",
               },
-              ...(data ? { body: JSON.stringify(data) } : {}),
             });
-            const value = await response.json();
-            if (!response.ok)
-              throw new Error(`${path}: ${JSON.stringify(value)}`);
-            return value;
-          };
-          let replaySample;
-          const run = {
-            persona: personaId,
-            seed,
-            group,
-            habits: [],
-            unsafeLearned: 0,
-            falseStated: 0,
-            statedSaved: 0,
-            privacyLeaks: 0,
-            freshStoreEmpty: false,
-            predictionErrors: [],
-            files: [],
-          };
-          runs.push(run);
-          try {
-            saveLearningPrefs(server.store.db, {
-              personalContext: group !== "A",
-              habits: group.startsWith("C"),
-              postprocess: group !== "C-no-postprocess",
-              examples:
-                group === "C-no-examples"
-                  ? localModel(provider)
-                    ? "never"
-                    : "local"
-                  : "always",
-            });
-            run.freshStoreEmpty = server.doctor.memories().length === 0;
-            if (group !== "A") {
-              await server.guidelines.addDocument({
-                title: "合成整理规范",
-                text: await readFile(join(root, "kb/合成整理规范.txt"), "utf8"),
-              });
-              server.extensions.save({
-                kind: "skill",
-                spec: {
-                  name: "评测建档整理",
-                  description: "整理建档事实与出处",
-                  appliesTo: ["建档", "病史摘要"],
-                  body: "只依据本次资料整理临床事实，保留疑似限定词与原始出处。预约清单不建检验条目。",
-                },
-              });
-            }
-            const learning = shuffle(
-                manifest.patients.filter((p) => p.split === "learning"),
-                seed,
-              ).slice(0, matrix.learningPatients),
-              heldout = release
-                ? manifest.patients.filter((p) => p.split === "holdout")
-                : [];
-            for (const [index, item] of [...learning, ...heldout].entries()) {
-              activePatient = item.id;
-              const beforeRequests = requests.length,
-                beforeChars = inputChars,
-                beforeTokens = inputTokens,
-                beforeMissingUsage = missingUsage,
-                start = Date.now();
-              const gold = JSON.parse(
-                  await readFile(join(root, "patients", item.id, "gold.json")),
-                ),
-                final = renderLearningGold(gold, persona);
-              const session = await request("/api/sessions", "POST", {
-                title: "上传资料建档",
-              });
-              for (const filename of item.materials) {
-                const buffer = await readFile(
-                  join(root, "patients", item.id, "materials", filename),
-                );
-                await request(
-                  `/api/sessions/${session.id}/files`,
-                  "POST",
-                  /\.png$/i.test(filename)
-                    ? { name: filename, image: buffer.toString("base64") }
-                    : { name: filename, text: buffer.toString("utf8") },
-                );
-              }
-              const correction =
-                group.startsWith("C") && [4, 14].includes(index)
-                  ? `${persona.stated[index === 4 ? 0 : 1]}；${persona.patientOnly}`
-                  : "";
-              const started = await request(
-                `/api/sessions/${session.id}/intake-job`,
-                "POST",
-                { correction, externalConsent: true },
-              );
-              run.statedSaved += started.job.remembered?.length || 0;
-              if (
-                started.job.remembered?.some((m) =>
-                  m.content.includes(persona.patientOnly),
-                )
-              )
-                run.falseStated++;
-              let job = started.job;
-              const deadline = Date.now() + 600000;
-              while (job.status === "running") {
-                if (Date.now() > deadline) throw new Error("建档超时");
-                await new Promise((r) => setTimeout(r, 500));
-                job = (await request(`/api/sessions/${session.id}/intake-job`))
-                  .job;
-              }
-              if (job.status === "failed" || job.status === "interrupted")
-                throw new Error(job.error || job.progress);
-              const actions = (
-                await request(
-                  `/api/pending-actions?type=patient-create&sourceSessionId=${session.id}`,
-                )
-              ).actions;
-              if (actions.length !== 1) throw new Error("模型未生成唯一草稿");
-              const action = actions[0],
-                metrics = learningMetrics(action.payload, final, {
-                  ...gold,
-                  diagnoses: gold.diagnoses.filter(
-                    (d) => !persona.excludeFindings || d.status !== "finding",
-                  ),
-                });
-              const row = {
-                group,
-                persona: personaId,
-                seed,
-                patient: item.id,
-                sequence: index + 1,
-                split: item.split,
-                ...metrics,
-                durationMs: Date.now() - start,
-                inputChars: inputChars - beforeChars,
-                inputTokens:
-                  missingUsage === beforeMissingUsage
-                    ? inputTokens - beforeTokens
-                    : null,
-                contextChars: action.payload.learningContext?.chars || 0,
-              };
-              rows.push(row);
-              if (
-                !replaySample &&
-                action.payload.diagnoses?.some((d) =>
-                  TERM_GROUPS.some((g) => g.includes(d.name)),
-                )
-              )
-                replaySample = action.payload;
-              for (const id of new Set(
-                (action.payload.habitChanges || []).map((c) => c.habitId),
-              )) {
-                const habit = server.doctor.memoryRow(id);
-                if (habit.origin !== "learned" || !habit.dryrun) continue;
-                const trial = dryRunRule(habit.rule, [
-                  { ai: action.payload.preHabitPayload, final },
-                ]);
-                const appliedChanges = action.payload.habitChanges.filter(
-                  (c) => c.habitId === id,
-                ).length;
-                const precision =
-                  habit.dryrun.correct /
-                  Math.max(1, habit.dryrun.correct + habit.dryrun.wrong);
-                run.predictionErrors.push({
-                  habitId: id,
-                  predicted: appliedChanges * precision,
-                  actual: trial.correct,
-                });
-              }
-              if (!localModel(provider) && group === "C-no-examples")
-                for (const req of requests.slice(beforeRequests)) {
-                  const text = JSON.stringify(req.messages);
-                  run.privacyLeaks += canaries.filter(
-                    (c) => c.id !== item.id && text.includes(c.text),
-                  ).length;
-                }
-              // Replay each trial's own evidence with its frozen rule: the audit records
-              // both prediction and actual item savings, without using the model as judge.
-
-              // Holdout records never enter learning or reference history.
-              let confirmed = null;
-              if (item.split === "learning") {
-                const reasons = Object.fromEntries(
-                  metrics.diffs
-                    .filter(
-                      (d) => d.op === "delete" && d.section === "diagnoses",
-                    )
-                    .map((d) => [
-                      `diagnoses:${d.beforeIndex}`,
-                      d.itemBefore?.status === "finding"
-                        ? "不该算诊断"
-                        : "资料里没有",
-                    ]),
-                );
-                const saved = await request(
-                  `/api/pending-actions/${action.id}/review-draft`,
-                  "PATCH",
-                  { payload: final, reasons, expectedRevision: 0 },
-                );
-                confirmed = await request(
-                  `/api/pending-actions/${action.id}/confirm`,
-                  "POST",
-                  {
-                    payload: final,
-                    reviewMs: 60000,
-                    expectedRevision: saved.reviewRevision,
-                  },
-                );
-                for (const m of confirmed.habitSuggestions || []) {
-                  const judgment =
-                    m.rule?.type === "style_rule" && styleCalibration.usable
-                      ? await styleCalibration.judge(m, persona)
-                      : evaluateHabit(m, persona);
-                  const { unsafe } = judgment;
-                  if (unsafe) run.unsafeLearned++;
-                  if (judgment.correct === false) {
-                    await request(
-                      `/api/learning/habits/${m.id}/decision`,
-                      "POST",
-                      { decision: "undo" },
-                    );
-                  }
-                  run.habits.push({
-                    id: m.id,
-                    rule: m.rule,
-                    origin: m.origin,
-                    ...judgment,
-                    dryrun: m.dryrun,
-                  });
-                }
-              } else
-                await request(
-                  `/api/pending-actions/${action.id}/reject`,
-                  "POST",
-                  {},
-                );
-              const filename = `${group}-${personaId}-${seed}-${item.id}.json`;
-              run.files.push(filename);
-              await writeFile(
-                join(output, filename),
-                JSON.stringify(
-                  {
-                    row,
-                    draft: action.payload,
-                    final,
-                    confirmed,
-                    requests: requests.slice(beforeRequests),
-                  },
-                  null,
-                  2,
-                ),
-              );
-              console.log(
-                `${group} ${personaId}/${seed} ${index + 1}/${learning.length + heldout.length} ${item.id}: SER=${row.ser.toFixed(3)} F1=${row.f1.toFixed(3)}`,
-              );
-            }
-            if (release && group === "C")
-              run.selfHealing = await selfHealingProbe(replaySample, persona);
-          } finally {
-            await server.shutdown();
           }
+          const learning = shuffle(
+              manifest.patients.filter((p) => p.split === "learning"),
+              seed,
+            ).slice(0, matrix.learningPatients),
+            heldout = release
+              ? manifest.patients.filter((p) => p.split === "holdout")
+              : [];
+          for (const [index, item] of [...learning, ...heldout].entries()) {
+            tracking.activePatient = item.id;
+            const beforeRequests = requests.length,
+              beforeChars = tracking.inputChars,
+              beforeTokens = tracking.inputTokens,
+              beforeMissingUsage = tracking.missingUsage,
+              start = Date.now();
+            const gold = JSON.parse(
+                await readFile(join(root, "patients", item.id, "gold.json")),
+              ),
+              final = renderLearningGold(gold, persona);
+            const session = await request("/api/sessions", "POST", {
+              title: "上传资料建档",
+            });
+            for (const filename of item.materials) {
+              const buffer = await readFile(
+                join(root, "patients", item.id, "materials", filename),
+              );
+              await request(
+                `/api/sessions/${session.id}/files`,
+                "POST",
+                /\.png$/i.test(filename)
+                  ? { name: filename, image: buffer.toString("base64") }
+                  : { name: filename, text: buffer.toString("utf8") },
+              );
+            }
+            const correction =
+              group.startsWith("C") && [4, 14].includes(index)
+                ? `${persona.stated[index === 4 ? 0 : 1]}；${persona.patientOnly}`
+                : "";
+            const started = await request(
+              `/api/sessions/${session.id}/intake-job`,
+              "POST",
+              { correction, externalConsent: true },
+            );
+            run.statedSaved += started.job.remembered?.length || 0;
+            if (
+              started.job.remembered?.some((m) =>
+                m.content.includes(persona.patientOnly),
+              )
+            )
+              run.falseStated++;
+            let job = started.job;
+            const deadline = Date.now() + 600000;
+            while (job.status === "running") {
+              if (Date.now() > deadline) throw new Error("建档超时");
+              await new Promise((r) => setTimeout(r, 500));
+              job = (await request(`/api/sessions/${session.id}/intake-job`))
+                .job;
+            }
+            if (job.status === "failed" || job.status === "interrupted")
+              throw new Error(job.error || job.progress);
+            const actions = (
+              await request(
+                `/api/pending-actions?type=patient-create&sourceSessionId=${session.id}`,
+              )
+            ).actions;
+            if (actions.length !== 1) throw new Error("模型未生成唯一草稿");
+            const action = actions[0],
+              metrics = learningMetrics(action.payload, final, {
+                ...gold,
+                diagnoses: gold.diagnoses.filter(
+                  (d) => !persona.excludeFindings || d.status !== "finding",
+                ),
+              });
+            const row = {
+              group,
+              persona: personaId,
+              seed,
+              patient: item.id,
+              sequence: index + 1,
+              split: item.split,
+              ...metrics,
+              durationMs: Date.now() - start,
+              inputChars: tracking.inputChars - beforeChars,
+              inputTokens:
+                tracking.missingUsage === beforeMissingUsage
+                  ? tracking.inputTokens - beforeTokens
+                  : null,
+              contextChars: action.payload.learningContext?.chars || 0,
+            };
+            rows.push(row);
+            if (
+              !replaySample &&
+              action.payload.diagnoses?.some((d) =>
+                TERM_GROUPS.some((g) => g.includes(d.name)),
+              )
+            )
+              replaySample = action.payload;
+            for (const id of new Set(
+              (action.payload.habitChanges || []).map((c) => c.habitId),
+            )) {
+              const habit = server.doctor.memoryRow(id);
+              if (habit.origin !== "learned" || !habit.dryrun) continue;
+              const trial = dryRunRule(habit.rule, [
+                { ai: action.payload.preHabitPayload, final },
+              ]);
+              const appliedChanges = action.payload.habitChanges.filter(
+                (c) => c.habitId === id,
+              ).length;
+              const precision =
+                habit.dryrun.correct /
+                Math.max(1, habit.dryrun.correct + habit.dryrun.wrong);
+              run.predictionErrors.push({
+                habitId: id,
+                predicted: appliedChanges * precision,
+                actual: trial.correct,
+              });
+            }
+            if (!localModel(provider) && group === "C-no-examples")
+              for (const req of requests.slice(beforeRequests)) {
+                const text = JSON.stringify(req.messages);
+                run.privacyLeaks += canaries.filter(
+                  (c) => c.id !== item.id && text.includes(c.text),
+                ).length;
+              }
+            // Replay each trial's own evidence with its frozen rule: the audit records
+            // both prediction and actual item savings, without using the model as judge.
+
+            // Holdout records never enter learning or reference history.
+            let confirmed = null;
+            if (item.split === "learning") {
+              const reasons = Object.fromEntries(
+                metrics.diffs
+                  .filter((d) => d.op === "delete" && d.section === "diagnoses")
+                  .map((d) => [
+                    `diagnoses:${d.beforeIndex}`,
+                    d.itemBefore?.status === "finding"
+                      ? "不该算诊断"
+                      : "资料里没有",
+                  ]),
+              );
+              const saved = await request(
+                `/api/pending-actions/${action.id}/review-draft`,
+                "PATCH",
+                { payload: final, reasons, expectedRevision: 0 },
+              );
+              confirmed = await request(
+                `/api/pending-actions/${action.id}/confirm`,
+                "POST",
+                {
+                  payload: final,
+                  reviewMs: 60000,
+                  expectedRevision: saved.reviewRevision,
+                },
+              );
+              for (const m of confirmed.habitSuggestions || []) {
+                const judgment =
+                  m.rule?.type === "style_rule" && styleCalibration.usable
+                    ? await styleCalibration.judge(m, persona)
+                    : evaluateHabit(m, persona);
+                const { unsafe } = judgment;
+                if (unsafe) run.unsafeLearned++;
+                if (judgment.correct === false) {
+                  await request(
+                    `/api/learning/habits/${m.id}/decision`,
+                    "POST",
+                    { decision: "undo" },
+                  );
+                }
+                run.habits.push({
+                  id: m.id,
+                  rule: m.rule,
+                  origin: m.origin,
+                  ...judgment,
+                  dryrun: m.dryrun,
+                });
+              }
+            } else
+              await request(
+                `/api/pending-actions/${action.id}/reject`,
+                "POST",
+                {},
+              );
+            const filename = `${group}-${personaId}-${seed}-${item.id}.json`;
+            run.files.push(filename);
+            await writeFile(
+              join(output, filename),
+              JSON.stringify(
+                {
+                  row,
+                  draft: action.payload,
+                  final,
+                  confirmed,
+                  requests: requests.slice(beforeRequests),
+                },
+                null,
+                2,
+              ),
+            );
+            console.log(
+              `${group} ${personaId}/${seed} ${index + 1}/${learning.length + heldout.length} ${item.id}: SER=${row.ser.toFixed(3)} F1=${row.f1.toFixed(3)}`,
+            );
+          }
+          if (release && group === "C")
+            run.selfHealing = await selfHealingProbe(replaySample, persona);
+          run.completed = true;
+        } catch (error) {
+          run.error = String(error.message).replaceAll(
+            config.apiKey || "\u0000",
+            "[redacted]",
+          );
+          throw error;
+        } finally {
+          await writeFile(
+            join(output, `${group}-${personaId}-${seed}-run.json`),
+            JSON.stringify(run, null, 2),
+          );
+          await server.shutdown();
         }
+      },
+    );
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length)
+      throw new AggregateError(
+        failures.map((r) => r.reason),
+        `${failures.length} 个矩阵单元运行失败；已保留各单元结果`,
+      );
     const summary = summarizeLearning(rows),
       gates = Object.fromEntries(
         Object.keys(protocol.gates).map((g) => [g, { status: "unverified" }]),
@@ -415,13 +448,20 @@ if (!configPath) {
           c.late.ser <= a.late.ser * 0.7 &&
           summary.pairedLateCI95?.[1] < 0,
       );
-      if (b?.late?.count) flag("G2", b.late.f1 >= a.late.f1);
+      if (b?.overall?.count)
+        flag(
+          "G2",
+          b.overall.f1 >= a.overall.f1 ||
+            (summary.paired.B?.overall.ci95?.[1] ?? Infinity) < 0,
+        );
       flag(
         "G3",
         [b, c]
           .filter(Boolean)
           .every(
-            (g) => g.late.f1 >= a.late.f1 - 0.02 && g.late.fer <= a.late.fer,
+            (g) =>
+              g.overall.f1 >= a.overall.f1 - 0.02 &&
+              g.overall.fer <= a.overall.fer,
           ),
       );
       flag("G4", c.holdout.ser <= a.holdout.ser * 0.8);
@@ -582,6 +622,7 @@ if (!configPath) {
       model: { provider: config.provider, model: config.model },
       mode: release ? "release" : "development",
       calls,
+      concurrency,
       rows: rows.length,
       summary,
       gates,

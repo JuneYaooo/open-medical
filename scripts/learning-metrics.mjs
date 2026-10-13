@@ -147,6 +147,7 @@ export function summarizeLearning(rows) {
   for (const group of groups) {
     summaries[group] = {};
     for (const [label, lo, hi] of [
+      ["overall", 1, 40],
       ["early", 1, 10],
       ["middle", 11, 20],
       ["late", 21, 30],
@@ -159,51 +160,65 @@ export function summarizeLearning(rows) {
       for (const r of selected) {
         const key = `${r.persona}:${r.seed}`;
         if (!units.has(key)) units.set(key, []);
-        units.get(key).push(r.ser);
+        units.get(key).push(r);
       }
       summaries[group][label] = {
         count: selected.length,
         ser: mean(selected.map((r) => r.ser)),
         fer: mean(selected.map((r) => r.fer)),
         f1: mean(selected.map((r) => r.f1)),
-        serCI95: bootstrap([...units.values()].map(mean)),
+        ...Object.fromEntries(
+          ["ser", "fer", "f1"].map((metric) => [
+            `${metric}CI95`,
+            bootstrap(
+              [...units.values()].map((unit) =>
+                mean(unit.map((row) => row[metric])),
+              ),
+            ),
+          ]),
+        ),
       };
     }
   }
-  const pairs = rows
-    .filter((r) => r.group === "C")
-    .map((r) => {
-      const a = rows.find(
-        (a) =>
-          a.group === "A" &&
-          a.persona === r.persona &&
-          a.seed === r.seed &&
-          a.patient === r.patient,
-      );
-      return a
-        ? {
-            persona: r.persona,
-            seed: r.seed,
-            sequence: r.sequence,
-            difference: r.ser - a.ser,
-          }
-        : null;
-    })
-    .filter(Boolean);
-  const units = new Map();
-  for (const p of pairs.filter((p) => p.sequence >= 21 && p.sequence <= 30)) {
-    const key = `${p.persona}:${p.seed}`;
-    if (!units.has(key)) units.set(key, []);
-    units.get(key).push(p.difference);
+  const paired = {};
+  for (const group of groups.filter((g) => g !== "A")) {
+    paired[group] = {};
+    for (const [label, lo, hi] of [
+      ["overall", 1, 40],
+      ["late", 21, 30],
+    ]) {
+      const units = new Map(),
+        differences = [];
+      for (const r of rows.filter(
+        (r) => r.group === group && r.sequence >= lo && r.sequence <= hi,
+      )) {
+        const a = rows.find(
+          (a) =>
+            a.group === "A" &&
+            a.persona === r.persona &&
+            a.seed === r.seed &&
+            a.patient === r.patient &&
+            a.sequence === r.sequence,
+        );
+        if (!a) continue;
+        const key = `${r.persona}:${r.seed}`,
+          difference = r.ser - a.ser;
+        if (!units.has(key)) units.set(key, []);
+        units.get(key).push(difference);
+        differences.push(difference);
+      }
+      paired[group][label] = {
+        difference: mean(differences),
+        ci95: bootstrap([...units.values()].map(mean)),
+        pairs: differences.length,
+      };
+    }
   }
   return {
     groups: summaries,
-    pairedLateDifference: mean(
-      pairs
-        .filter((p) => p.sequence >= 21 && p.sequence <= 30)
-        .map((p) => p.difference),
-    ),
-    pairedLateCI95: bootstrap([...units.values()].map(mean)),
+    paired,
+    pairedLateDifference: paired.C?.late.difference ?? null,
+    pairedLateCI95: paired.C?.late.ci95 ?? null,
   };
 }
 

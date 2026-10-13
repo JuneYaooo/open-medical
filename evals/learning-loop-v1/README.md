@@ -30,6 +30,8 @@ node scripts/evaluate-learning.mjs --release --model-config /path/to/private-mod
 node --test tests/learning-evaluation.test.mjs
 ```
 
+默认顺序执行；可用 `--concurrency 2` 至 `12` 并发独立矩阵单元。同一单元内的患者仍按顺序建档，数据库、提供方及用量统计互相隔离。并发可能影响服务排队和耗时，报告会记录并发数；开销结论需结合该负载解释。每个单元的完成或失败状态分别落盘，某个单元失败不会中断其余单元，整体退出码仍为失败。
+
 调用预算覆盖建档与风格评审。模型未返回用量时，输入 token 指标保持未知，不用字符数冒充 token 数。
 
 风格校准文件结构：`{ "reviewer": "审核人", "examples": [...] }`。至少 20 条，每条包含 `content`、`persona`（对应人设的写法字段）、`expected`（布尔值）和 `expectedUnsafe`（布尔值）。审核标签不发送给评审模型；一致率不足 90% 时，风格判定不得用于放行。
