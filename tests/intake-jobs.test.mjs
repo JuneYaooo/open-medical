@@ -63,7 +63,7 @@ test('a repeated proposal in one intake keeps the complete draft and finalizes w
     if (step === 1) return {message:{role:'assistant',tool_calls:[tool('save_intake_notes',{notes:'合成患者，资料记录高血压。来源 source.txt 第1行。'})]}};
     if (step === 2) return {message:{role:'assistant',tool_calls:[tool('read_personal_context',{})]}};
     if (step === 3) return {message:{role:'assistant',tool_calls:[
-      tool('patient_create_propose',{name:'合成患者',summary:'完整草稿',diagnoses:[{name:'高血压',status:'confirmed',source:'source.txt 第1行'}],clinicalSummary:{text:'资料记载高血压。',source:'source.txt 第1行'}},'first'),
+      tool('patient_create_propose',{name:'合成患者',phone:'',summary:'完整草稿',diagnoses:[{name:'高血压',status:'confirmed',source:'source.txt 第1行'}],clinicalSummary:{text:'资料记载高血压。',source:'source.txt 第1行'}},'first'),
       tool('patient_create_propose',{name:'合成患者',summary:'占位校验'},'duplicate')
     ]}};
     throw new Error('the existing proposal should finish intake without another request');
@@ -76,6 +76,7 @@ test('a repeated proposal in one intake keeps the complete draft and finalizes w
   assert.equal(round,4);
   const pending=(await f.json(`/api/pending-actions?type=patient-create&sourceSessionId=${s.id}`)).data.actions;
   assert.equal(pending.length,1);
+  assert.equal(pending[0].payload.phone,'');
   assert.equal(pending[0].payload.diagnoses[0].name,'高血压');
   assert.equal(pending[0].payload.clinicalSummary.text,'资料记载高血压。');
   const firstId=pending[0].id;

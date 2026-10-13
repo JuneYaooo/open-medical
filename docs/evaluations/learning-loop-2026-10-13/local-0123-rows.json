@@ -1,0 +1,22 @@
+[
+  {
+    "group": "A",
+    "persona": "D1",
+    "seed": 17,
+    "patient": "P013",
+    "sequence": 1,
+    "split": "learning",
+    "ser": 0.3076923076923077,
+    "fer": 0.38461538461538464,
+    "f1": 0.4615384615384615,
+    "precision": 0.42857142857142855,
+    "recall": 0.5,
+    "summaryDistance": 0.02564102564102564,
+    "editRate": 0.6923076923076923,
+    "aiItems": 13,
+    "durationMs": 208296,
+    "inputChars": 114241,
+    "inputTokens": 64834,
+    "contextChars": 0
+  }
+]

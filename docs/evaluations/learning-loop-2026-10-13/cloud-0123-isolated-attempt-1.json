@@ -1,0 +1,296 @@
+{
+  "version": "0.9.123",
+  "status": "failed",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "concurrency": 5,
+  "calls": 1193,
+  "completed": 268,
+  "completedCells": 5,
+  "error": "40 个矩阵单元运行失败；已保留各单元结果",
+  "failures": [
+    {
+      "group": "A",
+      "persona": "D1",
+      "seed": 41,
+      "completed": 20,
+      "error": "执行失败，请检查模型和文件配置"
+    },
+    {
+      "group": "B",
+      "persona": "D1",
+      "seed": 41,
+      "completed": 16,
+      "error": "执行失败，请检查模型和文件配置"
+    },
+    {
+      "group": "C",
+      "persona": "D1",
+      "seed": 41,
+      "completed": 12,
+      "error": "执行失败，请检查模型和文件配置"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D1",
+      "seed": 41,
+      "completed": 10,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D1",
+      "seed": 41,
+      "completed": 10,
+      "error": "执行失败，请检查模型和文件配置"
+    },
+    {
+      "group": "A",
+      "persona": "D1",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D1",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D1",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D1",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D1",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D2",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D2",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D2",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D2",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D2",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D2",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D2",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D2",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D2",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D2",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D2",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D2",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D2",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D2",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D2",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D3",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D3",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D3",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D3",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D3",
+      "seed": 17,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D3",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D3",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D3",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D3",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D3",
+      "seed": 41,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "A",
+      "persona": "D3",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "B",
+      "persona": "D3",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C",
+      "persona": "D3",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-postprocess",
+      "persona": "D3",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    },
+    {
+      "group": "C-no-examples",
+      "persona": "D3",
+      "seed": 83,
+      "completed": 0,
+      "error": "模型连接失败，有限重试后仍不可用；检查点已保留"
+    }
+  ],
+  "note": "No local model, build, or test suite was running during this attempt. A fresh-process connectivity check succeeded after failure; root cause unconfirmed."
+}

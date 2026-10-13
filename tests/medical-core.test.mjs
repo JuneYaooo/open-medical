@@ -138,6 +138,16 @@ test("server registered medical plugins are schema checked and provenance marked
     plugins: new Map([["medical_demo", { definition, execute: () => ({}) }]]),
   }), /value/);
 });
+test("optional blank plugin text is accepted without weakening required text", async () => {
+  const definition = { type: "function", function: { name: "optional_text", parameters: {
+    type: "object", properties: { name: { type: "string" }, phone: { type: "string" }, source: { type: "string", minLength: 1 } }, required: ["name"],
+  } } };
+  const context = { definitions: [definition], plugins: new Map([["optional_text", { definition, execute: args => args }]]) };
+  assert.equal((await runTool("optional_text", { name: "合成患者", phone: "" }, context)).phone, "");
+  for (const args of [{ name: "" }, { name: "合成患者", source: "" }, { name: "合成患者", phone: null }, { name: "合成患者", phone: "1".repeat(6001) }])
+    await assert.rejects(() => runTool("optional_text", args, context));
+});
+
 test("async plugin results are awaited, not swallowed into provenance stubs", async () => {
   const definition = {
     type: "function",

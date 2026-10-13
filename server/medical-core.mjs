@@ -188,7 +188,11 @@ export async function runTool(
     );
   for (const [key, value] of Object.entries(args)) {
     const type = schema.properties[key].type;
-    if (type === "string") string(value, key, 6000);
+    // Optional fields such as an unknown phone number may be explicitly empty.
+    // Keep required text and explicit minimum lengths non-empty.
+    const optionalEmpty = value === "" && !(schema.required || []).includes(key)
+      && !(schema.properties[key].minLength > 0);
+    if (type === "string" && !optionalEmpty) string(value, key, 6000);
     if (type === "integer")
       check(
         Number.isInteger(value) && value > 0,
