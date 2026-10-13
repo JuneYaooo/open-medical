@@ -47,15 +47,14 @@ export function PluginCenter() {
 // 自动启用连接。每步一个按钮,状态由 /api/wechat-exp/status 轮询驱动。
 // 插件中心和随访连接页共用;onDone 在步骤③连接成功后回调连接对象,便于宿主刷新状态。
 export function PluginSetup({entry,onDone}) {
- const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[accounts,setAccounts]=useState(null),[wxid,setWxid]=useState('');
+ const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[accounts,setAccounts]=useState(null),[wxid,setWxid]=useState('');
  const poll=async()=>{try{const s=await api('/api/wechat-exp/status','GET');setStatus(s);return s;}catch{return null;}};
  useEffect(()=>{poll();},[]);
  // 仅在任务进行中持续轮询;空闲时不轮询,避免页面永远达不到 networkidle(会挂起 UI 测试的 goto)。
  useEffect(()=>{ if(!status?.job) return; const t=setInterval(poll,2500); return()=>clearInterval(t); },[status?.job]);
- const runStep=async fn=>{setBusy(true);setError('');try{await fn();await poll();}catch(e){setError(e.message);}finally{setBusy(false);}};
+ const runStep=async fn=>{setBusy(true);setError('');setNotice('');try{await fn();await poll();}catch(e){setError(e.message);}finally{setBusy(false);}};
  const s=status||{toolReady:false,backupReady:false,account:'',bridgeRunning:false,job:null,warning:''};
  const connection=entry.connection||{channel:entry.manifest.id,endpoint:entry.manifest.defaultEndpoint};
- const enabled=async()=>{try{const settings=await api('/api/chat-followups/settings');const c=(settings.connections||[]).find(x=>x.channel===connection.channel);return Boolean(c?.enabled);}catch{return false;}};
  const step1=!s.toolReady&&(
   <div className="toolbar-actions">
    <button disabled={busy} onClick={()=>runStep(()=>api('/api/wechat-exp/download','POST',{}))}>{s.job?.kind==='download'?(s.job.note||'正在下载…'):'① 下载导出组件（约 45MB）'}</button>
@@ -84,6 +83,7 @@ export function PluginSetup({entry,onDone}) {
   <p className="muted">✓ 组件已就绪 · 备份完成（{when(s.lastBackupAt)}）· {s.bridgeRunning?'导入服务运行中':'导入服务随连接启停'}</p>);
  return <div className="chat-setup-steps" style={{display:'block'}}>
   {step1}{step2}{step3}{doneStep}
+  {notice&&<p role="status">{notice}</p>}
   {error&&<p role="alert">{error}</p>}
   {s.lastError&&<p role="alert">上次任务失败：{s.lastError}</p>}
  </div>;

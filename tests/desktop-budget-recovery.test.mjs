@@ -75,7 +75,7 @@ test('model settings UI rejects full-window output for both save and probe, then
   await dialog.getByRole('combobox', {name:'服务商',exact:true}).selectOption('deepseek');
   await dialog.getByRole('combobox', {name:'模型',exact:true}).selectOption('__custom__');
   await dialog.getByLabel('模型 ID', {exact:true}).fill('deepseek-flash');
-  await dialog.getByLabel(/^API Key/).fill('synthetic-ui-test-key');
+  await dialog.getByPlaceholder('粘贴 API Key', { exact: true }).fill('synthetic-ui-test-key');
   await dialog.getByText(/当前生效：1,000,000 Token/).waitFor();
   await dialog.getByRole('button', {name:'保存并启用',exact:true}).click();
   await dialog.getByRole('status').filter({hasText:'已保存并启用'}).waitFor();

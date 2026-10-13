@@ -169,7 +169,7 @@ test('预算内的单图保持原始字节不重压；解码失败与压不进�
   assert.equal(kept.name, 'tiny.png');
   assert.equal(kept.image, Buffer.from(raw).toString('base64'), '预算内不做有损重编码');
 
-  const ops = stubCanvas([6_000_000]);
+  stubCanvas([6_000_000]);
   globalThis.createImageBitmap = async () => { throw new Error('bad image'); };
   await assert.rejects(importMaterial({ name: 'broken.png', size: 6_000_000, arrayBuffer: async () => new Uint8Array(6_000_000).buffer }), /无法解码/);
 

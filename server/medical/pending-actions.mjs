@@ -238,7 +238,7 @@ export class PendingActions {
   // 只回元数据，完整文件内容仅在 row(id)（确认时）读取。
   slimPayload(type, payload) {
     if (type !== "ext-install" || !payload?.install) return payload;
-    return { ...payload, install: { ...payload.install, skills: (payload.install.skills || []).map(({ files, body, ...meta }) => ({ ...meta, fileCount: Array.isArray(files) ? files.length : files })) } };
+    return { ...payload, install: { ...payload.install, skills: (payload.install.skills || []).map(({ files, body: _body, ...meta }) => ({ ...meta, fileCount: Array.isArray(files) ? files.length : files })) } };
   }
   list({ patientId, status = "pending", type, sourceSessionId, limit = 100, offset = 0 } = {}) {
     check(

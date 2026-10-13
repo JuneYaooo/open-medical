@@ -4,7 +4,6 @@ import {
   mkdirSync,
   chmodSync,
   openSync,
-  closeSync,
   writeFileSync,
   readFileSync,
   unlinkSync,

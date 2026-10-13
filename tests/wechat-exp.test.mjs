@@ -25,7 +25,8 @@ function makeService({ backupOutput = '备份完成' } = {}) {
   const service = new WechatExpService({
     dataDir: 'output/test-wechat-exp-data', log: () => {},
     spawnTool: async args => {
-      const o = args[args.indexOf('-o') + 1];
+      const outputIndex = args.indexOf('-o');
+      const o = outputIndex >= 0 ? args[outputIndex + 1] : null;
       if (o) {
         mkdirSync(o, { recursive: true });
         if (args.includes('contacts')) writeFileSync(join(o, 'contacts.csv'), CONTACTS_CSV);
@@ -80,7 +81,7 @@ test('api endpoints reject unknown paths and unconfigured accounts', async () =>
   rmSync('output/test-wechat-exp-data', { recursive: true, force: true });
 });
 
-test('wechat-exp api routes: status reflects tool and backup readiness', async t => {
+test('wechat-exp api routes: status reflects tool and backup readiness', async () => {
   const service = makeService({});
   const sent = [];
   const ctx = { body: async () => ({}), send: (status, value) => { sent.push({ status, value }); return true; } };

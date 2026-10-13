@@ -95,7 +95,7 @@ test("根级 SKILL.md 的技能包整体安装,文本与二进制文件逐字落
   assert.equal(extensions.list({ kind: "skill" }).length, 1);
 });
 
-test("多技能包按编号选择;重名、内置冲突与坏 frontmatter 跳过并说明", async (t) => {
+test("多技能包按编号选择;重名、内置冲突与坏 frontmatter 跳过并说明", async (_t) => {
   const url = "https://github.com/o/pack";
   const archive = await tarBuffer([
     { name: "pack/a/SKILL.md", data: Buffer.from(SKILL_MD("a")) },
@@ -131,7 +131,7 @@ test("多技能包按编号选择;重名、内置冲突与坏 frontmatter 跳过
   assert.equal(updatable.skills[0].previousVersion, 3);
 });
 
-test("超限文件与坏 frontmatter 被跳过;超过 8 个技能必须选择", async (t) => {
+test("超限文件与坏 frontmatter 被跳过;超过 8 个技能必须选择", async (_t) => {
   const url = "https://github.com/o/mixed";
   const mixed = await tarBuffer([
     { name: "ok/SKILL.md", data: Buffer.from(SKILL_MD("ok")) },
@@ -151,7 +151,7 @@ test("超限文件与坏 frontmatter 被跳过;超过 8 个技能必须选择", 
   assert.deepEqual(picked.skills.map((s) => s.id), ["s0", "s1"]);
 });
 
-test("只接受 HTTPS 地址;404 与坏包错误可读", async (t) => {
+test("只接受 HTTPS 地址;404 与坏包错误可读", async (_t) => {
   await assert.rejects(() => stageSkillImport({ url: "http://github.com/o/r", fetchImpl: fetchServing(Buffer.alloc(8)), resolveProxy: noProxy }), /GitHub 仓库链接/);
   await assert.rejects(() => stageSkillImport({ url: "https://example.com/pack.zip", fetchImpl: fetchServing(Buffer.alloc(8)), resolveProxy: noProxy }), /压缩包/);
   const missing = async () => ({ ok: false, status: 404, url: "x" });

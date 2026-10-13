@@ -14,7 +14,7 @@ function Source({ value }) {
 }
 // 从病程/诊断备注里提取引用的原文文件名（与「查看原文」跳转共用）。
 export function citedFileName(text) {
-  const m = String(text || '').match(/([^\s,，、;；:：()（）\[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/i);
+  const m = String(text || '').match(/([^\s,，、;；:：()（）[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/i);
   return m ? m[1] : '';
 }
 function LabPlot({ group }) {

@@ -196,23 +196,23 @@ test("collection deletion checks current contents, removes chunks and vectors, p
   assert.equal(library.store.db.prepare("SELECT count(*) AS n FROM guideline_chunks WHERE doc_id=?").get(first.id).n, 0);
   assert.equal(library.collections().some(c => c.name === "待删除"), false);
   await assert.rejects(library.removeCollection("待删除", current), { code: "NOT_FOUND" });
-  const implicit = library.collections()[0];
+  const implicit = library.collections().find(c => c.name === "保留库");
   await library.removeCollection(implicit.name, implicit);
-  assert.deepEqual(library.collections(), []);
+  assert.deepEqual(library.collections().map(c => c.name), ["患教素材"]);
 });
 
 test("empty collection deletion rolls back on audit failure and rejects concurrent indexing", async (t) => {
   const library = newLibrary(t);
   library.saveCollection("空库", { expectedRevision: 0, description: "测试", whenToUse: "测试" });
-  const current = library.collections()[0];
+  const current = library.collections().find(c => c.name === "空库");
   library.activeIndexWrites = 1;
   await assert.rejects(library.removeCollection("空库", current), { code: "KNOWLEDGE_BUSY" });
   library.activeIndexWrites = 0;
   const audit = library.store.audit;
   library.store.audit = () => { throw new Error("audit failed"); };
   await assert.rejects(library.removeCollection("空库", current), /audit failed/);
-  assert.equal(library.collections().length, 1);
+  assert.ok(library.collections().some(c => c.name === "空库"));
   library.store.audit = audit;
   await library.removeCollection("空库", current);
-  assert.deepEqual(library.collections(), []);
+  assert.deepEqual(library.collections().map(c => c.name), ["患教素材"]);
 });

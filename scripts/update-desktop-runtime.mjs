@@ -19,6 +19,7 @@ import {
   rename,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 
 const signing =
@@ -44,7 +45,7 @@ const stagedApp = join(staging, "Open Medical.app");
 const previous = join(staging, "previous.app");
 let committed = false;
 try {
-  await cp(app, stagedApp, { recursive: true });
+  await cp(app, stagedApp, { recursive: true, verbatimSymlinks: true });
   const target = join(stagedApp, "Contents/Resources/app");
   for (const entry of [
     "dist",
@@ -75,6 +76,8 @@ try {
     await readFile(join(root, "package.json"), "utf8"),
   );
   pkg.version = sourcePackage.version;
+  for (const key of ["CFBundleShortVersionString", "CFBundleVersion"])
+    execFileSync("/usr/bin/plutil", ["-replace", key, "-string", pkg.version, join(stagedApp, "Contents/Info.plist")]);
   // Refresh inside staging so failed copies leave the previous bundle intact.
   await bundleRuntimeDependencies(root, target, { clean: true });
   pkg.dependencies = Object.fromEntries(

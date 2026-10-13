@@ -41,7 +41,7 @@ const iso = () => new Date().toISOString();
 // 统计评分（assessOcrQuality）对"页眉词完整+正文乱码"的词汤式页面会误判
 // 良好；模型整理时却明确知道哪份材料缺数值——把它的判断回写为质量标注。
 const UNREADABLE_MARKER = /不可读|无法辨认|难以辨认|无法识别|缺字|乱码|字迹不清|模糊不清/i;
-const FILE_REF = /([^\s,，、;；:：()（）\[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/gi;
+const FILE_REF = /([^\s,，、;；:：()（）[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/gi;
 const sessionKind = (w) => w?.kind === "session";
 // Extraction steps a run performs on the way to its deliverable.
 const SUPPORTING = new Set(["clinical_timeline", "observations"]);

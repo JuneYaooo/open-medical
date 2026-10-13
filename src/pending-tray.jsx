@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, X } from "lucide-react";
 import { api } from "./agent-runtime";
 import "./care.css";
@@ -49,6 +49,7 @@ function Preview({ action }) {
 
 // 聊天中由 care_* 工具发起的外发/计划/设置提案；医生在此一键确认。
 export function PendingTray() {
+  const tray = useRef(null);
   const [actions, setActions] = useState([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState("");
@@ -63,6 +64,18 @@ export function PendingTray() {
     return () => { clearInterval(timer); window.removeEventListener(PENDING_REFRESH_EVENT, load); };
   }, [load]);
   useEffect(() => { if (!actions.length) setOpen(false); }, [actions.length]);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event) => {
+      if (event.type === "keydown" ? event.key === "Escape" : !tray.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [open]);
   async function resolve(action, decision) {
     setBusy(action.id); setError("");
     try { await api(`/api/pending-actions/${action.id}/${decision}`, "POST", {}); await load(); }
@@ -70,7 +83,7 @@ export function PendingTray() {
     finally { setBusy(""); }
   }
   if (!actions.length) return null;
-  return <div className="pending-tray">
+  return <div className="pending-tray" ref={tray}>
     {open && <section className="pending-panel" aria-label="待确认的操作">
       <header><strong>待你确认（{actions.length}）</strong><button className="icon-button" aria-label="收起" onClick={() => setOpen(false)}><X size={16} /></button></header>
       {error && <p role="alert" className="care-error">{error}</p>}

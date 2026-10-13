@@ -5,7 +5,7 @@
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readdirSync, readFileSync, existsSync, mkdirSync, rmSync, renameSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { check, AppError } from "./errors.mjs";
@@ -14,7 +14,6 @@ const run = promisify(execFile);
 const RELEASE_API = "https://api.github.com/repos/sunhanaix/pc_wechat_exp/releases/latest";
 const WARNING = "⚠️ 该组件需要从微信进程内存提取数据库密钥，此行为可能被微信感知上报，存在账号被平台处罚的先例（一次性备份风险较低但不为零）。请仅用你自己拥有的账号与数据，知情后启用。";
 const CONTACTS_TTL = 5 * 60_000, CHAT_TTL = 5 * 60_000;
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const clip = (value, n) => { const s = String(value || ""); return s.length > n ? `${s.slice(0, n)}…` : s; };
 const splitCsvLine = line => {
   const cells = []; let cur = "", inQ = false;

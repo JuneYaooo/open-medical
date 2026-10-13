@@ -19,7 +19,7 @@ export function localOcrService() {
 
 // 本机识别一层：PaddleOCR 服务（如已配置）→ macOS 原生 OCR → Windows 系统
 // 识别（Windows.Media.Ocr）。返回 { available, lines, engine? }；服务不可达
-// 时自动落回系统组件，组件级失败（WINDOWS_OCR）折算为不可用，由调用方决定
+// 时自动落回系统组件，组件级失败折算为不可用，由调用方决定
 // 下一步，其他错误原样抛出。
 export async function localOcrLines(bytes, signal) {
   const service = localOcrService();
@@ -33,8 +33,14 @@ export async function localOcrLines(bytes, signal) {
     }
   }
   if (localOcrAvailable()) {
-    const result = await recognizeImage(bytes, signal);
-    return { available: true, lines: result.lines, engine: "system" };
+    try {
+      const result = await recognizeImage(bytes, signal);
+      return { available: true, lines: result.lines, engine: "system" };
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (!["OCR_FAILED", "OCR_UNAVAILABLE"].includes(error?.code)) throw error;
+      return { available: false, lines: [] };
+    }
   }
   if (windowsOcrAvailable()) {
     try {

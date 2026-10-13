@@ -1366,7 +1366,6 @@ function App() {
     : null;
   return (
     <div className={`agent-app v6-shell mode-${view === "workspaces" ? workspaceDisplay : displayMode} ${medical ? "medical-shell" : ""} ${largeText ? "large-text" : ""}`}>
-      {medicalEnabled(config) && <PendingTray />}
       {medicalEnabled(config) && <IntakeBackground onOpen={() => openPatient({create: true, intakeOpen: Date.now()})} />}
       <a href="#main-content" className="skip-link">
         跳到工作区
@@ -1392,6 +1391,7 @@ function App() {
           </span>
         </div>
         <div className="top-actions">
+          {medical && <PendingTray />}
           {["workbench", "workspaces"].includes(view) && <div className="display-modes" role="group" aria-label="工作区显示方式">
             {[["work", "工作区"], ["split", "AI 半屏"], ["chat", "AI 全屏"]].map(([id,label]) => <button key={id} disabled={!["workbench","workspaces"].includes(view)} title={["workbench","workspaces"].includes(view)?label:"打开任务或项目后切换显示方式"} aria-pressed={(view==="workspaces"?workspaceDisplay:displayMode)===id} onClick={()=>{if(view==="workspaces")setWorkspaceDisplay(id);else {setDisplayMode(id);setInspector(id!=="chat");}}}>{label}</button>)}
           </div>

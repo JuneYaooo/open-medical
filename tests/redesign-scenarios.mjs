@@ -7,7 +7,7 @@ export const SCENARIOS = [
   {
     name: 'Agent 外壳：新任务醒目，业务与工具有固定归属',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  for (const label of ["新建任务", "任务记录", "项目文件", "患者", "资料与工具"]) {
+  for (const label of ["新建任务", "查看全部任务记录", "查看全部项目文件", "患者", "资料与工具"]) {
     assert.ok(await page.getByRole('button',{name:label,exact:true}).isVisible());
   }
   assert.equal(await page.locator('.scenario-tabs, .tool-slide, .advanced-nav').count(),0);
@@ -198,7 +198,7 @@ export const SCENARIOS = [
   {
     name: '项目：左栏「＋ 新建」打开项目创建入口',
     fn: async ({ page, seed: _seed, origin: _origin }) => {
-  await page.getByRole("button",{name:"项目文件",exact:true}).click();await page.getByRole("button",{name:"连接项目",exact:true}).click();
+  await page.getByRole("button",{name:"查看全部项目文件",exact:true}).click();await page.getByRole("button",{name:"连接项目",exact:true}).click();
   // 融合后：同一医疗外壳内弹出「连接项目工作区」modal，不再有独立工作区布局
   await page.waitForSelector(".modal-backdrop", { timeout: 10000 });
   assert.match(
@@ -362,7 +362,7 @@ export const SCENARIOS = [
     await page.locator(".composer textarea").fill("请整理本患者的病例材料，生成病历时间线，保留来源与行号。");
     await page.locator(".composer textarea").press("Enter");
     await page.waitForSelector(".artifact-inline", { timeout: 30000 });
-    await page.getByRole('button',{name:'任务记录',exact:true}).click();
+    await page.getByRole('button',{name:'查看全部任务记录',exact:true}).click();
     await page.getByRole('button',{name:'待复核',exact:true}).click();
     await page.locator('.task-directory-row').filter({hasText:'复核队列患者'}).click();
     await page.waitForSelector(".artifact-inline", { timeout: 10000 });
@@ -375,7 +375,7 @@ export const SCENARIOS = [
     await page.locator('.review-form button:has-text("确认通过")').click();
     await page.waitForSelector(".accept-bar .acc-badge.approved", { timeout: 8000 });
     await page.locator('button:has-text("‹ 返回对话")').click();
-    await page.getByRole('button',{name:'任务记录',exact:true}).click();
+    await page.getByRole('button',{name:'查看全部任务记录',exact:true}).click();
     await page.getByRole('button',{name:'待复核',exact:true}).click();
     assert.equal(await page.locator('.task-directory-row').count(),0);
   },
