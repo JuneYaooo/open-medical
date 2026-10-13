@@ -5,7 +5,7 @@ import { chromium } from 'playwright-core';
 import { dashboardLabGroups } from '../shared/patient-dashboard.mjs';
 import { fixture } from './helpers.mjs';
 
-test('lab visualization keeps units separate, preserves zero and disables ambiguous or incomplete trends',()=>{
+test('lab visualization keeps units separate, preserves zero and still draws single-day or conflicting records as scatter',()=>{
   const g=dashboardLabGroups([
     {item:'标志物',unit:'U/L',value:0,date:'2026-01-01'},
     {item:'标志物',unit:'U/L',value:10,date:'2026-02-01'},
@@ -16,9 +16,12 @@ test('lab visualization keeps units separate, preserves zero and disables ambigu
     {item:'无单位',value:1,date:'2026-01-01'}, {item:'无单位',value:2,date:'2026-02-01'},
     {item:'坏日期',unit:'U/L',value:1,date:'2026-02-30'}, {item:'坏日期',unit:'U/L',value:2,date:'2026-03-01'},
   ]);
-  assert.equal(g.length,5);assert.ok(g[0].canPlot);assert.equal(g[0].points[0].value,0);
-  assert.equal(g[1].canPlot,false);assert.equal(g[2].conflict,true);assert.equal(g[2].canPlot,false);
-  assert.equal(g[2].records.length,3);assert.equal(g[3].canPlot,false);assert.equal(g[4].canPlot,false);
+  assert.equal(g.length,5);
+  assert.ok(g[0].canPlot);assert.equal(g[0].points[0].value,0);assert.equal(g[0].distinctDates,2);
+  assert.ok(g[1].canPlot);assert.equal(g[1].points.length,1);assert.equal(g[1].distinctDates,1);
+  assert.equal(g[2].conflict,true);assert.ok(g[2].canPlot);assert.equal(g[2].points.length,3);assert.equal(g[2].records.length,3);assert.equal(g[2].distinctDates,2);
+  assert.ok(g[3].canPlot);assert.equal(g[3].distinctDates,2);
+  assert.ok(g[4].canPlot);assert.equal(g[4].points.length,1);assert.equal(g[4].distinctDates,1);
 });
 const chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 test('patient chart opens a complete visual dashboard with interactive trends, timeline and source text', {skip:!existsSync(chrome)},async t=>{
@@ -49,10 +52,13 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   await panel.getByRole('img',{name:'验收指标 U/L 检验趋势，2 次记录'}).waitFor();
   const table=panel.getByRole('table');assert.match(await table.innerText(),/0/);
   const select=panel.getByLabel('查看检验项目');
-  await select.selectOption(JSON.stringify(['验收指标','mg/L']));assert.equal(await panel.getByRole('img',{name:/检验趋势/}).count(),0);
+  await select.selectOption(JSON.stringify(['验收指标','mg/L']));
+  assert.equal(await panel.getByRole('img',{name:/检验趋势/}).count(),1);
+  await panel.getByText(/还连不成趋势线/).waitFor();
   assert.match(await panel.getByRole('table').innerText(),/8/);
   await select.selectOption(JSON.stringify(['冲突指标','U/L']));
-  await panel.getByText('同日存在不同数值，暂不连线，请核对下方记录及来源。').waitFor();
+  await panel.getByText(/散点并列、暂不连线/).waitFor();
+  assert.equal(await panel.getByRole('img',{name:/散点展示/}).count(),1);
   assert.equal(await panel.getByRole('table').locator('tbody tr').count(),2);
   await tabs.getByRole('button',{name:'就诊经过',exact:true}).click();
   assert.deepEqual(await panel.getByRole('region',{name:'就诊时间轴'}).locator('time').allTextContents(),['2026-02-01','2026-01-01']);

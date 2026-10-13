@@ -32,18 +32,21 @@ test("return visits appear the day before, the day itself and after, until an ou
   assert.equal(list[0].history[0].status, "scheduled");
 });
 
-test("new lab values are listed until the doctor marks them read", async (t) => {
+test("labs present at creation are the baseline; only later additions are listed until marked read", async (t) => {
   const f = await fixture(t, { followupOptions: { autoStart: false } });
   const p = (await f.json("/api/patients", "POST", { name: "检验患者", labs: [{ item: "肌酐", value: 80, unit: "umol/L", date: "2026-09-01" }] })).data;
-  let item = (await f.json("/api/doctor/overview?kind=tracking")).data.items.find((i) => i.id === `labs:${p.id}`);
-  assert.equal(item.title, "新检验结果 1 项"); assert.equal(item.action.tab, "labs");
-  assert.equal((await f.json(`/api/patients/${p.id}/labs/reviewed`, "POST", {})).data.remaining, 0);
-  assert.equal((await f.json("/api/doctor/overview?kind=tracking")).data.total, 0);
+  assert.equal((await f.json("/api/doctor/overview?kind=tracking")).data.items.find((i) => i.id === `labs:${p.id}`), undefined, "建档时就有的检验是基线，不算新结果");
+  assert.equal((await f.json(`/api/patients/${p.id}/labs/new`)).data.labs.length, 0);
   const current = (await f.json(`/api/patients/${p.id}`)).data;
   await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: current.revision, labs: [...current.labs, { item: "肌酐", value: 150, unit: "umol/L", date: "2026-09-28" }] });
-  item = (await f.json("/api/doctor/overview?kind=tracking")).data.items.find((i) => i.id === `labs:${p.id}`);
+  let item = (await f.json("/api/doctor/overview?kind=tracking")).data.items.find((i) => i.id === `labs:${p.id}`);
+  assert.equal(item.title, "新检验结果 1 项"); assert.equal(item.action.tab, "labs");
   assert.match(item.detail, /肌酐 150umol\/L（2026-09-28）/);
+  assert.equal((await f.json(`/api/patients/${p.id}/labs/reviewed`, "POST", {})).data.remaining, 0);
+  assert.equal((await f.json("/api/doctor/overview?kind=tracking")).data.total, 0);
   const tools = Object.fromEntries(scheduleTools(() => f.server.schedule).map((x) => [x.definition.function.name, x.execute]));
+  assert.equal(tools.patient_new_labs({ patientId: p.id }).labs.length, 0);
+  await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: (await f.json(`/api/patients/${p.id}`)).data.revision, labs: [...(await f.json(`/api/patients/${p.id}`)).data.labs, { item: "肌酐", value: 190, unit: "umol/L", date: "2026-10-01" }] });
   assert.equal(tools.patient_new_labs({ patientId: p.id }).labs.length, 1);
   assert.equal(tools.patient_new_labs({ patientId: p.id, markReviewed: true }).remaining, 0);
   const booked = tools.appointment_create({ patientId: p.id, date: local(1), reason: "复查肌酐" });
@@ -56,7 +59,9 @@ test("browser: agenda opens the patient's appointments; new results can be marke
   if (!existsSync(chrome) || !existsSync("dist/index.html")) return t.skip("Chrome/build unavailable");
   const { chromium } = await import("playwright-core");
   const f = await fixture(t, { followupOptions: { autoStart: false } });
-  const p = (await f.json("/api/patients", "POST", { name: "孙复诊", patientNumber: "V-001", labs: [{ item: "血红蛋白", value: 102, unit: "g/L", date: "2026-09-27" }] })).data;
+  const p = (await f.json("/api/patients", "POST", { name: "孙复诊", patientNumber: "V-001" })).data;
+  const baseline = (await f.json(`/api/patients/${p.id}`)).data;
+  await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: baseline.revision, labs: [{ item: "血红蛋白", value: 102, unit: "g/L", date: "2026-09-27" }] });
   const browser = await chromium.launch({ executablePath: chrome, headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors = [];

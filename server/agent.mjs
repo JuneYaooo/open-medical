@@ -609,6 +609,8 @@ export function createServer(options = {}) {
         if (session.title === `${previousName} · 病例`) store.mutate(patient.sessionId, (value) => { value.title = `${patient.name} · 病例`; });
       }
     },
+    // schedule 在下方才创建；建档发生在服务就绪后，闭包引用是安全的。
+    onCreated: (patient) => schedule.baselinePatient(patient),
     createSession: ({ title, patientId }) => {
       const projected = sessionBridge.createSession({ title, patientId });
       return { id: projected.id };

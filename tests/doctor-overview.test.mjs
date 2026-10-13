@@ -5,6 +5,8 @@ import { fixture } from "./helpers.mjs";
 test("doctor agenda unifies actionable work without treating read/generated as completed", async (t) => {
   const f = await fixture(t, { followupOptions: { autoStart: false } });
   const p = (await f.json("/api/patients", "POST", { name: "今日患者", patientNumber: "TODAY-1", labs: [{ item: "血钾", value: 2.5, unit: "mmol/L", date: "2026-09-21" }] })).data;
+  // 建档时就有的检验是已阅基线；补一次仍低于阈值的新结果才会出现「新检验结果」待办。
+  await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: p.revision, labs: [...p.labs, { item: "血钾", value: 2.2, unit: "mmol/L", date: "2026-09-22" }] });
   const job = f.server.followups.create(p.id, { name: "复诊联系", once: true, firstDueAt: new Date(Date.now() + 60000).toISOString() });
   const reminder = f.server.followups.createReminder(p, job, "请联系");
   f.server.patients.ingest([{ direction: "in", text: "合成消息" }], { patientId: p.id });
@@ -24,7 +26,8 @@ test("doctor agenda unifies actionable work without treating read/generated as c
   assert.equal(filtered.items[0].action.tab, "followups");
   await f.json(`/api/reminders/${reminder.id}/complete`, "POST", { status: "completed", note: "已登记反馈" });
   assert.equal((await f.json("/api/doctor/overview")).data.counts.followup, 0);
-  await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: p.revision, archived: true });
+  const archived = (await f.json(`/api/patients/${p.id}`)).data;
+  await f.json(`/api/patients/${p.id}`, "PATCH", { expectedRevision: archived.revision, archived: true });
   assert.equal((await f.json("/api/doctor/overview")).data.total, 1, "archived patient work is not mixed into daily queue");
 });
 

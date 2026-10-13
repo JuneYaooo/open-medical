@@ -40,6 +40,7 @@
 .chart-med-status.stopped { color:#65716a; }
 .chart-meds p { font-size:12px; line-height:1.7; margin:6px 0; }
 .chart-empty { color:#64766c; font-size:13px; line-height:1.8; padding:10px 0; }
+.chart-lab-hint { color:#64766c; font-size:13px; line-height:1.8; margin:10px 0 0; }
 .chart-lab-picker { display:flex; align-items:center; gap:16px; font-size:12px; }
 .chart-lab-picker select { max-width:100%; min-width:0; padding:8px 12px; border:1px solid var(--border); border-radius:6px; background:#fff; }
 .chart-lab-summary { display:flex; justify-content:space-between; gap:16px; margin:24px 0 4px; }

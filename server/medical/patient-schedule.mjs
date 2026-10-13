@@ -30,6 +30,14 @@ export class PatientSchedule {
     const put = this.db.prepare("INSERT OR IGNORE INTO lab_reviews VALUES (?,?,?)"), at = new Date(this.now()).toISOString();
     sqliteTransaction(this.db, () => { for (const p of this.patients.all()) for (const lab of p.labs || []) put.run(p.id, labKey(lab), at); });
   }
+  // 建档时就带着的检验不算「新结果」——医生刚看着这批资料整理成档案；
+  // 只有此后通过更新进来的检验（复诊报告、微信补传等）才该提醒查看。
+  baselinePatient(patient) {
+    const labs = (patient && patient.labs) || [];
+    if (!labs.length) return;
+    const put = this.db.prepare("INSERT OR IGNORE INTO lab_reviews VALUES (?,?,?)"), at = new Date(this.now()).toISOString();
+    sqliteTransaction(this.db, () => { for (const lab of labs) put.run(patient.id, labKey(lab), at); });
+  }
 
   // ---------- appointments ----------
   row(id) {

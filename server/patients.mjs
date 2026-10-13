@@ -6,7 +6,7 @@ import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../shared/diagnoses.mjs";
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
 export class PatientRegistry {
-  constructor(store, runtime, { createSession, removeSession, onIdentityChanged } = {}) {
+  constructor(store, runtime, { createSession, removeSession, onIdentityChanged, onCreated } = {}) {
     this.store = store;
     this.runtime = runtime;
     // 统一内核：新患者病例会话由 SessionBridge 创建（kind:"session" 工作区）。
@@ -17,6 +17,7 @@ export class PatientRegistry {
       }));
     this.removeSession = removeSession;
     this.onIdentityChanged = onIdentityChanged;
+    this.onCreated = onCreated;
   }
   all() {
     return this.store.db
@@ -170,6 +171,8 @@ export class PatientRegistry {
       this.store.audit(session.id, "patient.created", {
         patientId: patient.id,
       });
+      // 建档事务内把初始检验记为已阅基线（SAVEPOINT 可嵌套）。
+      this.onCreated?.(patient);
       return { ...patient, counts: this.counts(patient.id) };
     });
   }

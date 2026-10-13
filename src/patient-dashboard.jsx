@@ -19,17 +19,37 @@ export function citedFileName(text) {
 }
 function LabPlot({ group }) {
   const points = group.points, values = points.map(p=>p.value);
+  const dates = [...new Set(points.map(p=>p.date))].sort();
   const min = Math.min(...values), max = Math.max(...values), pad = (max-min || Math.abs(max) || 1)*.15;
-  const low=min-pad, high=max+pad, start=Date.parse(points[0].date), end=Date.parse(points.at(-1).date);
+  let low = min-pad, high = max+pad;
+  if (min >= 0 && low < 0) low = 0; // 检验值不会为负，别让轴标签跑出负数
+  let start=Date.parse(dates[0]), end=Date.parse(dates.at(-1));
+  if (start===end) { start-=43200000; end+=43200000; } // 单日记录左右各留半天，散点才落得进坐标系
   const x = p => 60 + (Date.parse(p.date)-start)/(end-start)*600;
   const y = p => 150-(p.value-low)/(high-low)*115;
   const short = n => Number(n.toPrecision(5)).toString();
-  return <svg viewBox="0 0 700 194" role="img" aria-label={`${group.item} ${group.unit} 检验趋势，${points.length} 次记录`}>
+  const unique = [...new Map(points.map(p=>[`${p.date}|${p.value}`,p])).values()];
+  // 同日多值时不连线：并列数值之间没有先后，连了就是假趋势。
+  const line = dates.length > 1 && !group.conflict;
+  return <svg viewBox="0 0 700 194" role="img" aria-label={`${group.item} ${group.unit || '单位未记录'} 检验趋势，${points.length} 次记录${line ? '' : '，散点展示'}`}>
     {[low,(low+high)/2,high].map((n,i)=><g key={i}><line x1="60" x2="660" y1={150-i*57.5} y2={150-i*57.5} stroke="var(--border)"/><text x="49" y={154-i*57.5} textAnchor="end">{short(n)}</text></g>)}
-    <polyline fill="none" stroke="var(--accent)" strokeWidth="2.5" points={points.map(p=>`${x(p)},${y(p)}`).join(' ')} />
-    {points.map(p=><circle key={p.date} cx={x(p)} cy={y(p)} r="4" fill="var(--accent)"><title>{p.date}：{p.value} {group.unit}；{p.source || '来源未记录'}</title></circle>)}
-    <text x="60" y="182">{points[0].date}</text><text x="660" y="182" textAnchor="end">{points.at(-1).date}</text>
+    {line && <polyline fill="none" stroke="var(--accent)" strokeWidth="2.5" points={unique.map(p=>`${x(p)},${y(p)}`).join(' ')} />}
+    {unique.map((p,i)=><circle key={i} cx={x(p)} cy={y(p)} r="4" fill="var(--accent)"><title>{p.date}：{p.value} {group.unit || '单位未记录'}；{p.source || '来源未记录'}</title></circle>)}
+    {dates.length > 1 ? <><text x="60" y="182">{dates[0]}</text><text x="660" y="182" textAnchor="end">{dates.at(-1)}</text></> : <text x="360" y="182" textAnchor="middle">{dates[0]}</text>}
   </svg>;
+}
+// 病史摘要常是一整段长文，按句切成约 2 句一段便于扫读；只加换行，不改文字本身。
+function summaryParagraphs(text) {
+  const out = [];
+  for (const block of String(text || '').split(/\n+/)) {
+    const sentences = block.match(/[^。！？]+[。！？]?/g) || [];
+    let cur = '';
+    for (const s of sentences) {
+      if (cur && cur.length + s.length > 160) { out.push(cur); cur = s; } else cur += s;
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
 }
 export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", focusFile = null, onChanged, onError }) {
   const [editing, setEditing] = useState(false);
@@ -45,7 +65,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   const [monitorBusy, setMonitorBusy] = useState(false);
   const groups = useMemo(()=>dashboardLabGroups(patient.labs || []),[patient.labs]);
   const [libraryFilter, setLibraryFilter] = useState('');
-  const group = groups.find(g=>g.key===selected) || groups.find(g=>g.canPlot) || groups[0];
+  const group = groups.find(g=>g.key===selected) || groups.find(g=>g.distinctDates>1) || groups[0];
   const diagnoses=patient.diagnoses || [], meds=patient.medications || [], visits=patient.visits || [], allergies=patient.allergies || [];
   const history=dashboardHistory(patient);
   const files=session.files || [];
@@ -130,7 +150,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       <section><h3>用药与过敏核对</h3><p>{allergies.length ? '已有过敏记录，请留意。' : patient.allergyStatus==='none_known' ? '已核对：无已知过敏。' : '过敏史尚待核对。'}{meds.some(m=>!m.status||m.status==='unknown') ? '部分用药的当前使用状态待核对。' : !meds.length ? '尚无用药记录。' : '已登记用药，接诊时核对是否变化。'}</p><button className="text-button" onClick={()=>onClinical('medications')}>查看用药与过敏</button></section>
     </div>}
     {view === 'diagnoses' && <article className="chart-history" aria-label="病程概览"><h3>{patient.clinicalSummary ? '病史摘要' : '病程概览'}</h3>
-      {patient.clinicalSummary ? <><p className="clinical-summary-text">{patient.clinicalSummary.text}</p><Source value={patient.clinicalSummary.source}/></> : <><small className="muted">按已保存的就诊记录排列；保留原有描述，不推断当前病情。</small>{history.length ? <ol className="history-overview">{history.map((v,i)=><li key={i}><time>{v.date || '日期未记录'}</time><p>{v.reason}</p><a href="#patient-visits" onClick={e=>{e.preventDefault();onClinical("visits");}}>查看就诊记录与补充说明</a></li>)}</ol> : <p>尚无可整理的就诊病程。请补充资料，诊断与用药记录仍可在下方查看。</p>}</>}
+      {patient.clinicalSummary ? <>{summaryParagraphs(patient.clinicalSummary.text).map((p,i)=><p key={i} className="clinical-summary-text">{p}</p>)}<Source value={patient.clinicalSummary.source}/></> : <><small className="muted">按已保存的就诊记录排列；保留原有描述，不推断当前病情。</small>{history.length ? <ol className="history-overview">{history.map((v,i)=><li key={i}><time>{v.date || '日期未记录'}</time><p>{v.reason}</p><a href="#patient-visits" onClick={e=>{e.preventDefault();onClinical("visits");}}>查看就诊记录与补充说明</a></li>)}</ol> : <p>尚无可整理的就诊病程。请补充资料，诊断与用药记录仍可在下方查看。</p>}</>}
       {patient.note && <details className="chart-record-notes"><summary>资料备注与待核对信息</summary><p>{patient.note}</p></details>}
       {!!patient.tags?.length && <div className="chart-tags" aria-label="患者标签">{patient.tags.map(tag=><span key={tag}>{tag}</span>)}</div>}
     </article>}
@@ -150,7 +170,11 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
     {view === 'labs' && <section className="chart-section chart-labs" aria-label="检验资料与趋势"><header><div><h3>检验资料与趋势</h3><p>同项目、同单位分别展示；趋势仅呈现记录，不自动判断正常或异常。</p></div><small>{patient.labs?.length || 0} 条检验</small></header>
       {group ? <><label className="chart-lab-picker">查看检验项目<select value={group.key} onChange={e=>setSelected(e.target.value)}>{groups.map(g=><option key={g.key} value={g.key}>{g.item} · {g.unit || '单位未记录'} · {g.records.length} 次</option>)}</select></label>
       <div className="chart-lab-summary"><b>{group.item}</b><span>{group.records.length} 次记录 · {group.unit || '单位未记录'}</span></div>
-      {group.canPlot ? <LabPlot group={group}/> : <p className="chart-empty">{group.conflict ? '同日存在不同数值，暂不连线，请核对下方记录及来源。' : !group.unit ? '单位未记录，暂不绘制趋势。' : '有效日期不足两次，先展示已有记录。'}</p>}
+      {group.canPlot ? <><LabPlot group={group}/>
+        {group.conflict && <p className="chart-lab-hint">同一天存在不同数值，散点并列、暂不连线（并列数值没有先后），请核对下方记录及来源。</p>}
+        {group.distinctDates === 1 && <p className="chart-lab-hint">这些记录都在同一天，还连不成趋势线；再录入其他日期的同项目检验，这里会自动连线。</p>}
+        {!group.unit && <p className="chart-lab-hint">单位未记录，纵轴只表示数值相对高低。</p>}
+      </> : <p className="chart-empty">这些检验缺有效日期或数值，暂无可绘制的记录，先看下方明细。</p>}
       <div className="chart-table-wrap"><table><caption>{group.item} · 全部记录</caption><thead><tr><th>日期</th><th>结果</th><th>单位</th><th>来源</th></tr></thead><tbody>{group.records.toReversed().map((r,i)=><tr key={i}><td>{r.date || '日期未记录'}</td><td><b>{r.value}</b></td><td>{r.unit || '未记录'}</td><td>{r.source || '来源未记录'}</td></tr>)}</tbody></table></div></> : <p className="chart-empty">资料中尚无结构化检验记录。</p>}
       {(!!group || !!monitors.length) && <div className="chart-monitors" aria-label="个性化检验监测">
         <header><div><h4>个性化监测</h4><p>按这位患者的目标设阈值或复查间隔；越界或到期会进入今日待办的风险提示，只提醒不自动处理。</p></div>
