@@ -12,9 +12,12 @@ import {
   ruleCoverage,
   isoDate,
   canonical,
+  DRUG_REGIMENS,
+  frequency,
 } from "../scripts/learning-v2-domain.mjs";
 import {
   factualMetrics,
+  rawDiffs,
   learningMetrics,
   evaluateHabit,
   scoreStated,
@@ -27,6 +30,9 @@ import {
   materialUpload,
   submitReviewEdits,
   habitEvidence,
+  promptHabitEvidence,
+  observeHabitUndo,
+  statedHabitJudgments,
 } from "../scripts/learning-review-v2.mjs";
 import { evaluateGates } from "../scripts/learning-gates-v2.mjs";
 const root = new URL("../evals/learning-loop-v2/", import.meta.url);
@@ -106,7 +112,7 @@ test("digit and identity masked diversity rejects clones and every rule changes 
     /Jaccard/,
   );
   for (const p of personas) {
-    assert.equal(p.rules.filter((r) => !r.learnable).length, 2);
+    assert.equal(p.rules.filter((r) => r.clinicalTrap).length, 2);
     const coverage = ruleCoverage(
       golds.filter((_, i) => manifest.patients[i].split === "learning"),
       p,
@@ -269,8 +275,18 @@ test("fact alignment is order-independent and does not collapse duplicate/date-d
 test("habit correctness follows arbitrary persona definitions, with no special finding/history literals", () => {
   const custom = {
     rules: [
-      { id: "x", kind: "exclude", learnable: true, names: ["视网膜色素斑"] },
-      { id: "y", kind: "omission", learnable: true, history: "动物接触史" },
+      {
+        id: "x",
+        kind: "exclude",
+        learnableByProduct: true,
+        names: ["视网膜色素斑"],
+      },
+      {
+        id: "y",
+        kind: "omission",
+        learnableByProduct: true,
+        history: "动物接触史",
+      },
     ],
   };
   assert.equal(
@@ -358,8 +374,10 @@ test("stated recall requires matching rule content; unrelated/paraphrased local 
   assert.equal(scoreStated([wrong], stated, p).matched, false);
   assert.deepEqual(
     [
-      scoreStated([right, local], stated, p).matched,
-      scoreStated([right, local], stated, p).unexpected,
+      scoreStated([right, local], stated, p, { newMemories: [right, local] })
+        .matched,
+      scoreStated([right, local], stated, p, { newMemories: [right, local] })
+        .unexpected,
     ],
     [true, 1],
   );
@@ -376,7 +394,11 @@ test("G6 uses persona rule count, excludes stated origin and rejects stored rule
     attend = {
       id: "a",
       origin: "learned",
-      rule: { type: "attend_rule", section: "tags", hint: "吸烟史" },
+      rule: {
+        type: "attend_rule",
+        section: "tags",
+        hint: "吸烟史：仍吸烟，累计23年",
+      },
     };
   const stated = {
     id: "s",
@@ -391,8 +413,8 @@ test("G6 uses persona rule count, excludes stated origin and rejects stored rule
   const base = {
     habits: [term, attend, stated],
     statedChecks: [
-      { matched: true, unexpected: 0 },
-      { matched: true, unexpected: 0 },
+      { ruleId: "terms", matched: true, unexpected: 0 },
+      { ruleId: "summary-order", matched: true, unexpected: 0 },
     ],
     ruleEvidence: [
       { habitId: "t", ruleIds: ["terms"], correct: true, changed: true },
@@ -405,8 +427,8 @@ test("G6 uses persona rule count, excludes stated origin and rejects stored rule
     ],
   };
   const r = scoreG6(base, p);
-  assert.equal(r.denominator, 9);
-  assert.equal(r.recall, 1 / 9);
+  assert.equal(r.denominator, 5);
+  assert.equal(r.recall, 1 / 5);
   assert.equal(r.precision, 0.5);
   assert.equal(r.learned, 2);
   assert.equal(r.status, "failed");
@@ -620,14 +642,418 @@ test("same-unit small numeric discrepancies are not hidden by conversion roundin
   assert.equal(factualMetrics(changed, simple).factualDisagreements.length, 1);
 });
 
-test("conversion rounding is directional and hallucinated tags never inflate writing edits", () => {
+test("clinical conversion rounding is accepted and hallucinated history never inflates writing edits", () => {
   const p = personas[0],
     draft = renderLearningGold(simple, p, { traps: false });
   draft.labs[1].value = 88.41;
-  assert.equal(factualMetrics(draft, simple, p).factualDisagreements.length, 1);
+  assert.equal(factualMetrics(draft, simple, p).factualDisagreements.length, 0);
   draft.labs[1].value = 88.4;
-  draft.tags = ["凭空编造的病史"];
+  draft.tags = ["吸烟史：每天一包"];
   const m = learningMetrics(draft, renderLearningGold(simple, p), simple, p);
   assert.equal(m.ser, 0);
   assert.ok(m.fer > 0);
+});
+
+test("product capability declarations exclude conversions, prose dates, caps, unsupported ordering and clinical traps", () => {
+  for (const [i, p] of personas.entries()) {
+    assert.equal(
+      p.rules.filter((r) => r.learnableByProduct).length,
+      [5, 5, 4][i],
+    );
+    const result = scoreG6({}, p);
+    assert.equal(result.knownProductGaps.count, [6, 6, 7][i]);
+    assert.equal(result.knownProductGaps.label, "known product gaps");
+    for (const r of p.rules) {
+      assert.equal(typeof r.learnableByProduct, "boolean");
+      assert.ok(r.reason.length > 10);
+      const supported =
+        ["term", "frequency", "exclude", "omission"].includes(r.kind) ||
+        (r.kind === "summary-order" &&
+          ["diagnosis-first", "chronological"].includes(r.order));
+      assert.equal(r.learnableByProduct, supported, `${p.id}/${r.id}`);
+    }
+    for (const gold of golds)
+      for (const section of ["diagnoses", "labs", "visits"])
+        for (const row of renderLearningGold(gold, p)[section])
+          assert.match(row.date, /^\d{4}-\d{2}-\d{2}$/);
+    const dates = p.rules.find((r) => r.id === "dates");
+    assert.equal(dates.kind, "style-date");
+    assert.equal(dates.scope, "summary-prose");
+    assert.equal(
+      evaluateHabit(
+        {
+          rule: {
+            type: "format_rule",
+            section: "visits",
+            field: "date",
+            pattern: "slash-date",
+          },
+        },
+        p,
+      ).correct,
+      false,
+    );
+  }
+  assert.equal(
+    evaluateHabit(
+      {
+        rule: {
+          type: "unit_normalize",
+          section: "labs",
+          item: "血糖",
+          from: "mg/dL",
+          to: "mmol/L",
+        },
+      },
+      personas[0],
+    ).unsafe,
+    true,
+  );
+});
+
+test("real patient-sentence omission hints match concepts across patients", async () => {
+  const p = personas[0],
+    habit = {
+      id: "h",
+      origin: "learned",
+      rule: {
+        type: "attend_rule",
+        section: "tags",
+        hint: "吸烟史：已戒烟，累计12年",
+      },
+    };
+  assert.equal(evaluateHabit(habit, p).correct, true);
+  assert.equal(
+    evaluateHabit(
+      { ...habit, rule: { ...habit.rule, hint: "饮酒史：每周一次" } },
+      p,
+    ).correct,
+    false,
+  );
+  const gold = {
+    historyFacts: [{ kind: "吸烟史", text: "吸烟史：仍吸烟，累计29年" }],
+  };
+  const draft = {
+    tags: ["吸烟史，29年"],
+    personalization: { habits: [{ id: "h" }] },
+  };
+  const evidence = await promptHabitEvidence(habit, draft, gold, p);
+  assert.equal(evidence[0].correct, true);
+  assert.equal(
+    scoreG6({ habits: [habit], ruleEvidence: evidence }, p).recall,
+    1 / 5,
+  );
+  assert.deepEqual(
+    await promptHabitEvidence(habit, draft, { historyFacts: [] }, p),
+    [],
+  );
+  assert.deepEqual(
+    await promptHabitEvidence(habit, { tags: draft.tags }, gold, p),
+    [],
+  );
+});
+
+test("style recall uses calibrated prompt observations and cannot use postprocessing credit", async () => {
+  const p = personas[0],
+    habit = {
+      id: "style",
+      origin: "learned",
+      content: "摘要先写诊断",
+      rule: { type: "style_rule", pattern: "diagnosis-first" },
+    };
+  const draft = {
+    clinicalSummary: { text: "主要问题：高血压。随后复查。" },
+    personalization: { habits: [{ id: "style" }] },
+  };
+  assert.deepEqual(
+    await promptHabitEvidence(habit, draft, simple, p, { usable: false }),
+    [],
+  );
+  const evidence = await promptHabitEvidence(habit, draft, simple, p, {
+    usable: true,
+    judge: async (_h, _p, observation) => {
+      assert.equal(observation.rule.id, "summary-order");
+      assert.equal(observation.summary, draft.clinicalSummary.text);
+      return { correct: true };
+    },
+  });
+  assert.equal(
+    scoreG6({ habits: [habit], ruleEvidence: evidence }, p).recall,
+    1 / 5,
+  );
+  assert.equal(
+    scoreG6(
+      {
+        habits: [habit],
+        ruleEvidence: [
+          {
+            habitId: "style",
+            ruleIds: ["summary-order"],
+            correct: true,
+            changed: true,
+          },
+        ],
+      },
+      p,
+    ).recall,
+    0,
+  );
+});
+
+test("G6 can pass for each current-product persona and stated denominator is data-driven", () => {
+  for (const p of personas) {
+    const rules = [
+      { type: "term_style", section: "diagnoses", direction: p.termDirection },
+      {
+        type: "format_rule",
+        section: "medications",
+        field: "frequency",
+        from: p.id === "D2" ? "每日一次" : "qd",
+        to: p.id === "D2" ? "qd" : "每日一次",
+      },
+      {
+        type: "exclude_rule",
+        section: "diagnoses",
+        status: "finding",
+        matcher: p.rules.find((r) => r.kind === "exclude").names[0],
+      },
+    ];
+    const habits = rules.map((rule, i) => ({
+      id: `h${i}`,
+      origin: "learned",
+      rule,
+    }));
+    const ruleEvidence = habits.map((h) => ({
+      habitId: h.id,
+      ruleIds: evaluateHabit(h, p).ruleIds,
+      correct: true,
+      changed: true,
+    }));
+    const statedChecks = p.stated.map((r) => ({
+      ruleId: r.ruleId,
+      matched: true,
+      unexpected: 0,
+    }));
+    assert.equal(
+      scoreG6({ habits, ruleEvidence, statedChecks }, p).status,
+      "passed",
+    );
+    const one = { ...p, stated: p.stated.slice(0, 1) };
+    assert.equal(
+      scoreG6(
+        { habits, ruleEvidence, statedChecks: statedChecks.slice(0, 1) },
+        one,
+      ).statedRecall,
+      1,
+    );
+    assert.equal(
+      scoreG6(
+        {
+          habits,
+          ruleEvidence,
+          statedChecks: [statedChecks[0], statedChecks[0]],
+        },
+        p,
+      ).statedRecall,
+      0.5,
+    );
+  }
+});
+
+test("old confirmed learned memories cannot earn stated recall", () => {
+  const p = personas[0],
+    memory = {
+      id: "old",
+      status: "confirmed",
+      origin: "learned",
+      rule: { type: "term_style", section: "diagnoses", direction: "full" },
+    };
+  assert.equal(scoreStated([memory], p.stated[0], p).matched, false);
+  assert.equal(
+    scoreStated([memory], p.stated[0], p, { newMemories: [] }).matched,
+    false,
+  );
+  assert.equal(
+    scoreStated([memory], p.stated[0], p, { newMemories: [{ ...memory }] })
+      .matched,
+    true,
+  );
+  assert.equal(
+    scoreStated([{ ...memory, origin: "stated" }], p.stated[0], p).matched,
+    true,
+  );
+});
+
+test("FER accepts converted clinical rounding but rejects material converted errors", () => {
+  const g = {
+    labs: [{ item: "血糖", value: 110, unit: "mg/dL", date: "2026-09-03" }],
+  };
+  for (const value of [6.1, 6.11, 6.111, 6.16])
+    assert.equal(
+      factualMetrics({ labs: [{ ...g.labs[0], unit: "mmol/L", value }] }, g)
+        .fer,
+      0,
+    );
+  assert.ok(
+    factualMetrics({ labs: [{ ...g.labs[0], unit: "mmol/L", value: 6.3 }] }, g)
+      .fer > 0,
+  );
+});
+
+test("diagnosis qualifiers and fuzzy same-date visit wording align as modifications, not invented facts", () => {
+  const g = {
+    diagnoses: [{ name: "心房颤动", status: "suspected", date: "2026-09-03" }],
+    visits: [{ reason: "肾功能复核", date: "2026-09-03" }],
+  };
+  const d = {
+    diagnoses: [{ ...g.diagnoses[0], name: "房颤（待排）" }],
+    visits: [{ ...g.visits[0], reason: "肾功能复查" }],
+  };
+  assert.equal(factualMetrics(d, g).fer, 0);
+  assert.equal(rawDiffs(d, g).length, 2);
+  assert.ok(rawDiffs(d, g).every((edit) => edit.op === "modify"));
+  d.diagnoses[0].status = "confirmed";
+  assert.deepEqual(
+    factualMetrics(d, g).factualDisagreements.map((e) => e.kind),
+    ["mismatch"],
+  );
+  d.visits[0].date = "2026-09-04";
+  assert.ok(
+    factualMetrics(d, g).factualDisagreements.some((e) => e.kind === "missing"),
+  );
+});
+
+test("history is concept-based and administrative tags are not hallucinations", () => {
+  const g = {
+    historyFacts: [{ kind: "吸烟史", text: "吸烟史：仍吸烟，累计18年" }],
+  };
+  assert.equal(
+    factualMetrics({ tags: ["吸烟史已记录", "重点随访", "资料待补齐"] }, g).fer,
+    0,
+  );
+  assert.equal(factualMetrics({ tags: ["重点随访"] }, {}).fer, 0);
+  assert.equal(
+    factualMetrics({ tags: ["饮酒史：每周饮酒"] }, {}).factualDisagreements[0]
+      .kind,
+    "hallucinated",
+  );
+});
+
+test("fixtures pair drug-specific doses with frequencies and distribute lab values across text formats", async () => {
+  const formats = new Set();
+  for (const [i, p] of manifest.patients.entries()) {
+    for (const m of golds[i].medications)
+      assert.ok(
+        DRUG_REGIMENS[m.name].some(
+          (r) => r.dose === m.dose && r.frequency === frequency(m.frequency),
+        ),
+      );
+    const sources = await readJSON(`patients/${p.id}/sources.json`);
+    for (const [file, text] of Object.entries(sources)) {
+      assert.doesNotMatch(
+        text,
+        /\b(?:confirmed|suspected|finding|active|stopped)\b/,
+      );
+      if (
+        !file.endsWith(".png") &&
+        /(?:血糖|肌酐)\s*[\d.]+\s*(?:mg|mmol|μmol)/.test(text)
+      )
+        formats.add(file.split(".").at(-1));
+    }
+  }
+  assert.deepEqual([...formats].sort(), ["docx", "pdf", "txt"]);
+  const hard = manifest.patients.filter(
+    (p) => p.degradation.difficulty === "hard",
+  );
+  assert.equal(hard.length, 13);
+  assert.ok(
+    hard.every(
+      (p) =>
+        Math.abs(p.degradation.rotation) >= 2 &&
+        Math.abs(p.degradation.rotation) <= 5 &&
+        p.degradation.jpegQuality <= 0.5,
+    ),
+  );
+});
+
+test("simulated doctor waits for two real reversions by default and reports oracle sensitivity", () => {
+  const p = personas[0],
+    habit = {
+      id: "bad",
+      rule: { type: "term_style", section: "diagnoses", direction: "short" },
+    };
+  const before = { name: "心房颤动", status: "suspected", date: "2026-09-03" },
+    after = { ...before, name: "AF" };
+  const draft = {
+      diagnoses: [after],
+      habitChanges: [
+        { habitId: "bad", section: "diagnoses", index: 0, before, after },
+      ],
+    },
+    final = { diagnoses: [before] };
+  const state = {};
+  assert.equal(observeHabitUndo(habit, {}, {}, p, state).undo, false);
+  const first = observeHabitUndo(habit, draft, final, p, state);
+  assert.equal(first.reverts, 1);
+  assert.equal(first.undo, false);
+  assert.equal(first.oracleWouldUndo, true);
+  assert.equal(observeHabitUndo(habit, draft, final, p, state).undo, true);
+  assert.equal(observeHabitUndo(habit, {}, {}, p, {}, "oracle").undo, true);
+  assert.equal(
+    observeHabitUndo(habit, draft, final, p, state, "never").undo,
+    false,
+  );
+  assert.throws(
+    () => observeHabitUndo(habit, {}, {}, p, {}, "bad-mode"),
+    /Unknown/,
+  );
+});
+
+test("natural-language stated preferences require calibrated intent credit on eligible memories", async () => {
+  const p = personas[0],
+    stated = p.stated[1];
+  const memory = {
+    id: "s",
+    origin: "stated",
+    content: "今后病史摘要先交代主要诊断",
+  };
+  const local = { id: "local", content: "这位患者优先写主诊断" };
+  const calibration = {
+    usable: true,
+    judge: async (m, _p, observation) => {
+      assert.equal(observation.mode, "stated-intent");
+      assert.equal(observation.rule.id, stated.ruleId);
+      return { correct: m.id === "s" };
+    },
+  };
+  const judgments = await statedHabitJudgments(
+    [memory, local],
+    stated,
+    p,
+    calibration,
+  );
+  assert.equal(scoreStated([memory], stated, p).matched, false);
+  assert.equal(
+    scoreStated([memory, local], stated, p, {
+      judgments,
+      newMemories: [memory, local],
+    }).matched,
+    true,
+  );
+  assert.equal(
+    scoreStated([memory, local], stated, p, {
+      judgments,
+      newMemories: [memory, local],
+    }).unexpected,
+    1,
+  );
+  assert.equal(
+    scoreStated([{ ...memory, origin: "learned" }], stated, p, { judgments })
+      .matched,
+    false,
+  );
+  assert.deepEqual(
+    await statedHabitJudgments([memory], stated, p, { usable: false }),
+    [],
+  );
 });
