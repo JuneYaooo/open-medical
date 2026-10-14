@@ -2,7 +2,7 @@
 .patient-history-workspace button { transition:background .18s ease,color .18s ease; }
 .patient-history-workspace .text-button { display:inline-flex; align-items:center; gap:5px; color:var(--history-accent); font-size:13px; }
 .patient-history-workspace :is(button,input,textarea,summary):focus-visible { outline:2px solid var(--history-accent); outline-offset:3px; }
-.history-status-nav { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; margin-bottom:25px; padding:7px; background:#f1f4ee; border-radius:13px; }
+.history-status-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-bottom:25px; padding:7px; background:#f1f4ee; border-radius:13px; }
 .history-status-nav button { display:flex; flex-direction:column; gap:8px; align-items:flex-start; padding:14px 17px; color:#607367; background:transparent; border:1px solid transparent; border-radius:9px; cursor:pointer; }
 .history-status-nav button:hover { background:#e8eee4; }
 .history-status-nav button.selected { background:#fff; border-color:#d9e2d4; color:#274f38; box-shadow:0 2px 5px #304b3510; }
@@ -80,3 +80,16 @@
 
 .history-journey-actions { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
 .history-journey-actions .history-expand { margin:0; }
+
+.history-snapshot { margin:0; display:grid; gap:18px; }
+.history-snapshot>div { display:grid; grid-template-columns:72px minmax(0,1fr); gap:16px; }
+.history-snapshot dt { color:var(--history-muted); font-size:12px; padding-top:3px; }
+.history-snapshot dd { margin:0; line-height:1.8; font-size:14px; white-space:pre-wrap; }
+.history-snapshot-item { display:block; }
+.history-original { margin-top:18px; color:var(--history-muted); font-size:12px; }
+.history-original summary { cursor:pointer; }
+.history-original .history-summary-copy { margin-top:16px; font-size:13px; }
+.history-findings { list-style:none; padding:0; margin:0; }
+.history-findings li { padding:14px 0; border-bottom:1px solid #e8ece4; font-size:13px; line-height:1.8; }
+.history-findings time { display:block; color:var(--history-muted); font-size:12px; }
+@container(max-width:520px) { .history-snapshot>div { grid-template-columns:1fr; gap:4px; } }

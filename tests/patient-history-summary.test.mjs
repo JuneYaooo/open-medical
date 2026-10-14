@@ -27,3 +27,14 @@ test('sourced clinical summary persists only after proposal confirmation; update
  const invalid=await f.json('/api/patients/'+p.id,'PATCH',{expectedRevision:saved.revision,clinicalSummary:{text:'缺少来源'}});assert.equal(invalid.status,400);
  assert.deepEqual((await f.json('/api/patients/'+p.id)).data.clinicalSummary,next);
 });
+
+
+test('short summary preserves qualifications and normalizes editor newlines without truncating legacy text', async()=>{
+ const {parseClinicalSummary,formatClinicalSummary,SUMMARY_LIMIT}=await import('../shared/clinical-summary.mjs');
+ const fields={current:'2026-06复诊，仍有不适。',problems:'疑似问题待排，尚未确诊。',course:'年初起病，\n治疗后改善，近期再次不适。'};
+ const text=formatClinicalSummary(fields);
+ assert.deepEqual(parseClinicalSummary(text),{...fields,course:'年初起病， 治疗后改善，近期再次不适。'});
+ assert.equal(parseClinicalSummary('旧病史'.repeat(200)),null);
+ assert.equal(parseClinicalSummary(formatClinicalSummary({...fields,current:'长'.repeat(SUMMARY_LIMIT+1)})),null);
+ assert.equal(parseClinicalSummary('当前状态：暂无\n主要问题：暂无'),null);
+});

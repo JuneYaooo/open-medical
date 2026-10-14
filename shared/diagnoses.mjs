@@ -6,7 +6,7 @@
 export const DIAGNOSIS_STATUS = ["confirmed", "suspected", "finding", "needs_review"];
 
 export const DIAGNOSIS_STATUS_LABELS = {
-  confirmed: "确诊与明确问题",
+  confirmed: "已确诊",
   suspected: "疑似与待排",
   finding: "影像与检验发现",
   needs_review: "待核对",

@@ -29,7 +29,7 @@ import { PatientImportModal } from "./patient-import";
 import { CareTasksPanel } from "./care-tasks";
 import { AppointmentsPanel, NewLabsNotice } from "./appointments";
 
-const RECORD_TABS = [["overview", "概览"], ["diagnoses", "诊断与病史"], ["medications", "治疗与预后"], ["labs", "检验趋势"], ["visits", "就诊经过"], ["library", "资料库"]];
+const RECORD_TABS = [["overview", "概览"], ["diagnoses", "诊断与病史"], ["medications", "治疗与预后"], ["labs", "检验趋势"], ["visits", "就诊经过"], ["library", "资料库"], ["review", "资料核对"]];
 const isRecordTab = tab => RECORD_TABS.some(([id]) => id === tab) || tab === "clinical";
 
 const GENDER = { male: "男", female: "女", unknown: "" };

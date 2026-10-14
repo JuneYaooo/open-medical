@@ -125,7 +125,7 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
       {previous && <span className="ocr-badge plain">{previous}</span>}
       {edited && <span className="ocr-badge plain">{edited}</span>}
     </p>}
-    {images.length > 0 && <details onToggle={(event) => setOpen(event.currentTarget.open)}><summary>查看{e.type === 'image' ? '原图' : '扫描页'}与识别文字对照</summary>
+    {images.length > 0 && <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}><summary>查看{e.type === 'image' ? '原图' : '扫描页'}与识别文字对照</summary>
       {open && <>
         <div className="ocr-seg" role="tablist" aria-label="对照方式">
           <button className={mode === 'compare' ? 'active' : ''} onClick={() => setMode('compare')}>图文对照</button>
@@ -141,7 +141,7 @@ export function MaterialDetails({ file, sessionId, visionSupported = null, onCha
       {visionSupported
         ? <button className="secondary" disabled={busy} onClick={reprepare}>用识别模型重新识别并整理</button>
         : <small className="muted">暂无可用的图片识别模型；可在模型设置中勾选「此模型支持图片」，或在「文字识别（OCR）」中配置专用识别模型后重新识别。</small>}
-      {!editing && <button className="text-button" disabled={busy} onClick={() => { setDraftText(file.text || ''); setEditing(true); }}>修正文字</button>}
+      {!editing && <button className="text-button" disabled={busy} onClick={() => { setDraftText(file.text || ''); setEditing(true); setOpen(true); }}>修正文字</button>}
     </div>}
     {zoom && <div className="ocr-lightbox" role="dialog" aria-label={`查看 ${zoom.name} 原图`} onClick={() => { setZoom(null); setZoomScale(1); }}
       onWheel={(event) => setZoomScale((s) => Math.min(5, Math.max(0.5, s * (event.deltaY < 0 ? 1.15 : 0.87))))}>

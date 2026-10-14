@@ -36,7 +36,7 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   assert.ok(p.id);
   await f.json(`/api/sessions/${p.sessionId}/files`,'POST',{name:'报告.txt',text:'原始报告验收文字，数值 0 U/L。'});
   const browser=await chromium.launch({executablePath:chrome,headless:true});t.after(()=>browser.close());
-  const page=await browser.newPage({viewport:{width:1440,height:1100}});
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});page.setDefaultTimeout(15000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(f.origin);await page.getByRole('navigation',{name:'主要业务'}).getByRole('button',{name:'患者',exact:true}).click();
   await page.locator('.patient-card').filter({hasText:'资料面板验收'}).click();
@@ -46,7 +46,7 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   const tabs=page.getByRole('navigation',{name:'患者栏目'});
   await tabs.getByRole('button',{name:'诊断与病史',exact:true}).click();
   assert.doesNotMatch(await panel.locator('.clinical-summary-text').allTextContents().then(a=>a.join('')),/病史摘要：合成验收资料/);
-  await panel.getByText("资料备注与待核对信息",{exact:true}).click();
+  await tabs.getByRole('button',{name:'资料核对',exact:true}).click();
   assert.match(await panel.innerText(),/病史摘要：合成验收资料/);
   await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
   await panel.getByRole('img',{name:'验收指标 U/L 检验趋势，2 次记录'}).waitFor();
@@ -56,7 +56,9 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   const otherUnit = panel.getByRole('article',{name:'验收指标 mg/L',exact:true});
   const conflict = panel.getByRole('article',{name:'冲突指标 U/L',exact:true});
   await otherUnit.getByText(/还连不成趋势线/).waitFor();
-  await conflict.getByText(/散点并列、暂不连线/).waitFor();
+  await conflict.getByRole('button',{name:'查看数值冲突'}).click();
+  assert.match(await panel.getByRole('region',{name:'检验数值冲突'}).innerText(),/冲突指标/);
+  await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
   await conflict.getByText('全部记录与来源 · 2 条').click();
   assert.equal(await conflict.getByRole('table').locator('tbody tr').count(),2);
   assert.match(await panel.locator('.chart-lab-comparison').innerText(),/0/);

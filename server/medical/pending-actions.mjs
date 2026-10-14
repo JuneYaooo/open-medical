@@ -1,3 +1,4 @@
+import { CLINICAL_SUMMARY_INSTRUCTION } from '../../shared/clinical-summary.mjs';
 import { learningPrefs } from "./personal-context.mjs";
 import { ReviewLog } from "./review-log.mjs";
 import { HabitLearner } from "./habit-learner.mjs";
@@ -920,4 +921,4 @@ const diagnosisItemsDef = {
   ];
 }
 
-const clinicalSummaryDef = {type:"object",description:"供医生阅读的病史摘要：按时间概括主要疾病、关键治疗、复查变化与最新资料。保留疑似限定词；身份编号/OCR错误/归属不明联系方式只写备注，不进入本字段。",properties:{text:{type:"string",description:"清晰分段的病史正文，不是标签或资料核对清单"},source:{type:"string",description:"所依据的文件名、页码或行号，必须能回查"}},required:["text","source"],additionalProperties:false};
+const clinicalSummaryDef = {type:"object",description:CLINICAL_SUMMARY_INSTRUCTION,properties:{text:{type:"string",description:"当前状态、主要问题、病程演变三行短摘要，每项最多 120 字"},source:{type:"string",description:"所依据的文件名、页码或行号，必须能回查"}},required:["text","source"],additionalProperties:false};
