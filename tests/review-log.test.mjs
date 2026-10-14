@@ -135,6 +135,7 @@ test("superseded review retains signals but does not contribute to trend; clear 
     1,
   );
   assert.equal(f.server.pending.reviewLog.stats().count, 0);
+  const stated = f.server.doctor.saveStated({ content: "以后诊断都写全称" });
   assert.equal((await f.json("/api/learning/clear", "POST", {})).status, 400);
   assert.equal(
     (await f.json("/api/learning/clear", "POST", { confirmed: true })).status,
@@ -144,6 +145,12 @@ test("superseded review retains signals but does not contribute to trend; clear 
     f.server.store.db.prepare("SELECT COUNT(*) n FROM review_diffs").get().n,
     0,
   );
+  assert.equal(f.server.doctor.memoryRow(stated.id).status, "confirmed", "stated habits survive by default");
+  assert.equal(
+    (await f.json("/api/learning/clear", "POST", { confirmed: true, includeStated: true })).status,
+    200,
+  );
+  assert.throws(() => f.server.doctor.memoryRow(stated.id), /不存在/);
 });
 test("stats show threshold and median at five confirmed charts", async (t) => {
   const f = await fixture(t);

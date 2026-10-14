@@ -317,8 +317,13 @@ export class DoctorProfile {
   // Observed signals come from real doctor actions (review decisions,
   // artifact corrections, repeated choices). Identical signals are merged
   // with a count instead of duplicating rows.
-  recordSignal({ content, topic = "", source = {} } = {}) {
+  recordSignal({ content, topic = "", source = {}, note } = {}) {
     const text = string(content, "信号内容", 1000);
+    // A future-facing sentence inside the doctor's note is a stated habit: save it on the spot.
+    const remembered = note
+      ? this.extractStated(note, { type: source.type, actionId: source.actionId })
+      : [];
+    if (note) source = { ...source, note: String(note).slice(0, 300) };
     const digest = hashContent(text);
     const existing = this.store.db
       .prepare(
@@ -336,7 +341,7 @@ export class DoctorProfile {
           JSON.stringify({ ...source, at: time, digest }),
           existing.id,
         );
-      return this.memoryRow(existing.id);
+      return { ...this.memoryRow(existing.id), remembered };
     }
     const info = this.store.db
       .prepare(
@@ -349,20 +354,21 @@ export class DoctorProfile {
         time,
         time,
       );
-    return this.memoryRow(Number(info.lastInsertRowid));
+    return { ...this.memoryRow(Number(info.lastInsertRowid)), remembered };
   }
-  // Deterministic pass: repeated identical signals become pending
-  // candidates. One-off signals stay open for the model pass or manual
-  // confirmation.
+  // Deterministic pass over feedback signals; one-off signals stay open for the model pass.
   consolidate() {
+    // Doctor-written feedback repeated ≥2 times is the doctor's own wording, so it takes effect
+    // directly (notify + undo, no pending step). Case-specific evidence notes stay observations.
     const open = this.store.db
       .prepare(
-        "SELECT id,content,count,topic FROM doctor_memories WHERE kind='observed' AND status='open' ORDER BY id ASC LIMIT 200",
+        "SELECT id,content,count,topic,source FROM doctor_memories WHERE kind='observed' AND status='open' ORDER BY id ASC LIMIT 200",
       )
-      .all();
+      .all()
+      .filter((row) => FEEDBACK_TOPICS.includes(row.topic));
     const groups = new Map();
     for (const row of open) {
-      const key = hashContent(row.content);
+      const key = hashContent(feedbackText(row));
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(row);
     }
@@ -371,29 +377,26 @@ export class DoctorProfile {
     for (const rows of groups.values()) {
       const total = rows.reduce((sum, row) => sum + row.count, 0);
       if (total < 2) continue;
-      const source = {
-        mode: "repeat",
-        count: total,
-        signals: rows.map((row) => row.id),
-      };
-      const info = this.store.db
-        .prepare(
-          "INSERT INTO doctor_memories(kind,status,pinned,count,topic,content,source,created_at,updated_at) VALUES ('consolidated','pending',0,?,?,?,?,?,?)",
-        )
-        .run(
-          total,
-          rows[0].topic,
-          rows[0].content,
-          JSON.stringify(source),
-          time,
-          time,
-        );
-      created.push(this.memoryRow(Number(info.lastInsertRowid)));
+      const content = feedbackText(rows[0]);
+      const memory =
+        this.memories({ status: "confirmed" }).find((m) => m.content === content) ||
+        this.addMemory({
+          kind: "consolidated",
+          status: "confirmed",
+          content,
+          topic: rows[0].topic,
+          source: { type: "repeated_feedback", count: total, signals: rows.map((row) => row.id) },
+        });
+      this.store.db
+        .prepare("UPDATE doctor_memories SET origin='learned',evidence=?,count=? WHERE id=?")
+        .run(JSON.stringify(rows.map((row) => row.content).slice(0, 5)), total, memory.id);
+      this.store.db
+        .prepare("INSERT INTO habit_history(habit_id,decision,snapshot,created_at) VALUES (?,?,?,?)")
+        .run(memory.id, "learned", JSON.stringify(memory), time);
+      created.push(this.memoryRow(memory.id));
       for (const row of rows)
         this.store.db
-          .prepare(
-            "UPDATE doctor_memories SET status='merged',updated_at=? WHERE id=?",
-          )
+          .prepare("UPDATE doctor_memories SET status='merged',updated_at=? WHERE id=?")
           .run(time, row.id);
     }
     return { created, openLeft: this.counts().openSignals };
@@ -467,6 +470,12 @@ export class DoctorProfile {
     return { created, model: result.model || model || provider.model };
   }
 }
+const FEEDBACK_TOPICS = ["提案反馈", "复核反馈"];
+// Signal rows wrap the note with proposal context ("拒绝建档「…」时说明：…"); habits keep only the note.
+const feedbackText = (row) => {
+  const note = row.source?.note ?? JSON.parse(row.source || "{}").note;
+  return String(note || row.content.replace(/^.*?(?:时说明|复核拒绝[^：]*)：/, "")).trim();
+};
 const memoryText = { type: "string" };
 // Agent-facing tools. Saving from the model always creates a pending entry
 // that the doctor must confirm; forgetting deactivates instead of deleting.

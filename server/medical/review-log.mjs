@@ -438,10 +438,12 @@ export class ReviewLog {
         category: r.category,
       }));
   }
-  clear() {
+  // Spec §7.6 clears review data and learned habits; the doctor's own stated habits are kept
+  // unless they explicitly opt in to removing them too.
+  clear({ includeStated = false } = {}) {
     return sqliteTransaction(this.db, () => {
       this.db.exec(
-        "DELETE FROM review_diffs; DELETE FROM review_sessions; DELETE FROM habit_feedback; DELETE FROM habit_patterns; DELETE FROM habit_history; DELETE FROM learning_events; DELETE FROM doctor_memories WHERE kind='consolidated' OR json_extract(source,'$.type')='stated';",
+        `DELETE FROM review_diffs; DELETE FROM review_sessions; DELETE FROM habit_feedback; DELETE FROM habit_patterns; DELETE FROM habit_history; DELETE FROM learning_events; DELETE FROM doctor_memories WHERE kind='consolidated'${includeStated ? " OR json_extract(source,'$.type')='stated'" : ""};`,
       );
       // Pending drafts retain clinical content but lose references to erased learning data.
       for (const row of this.db

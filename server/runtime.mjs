@@ -1101,6 +1101,7 @@ export class MedicalRuntime {
         this.doctor.recordSignal({
           content: `复核拒绝${saved.type === "observations" ? "检验摘录" : saved.type === "clinical_timeline" ? "时间线" : saved.type === "medication_review" ? "用药核对" : "草稿"}：${note}`,
           topic: "复核反馈",
+          note,
           source: { type: "review_rejected", sessionId, artifactId },
         });
     }

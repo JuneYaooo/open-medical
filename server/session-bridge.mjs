@@ -1210,6 +1210,7 @@ export class SessionBridge {
       this.doctor.recordSignal({
         content: `复核拒绝${reviewed.type === "observations" ? "检验摘录" : reviewed.type === "clinical_timeline" ? "时间线" : reviewed.type === "medication_review" ? "用药核对" : "草稿"}：${note}`,
         topic: "复核反馈",
+        note,
         source: { type: "review_rejected", sessionId: id, artifactId },
       });
     this.store.audit(id, "artifact.reviewed", {

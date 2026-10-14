@@ -110,15 +110,19 @@ export function DoctorProfilePanel() {
             externalConsent: modelConsent === true,
           })
         : await api("/api/doctor/consolidate", "POST");
+      const learned = !useModel && value.created.length > 0;
       setNotice(
-        value.created.length
-          ? `已归纳出 ${value.created.length} 条候选偏好，请在「待确认」中审核。`
-          : useModel
-            ? "模型没有归纳出新偏好。"
-            : "重复出现≥2次的信号才会自动归纳；其余请在「学习信号」中手动确认。",
+        learned
+          ? `记下了 ${value.created.length} 条习惯（你重复写过的说明），已生效；不对可在「生效中」停用或删除。`
+          : value.created.length
+            ? `模型归纳出 ${value.created.length} 条候选偏好，请在「待确认」中审核。`
+            : useModel
+              ? "模型没有归纳出新偏好。"
+              : "同一条说明写过 2 次以上才会记成习惯；面向以后的话（如「以后都…」）写下时就已记住。",
       );
-      setTab("pending");
-      await loadMemories("pending");
+      const next = learned ? "confirmed" : "pending";
+      setTab(next);
+      await loadMemories(next);
       await loadProfile(true);
     } catch (err) {
       setError(err.message);
@@ -276,7 +280,7 @@ export function DoctorProfilePanel() {
               onClick={() => consolidate(false)}
               disabled={busy}
             >
-              <Sparkles size={14} /> 归纳重复信号（本地）
+              <Sparkles size={14} /> 把重复写过的说明记成习惯
             </button>
             <label className="doctor-consent">
               <input

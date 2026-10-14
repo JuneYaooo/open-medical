@@ -154,3 +154,83 @@ test("intake gate requires personal context when nonempty, permits empty and res
     );
   }
 });
+test("full sources trim lowest-priority blocks instead of failing the intake", async (t) => {
+  const store = new Store(":memory:");
+  saveLearningPrefs(store.db, { personalContext: true, habits: true });
+  t.after(() => store.close());
+  const doctor = new DoctorProfile(store);
+  const log = new ReviewLog(store);
+  for (const id of ["p1", "p2"])
+    log.record({
+      action: { id: `a-${id}` },
+      patientId: id,
+      ai: {
+        diagnoses: [1, 2, 3, 4, 5].map((n) => ({ name: `偶然发现的影像小结节${n}`.repeat(6), status: "finding" })),
+        clinicalSummary: { text: "长".repeat(900) },
+      },
+      final: { diagnoses: [], clinicalSummary: { text: "长".repeat(900) } },
+      reasons: Object.fromEntries([0, 1, 2, 3, 4].map((i) => [`diagnoses:${i}`, "不该算诊断"])),
+    });
+  // Many short habits: each block join adds a newline on top of the 1450-char habit cap.
+  for (let i = 0; i < 120; i++) doctor.saveStated({ content: `第${i}条习惯写法要求` });
+  const service = new PersonalContext({
+    store,
+    doctor,
+    provider: () => ({ local: true, baseUrl: "http://127.0.0.1:11434/v1", model: "synthetic" }),
+    cases: () => ({
+      similar: () => ({
+        matches: [
+          { caseId: "patient:p1", score: 5 },
+          { caseId: "patient:p2", score: 4 },
+        ],
+      }),
+    }),
+    guidelines: {
+      search: async () => ({
+        hits: [1, 2, 3].map((ord) => ({
+          docId: "kb",
+          ord,
+          docTitle: "合成指南",
+          startLine: ord,
+          endLine: ord,
+          snippet: "知识".repeat(200),
+        })),
+      }),
+    },
+    extensions: () => ({
+      list: () => [
+        { id: "s1", status: "active", name: "摘要技能", appliesTo: ["病史摘要"], body: "规则".repeat(468) },
+      ],
+    }),
+  });
+  const value = await service.build([{ notes: "高血压" }]);
+  assert.ok(value.text.length <= 6000);
+  assert.equal(value.examples.length, 2);
+  assert.equal(value.skills.length, 0, "skills are dropped first");
+  assert.ok(value.knowledge.length >= 1);
+  assert.match(value.text, /删除诊断「偶然发现的影像小结节1.*（原因：不该算诊断）/);
+});
+test("habits switch alone post-processes drafts without injecting prompt context", async (t) => {
+  const store = new Store(":memory:");
+  saveLearningPrefs(store.db, { personalContext: false, habits: true });
+  t.after(() => store.close());
+  const doctor = new DoctorProfile(store);
+  const habit = doctor.saveStated({ content: "以后诊断都写全称" });
+  const service = new PersonalContext({
+    store,
+    doctor,
+    provider: () => ({ local: false, baseUrl: "https://model.invalid/v1", model: "synthetic" }),
+    cases: () => ({ similar: () => ({ matches: [] }) }),
+    guidelines: { search: async () => ({ hits: [] }) },
+    extensions: () => ({ list: () => [] }),
+  });
+  const context = await service.build([{ notes: "HTN" }]);
+  assert.equal(context.text, "", "gate stays open when P1 is off");
+  const { HabitLearner } = await import("../server/medical/habit-learner.mjs");
+  const payload = service.prepare({ diagnoses: [{ name: "HTN" }] }, context, {
+    habitLearner: new HabitLearner(store, doctor),
+  });
+  assert.equal(payload.diagnoses[0].name, "高血压");
+  assert.deepEqual(payload.personalization.habits.map((h) => h.id), [habit.id]);
+  assert.equal(payload.habitChanges[0].habitId, habit.id);
+});

@@ -82,7 +82,7 @@ test("doctor memories: explicit entries are active, lifecycle and topic replacem
   assert.throws(() => doctor.memoryRow(second.id), /记忆条目不存在/);
 });
 
-test("doctor signals: dedupe, deterministic consolidation and manual confirm", (t) => {
+test("doctor signals: dedupe, repeated feedback takes effect without a pending step", (t) => {
   const doctor = newDoctor(t);
   const source = { type: "review_rejected", sessionId: "s1" };
   doctor.recordSignal({ content: "日期必须保留原格式", topic: "复核反馈", source });
@@ -94,13 +94,13 @@ test("doctor signals: dedupe, deterministic consolidation and manual confirm", (
   const result = doctor.consolidate();
   assert.equal(result.created.length, 1);
   assert.equal(result.created[0].kind, "consolidated");
+  assert.equal(result.created[0].status, "confirmed");
+  assert.equal(result.created[0].origin, "learned");
   assert.equal(result.created[0].content, "日期必须保留原格式");
   assert.equal(result.created[0].count, 2);
   // Repeated signals are merged away; the single one stays open.
   assert.equal(doctor.memories({ kind: "observed", status: "open" }).length, 1);
-
-  const confirmed = doctor.confirmMemory(result.created[0].id);
-  assert.equal(confirmed.status, "confirmed");
+  assert.equal(doctor.memories({ status: "pending" }).length, 0);
   assert.ok(doctor.get().digest.includes("日期必须保留原格式"));
   doctor.dismissMemory(once.id);
 });
@@ -271,11 +271,18 @@ test("proposal tray feedback becomes observed signals and consolidates", async (
   assert.equal(open[0].count, 2);
   assert.equal(open[0].topic, "提案反馈");
 
-  // 重复出现的反馈经确定性归并成为待确认偏好候选，医生确认后才生效。
+  // 重复出现的反馈是医生自己的原话：归并后直接生效，只保留说明本身，不带提案摘要。
   const consolidated = f.server.doctor.consolidate();
   assert.equal(consolidated.created.length, 1);
-  assert.equal(consolidated.created[0].status, "pending");
-  assert.match(consolidated.created[0].content, /文风要正式/);
+  assert.equal(consolidated.created[0].status, "confirmed");
+  assert.equal(consolidated.created[0].content, "文风要正式，不要表格");
+
+  // 说明里面向以后的话当场记下，并随拒绝结果返回给托盘显示「记下了」。
+  const fifth = await propose("出院小结摘要");
+  const said = await f.json(`/api/pending-actions/${fifth.id}/reject`, "POST", { note: "以后小结都写成段落；这份先不入库" });
+  assert.equal(said.status, 200);
+  assert.deepEqual(said.data.remembered.map((m) => m.content), ["以后小结都写成段落"]);
+  assert.equal(f.server.doctor.memories({ status: "confirmed" }).filter((m) => m.content === "以后小结都写成段落").length, 1);
 
   // 确认时带的备注同样进信号。
   const fourth = await propose("随访提醒提前一天");

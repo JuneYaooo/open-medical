@@ -195,13 +195,64 @@ export function reviewCounts(before, diffs) {
     rate: aiItems ? items.length / aiItems : null,
   };
 }
+const SECTION_LABELS = {
+  diagnoses: "诊断",
+  medications: "用药",
+  labs: "检验",
+  visits: "就诊",
+  allergies: "过敏原",
+  groups: "分组",
+  tags: "标签",
+  clinicalSummary: "病史摘要",
+  identity: "身份信息",
+  allergy: "过敏史",
+};
+const FIELD_LABELS = {
+  name: "名称",
+  status: "状态",
+  date: "日期",
+  note: "备注",
+  dose: "剂量",
+  frequency: "频次",
+  value: "数值",
+  unit: "单位",
+  item: "项目",
+  reason: "事由",
+  allergyStatus: "过敏状态",
+  gender: "性别",
+  birthYear: "出生年",
+  phone: "电话",
+  patientNumber: "病历号",
+};
+const briefValue = (v) => {
+  if (v === null || v === undefined || v === "") return "空";
+  const text =
+    typeof v === "object"
+      ? [v.name ?? v.item ?? v.reason, v.dose, v.frequency, v.value, v.unit, v.date]
+          .filter((x) => x !== undefined && x !== null && x !== "")
+          .join(" ") || JSON.stringify(v)
+      : String(v);
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+};
+// Natural-language summary shared by the "keep my edits" rerun prompt and reference examples.
 export function diffSummary(diffs) {
   return diffs
-    .map(
-      (d) =>
-        `${d.section} ${d.op} ${d.field}: ${JSON.stringify(d.before)} → ${JSON.stringify(d.after)}${d.reason ? `（${d.reason}）` : ""}`,
-    )
-    .join("\n");
+    .map((d) => {
+      const section = SECTION_LABELS[d.section] || d.section;
+      const why = d.reason ? `（原因：${d.reason}）` : "";
+      if (d.op === "add") return `新增${section}「${briefValue(d.after)}」${why}`;
+      if (d.op === "delete")
+        return `删除${section}「${briefValue(d.before)}」${why}`;
+      if (d.section === "clinicalSummary")
+        return `改写了病史摘要（${String(d.before ?? "").length} 字 → ${String(d.after ?? "").length} 字）`;
+      const owner =
+        d.itemBefore && typeof d.itemBefore === "object" && d.field !== "name"
+          ? `「${briefValue(d.itemBefore.name ?? d.itemBefore.item ?? d.itemBefore.reason)}」的`
+          : "";
+      const field = FIELD_LABELS[d.field] || d.field || "";
+      return `${section}${owner}${field}由「${briefValue(d.before)}」改为「${briefValue(d.after)}」${why}`;
+    })
+    .join("；");
 }
 export function paragraphDiff(before = "", after = "") {
   const a = before.split(/\n\s*\n/).filter(Boolean),

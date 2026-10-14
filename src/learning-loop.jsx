@@ -223,6 +223,7 @@ export function LearningStats({ onClear }) {
     [error, setError] = useState(""),
     [details, setDetails] = useState(null),
     [confirmClear, setConfirmClear] = useState(false),
+    [includeStated, setIncludeStated] = useState(false),
     [busy, setBusy] = useState(false);
   const load = () =>
     api("/api/review-stats?range=90d")
@@ -365,12 +366,23 @@ export function LearningStats({ onClear }) {
           <p>
             清空所有核对差异、学习候选和由修改形成的习惯？患者档案仍会保留。
           </p>
+          <label>
+            <input
+              type="checkbox"
+              checked={includeStated}
+              onChange={(e) => setIncludeStated(e.target.checked)}
+            />
+            同时删除我亲口说过的习惯（默认保留）
+          </label>
           <button
             disabled={busy}
             onClick={async () => {
               setBusy(true);
               try {
-                await api("/api/learning/clear", "POST", { confirmed: true });
+                await api("/api/learning/clear", "POST", {
+                  confirmed: true,
+                  includeStated,
+                });
                 setConfirmClear(false);
                 setDetails(null);
                 await load();
@@ -385,7 +397,14 @@ export function LearningStats({ onClear }) {
           >
             确认清空学习记录
           </button>
-          <button onClick={() => setConfirmClear(false)}>取消</button>
+          <button
+            onClick={() => {
+              setConfirmClear(false);
+              setIncludeStated(false);
+            }}
+          >
+            取消
+          </button>
         </div>
       )}
     </section>

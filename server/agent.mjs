@@ -1608,9 +1608,10 @@ export function createServer(options = {}) {
       if (path === "/api/review-stats" && req.method === "GET") return send(res, 200, pending.reviewLog.stats(url.searchParams.get('range') || '90d'));
       if (path === "/api/review-details" && req.method === "GET") return send(res, 200, { diffs: pending.reviewLog.details(url.searchParams.get('section')) });
       if (path === "/api/learning/clear" && req.method === "POST") {
-        check((await body(req)).confirmed === true, 'CONFIRM_REQUIRED', '请确认清空学习记录');
+        const input = await body(req);
+        check(input.confirmed === true, 'CONFIRM_REQUIRED', '请确认清空学习记录');
         check(!personalRegression.active, 'RUN_ACTIVE', '请先停止历史档案评测，再清空学习记录', 409);
-        return send(res, 200, pending.reviewLog.clear());
+        return send(res, 200, pending.reviewLog.clear({ includeStated: input.includeStated === true }));
       }
       if (parts[1] === 'pending-actions' && parts.length === 4 && parts[3] === 'review-draft' && req.method === 'PATCH') return send(res, 200, pending.saveReview(parts[2], await body(req)));
       if (parts[1] === 'learning' && parts[2] === 'habits' && parts.length === 5 && parts[4] === 'decision' && req.method === 'POST') { const input = await body(req); return send(res, 200, pending.habitLearner.decide(Number(parts[3]), input.decision, input)); }

@@ -360,3 +360,21 @@ test('style consolidation waits for five edits and reserves the short output bud
   assert.equal(memories.length, 1);
   assert.deepEqual(memories[0].rule, { type: 'style_rule', pattern: 'brief' });
 });
+test("delete reason takes effect on the next occurrence, even for the same patient", (t) => {
+  const { doctor, learner, log } = setup(t);
+  const drop = (id) =>
+    log.record({
+      action: { id },
+      patientId: "same-patient",
+      ai: { diagnoses: [{ name: "肝囊肿", status: "finding" }, { name: "高血压", status: "confirmed" }] },
+      final: { diagnoses: [{ name: "高血压", status: "confirmed" }] },
+      reasons: { "diagnoses:0": "不该算诊断" },
+    });
+  drop("first");
+  assert.equal(learner.aggregate().length, 0);
+  drop("second");
+  const [habit] = learner.aggregate();
+  assert.equal(habit.status, "confirmed");
+  assert.equal(doctor.memoryRow(habit.id).origin, "stated");
+  assert.equal(doctor.memoryRow(habit.id).rule.matcher, "肝囊肿");
+});

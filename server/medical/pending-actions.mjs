@@ -310,16 +310,17 @@ export class PendingActions {
       : string(note, "反馈说明", 300);
   }
   recordFeedback(action, decision, note) {
-    if (!note || !this.doctor) return;
-    this.doctor.recordSignal({
+    if (!note || !this.doctor) return [];
+    return this.doctor.recordSignal({
       content: `${decision === "rejected" ? "拒绝" : "确认"}${action.type === "patient-create" ? "建档" : action.type === "patient-update" ? "档案更新" : action.type === "followup-create" ? "随访" : action.type === "case-save" ? "病例入库" : "提案"}「${String(action.summary).slice(0, 200)}」时说明：${note}`,
       topic: "提案反馈",
+      note,
       source: {
         type: decision === "rejected" ? "proposal_rejected" : "proposal_confirmed",
         actionId: action.id,
         actionType: action.type,
       },
-    });
+    }).remembered;
   }
   normalizeReview(action, input) {
     const normalized = normalizePatientCreate(input);
@@ -488,8 +489,8 @@ export class PendingActions {
         "提案确认状态未写入，请刷新后重试；本次变更已回滚。",
         409,
       );
-      this.recordFeedback(action, "confirmed", feedback);
-      return { ok: true, action: this.row(id), applied, habitSuggestions, pausedHabits: this.store.db.prepare("SELECT subject FROM learning_events WHERE type='habit-paused' AND id>?").all(eventCursor).map(r => Number(r.subject)).concat((action.payload.personalization?.habits || []).filter(h => this.doctor?.memoryRow(h.id).status === "paused").map(h => h.id)).filter((id,i,ids) => ids.indexOf(id) === i) };
+      const remembered = this.recordFeedback(action, "confirmed", feedback);
+      return { ok: true, action: this.row(id), applied, habitSuggestions, remembered, pausedHabits: this.store.db.prepare("SELECT subject FROM learning_events WHERE type='habit-paused' AND id>?").all(eventCursor).map(r => Number(r.subject)).concat((action.payload.personalization?.habits || []).filter(h => this.doctor?.memoryRow(h.id).status === "paused").map(h => h.id)).filter((id,i,ids) => ids.indexOf(id) === i) };
     }); } catch (error) {
       // Installs return a list of ids; restore every skill file the rolled
       // back transaction had materialized.
@@ -506,8 +507,8 @@ export class PendingActions {
         "UPDATE pending_actions SET status='rejected',updated_at=? WHERE id=?",
       )
       .run(new Date().toISOString(), id);
-    this.recordFeedback(action, "rejected", feedback);
-    return { ok: true, action: this.row(id) };
+    const remembered = this.recordFeedback(action, "rejected", feedback);
+    return { ok: true, action: this.row(id), remembered };
   }
   // 被更新的提案取代（同一资料任务重新分析）。不算医生拒绝：审计里保留
   // supersededBy 指向取代它的提案，列表/计数把它当已处理。

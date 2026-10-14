@@ -1,4 +1,4 @@
-import { TERM_GROUPS } from "../../shared/review-diff.mjs";
+import { TERM_GROUPS, diffSummary } from "../../shared/review-diff.mjs";
 import { check } from "../errors.mjs";
 import { deidentifyExample } from "./deidentify-example.mjs";
 // P1/P2 remain opt-in until the release model matrix clears its acceptance gates.
@@ -99,6 +99,15 @@ export class PersonalContext {
             : "",
       model: model?.model || "",
       holdout,
+      // Structured habits post-process drafts under learning.habits alone, independent of the
+      // prompt block's switch and character budget.
+      ruleHabitIds:
+        prefs.habits && !holdout
+          ? this.doctor
+              .memories({ status: "confirmed" })
+              .filter((m) => m.rule)
+              .map((m) => m.id)
+          : [],
     };
     if (!prefs.personalContext || holdout) return context;
     const blocks = [
@@ -154,10 +163,19 @@ export class PersonalContext {
         const final = deidentifyExample(JSON.parse(s.final_snapshot));
         const diffs = this.store.db
           .prepare(
-            "SELECT before,after,section,field FROM review_diffs WHERE session_id=? LIMIT 5",
+            "SELECT section,op,field,before,after,reason,data FROM review_diffs WHERE session_id=? AND learnable=1 ORDER BY id LIMIT 5",
           )
-          .all(s.id);
-        const line = `【参考范例 E${context.examples.length + 1}，已去标识化】${JSON.stringify(final).slice(0, 850)}\n当时的修改：${JSON.stringify(deidentifyExample(diffs)).slice(0, 400)}`;
+          .all(s.id)
+          .map((d) => ({
+            ...JSON.parse(d.data || "{}"),
+            ...d,
+            before: JSON.parse(d.before ?? "null"),
+            after: JSON.parse(d.after ?? "null"),
+          }));
+        const edits = diffs.length
+          ? `\n该医生当时对 AI 草稿的修改：${diffSummary(deidentifyExample(diffs))}`.slice(0, 400)
+          : "";
+        const line = `【参考范例 E${context.examples.length + 1}，已去标识化】${JSON.stringify(final).slice(0, 850)}${edits}`;
         const ref = `E${context.examples.length + 1}`;
         context.examples.push({
           id: s.id,
@@ -225,10 +243,23 @@ export class PersonalContext {
         context.knowledge.length +
         context.skills.length >
       0;
-    context.text = hasContent
-      ? blocks.join("\n") +
-        "\n提交草稿时在 personalization 列出实际采用的 habitIds（数字）、exampleIds（范例 id）、kbRefs（K编号）、skillIds。不得声明未读取的条目。"
-      : "";
+    const trailer =
+      "\n提交草稿时在 personalization 列出实际采用的 habitIds（数字）、exampleIds（范例 id）、kbRefs（K编号）、skillIds。不得声明未读取的条目。";
+    // Over budget: drop whole blocks from the lowest priority end (skills → knowledge → examples)
+    // so an intake never fails just because every source is full.
+    const owners = [
+      ["skills", (b) => b.startsWith("【适用技能")],
+      ["knowledge", (b) => /^【K\d/.test(b)],
+      ["examples", (b) => b.startsWith("【参考范例")],
+    ];
+    while (blocks.join("\n").length + trailer.length > 6000) {
+      const owner = owners.find(([, test]) => blocks.some(test));
+      if (!owner) break;
+      const index = blocks.findLastIndex(owner[1]);
+      blocks.splice(index, 1);
+      context[owner[0]].pop();
+    }
+    context.text = hasContent ? blocks.join("\n") + trailer : "";
     check(
       context.text.length <= 6000,
       "CONTEXT_BUDGET",
@@ -266,16 +297,16 @@ export class PersonalContext {
     const prefs = learningPrefs(this.store.db);
     const result =
       prefs.habits && prefs.postprocess && !context.holdout
-        ? pending.habitLearner.postprocess(
-            before,
-            context.habits.map((h) => h.id),
-          )
+        ? pending.habitLearner.postprocess(before, [
+            ...new Set([
+              ...(context.ruleHabitIds || []),
+              ...context.habits.map((h) => h.id),
+            ]),
+          ])
         : { payload: before, changes: [] };
     for (const c of result.changes)
       if (!personalization.habits.some((h) => h.id === c.habitId))
-        personalization.habits.push(
-          context.habits.find((h) => h.id === c.habitId),
-        );
+        personalization.habits.push({ id: c.habitId, content: c.content });
     const payload = {
       ...result.payload,
       personalization,

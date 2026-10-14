@@ -328,10 +328,13 @@ export class HabitLearner {
     for (const [key, group] of groups) {
       let { rule } = group;
       const { rows, pattern } = group;
+      // A delete reason is the doctor saying so: one more occurrence suffices, even for the same
+      // patient. Inferred patterns need 3 hits across ≥2 patients.
       const stated = rule.type === "exclude_rule";
       if (
-        rows.length < (stated ? 2 : 3) ||
-        new Set(rows.map((r) => r.patient_id)).size < 2
+        stated
+          ? rows.length < 2
+          : rows.length < 3 || new Set(rows.map((r) => r.patient_id)).size < 2
       )
         continue;
       const existing =
