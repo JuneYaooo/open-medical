@@ -1,0 +1,40 @@
+{
+  "version": "0.9.127",
+  "attempt": 2,
+  "status": "failed",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "runtime": {
+    "electron": "44.2.0",
+    "node": "24.20.0"
+  },
+  "concurrency": 12,
+  "calls": 5301,
+  "callsScope": "current-invocation",
+  "reusedIntakes": 480,
+  "newIntakesIncludingPartialCells": 1265,
+  "completeCells": 43,
+  "plannedCells": 45,
+  "failedCells": [
+    {
+      "group": "C-no-examples",
+      "persona": "D3",
+      "seed": 41,
+      "error": "模型未生成唯一草稿"
+    },
+    {
+      "group": "C",
+      "persona": "D3",
+      "seed": 83,
+      "error": "未生成可核对的档案草稿。资料已保存，请重试。"
+    }
+  ],
+  "acceptance": "incomplete",
+  "limitations": [
+    "Two model responses did not submit a draft; failed traces preserved before cell replay.",
+    "Partial cells restart; completed cells are reused with an identical fingerprint.",
+    "Human gold review, style calibration, full local matrix and four-week pilot remain incomplete."
+  ]
+}

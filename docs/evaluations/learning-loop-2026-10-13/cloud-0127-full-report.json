@@ -1,0 +1,5814 @@
+{
+  "status": "incomplete",
+  "model": {
+    "provider": "anthropic",
+    "model": "deepseek-flash"
+  },
+  "mode": "release",
+  "calls": 331,
+  "concurrency": 12,
+  "reusedIntakes": 1720,
+  "callsScope": "current-invocation",
+  "rows": 1800,
+  "summary": {
+    "groups": {
+      "A": {
+        "overall": {
+          "count": 360,
+          "ser": 0.26651836929410383,
+          "fer": 0.6600738579231226,
+          "f1": 0.7119556369556382,
+          "serCI95": [
+            0.23860536794360326,
+            0.28758199317022853
+          ],
+          "ferCI95": [
+            0.636372929222194,
+            0.6916276051018697
+          ],
+          "f1CI95": [
+            0.6895695970695974,
+            0.7357885632885636
+          ]
+        },
+        "early": {
+          "count": 90,
+          "ser": 0.2750214600214597,
+          "fer": 0.6675888925888925,
+          "f1": 0.7027269027269019,
+          "serCI95": [
+            0.24173197173197172,
+            0.3015088615088615
+          ],
+          "ferCI95": [
+            0.6254985754985756,
+            0.7155973655973656
+          ],
+          "f1CI95": [
+            0.6823280423280422,
+            0.7207407407407408
+          ]
+        },
+        "middle": {
+          "count": 90,
+          "ser": 0.26903272653272625,
+          "fer": 0.6488620176120176,
+          "f1": 0.7231908831908823,
+          "serCI95": [
+            0.23940397565397564,
+            0.29468984718984725
+          ],
+          "ferCI95": [
+            0.6168386705886706,
+            0.6856789506789507
+          ],
+          "f1CI95": [
+            0.677973137973138,
+            0.7709157509157509
+          ]
+        },
+        "late": {
+          "count": 90,
+          "ser": 0.27700382950382924,
+          "fer": 0.6446592296592297,
+          "f1": 0.7267114367114358,
+          "serCI95": [
+            0.2582136382136382,
+            0.29359862359862365
+          ],
+          "ferCI95": [
+            0.6195534095534095,
+            0.6707266807266807
+          ],
+          "f1CI95": [
+            0.6901098901098899,
+            0.7625152625152627
+          ]
+        },
+        "holdout": {
+          "count": 90,
+          "ser": 0.24501546111840217,
+          "fer": 0.6791852918323508,
+          "f1": 0.6951933251933244,
+          "serCI95": [
+            0.21009966884966885,
+            0.27216853952148073
+          ],
+          "ferCI95": [
+            0.6483917933917934,
+            0.7120650047120637
+          ],
+          "f1CI95": [
+            0.6722832722832721,
+            0.7192511192511192
+          ]
+        }
+      },
+      "B": {
+        "overall": {
+          "count": 360,
+          "ser": 0.2117869229082468,
+          "fer": 0.6406985940257992,
+          "f1": 0.7357254782254804,
+          "serCI95": [
+            0.2043876439464675,
+            0.2187133822060293
+          ],
+          "ferCI95": [
+            0.6131937622562622,
+            0.676296745873952
+          ],
+          "f1CI95": [
+            0.7117216117216122,
+            0.7657000407000409
+          ]
+        },
+        "early": {
+          "count": 90,
+          "ser": 0.22627121788886476,
+          "fer": 0.6576418216859394,
+          "f1": 0.738909238909238,
+          "serCI95": [
+            0.20565431300725417,
+            0.24726902726902728
+          ],
+          "ferCI95": [
+            0.6197435897435896,
+            0.6967632095573273
+          ],
+          "f1CI95": [
+            0.7152706552706554,
+            0.7651933251933251
+          ]
+        },
+        "middle": {
+          "count": 90,
+          "ser": 0.21545778295778284,
+          "fer": 0.6327101602101602,
+          "f1": 0.7445746845746838,
+          "serCI95": [
+            0.19376974876974873,
+            0.2369035594035594
+          ],
+          "ferCI95": [
+            0.5957596107596108,
+            0.6711331261331261
+          ],
+          "f1CI95": [
+            0.7055921855921854,
+            0.7839316239316239
+          ]
+        },
+        "late": {
+          "count": 90,
+          "ser": 0.20725441225441216,
+          "fer": 0.6180108780108781,
+          "f1": 0.7426332926332917,
+          "serCI95": [
+            0.18768564768564772,
+            0.22465571465571463
+          ],
+          "ferCI95": [
+            0.5826292226292226,
+            0.6567029267029267
+          ],
+          "f1CI95": [
+            0.7063288563288563,
+            0.7822954822954822
+          ]
+        },
+        "holdout": {
+          "count": 90,
+          "ser": 0.19816427853192542,
+          "fer": 0.6544315161962221,
+          "f1": 0.716784696784696,
+          "serCI95": [
+            0.18631191792956497,
+            0.2097597201273672
+          ],
+          "ferCI95": [
+            0.6175023342670403,
+            0.6921729632023751
+          ],
+          "f1CI95": [
+            0.6828571428571428,
+            0.7519088319088318
+          ]
+        }
+      },
+      "C-no-postprocess": {
+        "overall": {
+          "count": 360,
+          "ser": 0.0819384781884782,
+          "fer": 0.6448795880045873,
+          "f1": 0.8798643023643026,
+          "serCI95": [
+            0.0757857882857883,
+            0.08881669256669258
+          ],
+          "ferCI95": [
+            0.6176277888777889,
+            0.6770658161283162
+          ],
+          "f1CI95": [
+            0.8679636104636105,
+            0.8913225663225661
+          ]
+        },
+        "early": {
+          "count": 90,
+          "ser": 0.1259889184889185,
+          "fer": 0.673589096089096,
+          "f1": 0.8279527879527876,
+          "serCI95": [
+            0.11301032301032299,
+            0.13727309727309725
+          ],
+          "ferCI95": [
+            0.6341002516002515,
+            0.7160765160765161
+          ],
+          "f1CI95": [
+            0.8059055759055758,
+            0.8490801790801789
+          ]
+        },
+        "middle": {
+          "count": 90,
+          "ser": 0.06637954637954638,
+          "fer": 0.6432615070115071,
+          "f1": 0.8965919265919258,
+          "serCI95": [
+            0.05480963480963481,
+            0.07963254338254337
+          ],
+          "ferCI95": [
+            0.60502442002442,
+            0.6810441872941873
+          ],
+          "f1CI95": [
+            0.8761164761164761,
+            0.917886927886928
+          ]
+        },
+        "late": {
+          "count": 90,
+          "ser": 0.05617303992303996,
+          "fer": 0.6134625097125095,
+          "f1": 0.9275986975986968,
+          "serCI95": [
+            0.0424456561956562,
+            0.07076987826987828
+          ],
+          "ferCI95": [
+            0.5840429940429941,
+            0.6474382099382099
+          ],
+          "f1CI95": [
+            0.904961334961335,
+            0.9479772079772081
+          ]
+        },
+        "holdout": {
+          "count": 90,
+          "ser": 0.079212407962408,
+          "fer": 0.6492052392052394,
+          "f1": 0.8673137973137965,
+          "serCI95": [
+            0.06727305102305103,
+            0.09050893550893552
+          ],
+          "ferCI95": [
+            0.6180874218374217,
+            0.6818675306175306
+          ],
+          "f1CI95": [
+            0.8461457061457058,
+            0.8858078958078957
+          ]
+        }
+      },
+      "C-no-examples": {
+        "overall": {
+          "count": 360,
+          "ser": 0.09251666543333208,
+          "fer": 0.6782866670366653,
+          "f1": 0.889479525104526,
+          "serCI95": [
+            0.08918963366880037,
+            0.09581423977257313
+          ],
+          "ferCI95": [
+            0.6607356994856995,
+            0.6985135350760352
+          ],
+          "f1CI95": [
+            0.8683622396122396,
+            0.9069113756613755
+          ]
+        },
+        "early": {
+          "count": 90,
+          "ser": 0.13782213157213163,
+          "fer": 0.6758242220742221,
+          "f1": 0.8727553927553923,
+          "serCI95": [
+            0.12913600288600288,
+            0.1447494634994635
+          ],
+          "ferCI95": [
+            0.65368857993858,
+            0.7025966625966626
+          ],
+          "f1CI95": [
+            0.8551119251119252,
+            0.8887464387464389
+          ]
+        },
+        "middle": {
+          "count": 90,
+          "ser": 0.07489658489658486,
+          "fer": 0.6831803381803385,
+          "f1": 0.8989721389721385,
+          "serCI95": [
+            0.06993117993117995,
+            0.07899822399822401
+          ],
+          "ferCI95": [
+            0.6534998334998336,
+            0.7111307211307211
+          ],
+          "f1CI95": [
+            0.8714936914936915,
+            0.9245624745624745
+          ]
+        },
+        "late": {
+          "count": 90,
+          "ser": 0.07802045177045175,
+          "fer": 0.6698847911347912,
+          "f1": 0.894004884004884,
+          "serCI95": [
+            0.07316447441447442,
+            0.08262182262182263
+          ],
+          "ferCI95": [
+            0.6495743145743147,
+            0.6938930051430051
+          ],
+          "f1CI95": [
+            0.8486609686609685,
+            0.9289173789173789
+          ]
+        },
+        "holdout": {
+          "count": 90,
+          "ser": 0.0793274934941601,
+          "fer": 0.6842573167573168,
+          "f1": 0.8921856846856845,
+          "serCI95": [
+            0.07666020707687377,
+            0.0820381007881008
+          ],
+          "ferCI95": [
+            0.6661434861434862,
+            0.7038522126022126
+          ],
+          "f1CI95": [
+            0.8673015873015872,
+            0.9170315795315798
+          ]
+        }
+      },
+      "C": {
+        "overall": {
+          "count": 360,
+          "ser": 0.0621019000063117,
+          "fer": 0.6444532516775154,
+          "f1": 0.9034918784918785,
+          "serCI95": [
+            0.054522237022237005,
+            0.07041309725133256
+          ],
+          "ferCI95": [
+            0.6153864653864655,
+            0.6800664164267106
+          ],
+          "f1CI95": [
+            0.8695460095460096,
+            0.9293335368335369
+          ]
+        },
+        "early": {
+          "count": 90,
+          "ser": 0.11285640285640286,
+          "fer": 0.6614992414992416,
+          "f1": 0.8456491656491655,
+          "serCI95": [
+            0.10294945794945795,
+            0.12354830354830354
+          ],
+          "ferCI95": [
+            0.6133146483146483,
+            0.7089915639915642
+          ],
+          "f1CI95": [
+            0.8130362230362229,
+            0.8816157916157916
+          ]
+        },
+        "middle": {
+          "count": 90,
+          "ser": 0.048436506304153394,
+          "fer": 0.6480126219096809,
+          "f1": 0.9222873422873418,
+          "serCI95": [
+            0.04005659917424623,
+            0.057843626961274014
+          ],
+          "ferCI95": [
+            0.615555403202462,
+            0.6831921319421319
+          ],
+          "f1CI95": [
+            0.88011396011396,
+            0.954936914936915
+          ]
+        },
+        "late": {
+          "count": 90,
+          "ser": 0.03783267658267658,
+          "fer": 0.6132765382765384,
+          "f1": 0.9417338217338213,
+          "serCI95": [
+            0.025151330151330156,
+            0.051508214008214
+          ],
+          "ferCI95": [
+            0.5799607799607799,
+            0.6507161357161357
+          ],
+          "f1CI95": [
+            0.8974033374033374,
+            0.973007733007733
+          ]
+        },
+        "holdout": {
+          "count": 90,
+          "ser": 0.04928201428201429,
+          "fer": 0.6550246050246048,
+          "f1": 0.9042971842971836,
+          "serCI95": [
+            0.040058275058275056,
+            0.05975043475043475
+          ],
+          "ferCI95": [
+            0.6295386095386095,
+            0.6893003293003294
+          ],
+          "f1CI95": [
+            0.8653561253561254,
+            0.9361116661116663
+          ]
+        }
+      }
+    },
+    "paired": {
+      "B": {
+        "overall": {
+          "difference": -0.054731446385858085,
+          "ci95": [
+            -0.07724129424497071,
+            -0.028886873611138317
+          ],
+          "pairs": 360
+        },
+        "late": {
+          "difference": -0.06974941724941723,
+          "ci95": [
+            -0.09374717874717874,
+            -0.04319097569097568
+          ],
+          "pairs": 90
+        }
+      },
+      "C-no-postprocess": {
+        "overall": {
+          "difference": -0.1845798911056265,
+          "ci95": [
+            -0.21050632442176562,
+            -0.15216531494105023
+          ],
+          "pairs": 360
+        },
+        "late": {
+          "difference": -0.2208307895807895,
+          "ci95": [
+            -0.24735875235875238,
+            -0.18899304399304398
+          ],
+          "pairs": 90
+        }
+      },
+      "C-no-examples": {
+        "overall": {
+          "difference": -0.17400170386077243,
+          "ci95": [
+            -0.19431308139028727,
+            -0.1493361148201834
+          ],
+          "pairs": 360
+        },
+        "late": {
+          "difference": -0.19898337773337763,
+          "ci95": [
+            -0.21209780959780958,
+            -0.18356356606356605
+          ],
+          "pairs": 90
+        }
+      },
+      "C": {
+        "overall": {
+          "difference": -0.2044164692877929,
+          "ci95": [
+            -0.23222120812194338,
+            -0.1683502982583865
+          ],
+          "pairs": 360
+        },
+        "late": {
+          "difference": -0.23917115292115276,
+          "ci95": [
+            -0.2657715895215895,
+            -0.208498075998076
+          ],
+          "pairs": 90
+        }
+      }
+    },
+    "pairedLateDifference": -0.23917115292115276,
+    "pairedLateCI95": [
+      -0.2657715895215895,
+      -0.208498075998076
+    ]
+  },
+  "gates": {
+    "G1": {
+      "status": "passed"
+    },
+    "G3": {
+      "status": "passed"
+    },
+    "G4": {
+      "status": "passed"
+    },
+    "G5": {
+      "status": "passed"
+    },
+    "G6": {
+      "status": "unverified",
+      "reason": "style 评审需要独立人工标注校准；结构化习惯结果已逐条记录",
+      "structuredPrecision": 1,
+      "statedRecall": 1,
+      "falseStated": 0,
+      "structuredRecall": 0.5555555555555557,
+      "precision": 0.6,
+      "falseRate": 0,
+      "calibration": {
+        "usable": false,
+        "reason": "未提供人工标注校准集"
+      }
+    },
+    "G6b": {
+      "status": "passed",
+      "probes": [
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        },
+        {
+          "status": "passed",
+          "patients": 5,
+          "method": "recorded-model-draft-replay",
+          "ledger": {
+            "applied": 5,
+            "reverted": 5,
+            "notApplicable": 0,
+            "rates": {
+              "before": null,
+              "after": 1
+            },
+            "conflict": true
+          }
+        }
+      ]
+    },
+    "G7": {
+      "status": "unverified",
+      "predicted": 0,
+      "actual": 0,
+      "observations": 0
+    },
+    "G8": {
+      "status": "passed",
+      "leaks": 0
+    },
+    "G9": {
+      "status": "passed",
+      "latencyRatio": 0.9659891162677982,
+      "extraTokens": 547.4388888888889
+    },
+    "G2": {
+      "status": "passed"
+    },
+    "G10": {
+      "status": "passed",
+      "isolatedRuns": 45
+    }
+  },
+  "runs": [
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D1-17-P013.json",
+        "A-D1-17-P018.json",
+        "A-D1-17-P038.json",
+        "A-D1-17-P027.json",
+        "A-D1-17-P026.json",
+        "A-D1-17-P033.json",
+        "A-D1-17-P023.json",
+        "A-D1-17-P021.json",
+        "A-D1-17-P001.json",
+        "A-D1-17-P003.json",
+        "A-D1-17-P037.json",
+        "A-D1-17-P007.json",
+        "A-D1-17-P034.json",
+        "A-D1-17-P030.json",
+        "A-D1-17-P009.json",
+        "A-D1-17-P019.json",
+        "A-D1-17-P002.json",
+        "A-D1-17-P029.json",
+        "A-D1-17-P039.json",
+        "A-D1-17-P014.json",
+        "A-D1-17-P015.json",
+        "A-D1-17-P005.json",
+        "A-D1-17-P006.json",
+        "A-D1-17-P022.json",
+        "A-D1-17-P035.json",
+        "A-D1-17-P025.json",
+        "A-D1-17-P011.json",
+        "A-D1-17-P017.json",
+        "A-D1-17-P031.json",
+        "A-D1-17-P010.json",
+        "A-D1-17-P004.json",
+        "A-D1-17-P008.json",
+        "A-D1-17-P012.json",
+        "A-D1-17-P016.json",
+        "A-D1-17-P020.json",
+        "A-D1-17-P024.json",
+        "A-D1-17-P028.json",
+        "A-D1-17-P032.json",
+        "A-D1-17-P036.json",
+        "A-D1-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D1-17-P013.json",
+        "B-D1-17-P018.json",
+        "B-D1-17-P038.json",
+        "B-D1-17-P027.json",
+        "B-D1-17-P026.json",
+        "B-D1-17-P033.json",
+        "B-D1-17-P023.json",
+        "B-D1-17-P021.json",
+        "B-D1-17-P001.json",
+        "B-D1-17-P003.json",
+        "B-D1-17-P037.json",
+        "B-D1-17-P007.json",
+        "B-D1-17-P034.json",
+        "B-D1-17-P030.json",
+        "B-D1-17-P009.json",
+        "B-D1-17-P019.json",
+        "B-D1-17-P002.json",
+        "B-D1-17-P029.json",
+        "B-D1-17-P039.json",
+        "B-D1-17-P014.json",
+        "B-D1-17-P015.json",
+        "B-D1-17-P005.json",
+        "B-D1-17-P006.json",
+        "B-D1-17-P022.json",
+        "B-D1-17-P035.json",
+        "B-D1-17-P025.json",
+        "B-D1-17-P011.json",
+        "B-D1-17-P017.json",
+        "B-D1-17-P031.json",
+        "B-D1-17-P010.json",
+        "B-D1-17-P004.json",
+        "B-D1-17-P008.json",
+        "B-D1-17-P012.json",
+        "B-D1-17-P016.json",
+        "B-D1-17-P020.json",
+        "B-D1-17-P024.json",
+        "B-D1-17-P028.json",
+        "B-D1-17-P032.json",
+        "B-D1-17-P036.json",
+        "B-D1-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 6
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 9,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "chronological"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D1-17-P013.json",
+        "C-no-postprocess-D1-17-P018.json",
+        "C-no-postprocess-D1-17-P038.json",
+        "C-no-postprocess-D1-17-P027.json",
+        "C-no-postprocess-D1-17-P026.json",
+        "C-no-postprocess-D1-17-P033.json",
+        "C-no-postprocess-D1-17-P023.json",
+        "C-no-postprocess-D1-17-P021.json",
+        "C-no-postprocess-D1-17-P001.json",
+        "C-no-postprocess-D1-17-P003.json",
+        "C-no-postprocess-D1-17-P037.json",
+        "C-no-postprocess-D1-17-P007.json",
+        "C-no-postprocess-D1-17-P034.json",
+        "C-no-postprocess-D1-17-P030.json",
+        "C-no-postprocess-D1-17-P009.json",
+        "C-no-postprocess-D1-17-P019.json",
+        "C-no-postprocess-D1-17-P002.json",
+        "C-no-postprocess-D1-17-P029.json",
+        "C-no-postprocess-D1-17-P039.json",
+        "C-no-postprocess-D1-17-P014.json",
+        "C-no-postprocess-D1-17-P015.json",
+        "C-no-postprocess-D1-17-P005.json",
+        "C-no-postprocess-D1-17-P006.json",
+        "C-no-postprocess-D1-17-P022.json",
+        "C-no-postprocess-D1-17-P035.json",
+        "C-no-postprocess-D1-17-P025.json",
+        "C-no-postprocess-D1-17-P011.json",
+        "C-no-postprocess-D1-17-P017.json",
+        "C-no-postprocess-D1-17-P031.json",
+        "C-no-postprocess-D1-17-P010.json",
+        "C-no-postprocess-D1-17-P004.json",
+        "C-no-postprocess-D1-17-P008.json",
+        "C-no-postprocess-D1-17-P012.json",
+        "C-no-postprocess-D1-17-P016.json",
+        "C-no-postprocess-D1-17-P020.json",
+        "C-no-postprocess-D1-17-P024.json",
+        "C-no-postprocess-D1-17-P028.json",
+        "C-no-postprocess-D1-17-P032.json",
+        "C-no-postprocess-D1-17-P036.json",
+        "C-no-postprocess-D1-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D1-17-P013.json",
+        "C-no-examples-D1-17-P018.json",
+        "C-no-examples-D1-17-P038.json",
+        "C-no-examples-D1-17-P027.json",
+        "C-no-examples-D1-17-P026.json",
+        "C-no-examples-D1-17-P033.json",
+        "C-no-examples-D1-17-P023.json",
+        "C-no-examples-D1-17-P021.json",
+        "C-no-examples-D1-17-P001.json",
+        "C-no-examples-D1-17-P003.json",
+        "C-no-examples-D1-17-P037.json",
+        "C-no-examples-D1-17-P007.json",
+        "C-no-examples-D1-17-P034.json",
+        "C-no-examples-D1-17-P030.json",
+        "C-no-examples-D1-17-P009.json",
+        "C-no-examples-D1-17-P019.json",
+        "C-no-examples-D1-17-P002.json",
+        "C-no-examples-D1-17-P029.json",
+        "C-no-examples-D1-17-P039.json",
+        "C-no-examples-D1-17-P014.json",
+        "C-no-examples-D1-17-P015.json",
+        "C-no-examples-D1-17-P005.json",
+        "C-no-examples-D1-17-P006.json",
+        "C-no-examples-D1-17-P022.json",
+        "C-no-examples-D1-17-P035.json",
+        "C-no-examples-D1-17-P025.json",
+        "C-no-examples-D1-17-P011.json",
+        "C-no-examples-D1-17-P017.json",
+        "C-no-examples-D1-17-P031.json",
+        "C-no-examples-D1-17-P010.json",
+        "C-no-examples-D1-17-P004.json",
+        "C-no-examples-D1-17-P008.json",
+        "C-no-examples-D1-17-P012.json",
+        "C-no-examples-D1-17-P016.json",
+        "C-no-examples-D1-17-P020.json",
+        "C-no-examples-D1-17-P024.json",
+        "C-no-examples-D1-17-P028.json",
+        "C-no-examples-D1-17-P032.json",
+        "C-no-examples-D1-17-P036.json",
+        "C-no-examples-D1-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 41,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D1-41-P005.json",
+        "A-D1-41-P019.json",
+        "A-D1-41-P014.json",
+        "A-D1-41-P003.json",
+        "A-D1-41-P037.json",
+        "A-D1-41-P030.json",
+        "A-D1-41-P002.json",
+        "A-D1-41-P023.json",
+        "A-D1-41-P022.json",
+        "A-D1-41-P029.json",
+        "A-D1-41-P031.json",
+        "A-D1-41-P027.json",
+        "A-D1-41-P017.json",
+        "A-D1-41-P018.json",
+        "A-D1-41-P013.json",
+        "A-D1-41-P035.json",
+        "A-D1-41-P034.json",
+        "A-D1-41-P015.json",
+        "A-D1-41-P021.json",
+        "A-D1-41-P039.json",
+        "A-D1-41-P026.json",
+        "A-D1-41-P011.json",
+        "A-D1-41-P006.json",
+        "A-D1-41-P001.json",
+        "A-D1-41-P009.json",
+        "A-D1-41-P025.json",
+        "A-D1-41-P007.json",
+        "A-D1-41-P033.json",
+        "A-D1-41-P038.json",
+        "A-D1-41-P010.json",
+        "A-D1-41-P004.json",
+        "A-D1-41-P008.json",
+        "A-D1-41-P012.json",
+        "A-D1-41-P016.json",
+        "A-D1-41-P020.json",
+        "A-D1-41-P024.json",
+        "A-D1-41-P028.json",
+        "A-D1-41-P032.json",
+        "A-D1-41-P036.json",
+        "A-D1-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 41,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D1-41-P005.json",
+        "C-D1-41-P019.json",
+        "C-D1-41-P014.json",
+        "C-D1-41-P003.json",
+        "C-D1-41-P037.json",
+        "C-D1-41-P030.json",
+        "C-D1-41-P002.json",
+        "C-D1-41-P023.json",
+        "C-D1-41-P022.json",
+        "C-D1-41-P029.json",
+        "C-D1-41-P031.json",
+        "C-D1-41-P027.json",
+        "C-D1-41-P017.json",
+        "C-D1-41-P018.json",
+        "C-D1-41-P013.json",
+        "C-D1-41-P035.json",
+        "C-D1-41-P034.json",
+        "C-D1-41-P015.json",
+        "C-D1-41-P021.json",
+        "C-D1-41-P039.json",
+        "C-D1-41-P026.json",
+        "C-D1-41-P011.json",
+        "C-D1-41-P006.json",
+        "C-D1-41-P001.json",
+        "C-D1-41-P009.json",
+        "C-D1-41-P025.json",
+        "C-D1-41-P007.json",
+        "C-D1-41-P033.json",
+        "C-D1-41-P038.json",
+        "C-D1-41-P010.json",
+        "C-D1-41-P004.json",
+        "C-D1-41-P008.json",
+        "C-D1-41-P012.json",
+        "C-D1-41-P016.json",
+        "C-D1-41-P020.json",
+        "C-D1-41-P024.json",
+        "C-D1-41-P028.json",
+        "C-D1-41-P032.json",
+        "C-D1-41-P036.json",
+        "C-D1-41-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 41,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 2
+          }
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 5
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D1-41-P005.json",
+        "C-no-postprocess-D1-41-P019.json",
+        "C-no-postprocess-D1-41-P014.json",
+        "C-no-postprocess-D1-41-P003.json",
+        "C-no-postprocess-D1-41-P037.json",
+        "C-no-postprocess-D1-41-P030.json",
+        "C-no-postprocess-D1-41-P002.json",
+        "C-no-postprocess-D1-41-P023.json",
+        "C-no-postprocess-D1-41-P022.json",
+        "C-no-postprocess-D1-41-P029.json",
+        "C-no-postprocess-D1-41-P031.json",
+        "C-no-postprocess-D1-41-P027.json",
+        "C-no-postprocess-D1-41-P017.json",
+        "C-no-postprocess-D1-41-P018.json",
+        "C-no-postprocess-D1-41-P013.json",
+        "C-no-postprocess-D1-41-P035.json",
+        "C-no-postprocess-D1-41-P034.json",
+        "C-no-postprocess-D1-41-P015.json",
+        "C-no-postprocess-D1-41-P021.json",
+        "C-no-postprocess-D1-41-P039.json",
+        "C-no-postprocess-D1-41-P026.json",
+        "C-no-postprocess-D1-41-P011.json",
+        "C-no-postprocess-D1-41-P006.json",
+        "C-no-postprocess-D1-41-P001.json",
+        "C-no-postprocess-D1-41-P009.json",
+        "C-no-postprocess-D1-41-P025.json",
+        "C-no-postprocess-D1-41-P007.json",
+        "C-no-postprocess-D1-41-P033.json",
+        "C-no-postprocess-D1-41-P038.json",
+        "C-no-postprocess-D1-41-P010.json",
+        "C-no-postprocess-D1-41-P004.json",
+        "C-no-postprocess-D1-41-P008.json",
+        "C-no-postprocess-D1-41-P012.json",
+        "C-no-postprocess-D1-41-P016.json",
+        "C-no-postprocess-D1-41-P020.json",
+        "C-no-postprocess-D1-41-P024.json",
+        "C-no-postprocess-D1-41-P028.json",
+        "C-no-postprocess-D1-41-P032.json",
+        "C-no-postprocess-D1-41-P036.json",
+        "C-no-postprocess-D1-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 41,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D1-41-P005.json",
+        "C-no-examples-D1-41-P019.json",
+        "C-no-examples-D1-41-P014.json",
+        "C-no-examples-D1-41-P003.json",
+        "C-no-examples-D1-41-P037.json",
+        "C-no-examples-D1-41-P030.json",
+        "C-no-examples-D1-41-P002.json",
+        "C-no-examples-D1-41-P023.json",
+        "C-no-examples-D1-41-P022.json",
+        "C-no-examples-D1-41-P029.json",
+        "C-no-examples-D1-41-P031.json",
+        "C-no-examples-D1-41-P027.json",
+        "C-no-examples-D1-41-P017.json",
+        "C-no-examples-D1-41-P018.json",
+        "C-no-examples-D1-41-P013.json",
+        "C-no-examples-D1-41-P035.json",
+        "C-no-examples-D1-41-P034.json",
+        "C-no-examples-D1-41-P015.json",
+        "C-no-examples-D1-41-P021.json",
+        "C-no-examples-D1-41-P039.json",
+        "C-no-examples-D1-41-P026.json",
+        "C-no-examples-D1-41-P011.json",
+        "C-no-examples-D1-41-P006.json",
+        "C-no-examples-D1-41-P001.json",
+        "C-no-examples-D1-41-P009.json",
+        "C-no-examples-D1-41-P025.json",
+        "C-no-examples-D1-41-P007.json",
+        "C-no-examples-D1-41-P033.json",
+        "C-no-examples-D1-41-P038.json",
+        "C-no-examples-D1-41-P010.json",
+        "C-no-examples-D1-41-P004.json",
+        "C-no-examples-D1-41-P008.json",
+        "C-no-examples-D1-41-P012.json",
+        "C-no-examples-D1-41-P016.json",
+        "C-no-examples-D1-41-P020.json",
+        "C-no-examples-D1-41-P024.json",
+        "C-no-examples-D1-41-P028.json",
+        "C-no-examples-D1-41-P032.json",
+        "C-no-examples-D1-41-P036.json",
+        "C-no-examples-D1-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 41,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D1-41-P005.json",
+        "B-D1-41-P019.json",
+        "B-D1-41-P014.json",
+        "B-D1-41-P003.json",
+        "B-D1-41-P037.json",
+        "B-D1-41-P030.json",
+        "B-D1-41-P002.json",
+        "B-D1-41-P023.json",
+        "B-D1-41-P022.json",
+        "B-D1-41-P029.json",
+        "B-D1-41-P031.json",
+        "B-D1-41-P027.json",
+        "B-D1-41-P017.json",
+        "B-D1-41-P018.json",
+        "B-D1-41-P013.json",
+        "B-D1-41-P035.json",
+        "B-D1-41-P034.json",
+        "B-D1-41-P015.json",
+        "B-D1-41-P021.json",
+        "B-D1-41-P039.json",
+        "B-D1-41-P026.json",
+        "B-D1-41-P011.json",
+        "B-D1-41-P006.json",
+        "B-D1-41-P001.json",
+        "B-D1-41-P009.json",
+        "B-D1-41-P025.json",
+        "B-D1-41-P007.json",
+        "B-D1-41-P033.json",
+        "B-D1-41-P038.json",
+        "B-D1-41-P010.json",
+        "B-D1-41-P004.json",
+        "B-D1-41-P008.json",
+        "B-D1-41-P012.json",
+        "B-D1-41-P016.json",
+        "B-D1-41-P020.json",
+        "B-D1-41-P024.json",
+        "B-D1-41-P028.json",
+        "B-D1-41-P032.json",
+        "B-D1-41-P036.json",
+        "B-D1-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 83,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D1-83-P019.json",
+        "B-D1-83-P009.json",
+        "B-D1-83-P033.json",
+        "B-D1-83-P035.json",
+        "B-D1-83-P018.json",
+        "B-D1-83-P006.json",
+        "B-D1-83-P015.json",
+        "B-D1-83-P001.json",
+        "B-D1-83-P034.json",
+        "B-D1-83-P039.json",
+        "B-D1-83-P038.json",
+        "B-D1-83-P002.json",
+        "B-D1-83-P027.json",
+        "B-D1-83-P007.json",
+        "B-D1-83-P005.json",
+        "B-D1-83-P029.json",
+        "B-D1-83-P030.json",
+        "B-D1-83-P017.json",
+        "B-D1-83-P014.json",
+        "B-D1-83-P013.json",
+        "B-D1-83-P010.json",
+        "B-D1-83-P022.json",
+        "B-D1-83-P021.json",
+        "B-D1-83-P003.json",
+        "B-D1-83-P023.json",
+        "B-D1-83-P037.json",
+        "B-D1-83-P026.json",
+        "B-D1-83-P025.json",
+        "B-D1-83-P031.json",
+        "B-D1-83-P011.json",
+        "B-D1-83-P004.json",
+        "B-D1-83-P008.json",
+        "B-D1-83-P012.json",
+        "B-D1-83-P016.json",
+        "B-D1-83-P020.json",
+        "B-D1-83-P024.json",
+        "B-D1-83-P028.json",
+        "B-D1-83-P032.json",
+        "B-D1-83-P036.json",
+        "B-D1-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 17,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D1-17-P013.json",
+        "C-D1-17-P018.json",
+        "C-D1-17-P038.json",
+        "C-D1-17-P027.json",
+        "C-D1-17-P026.json",
+        "C-D1-17-P033.json",
+        "C-D1-17-P023.json",
+        "C-D1-17-P021.json",
+        "C-D1-17-P001.json",
+        "C-D1-17-P003.json",
+        "C-D1-17-P037.json",
+        "C-D1-17-P007.json",
+        "C-D1-17-P034.json",
+        "C-D1-17-P030.json",
+        "C-D1-17-P009.json",
+        "C-D1-17-P019.json",
+        "C-D1-17-P002.json",
+        "C-D1-17-P029.json",
+        "C-D1-17-P039.json",
+        "C-D1-17-P014.json",
+        "C-D1-17-P015.json",
+        "C-D1-17-P005.json",
+        "C-D1-17-P006.json",
+        "C-D1-17-P022.json",
+        "C-D1-17-P035.json",
+        "C-D1-17-P025.json",
+        "C-D1-17-P011.json",
+        "C-D1-17-P017.json",
+        "C-D1-17-P031.json",
+        "C-D1-17-P010.json",
+        "C-D1-17-P004.json",
+        "C-D1-17-P008.json",
+        "C-D1-17-P012.json",
+        "C-D1-17-P016.json",
+        "C-D1-17-P020.json",
+        "C-D1-17-P024.json",
+        "C-D1-17-P028.json",
+        "C-D1-17-P032.json",
+        "C-D1-17-P036.json",
+        "C-D1-17-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 83,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D1-83-P019.json",
+        "A-D1-83-P009.json",
+        "A-D1-83-P033.json",
+        "A-D1-83-P035.json",
+        "A-D1-83-P018.json",
+        "A-D1-83-P006.json",
+        "A-D1-83-P015.json",
+        "A-D1-83-P001.json",
+        "A-D1-83-P034.json",
+        "A-D1-83-P039.json",
+        "A-D1-83-P038.json",
+        "A-D1-83-P002.json",
+        "A-D1-83-P027.json",
+        "A-D1-83-P007.json",
+        "A-D1-83-P005.json",
+        "A-D1-83-P029.json",
+        "A-D1-83-P030.json",
+        "A-D1-83-P017.json",
+        "A-D1-83-P014.json",
+        "A-D1-83-P013.json",
+        "A-D1-83-P010.json",
+        "A-D1-83-P022.json",
+        "A-D1-83-P021.json",
+        "A-D1-83-P003.json",
+        "A-D1-83-P023.json",
+        "A-D1-83-P037.json",
+        "A-D1-83-P026.json",
+        "A-D1-83-P025.json",
+        "A-D1-83-P031.json",
+        "A-D1-83-P011.json",
+        "A-D1-83-P004.json",
+        "A-D1-83-P008.json",
+        "A-D1-83-P012.json",
+        "A-D1-83-P016.json",
+        "A-D1-83-P020.json",
+        "A-D1-83-P024.json",
+        "A-D1-83-P028.json",
+        "A-D1-83-P032.json",
+        "A-D1-83-P036.json",
+        "A-D1-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 83,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D1-83-P019.json",
+        "C-no-postprocess-D1-83-P009.json",
+        "C-no-postprocess-D1-83-P033.json",
+        "C-no-postprocess-D1-83-P035.json",
+        "C-no-postprocess-D1-83-P018.json",
+        "C-no-postprocess-D1-83-P006.json",
+        "C-no-postprocess-D1-83-P015.json",
+        "C-no-postprocess-D1-83-P001.json",
+        "C-no-postprocess-D1-83-P034.json",
+        "C-no-postprocess-D1-83-P039.json",
+        "C-no-postprocess-D1-83-P038.json",
+        "C-no-postprocess-D1-83-P002.json",
+        "C-no-postprocess-D1-83-P027.json",
+        "C-no-postprocess-D1-83-P007.json",
+        "C-no-postprocess-D1-83-P005.json",
+        "C-no-postprocess-D1-83-P029.json",
+        "C-no-postprocess-D1-83-P030.json",
+        "C-no-postprocess-D1-83-P017.json",
+        "C-no-postprocess-D1-83-P014.json",
+        "C-no-postprocess-D1-83-P013.json",
+        "C-no-postprocess-D1-83-P010.json",
+        "C-no-postprocess-D1-83-P022.json",
+        "C-no-postprocess-D1-83-P021.json",
+        "C-no-postprocess-D1-83-P003.json",
+        "C-no-postprocess-D1-83-P023.json",
+        "C-no-postprocess-D1-83-P037.json",
+        "C-no-postprocess-D1-83-P026.json",
+        "C-no-postprocess-D1-83-P025.json",
+        "C-no-postprocess-D1-83-P031.json",
+        "C-no-postprocess-D1-83-P011.json",
+        "C-no-postprocess-D1-83-P004.json",
+        "C-no-postprocess-D1-83-P008.json",
+        "C-no-postprocess-D1-83-P012.json",
+        "C-no-postprocess-D1-83-P016.json",
+        "C-no-postprocess-D1-83-P020.json",
+        "C-no-postprocess-D1-83-P024.json",
+        "C-no-postprocess-D1-83-P028.json",
+        "C-no-postprocess-D1-83-P032.json",
+        "C-no-postprocess-D1-83-P036.json",
+        "C-no-postprocess-D1-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 83,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D1-83-P019.json",
+        "C-D1-83-P009.json",
+        "C-D1-83-P033.json",
+        "C-D1-83-P035.json",
+        "C-D1-83-P018.json",
+        "C-D1-83-P006.json",
+        "C-D1-83-P015.json",
+        "C-D1-83-P001.json",
+        "C-D1-83-P034.json",
+        "C-D1-83-P039.json",
+        "C-D1-83-P038.json",
+        "C-D1-83-P002.json",
+        "C-D1-83-P027.json",
+        "C-D1-83-P007.json",
+        "C-D1-83-P005.json",
+        "C-D1-83-P029.json",
+        "C-D1-83-P030.json",
+        "C-D1-83-P017.json",
+        "C-D1-83-P014.json",
+        "C-D1-83-P013.json",
+        "C-D1-83-P010.json",
+        "C-D1-83-P022.json",
+        "C-D1-83-P021.json",
+        "C-D1-83-P003.json",
+        "C-D1-83-P023.json",
+        "C-D1-83-P037.json",
+        "C-D1-83-P026.json",
+        "C-D1-83-P025.json",
+        "C-D1-83-P031.json",
+        "C-D1-83-P011.json",
+        "C-D1-83-P004.json",
+        "C-D1-83-P008.json",
+        "C-D1-83-P012.json",
+        "C-D1-83-P016.json",
+        "C-D1-83-P020.json",
+        "C-D1-83-P024.json",
+        "C-D1-83-P028.json",
+        "C-D1-83-P032.json",
+        "C-D1-83-P036.json",
+        "C-D1-83-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D1",
+      "seed": 83,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D1-83-P019.json",
+        "C-no-examples-D1-83-P009.json",
+        "C-no-examples-D1-83-P033.json",
+        "C-no-examples-D1-83-P035.json",
+        "C-no-examples-D1-83-P018.json",
+        "C-no-examples-D1-83-P006.json",
+        "C-no-examples-D1-83-P015.json",
+        "C-no-examples-D1-83-P001.json",
+        "C-no-examples-D1-83-P034.json",
+        "C-no-examples-D1-83-P039.json",
+        "C-no-examples-D1-83-P038.json",
+        "C-no-examples-D1-83-P002.json",
+        "C-no-examples-D1-83-P027.json",
+        "C-no-examples-D1-83-P007.json",
+        "C-no-examples-D1-83-P005.json",
+        "C-no-examples-D1-83-P029.json",
+        "C-no-examples-D1-83-P030.json",
+        "C-no-examples-D1-83-P017.json",
+        "C-no-examples-D1-83-P014.json",
+        "C-no-examples-D1-83-P013.json",
+        "C-no-examples-D1-83-P010.json",
+        "C-no-examples-D1-83-P022.json",
+        "C-no-examples-D1-83-P021.json",
+        "C-no-examples-D1-83-P003.json",
+        "C-no-examples-D1-83-P023.json",
+        "C-no-examples-D1-83-P037.json",
+        "C-no-examples-D1-83-P026.json",
+        "C-no-examples-D1-83-P025.json",
+        "C-no-examples-D1-83-P031.json",
+        "C-no-examples-D1-83-P011.json",
+        "C-no-examples-D1-83-P004.json",
+        "C-no-examples-D1-83-P008.json",
+        "C-no-examples-D1-83-P012.json",
+        "C-no-examples-D1-83-P016.json",
+        "C-no-examples-D1-83-P020.json",
+        "C-no-examples-D1-83-P024.json",
+        "C-no-examples-D1-83-P028.json",
+        "C-no-examples-D1-83-P032.json",
+        "C-no-examples-D1-83-P036.json",
+        "C-no-examples-D1-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 17,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D2-17-P013.json",
+        "A-D2-17-P018.json",
+        "A-D2-17-P038.json",
+        "A-D2-17-P027.json",
+        "A-D2-17-P026.json",
+        "A-D2-17-P033.json",
+        "A-D2-17-P023.json",
+        "A-D2-17-P021.json",
+        "A-D2-17-P001.json",
+        "A-D2-17-P003.json",
+        "A-D2-17-P037.json",
+        "A-D2-17-P007.json",
+        "A-D2-17-P034.json",
+        "A-D2-17-P030.json",
+        "A-D2-17-P009.json",
+        "A-D2-17-P019.json",
+        "A-D2-17-P002.json",
+        "A-D2-17-P029.json",
+        "A-D2-17-P039.json",
+        "A-D2-17-P014.json",
+        "A-D2-17-P015.json",
+        "A-D2-17-P005.json",
+        "A-D2-17-P006.json",
+        "A-D2-17-P022.json",
+        "A-D2-17-P035.json",
+        "A-D2-17-P025.json",
+        "A-D2-17-P011.json",
+        "A-D2-17-P017.json",
+        "A-D2-17-P031.json",
+        "A-D2-17-P010.json",
+        "A-D2-17-P004.json",
+        "A-D2-17-P008.json",
+        "A-D2-17-P012.json",
+        "A-D2-17-P016.json",
+        "A-D2-17-P020.json",
+        "A-D2-17-P024.json",
+        "A-D2-17-P028.json",
+        "A-D2-17-P032.json",
+        "A-D2-17-P036.json",
+        "A-D2-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 17,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D2-17-P013.json",
+        "C-D2-17-P018.json",
+        "C-D2-17-P038.json",
+        "C-D2-17-P027.json",
+        "C-D2-17-P026.json",
+        "C-D2-17-P033.json",
+        "C-D2-17-P023.json",
+        "C-D2-17-P021.json",
+        "C-D2-17-P001.json",
+        "C-D2-17-P003.json",
+        "C-D2-17-P037.json",
+        "C-D2-17-P007.json",
+        "C-D2-17-P034.json",
+        "C-D2-17-P030.json",
+        "C-D2-17-P009.json",
+        "C-D2-17-P019.json",
+        "C-D2-17-P002.json",
+        "C-D2-17-P029.json",
+        "C-D2-17-P039.json",
+        "C-D2-17-P014.json",
+        "C-D2-17-P015.json",
+        "C-D2-17-P005.json",
+        "C-D2-17-P006.json",
+        "C-D2-17-P022.json",
+        "C-D2-17-P035.json",
+        "C-D2-17-P025.json",
+        "C-D2-17-P011.json",
+        "C-D2-17-P017.json",
+        "C-D2-17-P031.json",
+        "C-D2-17-P010.json",
+        "C-D2-17-P004.json",
+        "C-D2-17-P008.json",
+        "C-D2-17-P012.json",
+        "C-D2-17-P016.json",
+        "C-D2-17-P020.json",
+        "C-D2-17-P024.json",
+        "C-D2-17-P028.json",
+        "C-D2-17-P032.json",
+        "C-D2-17-P036.json",
+        "C-D2-17-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 17,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "term_replace",
+            "section": "diagnoses",
+            "field": "name",
+            "from": "高血压",
+            "to": "HTN"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "term",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 27
+          }
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D2-17-P013.json",
+        "C-no-postprocess-D2-17-P018.json",
+        "C-no-postprocess-D2-17-P038.json",
+        "C-no-postprocess-D2-17-P027.json",
+        "C-no-postprocess-D2-17-P026.json",
+        "C-no-postprocess-D2-17-P033.json",
+        "C-no-postprocess-D2-17-P023.json",
+        "C-no-postprocess-D2-17-P021.json",
+        "C-no-postprocess-D2-17-P001.json",
+        "C-no-postprocess-D2-17-P003.json",
+        "C-no-postprocess-D2-17-P037.json",
+        "C-no-postprocess-D2-17-P007.json",
+        "C-no-postprocess-D2-17-P034.json",
+        "C-no-postprocess-D2-17-P030.json",
+        "C-no-postprocess-D2-17-P009.json",
+        "C-no-postprocess-D2-17-P019.json",
+        "C-no-postprocess-D2-17-P002.json",
+        "C-no-postprocess-D2-17-P029.json",
+        "C-no-postprocess-D2-17-P039.json",
+        "C-no-postprocess-D2-17-P014.json",
+        "C-no-postprocess-D2-17-P015.json",
+        "C-no-postprocess-D2-17-P005.json",
+        "C-no-postprocess-D2-17-P006.json",
+        "C-no-postprocess-D2-17-P022.json",
+        "C-no-postprocess-D2-17-P035.json",
+        "C-no-postprocess-D2-17-P025.json",
+        "C-no-postprocess-D2-17-P011.json",
+        "C-no-postprocess-D2-17-P017.json",
+        "C-no-postprocess-D2-17-P031.json",
+        "C-no-postprocess-D2-17-P010.json",
+        "C-no-postprocess-D2-17-P004.json",
+        "C-no-postprocess-D2-17-P008.json",
+        "C-no-postprocess-D2-17-P012.json",
+        "C-no-postprocess-D2-17-P016.json",
+        "C-no-postprocess-D2-17-P020.json",
+        "C-no-postprocess-D2-17-P024.json",
+        "C-no-postprocess-D2-17-P028.json",
+        "C-no-postprocess-D2-17-P032.json",
+        "C-no-postprocess-D2-17-P036.json",
+        "C-no-postprocess-D2-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 17,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [
+        {
+          "habitId": 1,
+          "predicted": 1,
+          "actual": 1
+        },
+        {
+          "habitId": 1,
+          "predicted": 1,
+          "actual": 1
+        }
+      ],
+      "files": [
+        "C-no-examples-D2-17-P013.json",
+        "C-no-examples-D2-17-P018.json",
+        "C-no-examples-D2-17-P038.json",
+        "C-no-examples-D2-17-P027.json",
+        "C-no-examples-D2-17-P026.json",
+        "C-no-examples-D2-17-P033.json",
+        "C-no-examples-D2-17-P023.json",
+        "C-no-examples-D2-17-P021.json",
+        "C-no-examples-D2-17-P001.json",
+        "C-no-examples-D2-17-P003.json",
+        "C-no-examples-D2-17-P037.json",
+        "C-no-examples-D2-17-P007.json",
+        "C-no-examples-D2-17-P034.json",
+        "C-no-examples-D2-17-P030.json",
+        "C-no-examples-D2-17-P009.json",
+        "C-no-examples-D2-17-P019.json",
+        "C-no-examples-D2-17-P002.json",
+        "C-no-examples-D2-17-P029.json",
+        "C-no-examples-D2-17-P039.json",
+        "C-no-examples-D2-17-P014.json",
+        "C-no-examples-D2-17-P015.json",
+        "C-no-examples-D2-17-P005.json",
+        "C-no-examples-D2-17-P006.json",
+        "C-no-examples-D2-17-P022.json",
+        "C-no-examples-D2-17-P035.json",
+        "C-no-examples-D2-17-P025.json",
+        "C-no-examples-D2-17-P011.json",
+        "C-no-examples-D2-17-P017.json",
+        "C-no-examples-D2-17-P031.json",
+        "C-no-examples-D2-17-P010.json",
+        "C-no-examples-D2-17-P004.json",
+        "C-no-examples-D2-17-P008.json",
+        "C-no-examples-D2-17-P012.json",
+        "C-no-examples-D2-17-P016.json",
+        "C-no-examples-D2-17-P020.json",
+        "C-no-examples-D2-17-P024.json",
+        "C-no-examples-D2-17-P028.json",
+        "C-no-examples-D2-17-P032.json",
+        "C-no-examples-D2-17-P036.json",
+        "C-no-examples-D2-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 17,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D2-17-P013.json",
+        "B-D2-17-P018.json",
+        "B-D2-17-P038.json",
+        "B-D2-17-P027.json",
+        "B-D2-17-P026.json",
+        "B-D2-17-P033.json",
+        "B-D2-17-P023.json",
+        "B-D2-17-P021.json",
+        "B-D2-17-P001.json",
+        "B-D2-17-P003.json",
+        "B-D2-17-P037.json",
+        "B-D2-17-P007.json",
+        "B-D2-17-P034.json",
+        "B-D2-17-P030.json",
+        "B-D2-17-P009.json",
+        "B-D2-17-P019.json",
+        "B-D2-17-P002.json",
+        "B-D2-17-P029.json",
+        "B-D2-17-P039.json",
+        "B-D2-17-P014.json",
+        "B-D2-17-P015.json",
+        "B-D2-17-P005.json",
+        "B-D2-17-P006.json",
+        "B-D2-17-P022.json",
+        "B-D2-17-P035.json",
+        "B-D2-17-P025.json",
+        "B-D2-17-P011.json",
+        "B-D2-17-P017.json",
+        "B-D2-17-P031.json",
+        "B-D2-17-P010.json",
+        "B-D2-17-P004.json",
+        "B-D2-17-P008.json",
+        "B-D2-17-P012.json",
+        "B-D2-17-P016.json",
+        "B-D2-17-P020.json",
+        "B-D2-17-P024.json",
+        "B-D2-17-P028.json",
+        "B-D2-17-P032.json",
+        "B-D2-17-P036.json",
+        "B-D2-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 41,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D2-41-P005.json",
+        "A-D2-41-P019.json",
+        "A-D2-41-P014.json",
+        "A-D2-41-P003.json",
+        "A-D2-41-P037.json",
+        "A-D2-41-P030.json",
+        "A-D2-41-P002.json",
+        "A-D2-41-P023.json",
+        "A-D2-41-P022.json",
+        "A-D2-41-P029.json",
+        "A-D2-41-P031.json",
+        "A-D2-41-P027.json",
+        "A-D2-41-P017.json",
+        "A-D2-41-P018.json",
+        "A-D2-41-P013.json",
+        "A-D2-41-P035.json",
+        "A-D2-41-P034.json",
+        "A-D2-41-P015.json",
+        "A-D2-41-P021.json",
+        "A-D2-41-P039.json",
+        "A-D2-41-P026.json",
+        "A-D2-41-P011.json",
+        "A-D2-41-P006.json",
+        "A-D2-41-P001.json",
+        "A-D2-41-P009.json",
+        "A-D2-41-P025.json",
+        "A-D2-41-P007.json",
+        "A-D2-41-P033.json",
+        "A-D2-41-P038.json",
+        "A-D2-41-P010.json",
+        "A-D2-41-P004.json",
+        "A-D2-41-P008.json",
+        "A-D2-41-P012.json",
+        "A-D2-41-P016.json",
+        "A-D2-41-P020.json",
+        "A-D2-41-P024.json",
+        "A-D2-41-P028.json",
+        "A-D2-41-P032.json",
+        "A-D2-41-P036.json",
+        "A-D2-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 41,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D2-41-P005.json",
+        "B-D2-41-P019.json",
+        "B-D2-41-P014.json",
+        "B-D2-41-P003.json",
+        "B-D2-41-P037.json",
+        "B-D2-41-P030.json",
+        "B-D2-41-P002.json",
+        "B-D2-41-P023.json",
+        "B-D2-41-P022.json",
+        "B-D2-41-P029.json",
+        "B-D2-41-P031.json",
+        "B-D2-41-P027.json",
+        "B-D2-41-P017.json",
+        "B-D2-41-P018.json",
+        "B-D2-41-P013.json",
+        "B-D2-41-P035.json",
+        "B-D2-41-P034.json",
+        "B-D2-41-P015.json",
+        "B-D2-41-P021.json",
+        "B-D2-41-P039.json",
+        "B-D2-41-P026.json",
+        "B-D2-41-P011.json",
+        "B-D2-41-P006.json",
+        "B-D2-41-P001.json",
+        "B-D2-41-P009.json",
+        "B-D2-41-P025.json",
+        "B-D2-41-P007.json",
+        "B-D2-41-P033.json",
+        "B-D2-41-P038.json",
+        "B-D2-41-P010.json",
+        "B-D2-41-P004.json",
+        "B-D2-41-P008.json",
+        "B-D2-41-P012.json",
+        "B-D2-41-P016.json",
+        "B-D2-41-P020.json",
+        "B-D2-41-P024.json",
+        "B-D2-41-P028.json",
+        "B-D2-41-P032.json",
+        "B-D2-41-P036.json",
+        "B-D2-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 41,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 4
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D2-41-P005.json",
+        "C-D2-41-P019.json",
+        "C-D2-41-P014.json",
+        "C-D2-41-P003.json",
+        "C-D2-41-P037.json",
+        "C-D2-41-P030.json",
+        "C-D2-41-P002.json",
+        "C-D2-41-P023.json",
+        "C-D2-41-P022.json",
+        "C-D2-41-P029.json",
+        "C-D2-41-P031.json",
+        "C-D2-41-P027.json",
+        "C-D2-41-P017.json",
+        "C-D2-41-P018.json",
+        "C-D2-41-P013.json",
+        "C-D2-41-P035.json",
+        "C-D2-41-P034.json",
+        "C-D2-41-P015.json",
+        "C-D2-41-P021.json",
+        "C-D2-41-P039.json",
+        "C-D2-41-P026.json",
+        "C-D2-41-P011.json",
+        "C-D2-41-P006.json",
+        "C-D2-41-P001.json",
+        "C-D2-41-P009.json",
+        "C-D2-41-P025.json",
+        "C-D2-41-P007.json",
+        "C-D2-41-P033.json",
+        "C-D2-41-P038.json",
+        "C-D2-41-P010.json",
+        "C-D2-41-P004.json",
+        "C-D2-41-P008.json",
+        "C-D2-41-P012.json",
+        "C-D2-41-P016.json",
+        "C-D2-41-P020.json",
+        "C-D2-41-P024.json",
+        "C-D2-41-P028.json",
+        "C-D2-41-P032.json",
+        "C-D2-41-P036.json",
+        "C-D2-41-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 41,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "term_replace",
+            "section": "diagnoses",
+            "field": "name",
+            "from": "高血压",
+            "to": "HTN"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "term",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 7
+          }
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D2-41-P005.json",
+        "C-no-postprocess-D2-41-P019.json",
+        "C-no-postprocess-D2-41-P014.json",
+        "C-no-postprocess-D2-41-P003.json",
+        "C-no-postprocess-D2-41-P037.json",
+        "C-no-postprocess-D2-41-P030.json",
+        "C-no-postprocess-D2-41-P002.json",
+        "C-no-postprocess-D2-41-P023.json",
+        "C-no-postprocess-D2-41-P022.json",
+        "C-no-postprocess-D2-41-P029.json",
+        "C-no-postprocess-D2-41-P031.json",
+        "C-no-postprocess-D2-41-P027.json",
+        "C-no-postprocess-D2-41-P017.json",
+        "C-no-postprocess-D2-41-P018.json",
+        "C-no-postprocess-D2-41-P013.json",
+        "C-no-postprocess-D2-41-P035.json",
+        "C-no-postprocess-D2-41-P034.json",
+        "C-no-postprocess-D2-41-P015.json",
+        "C-no-postprocess-D2-41-P021.json",
+        "C-no-postprocess-D2-41-P039.json",
+        "C-no-postprocess-D2-41-P026.json",
+        "C-no-postprocess-D2-41-P011.json",
+        "C-no-postprocess-D2-41-P006.json",
+        "C-no-postprocess-D2-41-P001.json",
+        "C-no-postprocess-D2-41-P009.json",
+        "C-no-postprocess-D2-41-P025.json",
+        "C-no-postprocess-D2-41-P007.json",
+        "C-no-postprocess-D2-41-P033.json",
+        "C-no-postprocess-D2-41-P038.json",
+        "C-no-postprocess-D2-41-P010.json",
+        "C-no-postprocess-D2-41-P004.json",
+        "C-no-postprocess-D2-41-P008.json",
+        "C-no-postprocess-D2-41-P012.json",
+        "C-no-postprocess-D2-41-P016.json",
+        "C-no-postprocess-D2-41-P020.json",
+        "C-no-postprocess-D2-41-P024.json",
+        "C-no-postprocess-D2-41-P028.json",
+        "C-no-postprocess-D2-41-P032.json",
+        "C-no-postprocess-D2-41-P036.json",
+        "C-no-postprocess-D2-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 41,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [
+        {
+          "habitId": 1,
+          "predicted": 1,
+          "actual": 1
+        },
+        {
+          "habitId": 1,
+          "predicted": 1,
+          "actual": 1
+        }
+      ],
+      "files": [
+        "C-no-examples-D2-41-P005.json",
+        "C-no-examples-D2-41-P019.json",
+        "C-no-examples-D2-41-P014.json",
+        "C-no-examples-D2-41-P003.json",
+        "C-no-examples-D2-41-P037.json",
+        "C-no-examples-D2-41-P030.json",
+        "C-no-examples-D2-41-P002.json",
+        "C-no-examples-D2-41-P023.json",
+        "C-no-examples-D2-41-P022.json",
+        "C-no-examples-D2-41-P029.json",
+        "C-no-examples-D2-41-P031.json",
+        "C-no-examples-D2-41-P027.json",
+        "C-no-examples-D2-41-P017.json",
+        "C-no-examples-D2-41-P018.json",
+        "C-no-examples-D2-41-P013.json",
+        "C-no-examples-D2-41-P035.json",
+        "C-no-examples-D2-41-P034.json",
+        "C-no-examples-D2-41-P015.json",
+        "C-no-examples-D2-41-P021.json",
+        "C-no-examples-D2-41-P039.json",
+        "C-no-examples-D2-41-P026.json",
+        "C-no-examples-D2-41-P011.json",
+        "C-no-examples-D2-41-P006.json",
+        "C-no-examples-D2-41-P001.json",
+        "C-no-examples-D2-41-P009.json",
+        "C-no-examples-D2-41-P025.json",
+        "C-no-examples-D2-41-P007.json",
+        "C-no-examples-D2-41-P033.json",
+        "C-no-examples-D2-41-P038.json",
+        "C-no-examples-D2-41-P010.json",
+        "C-no-examples-D2-41-P004.json",
+        "C-no-examples-D2-41-P008.json",
+        "C-no-examples-D2-41-P012.json",
+        "C-no-examples-D2-41-P016.json",
+        "C-no-examples-D2-41-P020.json",
+        "C-no-examples-D2-41-P024.json",
+        "C-no-examples-D2-41-P028.json",
+        "C-no-examples-D2-41-P032.json",
+        "C-no-examples-D2-41-P036.json",
+        "C-no-examples-D2-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 83,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D2-83-P019.json",
+        "A-D2-83-P009.json",
+        "A-D2-83-P033.json",
+        "A-D2-83-P035.json",
+        "A-D2-83-P018.json",
+        "A-D2-83-P006.json",
+        "A-D2-83-P015.json",
+        "A-D2-83-P001.json",
+        "A-D2-83-P034.json",
+        "A-D2-83-P039.json",
+        "A-D2-83-P038.json",
+        "A-D2-83-P002.json",
+        "A-D2-83-P027.json",
+        "A-D2-83-P007.json",
+        "A-D2-83-P005.json",
+        "A-D2-83-P029.json",
+        "A-D2-83-P030.json",
+        "A-D2-83-P017.json",
+        "A-D2-83-P014.json",
+        "A-D2-83-P013.json",
+        "A-D2-83-P010.json",
+        "A-D2-83-P022.json",
+        "A-D2-83-P021.json",
+        "A-D2-83-P003.json",
+        "A-D2-83-P023.json",
+        "A-D2-83-P037.json",
+        "A-D2-83-P026.json",
+        "A-D2-83-P025.json",
+        "A-D2-83-P031.json",
+        "A-D2-83-P011.json",
+        "A-D2-83-P004.json",
+        "A-D2-83-P008.json",
+        "A-D2-83-P012.json",
+        "A-D2-83-P016.json",
+        "A-D2-83-P020.json",
+        "A-D2-83-P024.json",
+        "A-D2-83-P028.json",
+        "A-D2-83-P032.json",
+        "A-D2-83-P036.json",
+        "A-D2-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 83,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D2-83-P019.json",
+        "B-D2-83-P009.json",
+        "B-D2-83-P033.json",
+        "B-D2-83-P035.json",
+        "B-D2-83-P018.json",
+        "B-D2-83-P006.json",
+        "B-D2-83-P015.json",
+        "B-D2-83-P001.json",
+        "B-D2-83-P034.json",
+        "B-D2-83-P039.json",
+        "B-D2-83-P038.json",
+        "B-D2-83-P002.json",
+        "B-D2-83-P027.json",
+        "B-D2-83-P007.json",
+        "B-D2-83-P005.json",
+        "B-D2-83-P029.json",
+        "B-D2-83-P030.json",
+        "B-D2-83-P017.json",
+        "B-D2-83-P014.json",
+        "B-D2-83-P013.json",
+        "B-D2-83-P010.json",
+        "B-D2-83-P022.json",
+        "B-D2-83-P021.json",
+        "B-D2-83-P003.json",
+        "B-D2-83-P023.json",
+        "B-D2-83-P037.json",
+        "B-D2-83-P026.json",
+        "B-D2-83-P025.json",
+        "B-D2-83-P031.json",
+        "B-D2-83-P011.json",
+        "B-D2-83-P004.json",
+        "B-D2-83-P008.json",
+        "B-D2-83-P012.json",
+        "B-D2-83-P016.json",
+        "B-D2-83-P020.json",
+        "B-D2-83-P024.json",
+        "B-D2-83-P028.json",
+        "B-D2-83-P032.json",
+        "B-D2-83-P036.json",
+        "B-D2-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 83,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "chronological"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D2-83-P019.json",
+        "C-D2-83-P009.json",
+        "C-D2-83-P033.json",
+        "C-D2-83-P035.json",
+        "C-D2-83-P018.json",
+        "C-D2-83-P006.json",
+        "C-D2-83-P015.json",
+        "C-D2-83-P001.json",
+        "C-D2-83-P034.json",
+        "C-D2-83-P039.json",
+        "C-D2-83-P038.json",
+        "C-D2-83-P002.json",
+        "C-D2-83-P027.json",
+        "C-D2-83-P007.json",
+        "C-D2-83-P005.json",
+        "C-D2-83-P029.json",
+        "C-D2-83-P030.json",
+        "C-D2-83-P017.json",
+        "C-D2-83-P014.json",
+        "C-D2-83-P013.json",
+        "C-D2-83-P010.json",
+        "C-D2-83-P022.json",
+        "C-D2-83-P021.json",
+        "C-D2-83-P003.json",
+        "C-D2-83-P023.json",
+        "C-D2-83-P037.json",
+        "C-D2-83-P026.json",
+        "C-D2-83-P025.json",
+        "C-D2-83-P031.json",
+        "C-D2-83-P011.json",
+        "C-D2-83-P004.json",
+        "C-D2-83-P008.json",
+        "C-D2-83-P012.json",
+        "C-D2-83-P016.json",
+        "C-D2-83-P020.json",
+        "C-D2-83-P024.json",
+        "C-D2-83-P028.json",
+        "C-D2-83-P032.json",
+        "C-D2-83-P036.json",
+        "C-D2-83-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 83,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 5,
+          "rule": {
+            "type": "term_replace",
+            "section": "diagnoses",
+            "field": "name",
+            "from": "2型糖尿病",
+            "to": "T2DM"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "term",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 9
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "term_replace",
+            "section": "diagnoses",
+            "field": "name",
+            "from": "高血压",
+            "to": "HTN"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "term",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 9
+          }
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D2-83-P019.json",
+        "C-no-postprocess-D2-83-P009.json",
+        "C-no-postprocess-D2-83-P033.json",
+        "C-no-postprocess-D2-83-P035.json",
+        "C-no-postprocess-D2-83-P018.json",
+        "C-no-postprocess-D2-83-P006.json",
+        "C-no-postprocess-D2-83-P015.json",
+        "C-no-postprocess-D2-83-P001.json",
+        "C-no-postprocess-D2-83-P034.json",
+        "C-no-postprocess-D2-83-P039.json",
+        "C-no-postprocess-D2-83-P038.json",
+        "C-no-postprocess-D2-83-P002.json",
+        "C-no-postprocess-D2-83-P027.json",
+        "C-no-postprocess-D2-83-P007.json",
+        "C-no-postprocess-D2-83-P005.json",
+        "C-no-postprocess-D2-83-P029.json",
+        "C-no-postprocess-D2-83-P030.json",
+        "C-no-postprocess-D2-83-P017.json",
+        "C-no-postprocess-D2-83-P014.json",
+        "C-no-postprocess-D2-83-P013.json",
+        "C-no-postprocess-D2-83-P010.json",
+        "C-no-postprocess-D2-83-P022.json",
+        "C-no-postprocess-D2-83-P021.json",
+        "C-no-postprocess-D2-83-P003.json",
+        "C-no-postprocess-D2-83-P023.json",
+        "C-no-postprocess-D2-83-P037.json",
+        "C-no-postprocess-D2-83-P026.json",
+        "C-no-postprocess-D2-83-P025.json",
+        "C-no-postprocess-D2-83-P031.json",
+        "C-no-postprocess-D2-83-P011.json",
+        "C-no-postprocess-D2-83-P004.json",
+        "C-no-postprocess-D2-83-P008.json",
+        "C-no-postprocess-D2-83-P012.json",
+        "C-no-postprocess-D2-83-P016.json",
+        "C-no-postprocess-D2-83-P020.json",
+        "C-no-postprocess-D2-83-P024.json",
+        "C-no-postprocess-D2-83-P028.json",
+        "C-no-postprocess-D2-83-P032.json",
+        "C-no-postprocess-D2-83-P036.json",
+        "C-no-postprocess-D2-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 17,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D3-17-P013.json",
+        "A-D3-17-P018.json",
+        "A-D3-17-P038.json",
+        "A-D3-17-P027.json",
+        "A-D3-17-P026.json",
+        "A-D3-17-P033.json",
+        "A-D3-17-P023.json",
+        "A-D3-17-P021.json",
+        "A-D3-17-P001.json",
+        "A-D3-17-P003.json",
+        "A-D3-17-P037.json",
+        "A-D3-17-P007.json",
+        "A-D3-17-P034.json",
+        "A-D3-17-P030.json",
+        "A-D3-17-P009.json",
+        "A-D3-17-P019.json",
+        "A-D3-17-P002.json",
+        "A-D3-17-P029.json",
+        "A-D3-17-P039.json",
+        "A-D3-17-P014.json",
+        "A-D3-17-P015.json",
+        "A-D3-17-P005.json",
+        "A-D3-17-P006.json",
+        "A-D3-17-P022.json",
+        "A-D3-17-P035.json",
+        "A-D3-17-P025.json",
+        "A-D3-17-P011.json",
+        "A-D3-17-P017.json",
+        "A-D3-17-P031.json",
+        "A-D3-17-P010.json",
+        "A-D3-17-P004.json",
+        "A-D3-17-P008.json",
+        "A-D3-17-P012.json",
+        "A-D3-17-P016.json",
+        "A-D3-17-P020.json",
+        "A-D3-17-P024.json",
+        "A-D3-17-P028.json",
+        "A-D3-17-P032.json",
+        "A-D3-17-P036.json",
+        "A-D3-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D2",
+      "seed": 83,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [
+        {
+          "habitId": 2,
+          "predicted": 1,
+          "actual": 1
+        }
+      ],
+      "files": [
+        "C-no-examples-D2-83-P019.json",
+        "C-no-examples-D2-83-P009.json",
+        "C-no-examples-D2-83-P033.json",
+        "C-no-examples-D2-83-P035.json",
+        "C-no-examples-D2-83-P018.json",
+        "C-no-examples-D2-83-P006.json",
+        "C-no-examples-D2-83-P015.json",
+        "C-no-examples-D2-83-P001.json",
+        "C-no-examples-D2-83-P034.json",
+        "C-no-examples-D2-83-P039.json",
+        "C-no-examples-D2-83-P038.json",
+        "C-no-examples-D2-83-P002.json",
+        "C-no-examples-D2-83-P027.json",
+        "C-no-examples-D2-83-P007.json",
+        "C-no-examples-D2-83-P005.json",
+        "C-no-examples-D2-83-P029.json",
+        "C-no-examples-D2-83-P030.json",
+        "C-no-examples-D2-83-P017.json",
+        "C-no-examples-D2-83-P014.json",
+        "C-no-examples-D2-83-P013.json",
+        "C-no-examples-D2-83-P010.json",
+        "C-no-examples-D2-83-P022.json",
+        "C-no-examples-D2-83-P021.json",
+        "C-no-examples-D2-83-P003.json",
+        "C-no-examples-D2-83-P023.json",
+        "C-no-examples-D2-83-P037.json",
+        "C-no-examples-D2-83-P026.json",
+        "C-no-examples-D2-83-P025.json",
+        "C-no-examples-D2-83-P031.json",
+        "C-no-examples-D2-83-P011.json",
+        "C-no-examples-D2-83-P004.json",
+        "C-no-examples-D2-83-P008.json",
+        "C-no-examples-D2-83-P012.json",
+        "C-no-examples-D2-83-P016.json",
+        "C-no-examples-D2-83-P020.json",
+        "C-no-examples-D2-83-P024.json",
+        "C-no-examples-D2-83-P028.json",
+        "C-no-examples-D2-83-P032.json",
+        "C-no-examples-D2-83-P036.json",
+        "C-no-examples-D2-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 17,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D3-17-P013.json",
+        "B-D3-17-P018.json",
+        "B-D3-17-P038.json",
+        "B-D3-17-P027.json",
+        "B-D3-17-P026.json",
+        "B-D3-17-P033.json",
+        "B-D3-17-P023.json",
+        "B-D3-17-P021.json",
+        "B-D3-17-P001.json",
+        "B-D3-17-P003.json",
+        "B-D3-17-P037.json",
+        "B-D3-17-P007.json",
+        "B-D3-17-P034.json",
+        "B-D3-17-P030.json",
+        "B-D3-17-P009.json",
+        "B-D3-17-P019.json",
+        "B-D3-17-P002.json",
+        "B-D3-17-P029.json",
+        "B-D3-17-P039.json",
+        "B-D3-17-P014.json",
+        "B-D3-17-P015.json",
+        "B-D3-17-P005.json",
+        "B-D3-17-P006.json",
+        "B-D3-17-P022.json",
+        "B-D3-17-P035.json",
+        "B-D3-17-P025.json",
+        "B-D3-17-P011.json",
+        "B-D3-17-P017.json",
+        "B-D3-17-P031.json",
+        "B-D3-17-P010.json",
+        "B-D3-17-P004.json",
+        "B-D3-17-P008.json",
+        "B-D3-17-P012.json",
+        "B-D3-17-P016.json",
+        "B-D3-17-P020.json",
+        "B-D3-17-P024.json",
+        "B-D3-17-P028.json",
+        "B-D3-17-P032.json",
+        "B-D3-17-P036.json",
+        "B-D3-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 17,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D3-17-P013.json",
+        "C-D3-17-P018.json",
+        "C-D3-17-P038.json",
+        "C-D3-17-P027.json",
+        "C-D3-17-P026.json",
+        "C-D3-17-P033.json",
+        "C-D3-17-P023.json",
+        "C-D3-17-P021.json",
+        "C-D3-17-P001.json",
+        "C-D3-17-P003.json",
+        "C-D3-17-P037.json",
+        "C-D3-17-P007.json",
+        "C-D3-17-P034.json",
+        "C-D3-17-P030.json",
+        "C-D3-17-P009.json",
+        "C-D3-17-P019.json",
+        "C-D3-17-P002.json",
+        "C-D3-17-P029.json",
+        "C-D3-17-P039.json",
+        "C-D3-17-P014.json",
+        "C-D3-17-P015.json",
+        "C-D3-17-P005.json",
+        "C-D3-17-P006.json",
+        "C-D3-17-P022.json",
+        "C-D3-17-P035.json",
+        "C-D3-17-P025.json",
+        "C-D3-17-P011.json",
+        "C-D3-17-P017.json",
+        "C-D3-17-P031.json",
+        "C-D3-17-P010.json",
+        "C-D3-17-P004.json",
+        "C-D3-17-P008.json",
+        "C-D3-17-P012.json",
+        "C-D3-17-P016.json",
+        "C-D3-17-P020.json",
+        "C-D3-17-P024.json",
+        "C-D3-17-P028.json",
+        "C-D3-17-P032.json",
+        "C-D3-17-P036.json",
+        "C-D3-17-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 17,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D3-17-P013.json",
+        "C-no-postprocess-D3-17-P018.json",
+        "C-no-postprocess-D3-17-P038.json",
+        "C-no-postprocess-D3-17-P027.json",
+        "C-no-postprocess-D3-17-P026.json",
+        "C-no-postprocess-D3-17-P033.json",
+        "C-no-postprocess-D3-17-P023.json",
+        "C-no-postprocess-D3-17-P021.json",
+        "C-no-postprocess-D3-17-P001.json",
+        "C-no-postprocess-D3-17-P003.json",
+        "C-no-postprocess-D3-17-P037.json",
+        "C-no-postprocess-D3-17-P007.json",
+        "C-no-postprocess-D3-17-P034.json",
+        "C-no-postprocess-D3-17-P030.json",
+        "C-no-postprocess-D3-17-P009.json",
+        "C-no-postprocess-D3-17-P019.json",
+        "C-no-postprocess-D3-17-P002.json",
+        "C-no-postprocess-D3-17-P029.json",
+        "C-no-postprocess-D3-17-P039.json",
+        "C-no-postprocess-D3-17-P014.json",
+        "C-no-postprocess-D3-17-P015.json",
+        "C-no-postprocess-D3-17-P005.json",
+        "C-no-postprocess-D3-17-P006.json",
+        "C-no-postprocess-D3-17-P022.json",
+        "C-no-postprocess-D3-17-P035.json",
+        "C-no-postprocess-D3-17-P025.json",
+        "C-no-postprocess-D3-17-P011.json",
+        "C-no-postprocess-D3-17-P017.json",
+        "C-no-postprocess-D3-17-P031.json",
+        "C-no-postprocess-D3-17-P010.json",
+        "C-no-postprocess-D3-17-P004.json",
+        "C-no-postprocess-D3-17-P008.json",
+        "C-no-postprocess-D3-17-P012.json",
+        "C-no-postprocess-D3-17-P016.json",
+        "C-no-postprocess-D3-17-P020.json",
+        "C-no-postprocess-D3-17-P024.json",
+        "C-no-postprocess-D3-17-P028.json",
+        "C-no-postprocess-D3-17-P032.json",
+        "C-no-postprocess-D3-17-P036.json",
+        "C-no-postprocess-D3-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 17,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D3-17-P013.json",
+        "C-no-examples-D3-17-P018.json",
+        "C-no-examples-D3-17-P038.json",
+        "C-no-examples-D3-17-P027.json",
+        "C-no-examples-D3-17-P026.json",
+        "C-no-examples-D3-17-P033.json",
+        "C-no-examples-D3-17-P023.json",
+        "C-no-examples-D3-17-P021.json",
+        "C-no-examples-D3-17-P001.json",
+        "C-no-examples-D3-17-P003.json",
+        "C-no-examples-D3-17-P037.json",
+        "C-no-examples-D3-17-P007.json",
+        "C-no-examples-D3-17-P034.json",
+        "C-no-examples-D3-17-P030.json",
+        "C-no-examples-D3-17-P009.json",
+        "C-no-examples-D3-17-P019.json",
+        "C-no-examples-D3-17-P002.json",
+        "C-no-examples-D3-17-P029.json",
+        "C-no-examples-D3-17-P039.json",
+        "C-no-examples-D3-17-P014.json",
+        "C-no-examples-D3-17-P015.json",
+        "C-no-examples-D3-17-P005.json",
+        "C-no-examples-D3-17-P006.json",
+        "C-no-examples-D3-17-P022.json",
+        "C-no-examples-D3-17-P035.json",
+        "C-no-examples-D3-17-P025.json",
+        "C-no-examples-D3-17-P011.json",
+        "C-no-examples-D3-17-P017.json",
+        "C-no-examples-D3-17-P031.json",
+        "C-no-examples-D3-17-P010.json",
+        "C-no-examples-D3-17-P004.json",
+        "C-no-examples-D3-17-P008.json",
+        "C-no-examples-D3-17-P012.json",
+        "C-no-examples-D3-17-P016.json",
+        "C-no-examples-D3-17-P020.json",
+        "C-no-examples-D3-17-P024.json",
+        "C-no-examples-D3-17-P028.json",
+        "C-no-examples-D3-17-P032.json",
+        "C-no-examples-D3-17-P036.json",
+        "C-no-examples-D3-17-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 41,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D3-41-P005.json",
+        "A-D3-41-P019.json",
+        "A-D3-41-P014.json",
+        "A-D3-41-P003.json",
+        "A-D3-41-P037.json",
+        "A-D3-41-P030.json",
+        "A-D3-41-P002.json",
+        "A-D3-41-P023.json",
+        "A-D3-41-P022.json",
+        "A-D3-41-P029.json",
+        "A-D3-41-P031.json",
+        "A-D3-41-P027.json",
+        "A-D3-41-P017.json",
+        "A-D3-41-P018.json",
+        "A-D3-41-P013.json",
+        "A-D3-41-P035.json",
+        "A-D3-41-P034.json",
+        "A-D3-41-P015.json",
+        "A-D3-41-P021.json",
+        "A-D3-41-P039.json",
+        "A-D3-41-P026.json",
+        "A-D3-41-P011.json",
+        "A-D3-41-P006.json",
+        "A-D3-41-P001.json",
+        "A-D3-41-P009.json",
+        "A-D3-41-P025.json",
+        "A-D3-41-P007.json",
+        "A-D3-41-P033.json",
+        "A-D3-41-P038.json",
+        "A-D3-41-P010.json",
+        "A-D3-41-P004.json",
+        "A-D3-41-P008.json",
+        "A-D3-41-P012.json",
+        "A-D3-41-P016.json",
+        "A-D3-41-P020.json",
+        "A-D3-41-P024.json",
+        "A-D3-41-P028.json",
+        "A-D3-41-P032.json",
+        "A-D3-41-P036.json",
+        "A-D3-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 41,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D3-41-P005.json",
+        "B-D3-41-P019.json",
+        "B-D3-41-P014.json",
+        "B-D3-41-P003.json",
+        "B-D3-41-P037.json",
+        "B-D3-41-P030.json",
+        "B-D3-41-P002.json",
+        "B-D3-41-P023.json",
+        "B-D3-41-P022.json",
+        "B-D3-41-P029.json",
+        "B-D3-41-P031.json",
+        "B-D3-41-P027.json",
+        "B-D3-41-P017.json",
+        "B-D3-41-P018.json",
+        "B-D3-41-P013.json",
+        "B-D3-41-P035.json",
+        "B-D3-41-P034.json",
+        "B-D3-41-P015.json",
+        "B-D3-41-P021.json",
+        "B-D3-41-P039.json",
+        "B-D3-41-P026.json",
+        "B-D3-41-P011.json",
+        "B-D3-41-P006.json",
+        "B-D3-41-P001.json",
+        "B-D3-41-P009.json",
+        "B-D3-41-P025.json",
+        "B-D3-41-P007.json",
+        "B-D3-41-P033.json",
+        "B-D3-41-P038.json",
+        "B-D3-41-P010.json",
+        "B-D3-41-P004.json",
+        "B-D3-41-P008.json",
+        "B-D3-41-P012.json",
+        "B-D3-41-P016.json",
+        "B-D3-41-P020.json",
+        "B-D3-41-P024.json",
+        "B-D3-41-P028.json",
+        "B-D3-41-P032.json",
+        "B-D3-41-P036.json",
+        "B-D3-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 41,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D3-41-P005.json",
+        "C-D3-41-P019.json",
+        "C-D3-41-P014.json",
+        "C-D3-41-P003.json",
+        "C-D3-41-P037.json",
+        "C-D3-41-P030.json",
+        "C-D3-41-P002.json",
+        "C-D3-41-P023.json",
+        "C-D3-41-P022.json",
+        "C-D3-41-P029.json",
+        "C-D3-41-P031.json",
+        "C-D3-41-P027.json",
+        "C-D3-41-P017.json",
+        "C-D3-41-P018.json",
+        "C-D3-41-P013.json",
+        "C-D3-41-P035.json",
+        "C-D3-41-P034.json",
+        "C-D3-41-P015.json",
+        "C-D3-41-P021.json",
+        "C-D3-41-P039.json",
+        "C-D3-41-P026.json",
+        "C-D3-41-P011.json",
+        "C-D3-41-P006.json",
+        "C-D3-41-P001.json",
+        "C-D3-41-P009.json",
+        "C-D3-41-P025.json",
+        "C-D3-41-P007.json",
+        "C-D3-41-P033.json",
+        "C-D3-41-P038.json",
+        "C-D3-41-P010.json",
+        "C-D3-41-P004.json",
+        "C-D3-41-P008.json",
+        "C-D3-41-P012.json",
+        "C-D3-41-P016.json",
+        "C-D3-41-P020.json",
+        "C-D3-41-P024.json",
+        "C-D3-41-P028.json",
+        "C-D3-41-P032.json",
+        "C-D3-41-P036.json",
+        "C-D3-41-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 41,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 8,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D3-41-P005.json",
+        "C-no-postprocess-D3-41-P019.json",
+        "C-no-postprocess-D3-41-P014.json",
+        "C-no-postprocess-D3-41-P003.json",
+        "C-no-postprocess-D3-41-P037.json",
+        "C-no-postprocess-D3-41-P030.json",
+        "C-no-postprocess-D3-41-P002.json",
+        "C-no-postprocess-D3-41-P023.json",
+        "C-no-postprocess-D3-41-P022.json",
+        "C-no-postprocess-D3-41-P029.json",
+        "C-no-postprocess-D3-41-P031.json",
+        "C-no-postprocess-D3-41-P027.json",
+        "C-no-postprocess-D3-41-P017.json",
+        "C-no-postprocess-D3-41-P018.json",
+        "C-no-postprocess-D3-41-P013.json",
+        "C-no-postprocess-D3-41-P035.json",
+        "C-no-postprocess-D3-41-P034.json",
+        "C-no-postprocess-D3-41-P015.json",
+        "C-no-postprocess-D3-41-P021.json",
+        "C-no-postprocess-D3-41-P039.json",
+        "C-no-postprocess-D3-41-P026.json",
+        "C-no-postprocess-D3-41-P011.json",
+        "C-no-postprocess-D3-41-P006.json",
+        "C-no-postprocess-D3-41-P001.json",
+        "C-no-postprocess-D3-41-P009.json",
+        "C-no-postprocess-D3-41-P025.json",
+        "C-no-postprocess-D3-41-P007.json",
+        "C-no-postprocess-D3-41-P033.json",
+        "C-no-postprocess-D3-41-P038.json",
+        "C-no-postprocess-D3-41-P010.json",
+        "C-no-postprocess-D3-41-P004.json",
+        "C-no-postprocess-D3-41-P008.json",
+        "C-no-postprocess-D3-41-P012.json",
+        "C-no-postprocess-D3-41-P016.json",
+        "C-no-postprocess-D3-41-P020.json",
+        "C-no-postprocess-D3-41-P024.json",
+        "C-no-postprocess-D3-41-P028.json",
+        "C-no-postprocess-D3-41-P032.json",
+        "C-no-postprocess-D3-41-P036.json",
+        "C-no-postprocess-D3-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 41,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D3-41-P005.json",
+        "C-no-examples-D3-41-P019.json",
+        "C-no-examples-D3-41-P014.json",
+        "C-no-examples-D3-41-P003.json",
+        "C-no-examples-D3-41-P037.json",
+        "C-no-examples-D3-41-P030.json",
+        "C-no-examples-D3-41-P002.json",
+        "C-no-examples-D3-41-P023.json",
+        "C-no-examples-D3-41-P022.json",
+        "C-no-examples-D3-41-P029.json",
+        "C-no-examples-D3-41-P031.json",
+        "C-no-examples-D3-41-P027.json",
+        "C-no-examples-D3-41-P017.json",
+        "C-no-examples-D3-41-P018.json",
+        "C-no-examples-D3-41-P013.json",
+        "C-no-examples-D3-41-P035.json",
+        "C-no-examples-D3-41-P034.json",
+        "C-no-examples-D3-41-P015.json",
+        "C-no-examples-D3-41-P021.json",
+        "C-no-examples-D3-41-P039.json",
+        "C-no-examples-D3-41-P026.json",
+        "C-no-examples-D3-41-P011.json",
+        "C-no-examples-D3-41-P006.json",
+        "C-no-examples-D3-41-P001.json",
+        "C-no-examples-D3-41-P009.json",
+        "C-no-examples-D3-41-P025.json",
+        "C-no-examples-D3-41-P007.json",
+        "C-no-examples-D3-41-P033.json",
+        "C-no-examples-D3-41-P038.json",
+        "C-no-examples-D3-41-P010.json",
+        "C-no-examples-D3-41-P004.json",
+        "C-no-examples-D3-41-P008.json",
+        "C-no-examples-D3-41-P012.json",
+        "C-no-examples-D3-41-P016.json",
+        "C-no-examples-D3-41-P020.json",
+        "C-no-examples-D3-41-P024.json",
+        "C-no-examples-D3-41-P028.json",
+        "C-no-examples-D3-41-P032.json",
+        "C-no-examples-D3-41-P036.json",
+        "C-no-examples-D3-41-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 83,
+      "group": "A",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "A-D3-83-P019.json",
+        "A-D3-83-P009.json",
+        "A-D3-83-P033.json",
+        "A-D3-83-P035.json",
+        "A-D3-83-P018.json",
+        "A-D3-83-P006.json",
+        "A-D3-83-P015.json",
+        "A-D3-83-P001.json",
+        "A-D3-83-P034.json",
+        "A-D3-83-P039.json",
+        "A-D3-83-P038.json",
+        "A-D3-83-P002.json",
+        "A-D3-83-P027.json",
+        "A-D3-83-P007.json",
+        "A-D3-83-P005.json",
+        "A-D3-83-P029.json",
+        "A-D3-83-P030.json",
+        "A-D3-83-P017.json",
+        "A-D3-83-P014.json",
+        "A-D3-83-P013.json",
+        "A-D3-83-P010.json",
+        "A-D3-83-P022.json",
+        "A-D3-83-P021.json",
+        "A-D3-83-P003.json",
+        "A-D3-83-P023.json",
+        "A-D3-83-P037.json",
+        "A-D3-83-P026.json",
+        "A-D3-83-P025.json",
+        "A-D3-83-P031.json",
+        "A-D3-83-P011.json",
+        "A-D3-83-P004.json",
+        "A-D3-83-P008.json",
+        "A-D3-83-P012.json",
+        "A-D3-83-P016.json",
+        "A-D3-83-P020.json",
+        "A-D3-83-P024.json",
+        "A-D3-83-P028.json",
+        "A-D3-83-P032.json",
+        "A-D3-83-P036.json",
+        "A-D3-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 83,
+      "group": "C",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-D3-83-P019.json",
+        "C-D3-83-P009.json",
+        "C-D3-83-P033.json",
+        "C-D3-83-P035.json",
+        "C-D3-83-P018.json",
+        "C-D3-83-P006.json",
+        "C-D3-83-P015.json",
+        "C-D3-83-P001.json",
+        "C-D3-83-P034.json",
+        "C-D3-83-P039.json",
+        "C-D3-83-P038.json",
+        "C-D3-83-P002.json",
+        "C-D3-83-P027.json",
+        "C-D3-83-P007.json",
+        "C-D3-83-P005.json",
+        "C-D3-83-P029.json",
+        "C-D3-83-P030.json",
+        "C-D3-83-P017.json",
+        "C-D3-83-P014.json",
+        "C-D3-83-P013.json",
+        "C-D3-83-P010.json",
+        "C-D3-83-P022.json",
+        "C-D3-83-P021.json",
+        "C-D3-83-P003.json",
+        "C-D3-83-P023.json",
+        "C-D3-83-P037.json",
+        "C-D3-83-P026.json",
+        "C-D3-83-P025.json",
+        "C-D3-83-P031.json",
+        "C-D3-83-P011.json",
+        "C-D3-83-P004.json",
+        "C-D3-83-P008.json",
+        "C-D3-83-P012.json",
+        "C-D3-83-P016.json",
+        "C-D3-83-P020.json",
+        "C-D3-83-P024.json",
+        "C-D3-83-P028.json",
+        "C-D3-83-P032.json",
+        "C-D3-83-P036.json",
+        "C-D3-83-P040.json"
+      ],
+      "selfHealing": {
+        "status": "passed",
+        "patients": 5,
+        "method": "recorded-model-draft-replay",
+        "ledger": {
+          "applied": 5,
+          "reverted": 5,
+          "notApplicable": 0,
+          "rates": {
+            "before": null,
+            "after": 1
+          },
+          "conflict": true
+        }
+      },
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 83,
+      "group": "B",
+      "habits": [],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 0,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "B-D3-83-P019.json",
+        "B-D3-83-P009.json",
+        "B-D3-83-P033.json",
+        "B-D3-83-P035.json",
+        "B-D3-83-P018.json",
+        "B-D3-83-P006.json",
+        "B-D3-83-P015.json",
+        "B-D3-83-P001.json",
+        "B-D3-83-P034.json",
+        "B-D3-83-P039.json",
+        "B-D3-83-P038.json",
+        "B-D3-83-P002.json",
+        "B-D3-83-P027.json",
+        "B-D3-83-P007.json",
+        "B-D3-83-P005.json",
+        "B-D3-83-P029.json",
+        "B-D3-83-P030.json",
+        "B-D3-83-P017.json",
+        "B-D3-83-P014.json",
+        "B-D3-83-P013.json",
+        "B-D3-83-P010.json",
+        "B-D3-83-P022.json",
+        "B-D3-83-P021.json",
+        "B-D3-83-P003.json",
+        "B-D3-83-P023.json",
+        "B-D3-83-P037.json",
+        "B-D3-83-P026.json",
+        "B-D3-83-P025.json",
+        "B-D3-83-P031.json",
+        "B-D3-83-P011.json",
+        "B-D3-83-P004.json",
+        "B-D3-83-P008.json",
+        "B-D3-83-P012.json",
+        "B-D3-83-P016.json",
+        "B-D3-83-P020.json",
+        "B-D3-83-P024.json",
+        "B-D3-83-P028.json",
+        "B-D3-83-P032.json",
+        "B-D3-83-P036.json",
+        "B-D3-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 83,
+      "group": "C-no-examples",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 6,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "diagnosis-first"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-examples-D3-83-P019.json",
+        "C-no-examples-D3-83-P009.json",
+        "C-no-examples-D3-83-P033.json",
+        "C-no-examples-D3-83-P035.json",
+        "C-no-examples-D3-83-P018.json",
+        "C-no-examples-D3-83-P006.json",
+        "C-no-examples-D3-83-P015.json",
+        "C-no-examples-D3-83-P001.json",
+        "C-no-examples-D3-83-P034.json",
+        "C-no-examples-D3-83-P039.json",
+        "C-no-examples-D3-83-P038.json",
+        "C-no-examples-D3-83-P002.json",
+        "C-no-examples-D3-83-P027.json",
+        "C-no-examples-D3-83-P007.json",
+        "C-no-examples-D3-83-P005.json",
+        "C-no-examples-D3-83-P029.json",
+        "C-no-examples-D3-83-P030.json",
+        "C-no-examples-D3-83-P017.json",
+        "C-no-examples-D3-83-P014.json",
+        "C-no-examples-D3-83-P013.json",
+        "C-no-examples-D3-83-P010.json",
+        "C-no-examples-D3-83-P022.json",
+        "C-no-examples-D3-83-P021.json",
+        "C-no-examples-D3-83-P003.json",
+        "C-no-examples-D3-83-P023.json",
+        "C-no-examples-D3-83-P037.json",
+        "C-no-examples-D3-83-P026.json",
+        "C-no-examples-D3-83-P025.json",
+        "C-no-examples-D3-83-P031.json",
+        "C-no-examples-D3-83-P011.json",
+        "C-no-examples-D3-83-P004.json",
+        "C-no-examples-D3-83-P008.json",
+        "C-no-examples-D3-83-P012.json",
+        "C-no-examples-D3-83-P016.json",
+        "C-no-examples-D3-83-P020.json",
+        "C-no-examples-D3-83-P024.json",
+        "C-no-examples-D3-83-P028.json",
+        "C-no-examples-D3-83-P032.json",
+        "C-no-examples-D3-83-P036.json",
+        "C-no-examples-D3-83-P040.json"
+      ],
+      "completed": true
+    },
+    {
+      "persona": "D3",
+      "seed": 83,
+      "group": "C-no-postprocess",
+      "habits": [
+        {
+          "id": 1,
+          "rule": {
+            "type": "exclude_rule",
+            "section": "diagnoses",
+            "matcher": "肝囊肿",
+            "status": "finding"
+          },
+          "origin": "stated",
+          "correct": true,
+          "unsafe": false,
+          "category": "spurious",
+          "dryrun": {
+            "correct": 2,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 2,
+          "rule": {
+            "type": "format_rule",
+            "section": "medications",
+            "field": "frequency",
+            "from": "bid",
+            "to": "每日两次"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "format",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 0
+          }
+        },
+        {
+          "id": 3,
+          "rule": {
+            "type": "attend_rule",
+            "section": "tags",
+            "hint": "吸烟史"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "omission",
+          "dryrun": {
+            "correct": 0,
+            "wrong": 0,
+            "irrelevant": 3
+          }
+        },
+        {
+          "id": 4,
+          "rule": {
+            "type": "unit_normalize",
+            "section": "labs",
+            "field": "unit",
+            "item": "肌酐",
+            "from": "umol/L",
+            "to": "μmol/L"
+          },
+          "origin": "learned",
+          "correct": true,
+          "unsafe": false,
+          "category": "unit",
+          "dryrun": {
+            "correct": 3,
+            "wrong": 0,
+            "irrelevant": 1
+          }
+        },
+        {
+          "id": 7,
+          "rule": {
+            "type": "style_rule",
+            "pattern": "brief"
+          },
+          "origin": "learned",
+          "correct": null,
+          "unsafe": false,
+          "category": "style",
+          "dryrun": null
+        }
+      ],
+      "unsafeLearned": 0,
+      "falseStated": 0,
+      "statedSaved": 2,
+      "privacyLeaks": 0,
+      "freshStoreEmpty": true,
+      "predictionErrors": [],
+      "files": [
+        "C-no-postprocess-D3-83-P019.json",
+        "C-no-postprocess-D3-83-P009.json",
+        "C-no-postprocess-D3-83-P033.json",
+        "C-no-postprocess-D3-83-P035.json",
+        "C-no-postprocess-D3-83-P018.json",
+        "C-no-postprocess-D3-83-P006.json",
+        "C-no-postprocess-D3-83-P015.json",
+        "C-no-postprocess-D3-83-P001.json",
+        "C-no-postprocess-D3-83-P034.json",
+        "C-no-postprocess-D3-83-P039.json",
+        "C-no-postprocess-D3-83-P038.json",
+        "C-no-postprocess-D3-83-P002.json",
+        "C-no-postprocess-D3-83-P027.json",
+        "C-no-postprocess-D3-83-P007.json",
+        "C-no-postprocess-D3-83-P005.json",
+        "C-no-postprocess-D3-83-P029.json",
+        "C-no-postprocess-D3-83-P030.json",
+        "C-no-postprocess-D3-83-P017.json",
+        "C-no-postprocess-D3-83-P014.json",
+        "C-no-postprocess-D3-83-P013.json",
+        "C-no-postprocess-D3-83-P010.json",
+        "C-no-postprocess-D3-83-P022.json",
+        "C-no-postprocess-D3-83-P021.json",
+        "C-no-postprocess-D3-83-P003.json",
+        "C-no-postprocess-D3-83-P023.json",
+        "C-no-postprocess-D3-83-P037.json",
+        "C-no-postprocess-D3-83-P026.json",
+        "C-no-postprocess-D3-83-P025.json",
+        "C-no-postprocess-D3-83-P031.json",
+        "C-no-postprocess-D3-83-P011.json",
+        "C-no-postprocess-D3-83-P004.json",
+        "C-no-postprocess-D3-83-P008.json",
+        "C-no-postprocess-D3-83-P012.json",
+        "C-no-postprocess-D3-83-P016.json",
+        "C-no-postprocess-D3-83-P020.json",
+        "C-no-postprocess-D3-83-P024.json",
+        "C-no-postprocess-D3-83-P028.json",
+        "C-no-postprocess-D3-83-P032.json",
+        "C-no-postprocess-D3-83-P036.json",
+        "C-no-postprocess-D3-83-P040.json"
+      ],
+      "completed": true
+    }
+  ],
+  "limitations": [
+    "金标准尚待独立逐份核对",
+    "style 评审尚需人工校准",
+    "发版需另一个模型档结果及全部门槛证据",
+    "Q3 需要真实医生试点",
+    "The model failed to submit a draft in two cells on attempt 2; attempt 3 reran those cells from the start. Earlier failures are retained, not counted as successful intakes.",
+    "G7 has no observed learned-rule postprocess changes: predicted=0, actual=0, observations=0. This is unverified, not passed.",
+    "C-no-examples FER exceeds A (0.6783 vs 0.6601). Its 3038 classified clinical differences include 313 tag deletions versus 219 in A; this is an analysis of edit categories, not a clinical adjudication."
+  ],
+  "version": "0.9.127",
+  "runtime": {
+    "electron": "44.2.0",
+    "node": "24.20.0"
+  },
+  "scoring": {
+    "revision": 2,
+    "names": "Review alignment normalization: NFKC, case, whitespace, known aliases"
+  },
+  "attemptHistory": [
+    {
+      "attempt": 1,
+      "calls": 3673,
+      "newIntakesIncludingPartialCells": 866,
+      "completeCells": 12,
+      "failure": "HTTP 402"
+    },
+    {
+      "attempt": 2,
+      "calls": 5301,
+      "newIntakesIncludingPartialCells": 1265,
+      "reusedIntakes": 480,
+      "completeCells": 43,
+      "failure": "Two model responses did not submit a draft"
+    },
+    {
+      "attempt": 3,
+      "calls": 331,
+      "newIntakesIncludingPartialCells": 80,
+      "reusedIntakes": 1720,
+      "completeCells": 45
+    }
+  ],
+  "totalCallsAcrossAttempts": 9305,
+  "ferDecomposition": {
+    "A": {
+      "draftItems": 4557,
+      "clinicalDiffs": 3013,
+      "clinicalDiffsByField": {
+        "diagnoses.note.modify": 786,
+        "medications.dose.modify": 360,
+        "visits.note.modify": 360,
+        "medications.note.modify": 344,
+        "diagnoses.status.modify": 327,
+        "tags..delete": 219,
+        "labs.unit.modify": 184,
+        "labs.value.modify": 117,
+        "visits.reason.modify": 71,
+        "diagnoses..delete": 54,
+        "diagnoses..add": 54,
+        "diagnoses.date.modify": 53,
+        "visits..delete": 28,
+        "medications.frequency.modify": 27,
+        "labs..add": 13,
+        "diagnoses.code.modify": 11,
+        "groups..delete": 4,
+        "diagnoses.name.modify": 1
+      }
+    },
+    "C": {
+      "draftItems": 4500,
+      "clinicalDiffs": 2910,
+      "clinicalDiffsByField": {
+        "diagnoses.note.modify": 781,
+        "visits.note.modify": 360,
+        "medications.dose.modify": 359,
+        "medications.note.modify": 335,
+        "diagnoses.status.modify": 330,
+        "tags..delete": 226,
+        "labs.unit.modify": 138,
+        "labs.value.modify": 117,
+        "diagnoses..delete": 57,
+        "visits.reason.modify": 54,
+        "diagnoses..add": 52,
+        "diagnoses.date.modify": 39,
+        "visits..delete": 31,
+        "medications.frequency.modify": 9,
+        "diagnoses.code.modify": 9,
+        "groups..delete": 5,
+        "labs..add": 5,
+        "medications.name.modify": 1,
+        "medications..delete": 1,
+        "medications..add": 1
+      }
+    },
+    "C-no-examples": {
+      "draftItems": 4458,
+      "clinicalDiffs": 3038,
+      "clinicalDiffsByField": {
+        "diagnoses.note.modify": 782,
+        "medications.dose.modify": 360,
+        "visits.note.modify": 359,
+        "medications.note.modify": 340,
+        "diagnoses.status.modify": 328,
+        "tags..delete": 313,
+        "labs.unit.modify": 136,
+        "labs.value.modify": 117,
+        "visits.reason.modify": 62,
+        "diagnoses..delete": 61,
+        "diagnoses..add": 57,
+        "diagnoses.date.modify": 48,
+        "visits..delete": 31,
+        "diagnoses.code.modify": 18,
+        "groups..delete": 9,
+        "medications.frequency.modify": 8,
+        "labs..add": 6,
+        "diagnoses.name.modify": 2,
+        "visits..add": 1
+      }
+    }
+  }
+}

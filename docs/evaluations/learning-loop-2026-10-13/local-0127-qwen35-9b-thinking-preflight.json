@@ -1,0 +1,37 @@
+{
+  "version": "0.9.127",
+  "status": "failed",
+  "scope": "A/C, D1, seed 17, one patient per group; preflight only",
+  "model": {
+    "provider": "local",
+    "model": "open-medical-eval-qwen35-9b-64k-t02"
+  },
+  "configuration": {
+    "base": "qwen3.5:9b-q4_K_M",
+    "contextWindow": 65536,
+    "maxTokens": 8192,
+    "thinking": "enabled",
+    "reasoning_effort": "high",
+    "kvCache": "q8_0",
+    "flashAttention": true,
+    "concurrency": 1
+  },
+  "calls": 9,
+  "completedIntakes": 0,
+  "results": [
+    {
+      "group": "A",
+      "error": "Model returned a narration after reading the first batch without performing the next tool call. No draft was submitted."
+    },
+    {
+      "group": "C",
+      "error": "Repeated patient_create_propose validation errors: known allergy status without allergens; evaluation reached the ten-minute intake timeout. No scorable draft."
+    }
+  ],
+  "acceptance": "not-qualified-for-full-matrix",
+  "limitations": [
+    "Two preflight cases cannot estimate accuracy or learning effect.",
+    "No F1 assigned because no scorable draft was produced.",
+    "This result applies to this configuration, not to all local models."
+  ]
+}
