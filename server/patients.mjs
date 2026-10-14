@@ -206,6 +206,8 @@ export class PatientRegistry {
         patient.clinicalSummary = optionalClinicalSummary(input.clinicalSummary);
       if (input.diagnoses !== undefined)
         patient.diagnoses = optionalDiagnoses(input.diagnoses);
+      if (input.treatmentPlan !== undefined)
+        patient.treatmentPlan = optionalTreatmentPlan(input.treatmentPlan);
       if (input.medications !== undefined)
         patient.medications = optionalMedications(input.medications);
       if (input.allergies !== undefined)
@@ -713,6 +715,20 @@ function optionalDiagnoses(value) {
   // keeps every source; doctor-entered duplicates merge the same way.
   return mergeDiagnoses(list);
 }
+function optionalTreatmentPlan(value) {
+  check(value && typeof value === "object" && !Array.isArray(value), "INVALID_INPUT", "治疗方案格式无效");
+  const result = {};
+  const textFields = { title: 120, goal: 2000, interventions: 4000, prognosis: 2000, source: 200 };
+  const dateFields = ["startDate", "reviewDate", "assessmentDate"];
+  check(Object.keys(value).every(key => key in textFields || dateFields.includes(key) || key === "status"), "INVALID_INPUT", "未知治疗方案字段");
+  for (const [key, limit] of Object.entries(textFields)) result[key] = value[key] === undefined || value[key] === "" ? "" : string(value[key], "治疗方案内容", limit).trim();
+  check(result.title, "INVALID_INPUT", "请填写治疗方案名称");
+  result.status = optionalChoice(value.status, ["active", "paused", "completed"]) || "active";
+  for (const key of dateFields) result[key] = value[key] === undefined || value[key] === "" ? "" : clinicalDate(value[key], "方案日期");
+  check(!result.startDate || !result.reviewDate || result.reviewDate >= result.startDate, "INVALID_INPUT", "复评日期不能早于开始日期");
+  check(!result.prognosis || result.assessmentDate, "INVALID_INPUT", "填写预后评估时请同时记录评估日期");
+  return result;
+}
 function optionalMedications(value) {
   return structuredList(value, "用药", 60, (item) => ({
     name: string(item.name, "药名", 120),
@@ -778,6 +794,7 @@ export function normalizePatientCreate(input) {
         note: input.note === undefined || input.note === "" ? "" : string(input.note, "备注", 2000),
         ...(input.clinicalSummary !== undefined ? { clinicalSummary: optionalClinicalSummary(input.clinicalSummary) } : {}),
         diagnoses: optionalDiagnoses(input.diagnoses),
+        ...(input.treatmentPlan !== undefined ? { treatmentPlan: optionalTreatmentPlan(input.treatmentPlan) } : {}),
         medications: optionalMedications(input.medications),
         allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
         labs: optionalLabs(input.labs),

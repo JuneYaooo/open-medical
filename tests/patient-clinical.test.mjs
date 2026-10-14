@@ -107,3 +107,36 @@ test("icd10 endpoint search", async (t) => {
   const byCode = (await f.json("/api/icd10?q=I50")).data;
   assert.equal(byCode.codes[0].code, "I50");
 });
+
+test("treatment plans persist with revision protection and preserve medication and allergy records", async t => {
+  const f = await fixture(t);
+  const patient = (await f.json('/api/patients', 'POST', { name: '方案验证患者', medications: [{ name: '已登记药物', status: 'unknown' }], allergies: ['已登记过敏原'] })).data;
+  const treatmentPlan = { title: '阶段治疗计划', status: 'active', goal: '记录症状变化', interventions: '既有治疗\n复诊核对', startDate: '2026-10-01', reviewDate: '2026-10-28', prognosis: '尚待复查后评估', assessmentDate: '2026-10-14', source: '复诊记录' };
+  const result = await f.json(`/api/patients/${patient.id}`, 'PATCH', { expectedRevision: patient.revision, treatmentPlan });
+  assert.equal(result.status, 200);
+  const saved = (await f.json(`/api/patients/${patient.id}`)).data;
+  assert.deepEqual(saved.treatmentPlan, treatmentPlan);
+  assert.deepEqual(saved.medications, patient.medications);
+  assert.deepEqual(saved.allergies, patient.allergies);
+  assert.equal((await f.json(`/api/patients/${patient.id}`, 'PATCH', { expectedRevision: patient.revision, treatmentPlan: { ...treatmentPlan, goal: '过时修改' } })).status, 409);
+  assert.deepEqual((await f.json(`/api/patients/${patient.id}`)).data.treatmentPlan, treatmentPlan);
+  const completed = await f.json(`/api/patients/${patient.id}`, 'PATCH', { expectedRevision: saved.revision, treatmentPlan: { ...treatmentPlan, status: 'completed', prognosis: '', assessmentDate: '', reviewDate: '' } });
+  assert.equal(completed.status, 200);
+  assert.equal(completed.data.treatmentPlan.prognosis, '');
+  assert.equal(completed.data.treatmentPlan.status, 'completed');
+});
+
+test("treatment plans reject impossible dates, missing assessment dates and invalid content atomically", async t => {
+  const f = await fixture(t);
+  const patient = (await f.json('/api/patients', 'POST', { name: '方案边界验证患者' })).data;
+  const invalid = [null, [], { title: ' ' }, { title: '测试', status: 'cured' }, { title: '测试', reviewDate: '2026-02-30' }, { title: '测试', startDate: '2026-10-20', reviewDate: '2026-10-19' }, { title: '测试', prognosis: '评估', assessmentDate: '' }, { title: '测试', interventions: 'x'.repeat(4001) }, { title: '测试', predictedSurvival: 95 }];
+  for (const treatmentPlan of invalid) {
+    assert.equal((await f.json(`/api/patients/${patient.id}`, 'PATCH', { expectedRevision: patient.revision, treatmentPlan })).status, 400);
+  }
+  const saved = (await f.json(`/api/patients/${patient.id}`)).data;
+  assert.equal(saved.revision, patient.revision);
+  assert.equal(saved.treatmentPlan, undefined);
+  const created = await f.json('/api/patients', 'POST', { name: '带方案建档患者', treatmentPlan: { title: '初始治疗方案' } });
+  assert.equal(created.status, 201);
+  assert.equal(created.data.treatmentPlan.status, 'active');
+});
