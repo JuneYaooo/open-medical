@@ -284,3 +284,27 @@ export function normalizedEditDistance(a = "", b = "") {
   }
   return row[b.length] / Math.max(1, a.length, b.length);
 }
+
+// Plain-language wording for a structured habit rule, shown to doctors and injected into prompts.
+export function describeHabitRule(rule) {
+  if (!rule || typeof rule !== "object") return "";
+  const section = SECTION_LABELS[rule.section] || rule.section || "";
+  switch (rule.type) {
+    case "term_replace":
+      return `${section}名称「${rule.from}」写成「${rule.to}」`;
+    case "term_style":
+      return rule.direction === "full" ? "诊断写中文全称，不用缩写" : "诊断用常用缩写";
+    case "unit_normalize":
+      return `${rule.item ? `${rule.item}的` : "检验"}单位「${rule.from}」写成「${rule.to}」`;
+    case "format_rule":
+      return rule.pattern === "iso-date"
+        ? `${section}日期写成 YYYY-MM-DD`
+        : `${section}${FIELD_LABELS[rule.field] || rule.field}「${rule.from}」写成「${rule.to}」`;
+    case "exclude_rule":
+      return `偶然发现「${rule.matcher}」不单列为诊断`;
+    case "attend_rule":
+      return `整理时注意提取：${String(rule.hint || "").slice(0, 40)}`;
+    default:
+      return "";
+  }
+}

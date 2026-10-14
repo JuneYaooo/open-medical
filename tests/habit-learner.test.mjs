@@ -378,3 +378,21 @@ test("delete reason takes effect on the next occurrence, even for the same patie
   assert.equal(doctor.memoryRow(habit.id).origin, "stated");
   assert.equal(doctor.memoryRow(habit.id).rule.matcher, "肝囊肿");
 });
+test("learned habits read as plain language, including ones saved in the old raw form", (t) => {
+  const { store, doctor, learner, log } = setup(t);
+  for (let i = 0; i < 3; i++)
+    log.record({
+      action: { id: `w${i}` },
+      patientId: i ? "b" : "a",
+      ai: { medications: [{ name: "二甲双胍", frequency: "bid" }] },
+      final: { medications: [{ name: "二甲双胍", frequency: "每日两次" }] },
+    });
+  const [habit] = learner.aggregate();
+  assert.equal(doctor.memoryRow(habit.id).content, "用药频次「bid」写成「每日两次」");
+  store.db.prepare("UPDATE doctor_memories SET content='labs：mmol/l → mmol/L', rule=? WHERE id=?").run(
+    JSON.stringify({ type: "unit_normalize", section: "labs", field: "unit", item: "血糖", from: "mmol/l", to: "mmol/L" }),
+    habit.id,
+  );
+  new HabitLearner(store, doctor);
+  assert.equal(doctor.memoryRow(habit.id).content, "血糖的单位「mmol/l」写成「mmol/L」");
+});

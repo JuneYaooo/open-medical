@@ -4,6 +4,7 @@ import {
   normalizeReviewText,
   alignReviewItems,
   TERM_GROUPS,
+  describeHabitRule,
 } from "../../shared/review-diff.mjs";
 import { check } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
@@ -305,6 +306,16 @@ export class HabitLearner {
     this.store = store;
     this.db = store.db;
     this.doctor = doctor;
+    // Habits learned before plain-language wording existed read "labs：a → b"; reword them once.
+    for (const row of this.db
+      .prepare(
+        "SELECT id,rule FROM doctor_memories WHERE kind='consolidated' AND rule IS NOT NULL AND content GLOB '[a-z]*：* → *'",
+      )
+      .all()) {
+      const content = describeHabitRule(JSON.parse(row.rule));
+      if (content)
+        this.db.prepare("UPDATE doctor_memories SET content=? WHERE id=?").run(content, row.id);
+    }
   }
   aggregate() {
     const signals = this.db
@@ -385,12 +396,7 @@ export class HabitLearner {
         (dryrun.wrong > 0 || dryrun.correct < 2)
       )
         continue;
-      const content =
-        rule.type === "exclude_rule"
-          ? `偶然发现「${rule.matcher}」不单列为诊断`
-          : rule.type === "attend_rule"
-            ? `整理时注意提取：${rule.hint}`
-            : `${rule.section}：${rule.from} → ${rule.to}`;
+      const content = describeHabitRule(rule);
       const memory = existing
         ? this.doctor.memoryRow(pattern.memory_id)
         : this.doctor.addMemory({

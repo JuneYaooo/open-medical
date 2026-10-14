@@ -355,7 +355,7 @@ test(
     await diagnoses.getByRole("button", { name: "保存", exact: true }).click();
     await dialog.getByRole("button", { name: /确认建档（含你的/ }).click();
     await dialog.waitFor({ state: "hidden" });
-    await page.getByText(/记下了：diagnoses/).waitFor();
+    await page.getByText(/记下了：诊断名称「HTN」写成「高血压」/).waitFor();
     const memory = f.server.doctor
       .memories({ status: "confirmed" })
       .find((m) => m.origin === "learned");
