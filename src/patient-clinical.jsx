@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { localCalendarDate } from "../shared/calendar-date.mjs";
-import { DIAGNOSIS_STATUS_SHORT } from "../shared/diagnoses.mjs";
+import { DIAGNOSIS_STATUS_SHORT, diagnosisStatus } from "../shared/diagnoses.mjs";
 import { Plus, X, Loader2, Search, Star, Share2 } from "lucide-react";
 import { ShareWizard } from "./share-wizard";
 
@@ -167,7 +167,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
               </span>
               <select
                 aria-label={`${d.name}诊断状态`}
-                value={d.status || "confirmed"}
+                value={diagnosisStatus(d)}
                 onChange={(e) =>
                   saveDiagnoses(
                     draft.diagnoses.map((item, i) =>

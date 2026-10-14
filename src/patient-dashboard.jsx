@@ -1,8 +1,8 @@
 import { HabitSuggestion, SimilarCaseCard } from "./learning-loop";
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, CalendarDays, Pill, ArrowUpRight } from 'lucide-react';
-import { dashboardLabGroups, dashboardLabLayout, dashboardHistory } from '../shared/patient-dashboard.mjs';
-import { groupDiagnoses, sortDiagnoses } from '../shared/diagnoses.mjs';
+import { dashboardLabGroups, dashboardLabLayout } from '../shared/patient-dashboard.mjs';
+import { sortDiagnoses } from '../shared/diagnoses.mjs';
 import { MATERIAL_CATEGORIES } from '../shared/material-classify.mjs';
 import { groupMaterials } from '../shared/material-folder.mjs';
 import { MaterialDetails, materialQualityLevel } from './material-details';
@@ -10,10 +10,8 @@ import { api } from './agent-runtime';
 import './patient-dashboard.css';
 import { ClinicalPanel } from './patient-clinical';
 import { TreatmentPanel } from './patient-treatment';
+import { PatientHistory } from './patient-history';
 
-function Source({ value }) {
-  return value ? <details className="chart-source"><summary>资料来源</summary><p>{value}</p></details> : <small className="muted">来源未记录</small>;
-}
 // 从病程/诊断备注里提取引用的原文文件名（与「查看原文」跳转共用）。
 export function citedFileName(text) {
   const m = String(text || '').match(/([^\s,，、;；:：()（）[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/i);
@@ -41,19 +39,6 @@ function LabPlot({ group, compact = false }) {
     {dates.length > 1 ? <><text x="60" y="182">{dates[0]}</text><text x={right} y="182" textAnchor="end">{dates.at(-1)}</text></> : <text x={width/2} y="182" textAnchor="middle">{dates[0]}</text>}
   </svg>;
 }
-// 病史摘要常是一整段长文，按句切成约 2 句一段便于扫读；只加换行，不改文字本身。
-function summaryParagraphs(text) {
-  const out = [];
-  for (const block of String(text || '').split(/\n+/)) {
-    const sentences = block.match(/[^。！？]+[。！？]?/g) || [];
-    let cur = '';
-    for (const s of sentences) {
-      if (cur && cur.length + s.length > 160) { out.push(cur); cur = s; } else cur += s;
-    }
-    if (cur) out.push(cur);
-  }
-  return out;
-}
 export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", focusFile = null, onChanged, onError }) {
   const [editing, setEditing] = useState(false);
   const titles = {overview:'患者概览',diagnoses:'诊断与病史',medications:'治疗方案与预后',labs:'检验趋势',visits:'就诊经过',library:'资料库'};
@@ -72,7 +57,6 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   const layout = dashboardLabLayout(patient.labs || [], display, monitors);
   const comparisonDates = [...new Set(layout.comparison.flatMap(g => g.records.map(r => r.date || '日期未记录')))].sort().reverse();
   const diagnoses=patient.diagnoses || [], meds=patient.medications || [], visits=patient.visits || [], allergies=patient.allergies || [];
-  const history=dashboardHistory(patient);
   const files=session.files || [];
   const libraryGroups = useMemo(()=>groupMaterials(files),[files]);
   // 资料库视图 = 全部资料视图（0.9.109 起合并）：文件名搜索 + 按类型筛选一起作用。
@@ -171,22 +155,8 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       <section><h3>最近检验</h3>{groups.slice().sort((a,b)=>String(b.records.at(-1)?.date||'').localeCompare(String(a.records.at(-1)?.date||''))).slice(0,3).map(g=><p key={g.key}>{g.item} · {g.conflict ? '同日数值待核对' : `${g.records.at(-1)?.value} ${g.unit || '单位未记录'}`}<small> · {g.records.at(-1)?.date || '日期未记录'}</small></p>)}{!groups.length && <p>尚无检验记录</p>}<button className="text-button" onClick={()=>onClinical('labs')}>查看全部检验与趋势</button></section>
       <section><h3>用药与过敏核对</h3><p>{allergies.length ? '已有过敏记录，请留意。' : patient.allergyStatus==='none_known' ? '已核对：无已知过敏。' : '过敏史尚待核对。'}{meds.some(m=>!m.status||m.status==='unknown') ? '部分用药的当前使用状态待核对。' : !meds.length ? '尚无用药记录。' : '已登记用药，接诊时核对是否变化。'}</p><button className="text-button" onClick={()=>onClinical('medications')}>查看治疗方案与预后</button></section>
     </div>}
-    {view === 'diagnoses' && <article className="chart-history" aria-label="病程概览"><h3>{patient.clinicalSummary ? '病史摘要' : '病程概览'}</h3>
-      {patient.clinicalSummary ? <>{summaryParagraphs(patient.clinicalSummary.text).map((p,i)=><p key={i} className="clinical-summary-text">{p}</p>)}<Source value={patient.clinicalSummary.source}/></> : <><small className="muted">按已保存的就诊记录排列；保留原有描述，不推断当前病情。</small>{history.length ? <ol className="history-overview">{history.map((v,i)=><li key={i}><time>{v.date || '日期未记录'}</time><p>{v.reason}</p><a href="#patient-visits" onClick={e=>{e.preventDefault();onClinical("visits");}}>查看就诊记录与补充说明</a></li>)}</ol> : <p>尚无可整理的就诊病程。请补充资料，诊断与用药记录仍可在下方查看。</p>}</>}
-      {patient.note && <details className="chart-record-notes"><summary>资料备注与待核对信息</summary><p>{patient.note}</p></details>}
-      {!!patient.tags?.length && <div className="chart-tags" aria-label="患者标签">{patient.tags.map(tag=><span key={tag}>{tag}</span>)}</div>}
-    </article>}
+    {view === 'diagnoses' && <PatientHistory patient={patient} files={files} onEdit={()=>setEditing(true)} onNavigate={onClinical} onChanged={onChanged} citedFileName={citedFileName}/>}
     <div>
-      {view === 'diagnoses' && <section id="chart-problems" className="chart-section" aria-label="诊断与问题"><header><h3>诊断与问题</h3><small>{diagnoses.length} 条记录</small></header>
-        {diagnoses.length ? groupDiagnoses(diagnoses).map(group=><div key={group.status} className="chart-problem-group">
-          <h4>{group.label}<small>{group.items.length} 条</small></h4>
-          <ul className="chart-problems">{group.items.map((d,i)=><li key={i}>
-            <div><b>{typeof d==='string'?d:d.name}</b>{typeof d!=='string' && (!!d.date || !!d.code) && <small>{[d.date || '日期未记录', d.code].filter(Boolean).join(' · ')}</small>}</div>
-            {typeof d!=='string' && d.note && <p className="chart-problem-note">{d.note}</p>}
-            {typeof d!=='string' && <Source value={(d.sources?.length ? d.sources : [d.source].filter(Boolean)).join('；')}/>}
-          </li>)}</ul>
-        </div>) : <p className="chart-empty">资料未明确提供诊断，待补充。</p>}
-      </section>}
       {view === 'medications' && <TreatmentPanel patient={patient} groups={groups} Plot={LabPlot} onEditMedications={()=>setEditing(true)} onNavigate={onClinical} onChanged={onChanged}/>}
     </div>
     {view === 'labs' && <section className="chart-section chart-labs" aria-label="检验资料与趋势"><header><div><h3>检验资料与趋势</h3><p>同项目、同单位分别展示；趋势仅呈现记录，不自动判断正常或异常。</p></div><small>{patient.labs?.length || 0} 条检验</small></header>
