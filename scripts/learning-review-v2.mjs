@@ -6,7 +6,11 @@ import {
   evaluateHabit,
   factualMetrics,
 } from "./learning-metrics-v2.mjs";
-import { canonical, renderLearningGold } from "./learning-v2-domain.mjs";
+import {
+  canonical,
+  renderLearningGold,
+  mentionsHistory,
+} from "./learning-v2-domain.mjs";
 
 export async function materialUpload(path, name) {
   const buffer = await readFile(path);
@@ -133,7 +137,7 @@ export async function submitReviewEdits(request, action, final, persona) {
   throw new Error("Review edit convergence exceeded 1000 changes");
 }
 // A candidate earns effective credit only on evidence after it was activated.
-// Stored prompt-only intentions without an observed application get no credit.
+// Structured postprocessing evidence is separate from prompt-only evidence.
 export function habitEvidence(habit, draft, gold, persona) {
   const judgment = evaluateHabit(habit, persona),
     before = draft.preHabitPayload;
@@ -182,4 +186,128 @@ export function habitEvidence(habit, draft, gold, persona) {
     };
   });
   return evidence;
+}
+
+// Prompt-only habits do not appear in habitChanges. Require inclusion in the
+// actual prompt context and a subsequent, applicable observation instead.
+export async function promptHabitEvidence(
+  habit,
+  draft,
+  gold,
+  persona,
+  calibration,
+) {
+  if (!(draft.personalization?.habits || []).some((h) => h.id === habit.id))
+    return [];
+  const judgment = evaluateHabit(habit, persona);
+  if (!judgment.correct) return [];
+  const evidence = [];
+  for (const ruleId of judgment.ruleIds) {
+    const rule = persona.rules.find((r) => r.id === ruleId);
+    if (rule.kind === "omission") {
+      if (!(gold.historyFacts || []).some((h) => h.kind === rule.history))
+        continue;
+      const observed = [
+        ...(draft.tags || []),
+        ...(draft.visits || []).map((v) => v.reason),
+      ].some((text) => mentionsHistory(text, rule.history));
+      evidence.push({
+        habitId: habit.id,
+        ruleIds: [ruleId],
+        source: "prompt-history",
+        observed,
+        correct: observed,
+      });
+    } else if (rule.kind === "summary-order" && calibration?.usable) {
+      const result = await calibration.judge(habit, persona, {
+        rule,
+        summary: draft.clinicalSummary?.text || "",
+        gold,
+      });
+      evidence.push({
+        habitId: habit.id,
+        ruleIds: [ruleId],
+        source: "calibrated-style-judge",
+        calibrated: true,
+        correct: result.correct,
+      });
+    }
+  }
+  return evidence;
+}
+
+export const UNDO_MODES = ["after-two-reverts", "oracle", "never"];
+export function observeHabitUndo(
+  habit,
+  draft,
+  final,
+  persona,
+  state,
+  mode = "after-two-reverts",
+) {
+  if (!UNDO_MODES.includes(mode)) throw new Error(`Unknown undo mode: ${mode}`);
+  const corrections = rawDiffs(draft, final);
+  const reverted = (draft.habitChanges || []).some((change) => {
+    if (change.habitId !== habit.id) return false;
+    return corrections.some((edit) => {
+      if (edit.section !== change.section) return false;
+      if (!change.after)
+        return (
+          edit.op === "add" &&
+          canonical(edit.itemAfter?.name) === canonical(change.before?.name)
+        );
+      if (edit.beforeIndex !== change.index) return false;
+      if (edit.op === "delete") return true;
+      return (
+        edit.op === "modify" &&
+        JSON.stringify(change.before?.[edit.field]) !==
+          JSON.stringify(change.after?.[edit.field]) &&
+        JSON.stringify(edit.before) ===
+          JSON.stringify(change.after?.[edit.field])
+      );
+    });
+  });
+  const record = (state[habit.id] ||= { reverts: 0, observations: 0 });
+  record.observations++;
+  if (reverted) record.reverts++;
+  const oracleWouldUndo = evaluateHabit(habit, persona).correct === false;
+  const noticedWouldUndo = record.reverts >= 2;
+  return {
+    habitId: habit.id,
+    reverted,
+    reverts: record.reverts,
+    oracleWouldUndo,
+    noticedWouldUndo,
+    undo:
+      mode === "oracle"
+        ? oracleWouldUndo
+        : mode === "after-two-reverts" && noticedWouldUndo,
+  };
+}
+
+// The product stores most explicit preferences as natural-language memories.
+// Judge intent separately from the downstream summary observation used by G6.
+export async function statedHabitJudgments(
+  memories,
+  stated,
+  persona,
+  calibration,
+) {
+  const rule = persona.rules.find((r) => r.id === stated.ruleId);
+  if (!rule?.learnableByProduct || !calibration?.usable) return [];
+  const judgments = [];
+  for (const habit of memories) {
+    if (habit.rule) continue;
+    const result = await calibration.judge(habit, persona, {
+      mode: "stated-intent",
+      rule,
+    });
+    judgments.push({
+      habitId: habit.id,
+      ruleId: rule.id,
+      calibrated: true,
+      correct: result.correct,
+    });
+  }
+  return judgments;
 }

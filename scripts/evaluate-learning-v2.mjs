@@ -7,11 +7,19 @@ import { createHash } from "node:crypto";
 
 import { selfHealingProbe } from "./learning-probes-v2.mjs";
 
-import { TERMS as TERM_GROUPS } from "./learning-v2-domain.mjs";
+import { calibrateStyleJudge } from "./learning-style-judge.mjs";
+import {
+  TERMS as TERM_GROUPS,
+  knownProductGaps,
+} from "./learning-v2-domain.mjs";
 import {
   materialUpload,
   submitReviewEdits,
   habitEvidence,
+  promptHabitEvidence,
+  observeHabitUndo,
+  statedHabitJudgments,
+  UNDO_MODES,
 } from "./learning-review-v2.mjs";
 import { evaluateGates } from "./learning-gates-v2.mjs";
 import { checkFixtures } from "./check-learning-fixtures-v2.mjs";
@@ -45,6 +53,11 @@ const release = args.includes("--release"),
   concurrency = Number(arg("--concurrency", "1"));
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 12)
   throw new Error("--concurrency 须为 1–12 的整数");
+const undoMode = arg("--undo-mode", "after-two-reverts");
+if (!UNDO_MODES.includes(undoMode)) throw new Error("Invalid --undo-mode");
+const styleLabels = arg("--style-calibration")
+  ? JSON.parse(await readFile(resolve(arg("--style-calibration")), "utf8"))
+  : null;
 const protocol = JSON.parse(await readFile(join(root, "protocol.json"))),
   manifest = JSON.parse(await readFile(join(root, "manifest.json")));
 if (!Number.isSafeInteger(maxCalls) || maxCalls < 1 || maxCalls > 20000)
@@ -111,6 +124,8 @@ if (args.includes("--dry-run")) {
     {
       ...matrix,
       protocol: 2,
+      undoMode,
+      styleLabels,
     },
     concurrency,
   );
@@ -192,7 +207,39 @@ if (args.includes("--dry-run")) {
         ).trim(),
       })),
     );
+  let styleCalibration = {
+    usable: false,
+    reason: "No human-reviewed style observation calibration supplied",
+  };
   try {
+    if (styleLabels) {
+      if (
+        !styleLabels.examples?.every(
+          (e) =>
+            e.observation?.rule &&
+            (e.observation.mode === "stated-intent" ||
+              typeof e.observation.summary === "string"),
+        )
+      )
+        throw new Error(
+          "V2 calibration requires rule and summary observations on every label",
+        );
+      if (
+        !styleLabels.examples.some(
+          (e) => e.observation.mode === "stated-intent",
+        ) ||
+        !styleLabels.examples.some(
+          (e) => e.observation.mode !== "stated-intent",
+        )
+      )
+        throw new Error(
+          "V2 calibration must cover both stated intent and summary observations",
+        );
+      styleCalibration = await calibrateStyleJudge(
+        trackedProvider().provider,
+        styleLabels,
+      );
+    }
     const cells = matrix.personas.flatMap((personaId) =>
       matrix.seeds.flatMap((seed) =>
         matrix.groups.map((group) => ({ personaId, seed, group })),
@@ -252,6 +299,9 @@ if (args.includes("--dry-run")) {
           unsafeLearned: 0,
           statedChecks: [],
           ruleEvidence: [],
+          undoMode,
+          undoState: {},
+          undoObservations: [],
           privacyLeaks: 0,
           freshStoreEmpty: false,
           predictionErrors: [],
@@ -326,30 +376,40 @@ if (args.includes("--dry-run")) {
             const memoriesBefore = new Set(
               server.doctor.memories().map((m) => m.id),
             );
+            const statementIndex = persona.stated.findIndex(
+              (_, j) => index === 4 + j * 10,
+            );
             const correction =
-              group.startsWith("C") && [4, 14].includes(index)
-                ? `${persona.stated[index === 4 ? 0 : 1].text}；${persona.patientOnly}`
+              group.startsWith("C") && statementIndex >= 0
+                ? `${persona.stated[statementIndex].text}；${persona.patientOnly}`
                 : "";
             const started = await request(
               `/api/sessions/${session.id}/intake-job`,
               "POST",
               { correction, externalConsent: true },
             );
-            if (correction)
+            if (correction) {
+              const afterStatement = server.doctor.memories();
+              const newMemories = afterStatement.filter(
+                (m) => !memoriesBefore.has(m.id),
+              );
+              const judgments = await statedHabitJudgments(
+                afterStatement.filter(
+                  (m) => m.origin === "stated" || !memoriesBefore.has(m.id),
+                ),
+                persona.stated[statementIndex],
+                persona,
+                styleCalibration,
+              );
               run.statedChecks.push(
                 scoreStated(
-                  server.doctor
-                    .memories()
-                    .filter((m) => m.status === "confirmed"),
-                  persona.stated[index === 4 ? 0 : 1],
+                  afterStatement.filter((m) => m.status === "confirmed"),
+                  persona.stated[statementIndex],
                   persona,
-                  {
-                    newMemories: server.doctor
-                      .memories()
-                      .filter((m) => !memoriesBefore.has(m.id)),
-                  },
+                  { newMemories, judgments },
                 ),
               );
+            }
             let job = started.job;
             const deadline = Date.now() + 600000;
             while (job.status === "running") {
@@ -418,6 +478,21 @@ if (args.includes("--dry-run")) {
                 actual: actualSavings,
               });
             }
+            if (item.split === "learning")
+              for (const habit of server.doctor
+                .memories()
+                .filter(
+                  (m) => m.origin === "learned" && memoriesBefore.has(m.id),
+                ))
+                run.ruleEvidence.push(
+                  ...(await promptHabitEvidence(
+                    habit,
+                    action.payload,
+                    gold,
+                    persona,
+                    styleCalibration,
+                  )),
+                );
             if (!localModel(provider) && group === "C-no-examples")
               for (const req of requests.slice(beforeRequests)) {
                 const text = JSON.stringify(req.messages);
@@ -450,29 +525,35 @@ if (args.includes("--dry-run")) {
               );
               for (const m of server.doctor
                 .memories()
-                .filter(
-                  (m) =>
-                    m.status === "confirmed" &&
-                    !run.habits.some((h) => h.id === m.id),
-                )) {
+                .filter((m) => m.status === "confirmed")) {
                 const judgment = evaluateHabit(m, persona);
-                const { unsafe } = judgment;
-                if (unsafe) run.unsafeLearned++;
-                if (judgment.correct === false) {
+                if (!run.habits.some((h) => h.id === m.id)) {
+                  if (judgment.unsafe) run.unsafeLearned++;
+                  run.habits.push({
+                    id: m.id,
+                    rule: m.rule,
+                    origin: m.origin,
+                    content: m.content,
+                    ...judgment,
+                    dryrun: m.dryrun,
+                  });
+                }
+                if (m.origin !== "learned") continue;
+                const decision = observeHabitUndo(
+                  m,
+                  action.payload,
+                  final,
+                  persona,
+                  run.undoState,
+                  undoMode,
+                );
+                run.undoObservations.push({ patient: item.id, ...decision });
+                if (decision.undo)
                   await request(
                     `/api/learning/habits/${m.id}/decision`,
                     "POST",
                     { decision: "undo" },
                   );
-                }
-                run.habits.push({
-                  id: m.id,
-                  rule: m.rule,
-                  origin: m.origin,
-                  content: m.content,
-                  ...judgment,
-                  dryrun: m.dryrun,
-                });
               }
             } else
               await request(
@@ -586,11 +667,45 @@ if (args.includes("--dry-run")) {
       gates,
       perPersona,
       runs,
+      undoMode,
+      undoSensitivity: {
+        method:
+          "Same observed trace, decision counts only; not counterfactual model outcomes",
+        oracle: runs.reduce(
+          (n, r) =>
+            n +
+            new Set(
+              (r.undoObservations || [])
+                .filter((o) => o.oracleWouldUndo)
+                .map((o) => o.habitId),
+            ).size,
+          0,
+        ),
+        afterTwoReverts: runs.reduce(
+          (n, r) =>
+            n +
+            new Set(
+              (r.undoObservations || [])
+                .filter((o) => o.noticedWouldUndo)
+                .map((o) => o.habitId),
+            ).size,
+          0,
+        ),
+      },
+      knownProductGaps: Object.fromEntries(
+        personas.map((p) => [p.id, knownProductGaps(p)]),
+      ),
+      styleCalibration: {
+        usable: styleCalibration.usable,
+        accuracy: styleCalibration.accuracy,
+        count: styleCalibration.count,
+        reason: styleCalibration.reason,
+      },
       limitations: [
         ...(!manifest.patients.every((p) => p.humanReviewed)
           ? ["金标准尚待独立逐份核对"]
           : []),
-        "Unstructured style memories receive no correctness credit without a structured matching rule and observed application.",
+        "Prompt-only style credit requires a human-calibrated style judge; uncalibrated evidence earns no credit.",
         "发版需另一个模型档结果及全部门槛证据",
         "Q3 需要真实医生试点",
       ],

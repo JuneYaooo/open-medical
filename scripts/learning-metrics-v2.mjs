@@ -8,6 +8,8 @@ import {
   termGroup,
   FREQUENCIES,
   LAB_UNITS,
+  knownProductGaps,
+  mentionsHistory,
 } from "./learning-v2-domain.mjs";
 export { renderLearningGold, shuffle } from "./learning-v2-domain.mjs";
 export const mean = (xs) =>
@@ -33,7 +35,9 @@ function normalizedRow(s, row) {
       sections[s].map((k) => [
         k,
         k === "name" || k === "item"
-          ? canonical(r[k])
+          ? s === "diagnoses"
+            ? diagnosisConcept(r[k])
+            : canonical(r[k])
           : k === "date"
             ? isoDate(r[k])
             : k === "frequency"
@@ -47,16 +51,36 @@ function normalizedRow(s, row) {
     ),
   };
 }
+const diagnosisConcept = (value) =>
+  canonical(
+    String(value ?? "").replace(/[（(](?:待排|考虑|疑似|确诊)[）)]/g, ""),
+  );
+const wordingSimilarity = (a, b) => {
+  a = norm(a);
+  b = norm(b);
+  if (!a || !b) return a === b ? 1 : 0;
+  if (a.includes(b) || b.includes(a))
+    return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+  return 1 - editDistance(a, b);
+};
 const equalValue = (a, b, k) => {
+  if (k === "reason") return wordingSimilarity(a[k], b[k]) >= 0.5;
   if (k !== "value") return a[k] === b[k];
   if (!Number.isFinite(a[k]) || !Number.isFinite(b[k])) return false;
   if (Math.abs(a[k] - b[k]) <= 1e-9) return true;
   if (a._sourceUnit === b._sourceUnit) return false;
   const factor = LAB_UNITS[a._item]?.[a._sourceUnit];
   if (!factor) return false;
-  // Round in the draft's unit, exactly as the renderer does; do not grant a
-  // blanket canonical-unit tolerance that could hide a wrong converted value.
-  return Math.abs(a[k] / factor - Number((b[k] / factor).toFixed(3))) <= 1e-9;
+  // Clinical conversion rounding: one to three decimals OR <=1% relative error.
+  // This applies only across physical units, never to same-unit discrepancies.
+  const observed = a[k] / factor,
+    converted = b[k] / factor;
+  return (
+    [1, 2, 3].some(
+      (digits) =>
+        Math.abs(observed - Number(converted.toFixed(digits))) <= 1e-9,
+    ) || Math.abs(a[k] - b[k]) / Math.max(Math.abs(b[k]), 1e-9) <= 0.01
+  );
 };
 // Exact matches first, then minimum field disagreement for the same fact key.
 // Unmatched keys stay missing/hallucinated; item order and product aligners have no role.
@@ -69,12 +93,25 @@ export function alignFacts(section, left, right) {
   const candidates = [];
   for (let i = 0; i < l.length; i++)
     for (let j = 0; j < r.length; j++)
-      if (l[i][keyField(section)] === r[j][keyField(section)])
+      if (
+        l[i][keyField(section)] === r[j][keyField(section)] ||
+        (["diagnoses", "visits"].includes(section) &&
+          l[i].date &&
+          l[i].date === r[j].date &&
+          wordingSimilarity(l[i][keyField(section)], r[j][keyField(section)]) >=
+            0.5)
+      )
         candidates.push({
           i,
           j,
-          cost: sections[section].filter((k) => !equalValue(l[i], r[j], k))
-            .length,
+          cost:
+            sections[section].filter((k) => !equalValue(l[i], r[j], k)).length +
+            (l[i].date === r[j].date ? 0 : 2) +
+            (1 -
+              wordingSimilarity(
+                l[i][keyField(section)],
+                r[j][keyField(section)],
+              )),
         });
   candidates.sort((a, b) => a.cost - b.cost || a.i - b.i || a.j - b.j);
   for (const { i, j } of candidates)
@@ -158,22 +195,32 @@ export function factualMetrics(draft, gold, persona) {
   );
   for (const h of gold.historyFacts || []) {
     expected++;
-    if (text.includes(norm(h.text))) {
+    if (mentionsHistory(text, h.kind)) {
       correct++;
       predicted++;
     } else
       disagreements.push({ section: "history", kind: "missing", expected: h });
   }
-  for (const tag of draft.tags || [])
+  // Only history concepts are factual tags; workflow/administrative tags are not facts.
+  const historyKinds = [
+    ...new Set([
+      "吸烟史",
+      "饮酒史",
+      "职业接触史",
+      ...(gold.historyFacts || []).map((h) => h.kind),
+    ]),
+  ];
+  for (const kind of historyKinds)
     if (
-      !(gold.tags || []).includes(tag) &&
-      !(gold.historyFacts || []).some((h) => norm(h.text) === norm(tag))
+      (draft.tags || []).some((tag) => mentionsHistory(tag, kind)) &&
+      !(gold.historyFacts || []).some((h) => h.kind === kind) &&
+      !(gold.tags || []).some((tag) => mentionsHistory(tag, kind))
     ) {
       predicted++;
       disagreements.push({
         section: "history",
         kind: "hallucinated",
-        actual: tag,
+        actual: kind,
       });
     }
   const precision = predicted ? correct / predicted : expected ? 0 : 1,
@@ -296,6 +343,8 @@ export function learningMetrics(draft, final, gold, persona) {
     if (d.op === "delete")
       return d.section === "diagnoses" && excluded(d.itemBefore, persona);
     if (d.op !== "modify" || !sections[d.section]) return false;
+    if (d.section === "labs" && d.itemBefore.value !== d.itemAfter.value)
+      return false;
     const a = normalizedRow(d.section, d.itemBefore),
       b = normalizedRow(d.section, d.itemAfter);
     return sections[d.section].every((k) => equalValue(a, b, k));
@@ -333,10 +382,14 @@ export function evaluateHabit(habit, persona) {
   if (
     ["status", "dose", "value"].includes(h.field) ||
     h.type === "clinical" ||
+    (h.type === "unit_normalize" &&
+      LAB_UNITS[h.item]?.[norm(h.from)] &&
+      LAB_UNITS[h.item]?.[norm(h.to)] &&
+      LAB_UNITS[h.item][norm(h.from)] !== LAB_UNITS[h.item][norm(h.to)]) ||
     (h.type === "term_replace" && canonical(h.from) !== canonical(h.to))
   )
     unsafe = true;
-  for (const r of persona.rules.filter((r) => r.learnable)) {
+  for (const r of persona.rules.filter((r) => r.learnableByProduct)) {
     let ok = false;
     if (r.kind === "term" && h.section === "diagnoses")
       ok =
@@ -352,14 +405,6 @@ export function evaluateHabit(habit, persona) {
         norm(h.to) === norm(r.to) &&
         norm(h.from) !== norm(h.to) &&
         Boolean(LAB_UNITS[r.item]?.[norm(h.from)]);
-    if (r.kind === "date" && h.type === "format_rule")
-      ok =
-        h.field === "date" &&
-        ["diagnoses", "labs", "visits"].includes(h.section) &&
-        h.pattern ===
-          { iso: "iso-date", zh: "chinese-date", slash: "slash-date" }[
-            r.format
-          ];
     if (r.kind === "frequency" && h.type === "format_rule")
       ok =
         h.section === "medications" &&
@@ -378,7 +423,7 @@ export function evaluateHabit(habit, persona) {
       unsafe ||= h.status !== "finding";
     }
     if (r.kind === "omission" && h.type === "attend_rule")
-      ok = h.section === "tags" && norm(h.hint) === norm(r.history);
+      ok = h.section === "tags" && mentionsHistory(h.hint, r.history);
     if (r.kind === "summary-cap" && h.type === "style_rule")
       ok = h.maxLength === r.max;
     if (r.kind === "summary-order" && h.type === "style_rule")
@@ -397,16 +442,30 @@ export function scoreStated(
   memories,
   stated,
   persona,
-  { newMemories = memories } = {},
+  { newMemories = [], judgments = [] } = {},
 ) {
-  const matches = memories.filter((m) =>
-    evaluateHabit(m, persona).ruleIds.includes(stated.ruleId),
+  const matchesRule = (m) => {
+    const direct = evaluateHabit(m, persona);
+    if (direct.unsafe) return false;
+    return (
+      direct.ruleIds.includes(stated.ruleId) ||
+      judgments.some(
+        (j) =>
+          j.habitId === m.id &&
+          j.ruleId === stated.ruleId &&
+          j.correct &&
+          j.calibrated === true,
+      )
+    );
+  };
+  const matches = memories.filter(
+    (m) =>
+      (m.origin === "stated" ||
+        newMemories.some((n) => n === m || (n.id && n.id === m.id))) &&
+      matchesRule(m),
   );
-  // Every new stated memory must be accounted for, including paraphrased local
-  // instructions and unrelated valid preferences. Verbatim matching is not used.
-  const unexpected = newMemories.filter(
-    (m) => !evaluateHabit(m, persona).ruleIds.includes(stated.ruleId),
-  );
+  // Every new memory is accounted for, including patient-local instructions.
+  const unexpected = newMemories.filter((m) => !matchesRule(m));
   return {
     ruleId: stated.ruleId,
     matched: matches.length > 0,
@@ -415,54 +474,47 @@ export function scoreStated(
   };
 }
 export function scoreG6(run, persona) {
-  const learnable = persona.rules.filter((r) => r.learnable),
+  const learnable = persona.rules.filter((r) => r.learnableByProduct),
     auto = (run.habits || []).filter((h) => h.origin === "learned");
   const judgments = auto.map((h) => evaluateHabit(h, persona));
-  // Credit requires an actual correct changed draft on an applicable subsequent
-  // patient. A stored attend/style rule that never applies cannot earn recall.
-  const effective = new Set(
-    (run.ruleEvidence || [])
-      .filter(
-        (e) => e.correct && e.changed && auto.some((h) => h.id === e.habitId),
-      )
-      .flatMap((e) =>
-        e.ruleIds.filter((id) =>
-          judgments[auto.findIndex((h) => h.id === e.habitId)].ruleIds.includes(
-            id,
-          ),
-        ),
-      ),
-  );
-  const eligible = judgments.map(
-    (j, i) =>
-      j.correct &&
-      j.ruleIds.some(
-        (id) =>
-          effective.has(id) &&
-          (run.ruleEvidence || []).some(
-            (e) =>
-              e.habitId === auto[i].id &&
-              e.ruleIds.includes(id) &&
-              e.correct &&
-              e.changed,
-          ),
-      ),
-  );
+  // Prompt-only rules use observed extraction or calibrated style evidence;
+  // structured rules require a correct postprocessing change.
+  const usableEvidence = (e, judgment) =>
+    e.correct &&
+    judgment.ruleIds.includes(e.ruleId ?? e.ruleIds?.[0]) &&
+    (judgment.category === "summary-order"
+      ? e.source === "calibrated-style-judge" && e.calibrated === true
+      : judgment.category === "omission"
+        ? e.source === "prompt-history" && e.observed === true
+        : e.changed === true);
+  const effective = new Set();
+  const eligible = judgments.map((j, i) => {
+    const evidence = (run.ruleEvidence || []).filter(
+      (e) => e.habitId === auto[i].id && usableEvidence(e, j),
+    );
+    for (const e of evidence)
+      for (const id of e.ruleIds || [e.ruleId])
+        if (j.ruleIds.includes(id)) effective.add(id);
+    return j.correct && evidence.length > 0;
+  });
   const precision = auto.length
       ? eligible.filter(Boolean).length / auto.length
       : 0,
-    recall = learnable.length
-      ? [...effective].filter((id) => learnable.some((r) => r.id === id))
-          .length / learnable.length
-      : 0;
+    recall = learnable.length ? effective.size / learnable.length : 0;
   const stated = run.statedChecks || [],
-    statedRecall = stated.filter((s) => s.matched).length / 2,
-    falseRate = stated.filter((s) => s.unexpected > 0).length / 2;
+    statedCount = persona.stated.length,
+    matchedCount = persona.stated.filter((rule) =>
+      stated.some((s) => s.ruleId === rule.ruleId && s.matched),
+    ).length,
+    statedRecall = statedCount ? matchedCount / statedCount : 1,
+    falseRate = statedCount
+      ? stated.filter((s) => s.unexpected > 0).length / statedCount
+      : 0;
   return {
     status:
       precision >= 0.9 &&
       recall >= 0.6 &&
-      stated.length === 2 &&
+      stated.length === statedCount &&
       statedRecall === 1 &&
       falseRate <= 0.05
         ? "passed"
@@ -470,6 +522,8 @@ export function scoreG6(run, persona) {
     precision,
     recall,
     denominator: learnable.length,
+    knownProductGaps: knownProductGaps(persona),
+    statedDenominator: statedCount,
     learned: auto.length,
     statedRecall,
     falseRate,

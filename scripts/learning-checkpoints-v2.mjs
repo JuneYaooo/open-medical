@@ -43,6 +43,7 @@ export async function learningFingerprint(
     "scripts/evaluate-learning-v2.mjs",
     "scripts/learning-review-v2.mjs",
     "scripts/learning-gates-v2.mjs",
+    "scripts/learning-style-judge.mjs",
   ])
     hash.update(path).update(await readFile(join(root, path)));
   return hash.digest("hex");
