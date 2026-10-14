@@ -252,7 +252,7 @@ export class PendingActions {
       summary: title,
       createdAt: time,
       updatedAt: time,
-      note: isCare(type) || type === "patient-grouping" ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建。医生在对话中明确同意后用 proposal_confirm 执行；也可在患者档案或「待确认」面板核对确认。",
+      note: !CHAT_CONFIRM_TYPES.includes(type) ? "提案已创建，需医生在工作台「待确认」面板核对后确认才会执行。" : "提案已创建，尚未落库。若对话中已明确要求执行本次操作（含纠正后继续），现在调用 proposal_confirm，无需再次确认；仅预览或尚有归属歧义时保留草稿。",
     };
   }
   // ext-install 载荷内嵌整包技能文件（几十 MB）；列表每 20 秒被托盘轮询，
@@ -579,15 +579,16 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_create_propose",
-        "从上传材料中识别出新患者时，提议创建患者档案（姓名等基本信息 + 可选的临床字段）。只创建待确认提案；医生在对话中明确同意（如「确认建档」）后用 proposal_confirm 立即建档并返回患者编号，也可到患者管理页核对确认；材料中找不到姓名时先向医生询问。",
+        "创建新患者的结构化档案提案。姓名优先使用用户明确指定的名称。用户已要求建档或纠正后执行且材料归属明确时，提交后在同一轮调用 proposal_confirm 完成，不再索要固定确认口令；仅预览或尚未授权保存时保留草稿。用户和材料都未提供姓名时才询问。排除其他患者时同步排除其临床事实，并用 sourceFileIds 指定保留的附件。",
         {
-          name: textDef,
+          name: { ...textDef, description: "优先使用用户指定姓名（可为昵称/化名），否则使用清晰材料姓名" },
+          sourceFileIds: { type: "array", items: textDef, description: "本次纳入档案的附件 ID，必须属于本轮可用附件；排除其他人材料时必传，空数组表示不复制附件，省略则保留全部" },
           gender: { type: "string", enum: ["male", "female"] },
           birthYear: { type: "integer" },
           phone: textDef,
           groups: { type: "array", items: textDef },
           tags: { type: "array", items: textDef },
-          note: {type:"string",description:"资料备注与待核对信息：身份比对、OCR冲突、缺失项目。不是病史摘要。"},
+          note: {type:"string",description:"尚未解决的资料核对信息，不是病史摘要。用户说不要备注时必须传空字符串，不得再添加缺失字段或其他核对说明；已澄清的命名/OCR差异不自动补备注。"},
           personalization: { type: 'object', properties: { habitIds: { type: 'array', items: { type: 'integer' } }, exampleIds: { type: 'array', items: textDef }, kbRefs: { type: 'array', items: textDef }, skillIds: { type: 'array', items: textDef } }, additionalProperties: false },
           clinicalSummary: clinicalSummaryDef,
           diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；同名诊断合并为一条并用 sources 列全来源" },
@@ -646,7 +647,12 @@ const diagnosisItemsDef = {
         if (context.sourceSessionId) {
           payload.sourceSessionId = context.sourceSessionId;
           if (context.sourceRunId) payload.sourceRunId = context.sourceRunId;
-          payload.sourceFileIds = context.sourceFileIds || (context.sources || []).map((source) => source.id);
+          const available = context.sourceFileIds || (context.sources || []).map((source) => source.id);
+          if (args.sourceFileIds !== undefined) {
+            check(Array.isArray(args.sourceFileIds) && args.sourceFileIds.every(id => typeof id === "string" && available.includes(id)),
+              "SOURCE_NOT_FOUND", "纳入档案的附件必须属于本轮可用材料", 409);
+          }
+          payload.sourceFileIds = [...new Set(args.sourceFileIds ?? available)];
           if (context.sourceInput) payload.sourceInput = context.sourceInput;
         }
         return pending.propose({
@@ -660,7 +666,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "patient_record_propose",
-        "提议更新患者档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。医生在对话中明确给出或更正姓名/性别/出生年等身份信息时（如更正建档时的占位姓名），把 name 等字段一并提交。只创建待确认提案；医生在对话中明确同意后用 proposal_confirm 落库。",
+        "提议更新患者档案。默认 append 追加新记录并保留既往数据；更改已有用药状态等须先读取档案，使用 replace 提交该字段完整列表。医生在对话中明确给出或更正姓名/性别/出生年等身份信息时（如更正建档时的占位姓名），把 name 等字段一并提交。用户已明确要求修改或纠正后执行时，提交后立即用 proposal_confirm 落库，不因更正再索要一次确认；仅预览或未授权保存时保留草稿。",
         {
           patientId: textDef,
           name: { ...textDef, description: "患者姓名。仅用医生本人在对话中明确说出的姓名，不得从模糊图片猜测" },
@@ -875,7 +881,7 @@ const diagnosisItemsDef = {
     {
       definition: definition(
         "proposal_confirm",
-        "医生在对话中明确同意某条待确认提案（如回复「确认建档」「同意」「就按这个写」）后，用它执行该提案，效果与在面板点确认相同：本机档案立即落库，建档提案会返回新患者编号。仅限建档/档案更新/随访/病例/分组类本地提案；给患者发消息、临床试验、扩展安装类提案影响外部或安装代码，仍须医生到「待确认」面板点击确认。医生意见不明确时，先复述提案要点请医生核对，不要替医生决定。",
+        "根据完整对话，用户已明确要求执行该操作（包括首次要求建档、修改档案，或纠正后继续执行），就用它执行最新提案；无需提案生成后再说固定确认口令。仅上传、讨论、预览、暂不保存或仍有实质歧义时不得执行。效果与在面板点确认相同：本机档案立即落库，建档提案会返回新患者编号。仅限建档/档案更新/随访/病例/分组类本地提案；给患者发消息、临床试验、扩展安装类提案影响外部或安装代码，仍须医生到「待确认」面板点击确认。医生意见不明确时，先复述提案要点请医生核对，不要替医生决定。",
         {
           proposalId: { type: "string", description: "提案编号（patient_create_propose / patient_record_propose 等工具返回的 id）" },
         },
@@ -905,7 +911,7 @@ const diagnosisItemsDef = {
           ...(action.type === "patient-create"
             ? {
                 patientId: result.applied.id,
-                note: `已建档，患者编号 ${result.applied.id}。补诊断/检验/用药/就诊明细用 patient_record_propose 提交，医生同意后再 proposal_confirm。`,
+                note: `已建档，患者编号 ${result.applied.id}。补诊断/检验/用药/就诊明细用 patient_record_propose 提交，属于已授权建档范围的明细可继续 proposal_confirm，无需重复询问。`,
               }
             : { note: "提案已执行落库。" }),
         };
