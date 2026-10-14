@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, X } from "lucide-react";
 import { api, PENDING_REFRESH_EVENT } from "./agent-runtime";
 import "./care.css";
+import { RememberedNotice } from "./learning-loop";
 
 const TYPES = { "patient-create": "建档提案", "patient-update": "档案更新", "followup-create": "随访提醒", "case-save": "病例入库", "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展", "ext-install": "技能安装" };
 export { PENDING_REFRESH_EVENT } from "./agent-runtime";
@@ -55,6 +56,7 @@ export function PendingTray() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [rejecting, setRejecting] = useState(null);
+  const [remembered, setRemembered] = useState(null);
   const [note, setNote] = useState("");
   const load = useCallback(() => api("/api/pending-actions?status=pending")
     .then((data) => setActions((data.actions || []).filter((a) => ["patient-create", "patient-update", "followup-create", "case-save"].includes(a.type) || a.type === "patient-grouping" || a.type === "patient-group-suggest" || a.type?.startsWith("care-") || a.type?.startsWith("trial-") || a.type?.startsWith("ext-"))))
@@ -81,15 +83,17 @@ export function PendingTray() {
   async function resolve(action, decision, withNote) {
     setBusy(action.id); setError("");
     try {
-      await api(`/api/pending-actions/${action.id}/${decision}`, "POST", withNote ? { note } : {});
+      const result = await api(`/api/pending-actions/${action.id}/${decision}`, "POST", withNote ? { note } : {});
+      if (result.remembered?.length) setRemembered({ key: `${action.id}:${decision}`, memories: result.remembered });
       setRejecting(null); setNote("");
       await load();
     }
     catch (e) { setError(e.message); }
     finally { setBusy(""); }
   }
-  if (!actions.length) return null;
+  if (!actions.length && !remembered) return null;
   return <div className="pending-tray" ref={tray}>
+    {remembered && <RememberedNotice key={remembered.key} memories={remembered.memories} />}
     {open && <section className="pending-panel" aria-label="待确认的操作">
       <header><strong>待你确认（{actions.length}）</strong><button className="icon-button" aria-label="收起" onClick={() => setOpen(false)}><X size={16} /></button></header>
       {error && <p role="alert" className="care-error">{error}</p>}
@@ -113,6 +117,6 @@ export function PendingTray() {
         </div> : <footer><button className="secondary" disabled={Boolean(busy)} onClick={() => { setRejecting(a.id); setNote(""); }}>拒绝</button><button disabled={Boolean(busy)} onClick={() => resolve(a, "confirm")}>{busy === a.id ? "处理中…" : "确认执行"}</button></footer>}
       </li>)}</ul>
     </section>}
-    <button className="pending-badge" aria-expanded={open} onClick={() => setOpen((v) => !v)}><ClipboardCheck size={18} />待确认<em>{actions.length}</em></button>
+    {!!actions.length && <button className="pending-badge" aria-expanded={open} onClick={() => setOpen((v) => !v)}><ClipboardCheck size={18} />待确认<em>{actions.length}</em></button>}
   </div>;
 }

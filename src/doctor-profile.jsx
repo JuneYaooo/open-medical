@@ -1,7 +1,7 @@
-import { LearningStats, HabitLedger } from "./learning-loop";
+import { LearningStats, HabitLedger, LearningDangerZone, memorySourceLabel } from "./learning-loop";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
-import { Check, Pin, PinOff, Trash2, RotateCcw, Loader2, Sparkles, Eye } from "lucide-react";
+import { Check, Trash2, RotateCcw, Loader2, Sparkles, Eye } from "lucide-react";
 
 const TEXT_FIELDS = [
   ["specialty", "科室", "如：心内科"],
@@ -16,7 +16,6 @@ const LIST_FIELDS = [
   ["terminology", "术语与缩写习惯"],
 ];
 const MEMORY_TABS = [
-  ["confirmed", "生效中"],
   ["pending", "待确认"],
   ["open", "学习信号"],
   ["dismissed", "已忽略"],
@@ -28,7 +27,7 @@ export function DoctorProfilePanel() {
   const [fields, setFields] = useState({});
   const [lists, setLists] = useState({});
   const [memories, setMemories] = useState([]);
-  const [tab, setTab] = useState("confirmed");
+  const [tab, setTab] = useState("pending");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -49,10 +48,7 @@ export function DoctorProfilePanel() {
   };
   const loadMemories = async (which = tab) => {
     const generation = ++memoryGeneration.current;
-    const status = which === "confirmed" ? "" : which;
-    const value = await api(
-      `/api/doctor/memories${which === "confirmed" ? "?status=confirmed" : `?status=${status}`}`,
-    );
+    const value = await api(`/api/doctor/memories?status=${which}`);
     if (generation === memoryGeneration.current) setMemories(value.memories);
   };
   useEffect(() => {
@@ -73,7 +69,7 @@ export function DoctorProfilePanel() {
         ...lists,
       });
       setProfile(value);
-      setNotice("偏好已保存，会注入后续每一次医疗任务。");
+      setNotice("偏好已保存，之后整理时会参考。");
     } catch (err) {
       setError(err.message);
 
@@ -87,6 +83,7 @@ export function DoctorProfilePanel() {
     try {
       await api(`/api/doctor/memories/${id}/${action}`, "POST", body || {});
       await Promise.all([loadMemories(), loadProfile(true)]);
+      window.dispatchEvent(new Event("habits-changed"));
     } catch (err) {
       setError(err.message);
     }
@@ -96,6 +93,7 @@ export function DoctorProfilePanel() {
     try {
       await api(`/api/doctor/memories/${id}`, "DELETE");
       await Promise.all([loadMemories(), loadProfile(true)]);
+      window.dispatchEvent(new Event("habits-changed"));
     } catch (err) {
       setError(err.message);
     }
@@ -113,14 +111,15 @@ export function DoctorProfilePanel() {
       const learned = !useModel && value.created.length > 0;
       setNotice(
         learned
-          ? `记下了 ${value.created.length} 条习惯（你重复写过的说明），已生效；不对可在「生效中」停用或删除。`
+          ? `记下了 ${value.created.length} 条习惯（你重复写过的说明），已生效；可在「我的习惯」编辑、停用或删除。`
           : value.created.length
             ? `模型归纳出 ${value.created.length} 条候选偏好，请在「待确认」中审核。`
             : useModel
               ? "模型没有归纳出新偏好。"
               : "同一条说明写过 2 次以上才会记成习惯；面向以后的话（如「以后都…」）写下时就已记住。",
       );
-      const next = learned ? "confirmed" : "pending";
+      const next = learned ? "open" : "pending";
+      window.dispatchEvent(new Event("habits-changed"));
       setTab(next);
       await loadMemories(next);
       await loadProfile(true);
@@ -137,8 +136,9 @@ export function DoctorProfilePanel() {
     try {
       await api("/api/doctor/memories", "POST", { content: newMemory });
       setNewMemory("");
-      setTab("confirmed");
-      await Promise.all([loadMemories("confirmed"), loadProfile(true)]);
+      setNotice("已添加到「我的习惯」。");
+      await Promise.all([loadMemories(), loadProfile(true)]);
+      window.dispatchEvent(new Event("habits-changed"));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -174,7 +174,7 @@ export function DoctorProfilePanel() {
           结构化偏好表单（高级）
         </summary>
         <p className="muted">
-          平时无需手动编辑：直接在对话里表达偏好，说出的偏好会直接记住，随时可撤销。此处表单用于微调「医生偏好档案」注入的系统指令（≤800 字）。
+          直接在对话里说出的偏好会记住，也可以在这里按科室、用药或写法分类填写。
         </p>
         {TEXT_FIELDS.map(([key, label, placeholder]) => (
           <label className="doctor-field" key={key}>
@@ -231,22 +231,21 @@ export function DoctorProfilePanel() {
         </div>
       </details>
 
-      <section className="doctor-section">
-        <LearningStats onClear={() => Promise.all([loadProfile(true), loadMemories(tab)])} />
-        <HabitLedger />
-        <h3>当前注入摘要预览</h3>
-        <pre className="doctor-digest">
-          {profile.digest || "（暂无偏好内容；填写上方偏好或确认记忆条目后会自动生成）"}
-        </pre>
-      </section>
+      <LearningStats />
+      <HabitLedger onChange={() => loadProfile(true)} />
+      <details className="doctor-section doctor-summary-preview">
+        <summary>整理时参考的偏好摘要</summary>
+        <pre className="doctor-digest">{profile.digest || "暂无偏好，写下一条即可开始。"}</pre>
+      </details>
 
       <section className="doctor-section">
         <h3>记忆</h3>
         <p className="muted">
-          在对话里直接说你的偏好即可：说过的当场记住，反复修改的写法通过试跑后自动生效。你可以随时编辑、停用或撤销。
+          在对话里直接说你的偏好即可：说过的当场记住，学到的写法也会出现在「我的习惯」，随时可以编辑、停用或删除。
         </p>
         <div className="doctor-add">
           <input
+            aria-label="直接写下一条偏好"
             value={newMemory}
             placeholder="直接写下一条确定的偏好，保存即生效"
             onChange={(e) => setNewMemory(e.target.value)}
@@ -288,7 +287,7 @@ export function DoctorProfilePanel() {
                 checked={modelConsent}
                 onChange={(e) => setModelConsent(e.target.checked)}
               />
-              允许把信号原文发送给所配置模型以辅助归纳
+              允许把你写过的说明发送给当前模型，帮助归纳偏好
             </label>
             <button
               onClick={() => consolidate(true)}
@@ -304,17 +303,7 @@ export function DoctorProfilePanel() {
               <div className="memory-main">
                 <p>{m.content}</p>
                 <small>
-                  {m.kind === "explicit"
-                    ? m.source?.via === "chat"
-                      ? "对话提议"
-                      : "手动添加"
-                    : m.kind === "consolidated"
-                      ? m.source?.mode === "model"
-                          ? "模型归纳"
-                          : `重复信号 ×${m.count}`
-                      : `观察信号 ×${m.count}`}
-                  {m.topic ? ` · ${m.topic}` : ""}
-                  {m.source?.type ? ` · 来自${sourceLabel(m.source.type)}` : ""}
+                  {memorySourceLabel(m)}
                 </small>
               </div>
               <div className="memory-actions">
@@ -325,15 +314,6 @@ export function DoctorProfilePanel() {
                     onClick={() => memoryAction(m.id, "confirm")}
                   >
                     <Check size={15} />
-                  </button>
-                )}
-                {m.status === "confirmed" && (
-                  <button
-                    className="icon-button"
-                    title={m.pinned ? "取消置顶" : "置顶"}
-                    onClick={() => memoryAction(m.id, "pin", { pinned: !m.pinned })}
-                  >
-                    {m.pinned ? <PinOff size={15} /> : <Pin size={15} />}
                   </button>
                 )}
                 {m.status !== "dismissed" ? (
@@ -367,19 +347,12 @@ export function DoctorProfilePanel() {
             <li className="memory-empty">
               {tab === "open"
                 ? "暂无学习信号。拒绝草稿复核或修订产物时会自动记录，供归纳为偏好。"
-                : tab === "confirmed"
-                  ? "还没有生效的偏好。写入结构化偏好或确认候选条目。"
-                  : "暂无条目。"}
+                : "暂无条目。"}
             </li>
           )}
         </ul>
       </section>
+      <LearningDangerZone onClear={() => Promise.all([loadProfile(true), loadMemories(tab)])} />
     </div>
   );
-}
-
-function sourceLabel(type) {
-  if (type === "review_rejected") return "复核拒绝";
-  if (type === "artifact_edited") return "草稿修订";
-  return type || "手动";
 }
