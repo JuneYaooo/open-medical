@@ -38,7 +38,8 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
   assert.ok(session.files.find(f=>f.name==='history.docx').text.includes('合成患者'));
   assert.ok(session.files.find(f=>f.name==='labs.xlsx').text.includes('A1=synthetic Hb'));
   assert.equal(session.files.find(f=>f.name==='scan.pdf').extraction.pageImages.length,1);
-  await page.locator('nav[aria-label="最近对话"] button').first().click();
+  await page.getByRole("button", {name:"查看全部任务记录", exact:true}).click();
+  await page.getByRole("main", {name:"任务记录"}).getByRole("button").filter({has:page.getByText(session.title, {exact:true})}).click();
   await page.getByRole('button',{name:/材料/}).first().click();
   await page.getByRole('button',{name:'查看资料',exact:true}).click();
  await page.getByText('图片 · 已保存原图 · 可本地 OCR / 视觉读取').waitFor();
@@ -48,7 +49,8 @@ test('browser attachments: image, scanned/text PDF, DOCX, XLSX, TXT, MD and JSON
   assert.ok(await page.locator('img[alt="sample.png"]').evaluate(img=>img.complete && img.naturalWidth>0));
   await page.reload();
  await page.locator(".app-navigation").waitFor();
-  await page.locator('nav[aria-label="最近对话"] button').first().click();
+  await page.getByRole("button", {name:"查看全部任务记录", exact:true}).click();
+  await page.getByRole("main", {name:"任务记录"}).getByRole("button").filter({has:page.getByText(session.title, {exact:true})}).click();
   await page.getByRole('button',{name:/材料/}).first().click();
   await page.getByRole('button',{name:'查看资料',exact:true}).click();
   await page.getByText('Word 抽取文本 · 未保存原件').waitFor();

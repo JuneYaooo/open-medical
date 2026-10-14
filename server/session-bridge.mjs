@@ -700,6 +700,7 @@ export class SessionBridge {
       updatedAt: projected.updatedAt,
       revision: projected.revision,
       messageCount: projected.messages.length,
+      userMessageCount: projected.messages.filter((message) => message.role === "user").length,
       reviewCount: projected.artifacts.filter((a) => a.status === "draft")
         .length,
       background: w.runs.some((run) => run.policy?.workflow === "trial-eligibility"),
@@ -721,6 +722,7 @@ export class SessionBridge {
       updatedAt: s.updatedAt,
       revision: s.revision,
       messageCount: s.messages.length,
+      userMessageCount: s.messages.filter((message) => message.role === "user").length,
       reviewCount: s.artifacts.filter((a) => a.status === "draft").length,
       running: this.runtime.active.has(s.id),
       lastRunStatus: s.runs.at(-1)?.status || null,

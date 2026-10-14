@@ -1360,6 +1360,7 @@ function App() {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [inspector]);
+  const recentConversations = sessions.filter(item => item.userMessageCount > 0).slice(0, 15);
   const effectiveConsentRequired = modelEnabled && accessMode === "each";
   const fileContent = citation
     ? session?.files.find((f) => f.id === citation.sourceId)?.text ||
@@ -1479,8 +1480,8 @@ function App() {
           {medical && <div className="agent-recents">
             <p className="business-nav-label">最近对话</p>
             <nav aria-label="最近对话" className="agent-recents-list">
-              {sessions.slice(0, 15).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : agoLabel(item.updatedAt)}</small></button>)}
-              {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+              {recentConversations.map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : agoLabel(item.updatedAt)}</small></button>)}
+              {!recentConversations.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
               <div className="agent-recents-tail">
                 <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
                 <button onClick={() => navigate("projects")}>查看全部项目文件</button>
