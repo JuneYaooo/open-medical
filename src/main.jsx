@@ -1479,40 +1479,12 @@ function App() {
           {medical && <div className="agent-recents">
             <p className="business-nav-label">最近对话</p>
             <nav aria-label="最近对话" className="agent-recents-list">
-              {(() => {
-                // Codex 式形态映射:会话没有项目字段但有患者——患者即"项目分组",
-                // 无患者关联的进「历史」。每组最多 3 条,分组最多 5 个,历史最多 6 条。
-                // 分组内会话标题常是「患者名 · 病例」(建档自动命名),分组标题已经
-                // 是患者名,显示时去掉前缀,免得两行互相重复。
-                const groups = new Map(); const loose = [];
-                const stripPatientPrefix = (title, patientName) =>
-                  patientName && (title === patientName || title.startsWith(patientName + " · ") || title.startsWith(patientName + "·"))
-                    ? title.slice(patientName.length).replace(/^[ ·・]+/, "").trim() || title
-                    : title;
-                for (const item of sessions) {
-                  if (item.patientId) {
-                    if (!groups.has(item.patientId)) groups.set(item.patientId, []);
-                    if (groups.get(item.patientId).length < 3) groups.get(item.patientId).push(item);
-                  } else if (loose.length < 6) loose.push(item);
-                  if (groups.size >= 5 && loose.length >= 6) break;
-                }
-                const taskButton = (item, patientName) => { const display = stripPatientPrefix(item.title, patientName); return <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{display}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : agoLabel(item.updatedAt)}</small></button>; };
-                return <>
-                  {[...groups.entries()].map(([pid, items]) => items.length ? <div key={pid} className="agent-recents-group">
-                    <p className="agent-recents-group-label">{patientsList.find(p => p.id === pid)?.name || "患者"}</p>
-                    {items.map(item => taskButton(item, patientsList.find(p => p.id === pid)?.name))}
-                  </div> : null)}
-                  {loose.length > 0 && <div className={groups.size ? "agent-recents-group" : undefined}>
-                    {groups.size > 0 && <p className="agent-recents-group-label">历史</p>}
-                    {loose.map(item => taskButton(item))}
-                  </div>}
-                  {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
-                  <div className="agent-recents-tail">
-                    <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
-                    <button onClick={() => navigate("projects")}>查看全部项目文件</button>
-                  </div>
-                </>;
-              })()}
+              {sessions.slice(0, 15).map(item => <button key={item.id} aria-label={`继续对话：${item.title}`} title={`继续对话：${item.title}`} className={view === "workbench" && activeId === item.id ? "active" : ""} onClick={() => openTask(item.id)}><span>{item.title}</span><small>{item.running ? "进行中" : item.reviewCount ? "待复核" : agoLabel(item.updatedAt)}</small></button>)}
+              {!sessions.length && <p className="sidebar-empty">发送第一条消息后，对话会保存在这里。</p>}
+              <div className="agent-recents-tail">
+                <button onClick={() => navigate("tasks")}>查看全部任务记录</button>
+                <button onClick={() => navigate("projects")}>查看全部项目文件</button>
+              </div>
             </nav>
           </div>}
           {!medical && <nav className="business-nav" aria-label="通用工作">
