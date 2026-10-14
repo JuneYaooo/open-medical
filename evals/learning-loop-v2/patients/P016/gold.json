@@ -23,8 +23,8 @@
   "medications": [
     {
       "name": "熊去氧胆酸",
-      "dose": "2.5mg",
-      "frequency": "每日一次",
+      "dose": "300mg",
+      "frequency": "每日两次",
       "status": "active"
     }
   ],

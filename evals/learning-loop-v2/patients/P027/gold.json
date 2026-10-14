@@ -28,20 +28,20 @@
   "medications": [
     {
       "name": "碳酸氢钠",
-      "dose": "5mg",
-      "frequency": "bid",
+      "dose": "500mg",
+      "frequency": "tid",
       "status": "active"
     },
     {
       "name": "对乙酰氨基酚",
-      "dose": "50mg",
+      "dose": "500mg",
       "frequency": "每日三次",
       "status": "active"
     },
     {
       "name": "缬沙坦",
-      "dose": "250mg",
-      "frequency": "qod",
+      "dose": "80mg",
+      "frequency": "qd",
       "status": "active"
     }
   ],

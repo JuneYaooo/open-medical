@@ -33,14 +33,14 @@
   "medications": [
     {
       "name": "呋塞米",
-      "dose": "50mg",
-      "frequency": "每日三次",
+      "dose": "20mg",
+      "frequency": "每日一次",
       "status": "active"
     },
     {
       "name": "二甲双胍",
-      "dose": "250mg",
-      "frequency": "qod",
+      "dose": "500mg",
+      "frequency": "tid",
       "status": "stopped"
     }
   ],

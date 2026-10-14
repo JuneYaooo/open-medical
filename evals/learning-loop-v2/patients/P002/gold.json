@@ -34,13 +34,13 @@
     {
       "name": "氨氯地平",
       "dose": "5mg",
-      "frequency": "每日两次",
+      "frequency": "每日一次",
       "status": "active"
     },
     {
       "name": "阿托伐他汀",
-      "dose": "50mg",
-      "frequency": "tid",
+      "dose": "20mg",
+      "frequency": "qd",
       "status": "active"
     }
   ],

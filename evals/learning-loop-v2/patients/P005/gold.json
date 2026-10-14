@@ -28,14 +28,14 @@
   "medications": [
     {
       "name": "阿托伐他汀",
-      "dose": "500mg",
-      "frequency": "qw",
+      "dose": "10mg",
+      "frequency": "qd",
       "status": "active"
     },
     {
       "name": "呋塞米",
-      "dose": "2.5mg",
-      "frequency": "每日一次",
+      "dose": "20mg",
+      "frequency": "每日两次",
       "status": "active"
     }
   ],

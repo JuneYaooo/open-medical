@@ -23,8 +23,8 @@
   "medications": [
     {
       "name": "呋塞米",
-      "dose": "50mg",
-      "frequency": "每日三次",
+      "dose": "20mg",
+      "frequency": "每日一次",
       "status": "active"
     }
   ],

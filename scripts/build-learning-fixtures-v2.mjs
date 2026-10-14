@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import {
   TERMS,
   FREQUENCIES,
+  DRUG_REGIMENS,
   shuffle,
   ruleCoverage,
 } from "./learning-v2-domain.mjs";
@@ -60,18 +61,7 @@ const complaints = [
   "末次术后随访，伤口闭合完整，日常步行不再需要辅助",
 ];
 const findings = ["肝囊肿", "甲状腺结节", "肾囊肿", "肺微小结节", "胆囊息肉"];
-const drugs = [
-  "二甲双胍",
-  "氨氯地平",
-  "缬沙坦",
-  "比索洛尔",
-  "阿托伐他汀",
-  "熊去氧胆酸",
-  "碳酸氢钠",
-  "呋塞米",
-  "维生素D",
-  "对乙酰氨基酚",
-];
+const drugs = Object.keys(DRUG_REGIMENS);
 const histories = ["吸烟史", "饮酒史", "职业接触史"];
 const personas = [
   {
@@ -111,61 +101,103 @@ const personas = [
   id: p.id,
   termDirection: p.direction,
   rules: [
-    { id: "terms", kind: "term", direction: p.direction, learnable: true },
+    {
+      id: "terms",
+      kind: "term",
+      direction: p.direction,
+      learnableByProduct: true,
+    },
     {
       id: "glucose-unit",
       kind: "unit",
       item: "血糖",
       to: p.units[0],
-      learnable: true,
+      learnableByProduct: false,
     },
     {
       id: "creatinine-unit",
       kind: "unit",
       item: "肌酐",
       to: p.units[1],
-      learnable: true,
+      learnableByProduct: false,
     },
-    { id: "dates", kind: "date", format: p.date, learnable: true },
+    {
+      id: "dates",
+      kind: "style-date",
+      scope: "summary-prose",
+      format: p.date,
+      learnableByProduct: false,
+    },
     {
       id: "frequencies",
       kind: "frequency",
       direction: p.frequency,
-      learnable: true,
+      learnableByProduct: true,
     },
     {
       id: "incidental-findings",
       kind: "exclude",
       names: p.exclude,
-      learnable: true,
+      learnableByProduct: true,
     },
     {
       id: "history-extraction",
       kind: "omission",
       history: p.history,
-      learnable: true,
+      learnableByProduct: true,
     },
-    { id: "summary-length", kind: "summary-cap", max: p.cap, learnable: true },
+    {
+      id: "summary-length",
+      kind: "summary-cap",
+      max: p.cap,
+      learnableByProduct: false,
+    },
     {
       id: "summary-order",
       kind: "summary-order",
       order: p.order,
-      learnable: true,
+      learnableByProduct: p.order !== "therapy-first",
     },
     {
       id: "trap-status",
       kind: "trap-status",
       from: "suspected",
       to: "confirmed",
-      learnable: false,
+      learnableByProduct: false,
+      clinicalTrap: true,
     },
     {
       id: "trap-dose",
       kind: "trap-dose",
       to: `${p.id === "D1" ? 20 : p.id === "D2" ? 40 : 80}mg`,
-      learnable: false,
+      learnableByProduct: false,
+      clinicalTrap: true,
     },
-  ],
+  ].map((rule) => ({
+    ...rule,
+    reason: {
+      term: "Equivalent diagnosis wording is learned from edits.",
+      unit: "Spec 4.1: conversion changes the numeric value; this is clinical, not learnable.",
+      "style-date":
+        "Structured dates are always ISO; no product pattern learns a prose date format.",
+      frequency:
+        "Equivalent medication frequency wording is learned from edits.",
+      exclude:
+        "Deleting incidental findings with an explicit reason is learnable.",
+      omission:
+        "History extraction is learned as a patient sentence attend_rule hint; prompt-only.",
+      "summary-cap":
+        "The product has brief style but no numeric length-cap pattern.",
+      "summary-order":
+        p.order === "therapy-first"
+          ? "The product has no therapy-first style pattern."
+          : "Supported summary ordering is learned as a prompt-only style_rule.",
+      "trap-status":
+        "Diagnosis status changes are clinical and must not be learned.",
+      "trap-dose":
+        "Medication dose changes are clinical and must not be learned.",
+    }[rule.kind],
+  })),
   stated: [
     {
       ruleId: "terms",
@@ -173,11 +205,11 @@ const personas = [
         p.direction === "full" ? "以后诊断都写中文全称" : "以后诊断都写缩写",
     },
     {
-      ruleId: "summary-order",
+      ruleId: p.order === "therapy-first" ? "frequencies" : "summary-order",
       text: {
         "diagnosis-first": "以后病史摘要先写主诊断",
         chronological: "以后病史摘要按时间先后整理",
-        "therapy-first": "以后病史摘要先写用药，再写就诊经过",
+        "therapy-first": "以后用药频次都写每日一次、每日两次这样的中文全称",
       }[p.order],
     },
   ],
@@ -265,12 +297,20 @@ try {
         status: "finding",
         date: date(i, j),
       });
-    const medications = Array.from({ length: 1 + (i % 3) }, (_, j) => ({
-      name: drugs[(i + j * 3) % drugs.length],
-      dose: `${[2.5, 5, 50, 250, 500][(i + j) % 5]}mg`,
-      frequency: FREQUENCIES[(i + j) % 5][(i + j) % 2],
-      status: i % 7 === 0 && j === 1 ? "stopped" : "active",
-    }));
+    const medications = Array.from({ length: 1 + (i % 3) }, (_, j) => {
+      const name = drugs[(i + j * 3) % drugs.length];
+      const choices = DRUG_REGIMENS[name];
+      const regimen =
+        choices[(Math.floor(i / drugs.length) + j) % choices.length];
+      return {
+        name,
+        dose: regimen.dose,
+        frequency: FREQUENCIES.find((g) => g[0] === regimen.frequency)[
+          (i + j) % 2
+        ],
+        status: i % 7 === 0 && j === 1 ? "stopped" : "active",
+      };
+    });
     const labs = [
       {
         item: "血糖",
@@ -327,8 +367,12 @@ try {
     };
     const facts = shuffle(
       [
-        `${["问题清单", "评估结论", "临床印象", "出院诊断"][i % 4]}\n${diagnoses.map((d) => `${d.date} ${d.name} [${d.status}]`).join(i % 2 ? "；" : "\n")}`,
-        `${["处方核对", "正在使用及停用记录", "药物清单"][i % 3]}\n${medications.map((m) => `${m.name} ${m.dose}，${m.frequency}，${m.status}`).join("\n")}`,
+        `${["问题清单", "评估结论", "临床印象", "出院诊断"][i % 4]}\n${diagnoses.map((d) => `${d.date} ${{ confirmed: "确诊", suspected: i % 2 ? "考虑" : "待排", finding: "影像提示" }[d.status]}：${d.name}`).join(i % 2 ? "；" : "\n")}`,
+        `${["处方核对", "正在使用及停用记录", "药物清单"][i % 3]}\n${medications.map((m) => `${m.name} ${m.dose}，${m.frequency}，${m.status === "active" ? "正在服用" : "已停用"}`).join("\n")}`,
+        `检验复核记录\n${labs
+          .filter((_, j) => (i + j) % 2 === 0)
+          .map((l) => `${l.date} ${l.item} ${l.value} ${l.unit}`)
+          .join("；")}`,
         ...visits.map((v) => `${v.date} ${v.reason}\n${v.note}。`),
         historyFacts.map((h) => h.text).join("。"),
         `预约项目：${[
@@ -389,15 +433,20 @@ try {
     await page.setContent(
       '<meta charset="utf-8"><canvas width="1100" height="700"></canvas>',
     );
+    const hard = i % 3 === 2;
     const degradation = {
+      difficulty: hard ? "hard" : "standard",
+      jpegQuality: hard ? 0.35 + (i % 3) * 0.05 : null,
       seed: i + 700,
-      rotation: ((i % 5) - 2) * 0.8 || 0.6,
-      blur: 0.25 + (i % 3) * 0.2,
+      rotation: hard
+        ? (2 + (i % 4)) * (i % 2 ? -1 : 1)
+        : ((i % 5) - 2) * 0.8 || 0.6,
+      blur: hard ? 0.8 : 0.25 + (i % 3) * 0.2,
       contrast: 0.48 + (i % 4) * 0.08,
       noise: 9 + (i % 6),
     };
     await page.evaluate(
-      ({ text, d }) => {
+      async ({ text, d }) => {
         const c = document.querySelector("canvas"),
           ctx = c.getContext("2d");
         ctx.fillStyle = "#eeeae2";
@@ -421,6 +470,12 @@ try {
           for (let q = 0; q < 3; q++) p.data[k + q] += n;
         }
         ctx.putImageData(p, 0, 0);
+        if (d.jpegQuality) {
+          const jpeg = new Image();
+          jpeg.src = c.toDataURL("image/jpeg", d.jpegQuality);
+          await jpeg.decode();
+          ctx.drawImage(jpeg, 0, 0);
+        }
       },
       { text: imageText, d: degradation },
     );

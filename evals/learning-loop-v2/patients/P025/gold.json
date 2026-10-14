@@ -18,8 +18,8 @@
   "medications": [
     {
       "name": "阿托伐他汀",
-      "dose": "500mg",
-      "frequency": "qw",
+      "dose": "10mg",
+      "frequency": "qd",
       "status": "active"
     }
   ],

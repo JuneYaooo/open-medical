@@ -33,20 +33,20 @@
   "medications": [
     {
       "name": "缬沙坦",
-      "dose": "50mg",
-      "frequency": "tid",
+      "dose": "80mg",
+      "frequency": "qd",
       "status": "active"
     },
     {
       "name": "熊去氧胆酸",
-      "dose": "250mg",
-      "frequency": "隔日一次",
+      "dose": "300mg",
+      "frequency": "每日两次",
       "status": "active"
     },
     {
       "name": "维生素D",
-      "dose": "500mg",
-      "frequency": "qw",
+      "dose": "800IU",
+      "frequency": "qd",
       "status": "active"
     }
   ],

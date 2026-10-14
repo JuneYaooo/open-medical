@@ -34,18 +34,18 @@
     {
       "name": "对乙酰氨基酚",
       "dose": "500mg",
-      "frequency": "每周一次",
+      "frequency": "每日三次",
       "status": "active"
     },
     {
       "name": "缬沙坦",
-      "dose": "2.5mg",
+      "dose": "160mg",
       "frequency": "qd",
       "status": "active"
     },
     {
       "name": "熊去氧胆酸",
-      "dose": "5mg",
+      "dose": "300mg",
       "frequency": "每日两次",
       "status": "active"
     }

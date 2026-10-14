@@ -89,7 +89,7 @@ export function renderLearningGold(
       ? dateText(value, proseFormat)
       : (sourceDates.get(value) ?? value);
   for (const r of persona.rules) {
-    if (omitRules.includes(r.id) || (!r.learnable && !traps)) continue;
+    if (omitRules.includes(r.id) || (r.clinicalTrap && !traps)) continue;
     if (r.kind === "term")
       out.diagnoses = out.diagnoses.map((d) => ({
         ...d,
@@ -99,7 +99,7 @@ export function renderLearningGold(
       out.labs = out.labs.map((l) =>
         l.item === r.item ? convertLab(l, r.to) : l,
       );
-    if (r.kind === "date") proseFormat = r.format;
+    if (r.kind === "style-date") proseFormat = r.format;
     if (r.kind === "frequency")
       out.medications = out.medications.map((m) => ({
         ...m,
@@ -176,4 +176,56 @@ export function shuffle(items, seed) {
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
+}
+
+// Synthetic adult regimens: dose and frequency are paired, never cross-product sampled.
+export const DRUG_REGIMENS = {
+  二甲双胍: [
+    { dose: "500mg", frequency: "bid" },
+    { dose: "500mg", frequency: "tid" },
+  ],
+  氨氯地平: [
+    { dose: "5mg", frequency: "qd" },
+    { dose: "2.5mg", frequency: "qd" },
+  ],
+  缬沙坦: [
+    { dose: "80mg", frequency: "qd" },
+    { dose: "160mg", frequency: "qd" },
+  ],
+  比索洛尔: [
+    { dose: "2.5mg", frequency: "qd" },
+    { dose: "5mg", frequency: "qd" },
+  ],
+  阿托伐他汀: [
+    { dose: "10mg", frequency: "qd" },
+    { dose: "20mg", frequency: "qd" },
+  ],
+  熊去氧胆酸: [{ dose: "300mg", frequency: "bid" }],
+  碳酸氢钠: [{ dose: "500mg", frequency: "tid" }],
+  呋塞米: [
+    { dose: "20mg", frequency: "qd" },
+    { dose: "20mg", frequency: "bid" },
+  ],
+  维生素D: [{ dose: "800IU", frequency: "qd" }],
+  对乙酰氨基酚: [{ dose: "500mg", frequency: "tid" }],
+};
+
+export function knownProductGaps(persona) {
+  const rules = persona.rules.filter((r) => r.learnableByProduct === false);
+  return {
+    label: "known product gaps",
+    count: rules.length,
+    byKind: Object.fromEntries(
+      [...new Set(rules.map((r) => r.kind))].map((kind) => [
+        kind,
+        rules.filter((r) => r.kind === kind).length,
+      ]),
+    ),
+    rules: rules.map(({ id, kind, reason }) => ({ id, kind, reason })),
+  };
+}
+
+export const historyConcept = (kind) => norm(kind).replace(/史$/, "");
+export function mentionsHistory(text, kind) {
+  return norm(text).includes(historyConcept(kind));
 }

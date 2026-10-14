@@ -18,8 +18,8 @@
   "medications": [
     {
       "name": "二甲双胍",
-      "dose": "2.5mg",
-      "frequency": "qd",
+      "dose": "500mg",
+      "frequency": "tid",
       "status": "active"
     }
   ],

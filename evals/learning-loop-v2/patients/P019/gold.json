@@ -18,8 +18,8 @@
   "medications": [
     {
       "name": "维生素D",
-      "dose": "250mg",
-      "frequency": "qod",
+      "dose": "800IU",
+      "frequency": "qd",
       "status": "active"
     }
   ],

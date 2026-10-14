@@ -18,8 +18,8 @@
   "medications": [
     {
       "name": "缬沙坦",
-      "dose": "50mg",
-      "frequency": "tid",
+      "dose": "160mg",
+      "frequency": "qd",
       "status": "active"
     }
   ],

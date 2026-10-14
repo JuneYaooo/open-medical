@@ -38,20 +38,20 @@
   "medications": [
     {
       "name": "熊去氧胆酸",
-      "dose": "2.5mg",
-      "frequency": "每日一次",
+      "dose": "300mg",
+      "frequency": "每日两次",
       "status": "active"
     },
     {
       "name": "维生素D",
-      "dose": "5mg",
-      "frequency": "bid",
+      "dose": "800IU",
+      "frequency": "qd",
       "status": "stopped"
     },
     {
       "name": "氨氯地平",
-      "dose": "50mg",
-      "frequency": "每日三次",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
       "status": "active"
     }
   ],

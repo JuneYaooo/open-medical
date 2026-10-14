@@ -6,33 +6,39 @@
       "id": "terms",
       "kind": "term",
       "direction": "full",
-      "learnable": true
+      "learnableByProduct": true,
+      "reason": "Equivalent diagnosis wording is learned from edits."
     },
     {
       "id": "glucose-unit",
       "kind": "unit",
       "item": "血糖",
       "to": "mmol/L",
-      "learnable": true
+      "learnableByProduct": false,
+      "reason": "Spec 4.1: conversion changes the numeric value; this is clinical, not learnable."
     },
     {
       "id": "creatinine-unit",
       "kind": "unit",
       "item": "肌酐",
       "to": "mg/dL",
-      "learnable": true
+      "learnableByProduct": false,
+      "reason": "Spec 4.1: conversion changes the numeric value; this is clinical, not learnable."
     },
     {
       "id": "dates",
-      "kind": "date",
+      "kind": "style-date",
+      "scope": "summary-prose",
       "format": "zh",
-      "learnable": true
+      "learnableByProduct": false,
+      "reason": "Structured dates are always ISO; no product pattern learns a prose date format."
     },
     {
       "id": "frequencies",
       "kind": "frequency",
       "direction": "full",
-      "learnable": true
+      "learnableByProduct": true,
+      "reason": "Equivalent medication frequency wording is learned from edits."
     },
     {
       "id": "incidental-findings",
@@ -41,38 +47,46 @@
         "甲状腺结节",
         "胆囊息肉"
       ],
-      "learnable": true
+      "learnableByProduct": true,
+      "reason": "Deleting incidental findings with an explicit reason is learnable."
     },
     {
       "id": "history-extraction",
       "kind": "omission",
       "history": "职业接触史",
-      "learnable": true
+      "learnableByProduct": true,
+      "reason": "History extraction is learned as a patient sentence attend_rule hint; prompt-only."
     },
     {
       "id": "summary-length",
       "kind": "summary-cap",
       "max": 280,
-      "learnable": true
+      "learnableByProduct": false,
+      "reason": "The product has brief style but no numeric length-cap pattern."
     },
     {
       "id": "summary-order",
       "kind": "summary-order",
       "order": "therapy-first",
-      "learnable": true
+      "learnableByProduct": false,
+      "reason": "The product has no therapy-first style pattern."
     },
     {
       "id": "trap-status",
       "kind": "trap-status",
       "from": "suspected",
       "to": "confirmed",
-      "learnable": false
+      "learnableByProduct": false,
+      "clinicalTrap": true,
+      "reason": "Diagnosis status changes are clinical and must not be learned."
     },
     {
       "id": "trap-dose",
       "kind": "trap-dose",
       "to": "80mg",
-      "learnable": false
+      "learnableByProduct": false,
+      "clinicalTrap": true,
+      "reason": "Medication dose changes are clinical and must not be learned."
     }
   ],
   "stated": [
@@ -81,8 +95,8 @@
       "text": "以后诊断都写中文全称"
     },
     {
-      "ruleId": "summary-order",
-      "text": "以后病史摘要先写用药，再写就诊经过"
+      "ruleId": "frequencies",
+      "text": "以后用药频次都写每日一次、每日两次这样的中文全称"
     }
   ],
   "patientOnly": "本患者第二份报告是术前检查",

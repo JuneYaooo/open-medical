@@ -28,19 +28,19 @@
   "medications": [
     {
       "name": "二甲双胍",
-      "dose": "2.5mg",
-      "frequency": "qd",
+      "dose": "500mg",
+      "frequency": "bid",
       "status": "active"
     },
     {
       "name": "比索洛尔",
       "dose": "5mg",
-      "frequency": "每日两次",
+      "frequency": "每日一次",
       "status": "active"
     },
     {
       "name": "碳酸氢钠",
-      "dose": "50mg",
+      "dose": "500mg",
       "frequency": "tid",
       "status": "active"
     }

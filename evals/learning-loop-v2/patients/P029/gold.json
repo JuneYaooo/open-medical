@@ -23,14 +23,14 @@
   "medications": [
     {
       "name": "维生素D",
-      "dose": "250mg",
-      "frequency": "qod",
+      "dose": "800IU",
+      "frequency": "qd",
       "status": "active"
     },
     {
       "name": "氨氯地平",
-      "dose": "500mg",
-      "frequency": "每周一次",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
       "status": "stopped"
     }
   ],

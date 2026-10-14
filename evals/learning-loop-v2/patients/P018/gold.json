@@ -33,20 +33,20 @@
   "medications": [
     {
       "name": "呋塞米",
-      "dose": "50mg",
-      "frequency": "每日三次",
+      "dose": "20mg",
+      "frequency": "每日两次",
       "status": "active"
     },
     {
       "name": "二甲双胍",
-      "dose": "250mg",
-      "frequency": "qod",
+      "dose": "500mg",
+      "frequency": "bid",
       "status": "active"
     },
     {
       "name": "比索洛尔",
-      "dose": "500mg",
-      "frequency": "每周一次",
+      "dose": "5mg",
+      "frequency": "每日一次",
       "status": "active"
     }
   ],
