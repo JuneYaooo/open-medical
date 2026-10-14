@@ -1599,14 +1599,14 @@ export function createServer(options = {}) {
         if (req.method === 'PUT') return send(res, 200, saveLearningPrefs(store.db, await body(req)));
       }
       if (path === '/api/learning/export' && req.method === 'GET') return send(res, 200, pending.reviewLog.stats('365d'));
-      if (path === '/api/learning/habits' && req.method === 'GET') return send(res, 200, { habits: doctor.memories().filter(m => m.rule || m.source?.type === 'stated').map(m => ({ ...m, ledger: pending.reviewLog.ledger(m.id) })) });
+      if (path === '/api/learning/habits' && req.method === 'GET') return send(res, 200, { habits: doctor.memories().filter(m => ['confirmed', 'paused', 'deleted'].includes(m.status)).map(m => ({ ...m, ledger: pending.reviewLog.ledger(m.id) })) });
       if (path === '/api/learning/feedback' && req.method === 'POST') {
         const input = await body(req), action = pending.row(input.actionId);
         check(action.payload.personalization?.habits?.some(h => h.id === input.habitId), 'INVALID_INPUT', '此草稿未采用该习惯');
         return send(res, 200, pending.reviewLog.feedback(input.habitId, input.actionId, 'notApplicable'));
       }
       if (path === "/api/review-stats" && req.method === "GET") return send(res, 200, pending.reviewLog.stats(url.searchParams.get('range') || '90d'));
-      if (path === "/api/review-details" && req.method === "GET") return send(res, 200, { diffs: pending.reviewLog.details(url.searchParams.get('section')) });
+      if (path === "/api/review-details" && req.method === "GET") return send(res, 200, { diffs: pending.reviewLog.details(url.searchParams.get('section'), url.searchParams.get('field')) });
       if (path === "/api/learning/clear" && req.method === "POST") {
         const input = await body(req);
         check(input.confirmed === true, 'CONFIRM_REQUIRED', '请确认清空学习记录');

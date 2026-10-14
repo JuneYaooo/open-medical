@@ -195,6 +195,8 @@ test(
     const profile = page
       .getByRole("dialog")
       .filter({ has: page.getByRole("heading", { name: "它学得怎么样" }) });
+    await profile.getByRole("region", { name: "危险操作" }).waitFor();
+    assert.equal(await profile.getByRole("button", { name: "生效中", exact: true }).count(), 0);
     await profile
       .getByRole("button", { name: "清空学习记录", exact: true })
       .click();

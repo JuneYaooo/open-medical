@@ -106,10 +106,9 @@ export const SCENARIOS = [
     .locator('.modal .doctor-add input')
     .fill("出院小结按科室模板第三节格式");
   await page.locator('.modal .doctor-add button:has-text("添加")').click();
-  await page.waitForSelector(
-    '.modal .memory:has-text("出院小结按科室模板第三节格式")',
-    { timeout: 5000 },
-  );
+  await page.getByRole('region', { name: '我的习惯', exact: true })
+    .getByRole('article', { name: '出院小结按科室模板第三节格式', exact: true })
+    .waitFor({ timeout: 5000 });
     },
   },
   {
