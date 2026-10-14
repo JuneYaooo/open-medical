@@ -182,9 +182,24 @@ export class CaseLibrary {
             if (!hitTerms.includes(term)) hitTerms.push(term);
           }
         }
+        // Containment in either direction, per diagnosis: "2型糖尿病" matches a chart that says
+        // "糖尿病" and vice versa, so a more or less specific wording still counts.
+        const itemDiagnoses = (item.diagnosis || "")
+          .toLowerCase()
+          .split(/[；;、,，]/)
+          .map((d) => d.trim())
+          .filter((d) => d.length >= 2);
         const diagnosisHit =
           diagnosisNeedle &&
-          (item.diagnosis || "").toLowerCase().includes(diagnosisNeedle);
+          itemDiagnoses.some(
+            (d) => d.includes(diagnosisNeedle) || diagnosisNeedle.includes(d),
+          );
+        // A more specific query term ("2型糖尿病") still hits a broader chart diagnosis ("糖尿病").
+        for (const term of terms)
+          if (!hitTerms.includes(term) && itemDiagnoses.some((d) => term.includes(d))) {
+            score += 1;
+            hitTerms.push(term);
+          }
         if (diagnosisHit) {
           score += 5;
           reasons.push(`诊断匹配：${item.diagnosis}`);

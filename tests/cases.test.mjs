@@ -204,3 +204,22 @@ test("case_save_propose carries lessons/tags into the library on confirm", async
   // 提案入库不自动加星：精选与否由医生在案例库里决定。
   assert.equal(saved.starred, false);
 });
+
+test("similar cases match broader or more specific diagnosis wording across charts", async (t) => {
+  const f = await fixture(t);
+  const chart = (name, diagnoses) =>
+    f.server.patients.create({
+      name,
+      gender: "male",
+      diagnoses: diagnoses.map((n) => ({ name: n, status: "confirmed" })),
+    });
+  const old = chart("既往患者", ["糖尿病", "高血压"]);
+  chart("无关患者", ["哮喘"]);
+  const current = chart("新患者", ["2型糖尿病", "高血压", "高脂血症"]);
+  const { data } = await f.json(`/api/learning/similar/${current.id}`);
+  assert.deepEqual(
+    data.matches.map((m) => m.caseId),
+    [`patient:${old.id}`],
+  );
+  assert.ok(data.matches[0].reasons.some((r) => /诊断匹配/.test(r)));
+});
