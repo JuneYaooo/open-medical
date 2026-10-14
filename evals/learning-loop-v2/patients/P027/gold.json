@@ -1,0 +1,96 @@
+{
+  "name": "SYNTH_V2_P027_6f9cc92f85c6",
+  "gender": "male",
+  "birthYear": 1974,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "CKD",
+      "status": "confirmed",
+      "date": "2026年8月25日"
+    },
+    {
+      "name": "高血压",
+      "status": "suspected",
+      "date": "26-09-26"
+    },
+    {
+      "name": "电解质紊乱",
+      "status": "suspected",
+      "date": "2026年8月25日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年8月25日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "碳酸氢钠",
+      "dose": "500mg",
+      "frequency": "tid",
+      "status": "active"
+    },
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "500mg",
+      "frequency": "每日三次",
+      "status": "active"
+    },
+    {
+      "name": "缬沙坦",
+      "dose": "80mg",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 160,
+      "unit": "mg/dL",
+      "date": "2026年8月25日"
+    },
+    {
+      "item": "肌酐",
+      "value": 96,
+      "unit": "μmol/L",
+      "date": "26-09-26"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 146,
+      "unit": "g/L",
+      "date": "6月27日"
+    },
+    {
+      "item": "ALT",
+      "value": 51,
+      "unit": "U/L",
+      "date": "6月27日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-07-01",
+      "reason": "肾功能复核",
+      "note": "长途旅行后小腿肿胀，抬高后改善，没有单侧疼痛"
+    },
+    {
+      "date": "26-09-26",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，比较水肿程度及每日体重变化，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月3次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

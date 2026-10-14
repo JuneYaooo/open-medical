@@ -1,0 +1,85 @@
+{
+  "name": "SYNTH_V2_P038_2e3e3311d401",
+  "gender": "female",
+  "birthYear": 1985,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "confirmed",
+      "date": "26-07-04"
+    },
+    {
+      "name": "房颤",
+      "status": "suspected",
+      "date": "8月5日"
+    },
+    {
+      "name": "伤口感染",
+      "status": "suspected",
+      "date": "26-07-04"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-07-04"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "8月5日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "呋塞米",
+      "dose": "20mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "二甲双胍",
+      "dose": "500mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 9.8,
+      "unit": "mmol/L",
+      "date": "26-07-04"
+    },
+    {
+      "item": "肌酐",
+      "value": 107,
+      "unit": "μmol/L",
+      "date": "8月5日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 157,
+      "unit": "g/L",
+      "date": "2026-09-06"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026/6/7",
+      "reason": "术后换药",
+      "note": "换药门诊转来复诊，瘢痕边缘干燥，体温记录正常"
+    },
+    {
+      "date": "8月5日",
+      "reason": "处方核对",
+      "note": "带来出院处方，检查伤口周围皮肤和活动范围，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计40年"
+    }
+  ]
+}

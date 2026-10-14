@@ -1,0 +1,1134 @@
+{
+  "version": 2,
+  "synthetic": true,
+  "patients": [
+    {
+      "id": "P001",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "4c9bc938eeaf916b97981c6ccd1d914619f7f48dceb7bac7427d312582856cf2",
+        "检验扫描.png": "566f704ddb0256d0e8b2a5dbd1483d782ff968e6cbee7df6fa09ecda69bba472"
+      },
+      "goldHash": "7fbc2c09c444c02987a5f17a3ea8a685ceac8d15f88ea306b2e67d6a04f16caf",
+      "sourceHash": "c749fd0b53088aa98224d7de1fb0aaac6a201b7669e0342c38153afb2a83ae9b",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 700,
+        "rotation": -1.6,
+        "blur": 0.25,
+        "contrast": 0.48,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P002",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "8d8a3d83eb748d55b8ca472c06166b7c1e7233cc0424fbc9fe0ee19e9e31a366",
+        "处方附件.pdf": "65e1480103ee3e3d033e54539c2b8035a616ef3e9cc5d730a2249e95d7e0efc8",
+        "检验扫描.png": "757acca9ce53046dc4be9f9aceb5714a692beaa8662bdb8b3c2fd4bf20502927"
+      },
+      "goldHash": "5623ea7fbefe4e8bdf3999087cceeaeaabf0859d9f5e4c403b944c17825606e2",
+      "sourceHash": "373ca239765a7bfad8c79cc9fd1636d3efac28e9f5723fb90db72bfc557df894",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 701,
+        "rotation": -0.8,
+        "blur": 0.45,
+        "contrast": 0.5599999999999999,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P003",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "6f6d08eddbabe4bc406f02fe2160c86da4db9b977fa09dd11717525d0f7ee512",
+        "处方附件.txt": "ffa5683e2369f0cecdf8141d4a5d05a5d93b774e7bb34a1449384d4c60e0d059",
+        "随访补充.docx": "dcb2dc8597d04b10d5986b5bb2e6bac546a8c3dba546fe30baaf25f0dd7bdc43",
+        "检验扫描.png": "87707d39787d049474aa3d0c4c00abcbefb96d52e5d9b51f36bcfed4fd3017e9"
+      },
+      "goldHash": "7d38e9bc293a3830a518ef362aa3a78aecd58a97afc8add13254e15c68ee2a2f",
+      "sourceHash": "63b07457877f31c6fe4b7be4b5e2c6da34c1c591f805f341950467b37b3db9e9",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 702,
+        "rotation": 4,
+        "blur": 0.8,
+        "contrast": 0.64,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P004",
+      "cluster": 0,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "de259bce6bb10c02d37b7e70bf00355b20bf274cf39200c7e715c8705234ee74",
+        "检验扫描.png": "9fc261550133cdfda329c193558c236798f5e9547e4d105aabfbce20a82a4f3d"
+      },
+      "goldHash": "a8efbeb9700bc8bf64456976dd34eb15b81ce6a364e2d6c55c04f7e34864c8bc",
+      "sourceHash": "916655651d7322390593782759d8cd7d8f64a390e3546c2b5daf13b605b92656",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 703,
+        "rotation": 0.8,
+        "blur": 0.25,
+        "contrast": 0.72,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P005",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "8b9a6d5b450d86942bef7284b1a71a06e039d7d2f792a10d967588f336d55bac",
+        "处方附件.pdf": "b7607f5301d998cc6e060852d99ac1bec26bdf2603dc867088dddcdf8a218580",
+        "检验扫描.png": "52d77a387a207350c75977257c38274b97952b80a9035836f7a07f900f3d01d4"
+      },
+      "goldHash": "4966f0fb1f756da1aee1b6409405d87d2f905572684b08402167ca156cd4a1c9",
+      "sourceHash": "435d8975eb0e46f7fe5741b353df2014a94c636ed4fba7d6093580a51629ee88",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 704,
+        "rotation": 1.6,
+        "blur": 0.45,
+        "contrast": 0.48,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P006",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "146b9d9965ce0287078e5f5ff0a42ba6bad5efcbd02a065d85cb80cfd0653133",
+        "处方附件.txt": "09667c6e02fb244fe46fe8223a0147c646a681791c289e8cdafd997fdb98caab",
+        "随访补充.docx": "1ae0244a475fad7ec8217a748927dc872e22b641280534e2c27b6524fb8a7d28",
+        "检验扫描.png": "3a0f9b356752adfe067852fdefb72fdaa94c4e1a6be67e6d9f8172add7eca58d"
+      },
+      "goldHash": "ac9f9f5bd577214db69b995d7c99b6a43cb30cda35a6488fd3cecc1d860ae11c",
+      "sourceHash": "b0917ee0dd4135a69c242b9f5450d57fabf607eb75542e972e46665c589b0209",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 705,
+        "rotation": -3,
+        "blur": 0.8,
+        "contrast": 0.5599999999999999,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P007",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "c768c7ab6d8d4781a0b18c6c562ea82e0b222a2fb99f0647dcf562610e488098",
+        "检验扫描.png": "4da7a5824ff46caa90efc3b37ae0d344a84c66271b3dbcf7abc0f66e3fbe5da7"
+      },
+      "goldHash": "354f0e039d7c886270475861722df4f72284f1116a56ee2a0846a2433d5cf1ba",
+      "sourceHash": "1b7195f121e0eea4322a63aad92f084c7cbf0bccbdfad36bae131a528f616dcc",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 706,
+        "rotation": -0.8,
+        "blur": 0.25,
+        "contrast": 0.64,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P008",
+      "cluster": 0,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "ba6bc5fe723ebff61e00666d808af94703555b5a7e777fa6a58f3b3499fb7ebf",
+        "处方附件.pdf": "1e858527c9511d51226ea1b854b61cee335ed820e871de36d1acdfb4a3b9cbac",
+        "检验扫描.png": "5fdb1419b1f14b96dfdf3db0c73cc23718f5a66de6e12031da8ae5a45cc140b4"
+      },
+      "goldHash": "a67b1a6c193193f6bdda527644d9d67b2218002ff7cde842d64531b9dfa0ffb8",
+      "sourceHash": "82fd537d136a60757e05b2db7856263c529f05d985c1f803cb70924756185109",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 707,
+        "rotation": 0.6,
+        "blur": 0.45,
+        "contrast": 0.72,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P009",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "c0556ac6161ccea20ff013374b310245ffd9cbfe9bd743d4354ec2d8f9a9ed4b",
+        "处方附件.txt": "62d4d183c38ab051991fa28093a3f22853aa8d5f13c769206196756282bda303",
+        "随访补充.docx": "d66953c76bbe27fc9752dd5a1190a2ac2a3a7b2cec41cf3b0b22c34910b93a08",
+        "检验扫描.png": "72c2d1d41417196f86b7fa5757924e14a0fd2b6b7c73f966d2804a26bc5ac2ee"
+      },
+      "goldHash": "1c06ce90204ea12a779c78b283abf38d17965f3ac8f22f55340cb4cd35d99607",
+      "sourceHash": "d2c8c8d7d388e0a51b4c4c3e547505709f57ed2b8220955716a5facba85ed5fb",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 708,
+        "rotation": 2,
+        "blur": 0.8,
+        "contrast": 0.48,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P010",
+      "cluster": 0,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "887184ebb28770d790b6ffd3e79202e760d6ea72983c6cfdfd065ed0ffe9809c",
+        "检验扫描.png": "59322b287cdb2e5b528310cd0aff5628187e138966aa2245d7ac67efbb253988"
+      },
+      "goldHash": "67c3a62737221db3f8424da9d2f9448e67c80f7e622d0620840770b652494a2b",
+      "sourceHash": "815816a24ac47f8d060e71e741d8cea8b118b0f38761a57d4920f352f0266e8d",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 709,
+        "rotation": 1.6,
+        "blur": 0.25,
+        "contrast": 0.5599999999999999,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P011",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "82a40c25d58187ce7f307db9ec54a30c7a87b918a8842b10d7acbe53265d35cb",
+        "处方附件.pdf": "d03417f13ff1d504064b1f1262cf727ace7422d30200277fa392cd042086eb08",
+        "检验扫描.png": "eef6d37581fe2485378db6f465140d9e29e93115d0bbeda1adad0ec22e6fc865"
+      },
+      "goldHash": "e88eb3b27db217e015a2b9051427fe65b3651f11c52f169693fa713dd465dc45",
+      "sourceHash": "a57e9d94d1c6f11a4c5602159fdbb294efa36adc2ca5ad138cf9624c920ec977",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 710,
+        "rotation": -1.6,
+        "blur": 0.45,
+        "contrast": 0.64,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P012",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "817a2347a058e4957585efb48cf89e11a633756c3cb0997b7a8dd663e0c6c63f",
+        "处方附件.txt": "3fb5bcca7fe44cd6c1073855bc60acf039a2c87626de8378eeca7cdbe22b5d34",
+        "随访补充.docx": "96cae021c8639923766d1f1df09b0458dd8bc5ca5602535d5f9ed252ef02abe3",
+        "检验扫描.png": "caf652776cd3bd25fe6c0e5c84d8f91c19a726256cdc9530d1fb9632628d5c9e"
+      },
+      "goldHash": "70d0cf39925bb741487252336a1923b81485882d39f39de97889902c7cc1eb03",
+      "sourceHash": "2499e10fb3330da2db739b675e475e7bbda9fcfa593359beef749a2214beb552",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 711,
+        "rotation": -5,
+        "blur": 0.8,
+        "contrast": 0.72,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P013",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "99d0168331005a40719d8b7accdeb9153b78c27f1b6aa250c8cdd4eeabbf0d19",
+        "检验扫描.png": "d5b5a25c4408223c23b272b0e59aaa52bcacaf1cffdd5edad093dddc46f72fd9"
+      },
+      "goldHash": "cf605dcf68d08254f05522aee3b3d600ada6c3c5b5a512b94c3de2bb1f35911f",
+      "sourceHash": "76448c52db097e84f5b201b442f20c91bc974a2813afdf26624b84d91d6c7fa7",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 712,
+        "rotation": 0.6,
+        "blur": 0.25,
+        "contrast": 0.48,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P014",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "8f194cd0247d590814b1643678c6741ec417ab8f753254578175d258b722e9e1",
+        "处方附件.pdf": "e7257b16c05fbece8e05c7456b39dc48bb1fe5eca9b3a4f66656870c528ead08",
+        "检验扫描.png": "cd16f18467ca011780a85cb1e2e563f2a8fb3e70c92903e5c62163e7ccef7937"
+      },
+      "goldHash": "d02b8c38bed0eb5253a916c30b78c682c371f5005c531484ced1643b6943d37b",
+      "sourceHash": "2a087fba800c4fcbac71cc9fd5b23f06cbfa546539bff498c9f620d6755ceb51",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 713,
+        "rotation": 0.8,
+        "blur": 0.45,
+        "contrast": 0.5599999999999999,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P015",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "184e7d1cd52fda4cf1578714e26669c1c6aeaf42b296595564b074b2c832bbdd",
+        "处方附件.txt": "1c1557f7f318adbed0c7511fd09b810a3992dbe6fafc4efe4ec803fe55076e5d",
+        "随访补充.docx": "70e7dda3e41629bbb8c596f393a30a83c60da61f7d058c7e0ac292fbc17aeb18",
+        "检验扫描.png": "eeef3c8f42c6e3cd0672c08fee5ce419c892ff40418fff0c9ad4137a1562b1f8"
+      },
+      "goldHash": "221ea362776671d80551477ab1bae95d54852bd43138560782803d385252c93c",
+      "sourceHash": "c284ba992bc768c7f4fe4d01f454029986a203b03117a0dd92d0f6f68e4ba545",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 714,
+        "rotation": 4,
+        "blur": 0.8,
+        "contrast": 0.64,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P016",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "fcd3882a214b8c3503dc8fb8e826d1256748d8694538de16254f1155fb147121",
+        "检验扫描.png": "2efe52140cc4dcef3ffc7edac5e2de26db37756ce388b848420e6f55f9f2f13f"
+      },
+      "goldHash": "7fdcd46a4b2c0f79e58ba4ad29a0776e99272f2f7b9cec32f9eb207f4b4eba34",
+      "sourceHash": "a707a370bf1f52fdcfbdd0fe0e4ff379313730a38cba4c9e233909a1d85d06cb",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 715,
+        "rotation": -1.6,
+        "blur": 0.25,
+        "contrast": 0.72,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P017",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "4f94e56de905fc97041cdb61cce66b08ce0ffcd413579abae126d8d9e79fbc85",
+        "处方附件.pdf": "c384282ec716415211954697f14d7a982be5fd4eaef9ff60990112c31161fbd1",
+        "检验扫描.png": "fb99478168fd55906e12d21475db81c4002b1301b130c8ca0ed65b5a37cb6058"
+      },
+      "goldHash": "b0b2c450f8a801e82aed5006166cfb7d7afbaa8378afd7cb269411c7f97e5d3b",
+      "sourceHash": "8564efd6d4a06028f58ce1e19bb78b63d5fcd16e693ed4c4685cc5407caf245c",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 716,
+        "rotation": -0.8,
+        "blur": 0.45,
+        "contrast": 0.48,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P018",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "5f4071e11a52e39886575050eb8a41d7a006a21df9f6659892fa73ca78171b4f",
+        "处方附件.txt": "8f9ecb2d33540f22e46f162dd85234c2b6ef5c45eec67d6e790a2d5575dce912",
+        "随访补充.docx": "3b11a008cbc6cde94c55839c279872c3b09a63e5b95f271d0c84e613cc97a3f0",
+        "检验扫描.png": "25874d049fa50d6437a172d61eb692d1688866df5714793d040588dfeb3286be"
+      },
+      "goldHash": "ecff7ef3894cbd698286a442c558713526698d10a8c3d5f2053eafac86057ed5",
+      "sourceHash": "12461752f8114f9de8353067c2e9f37e31d4c493bbcc46415352ecce3969198a",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 717,
+        "rotation": -3,
+        "blur": 0.8,
+        "contrast": 0.5599999999999999,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P019",
+      "cluster": 1,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "b997d2d06c4638b02a99dc4a7d1810906a9c5367bcb729b6aa1c5aa13396f4e5",
+        "检验扫描.png": "487afb19ae67fa68d48302700d540e63a063d56d4f1140cd46abcc94ff2d2a0f"
+      },
+      "goldHash": "fea82520748c51b8f4638496400200f411013965453c83121773f61b7f9c5b3d",
+      "sourceHash": "0a9a1aff05cff6087e154a876651e97388764f8e96cd2a4dc62324a0fcd5df27",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 718,
+        "rotation": 0.8,
+        "blur": 0.25,
+        "contrast": 0.64,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P020",
+      "cluster": 1,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "4edfe18cbbfb3ae08828bc5d3b634726d896de20a9c3fc1fd042592438d6aa00",
+        "处方附件.pdf": "af453fc016d8df03808e1138841b41da4514e7cc7c9138c0db0dd35741be4d1c",
+        "检验扫描.png": "11bbcbcc1e7201fee213ecf8f4fc453abe0cb90e64bba176c9e45c004073c0b9"
+      },
+      "goldHash": "23f4e876232ff32f35e42d32d7a9856a4a9ad0ddbf410cbf1656a47fe982cd7f",
+      "sourceHash": "ed7cbf73e9cb04bff6c50e78b2cce58dd7cc87d9afa97608214738ded3a32d08",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 719,
+        "rotation": 1.6,
+        "blur": 0.45,
+        "contrast": 0.72,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P021",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "83f79fb356434992448c7eb943aaf77c601328ffcb9a326f1a729d9ec151cf28",
+        "处方附件.txt": "67db974e53f92ed89d6aacef7e248ecb1eb8e72346ebb003f4ae0c04664e5e1f",
+        "随访补充.docx": "76a0b974092fd26d6e3573198179d86f3d5f9fba53bb2c3c434de1aee621e1e8",
+        "检验扫描.png": "3bc96cd0f489e0121cf46798da6e9637a1eff8244d61f172d35206ed34860be9"
+      },
+      "goldHash": "3cc8b49af800151c4102147cbd370d590299d063b2e3e8b63a9956873e7866c6",
+      "sourceHash": "020b62225064b4df6efaedd6ae27aa513d942de3ecb0db5d8fd5acafc52b2893",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 720,
+        "rotation": 2,
+        "blur": 0.8,
+        "contrast": 0.48,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P022",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "d0ac86263bfb8de9d2a09de4a8179a9e3bb5bb22b1b4a181f08f7182040f70ba",
+        "检验扫描.png": "c6788645643ec48fab15d66ef6acbe1dd9596e38bf15d3ddffc20dbac52a1c40"
+      },
+      "goldHash": "54d0bca3aa573aad746e429ac4ca58a5dae971be8f0da517fba69e157efaecd8",
+      "sourceHash": "bab52ed479c85cc6fff0fd65a77fbc35a28afeb6ca02538ba9ca45bf54e51724",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 721,
+        "rotation": -0.8,
+        "blur": 0.25,
+        "contrast": 0.5599999999999999,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P023",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "c697679effeb8db8afcfe3724a103ae82fccec5623dbacc1143241b9c5667ae1",
+        "处方附件.pdf": "c8cce91d29c68bc56ec4e7e3dab4d0d98d215319da940a1f1721ebfe08b16f77",
+        "检验扫描.png": "495838db3324c56043f2dff2c5c396128a08a10526ecda558fd3c1064b7fe4eb"
+      },
+      "goldHash": "587462077110589f22ba3242a2fb1834bc3a35aca0f03c23c916f44614dfce74",
+      "sourceHash": "9ec7450c9d48b3cbd6f901072c2aeea23dad15b06423bb36e5cc09010a31bdf7",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 722,
+        "rotation": 0.6,
+        "blur": 0.45,
+        "contrast": 0.64,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P024",
+      "cluster": 2,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "c613f54a0dc09ab343d79b5ed9f08c266ece2398c5cddbf02b117b0182ee5693",
+        "处方附件.txt": "ded9f82564fa5c6f1a818bf2400900fe4a44bfe9dbf7b64ee2ab705b22e36ca7",
+        "随访补充.docx": "da0694e558f77d5cbc7456d0a1f80b241f483d22d5558fff23829752d45f03c8",
+        "检验扫描.png": "86a53383daf33e7c8144c5690679fc26d6ee2ae3eea7be6a6ea9bb2fe4f4adb2"
+      },
+      "goldHash": "bf46ba36e09bb4eabf0d3858340bf17f5148769205e794592b6fd114b0578fb2",
+      "sourceHash": "d34a22abcc06f9eec25432dcd5aeb0052ff32742ae84abc7b35678cefc1c2b87",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 723,
+        "rotation": -5,
+        "blur": 0.8,
+        "contrast": 0.72,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P025",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "7fa1e859771ab474c06d605e7e8404f5eab0a44845655d230ed38868efd6bf88",
+        "检验扫描.png": "81655ebc882a178cd7fe32d64473b133a802717cebfd09db7e2ef2b4dc66f9e3"
+      },
+      "goldHash": "977586307bc0c096ec86c35866b7c3b7141236e840af837ee3b91689a0896579",
+      "sourceHash": "a6ef20eaf5f62ef9c9a8c1bc3eb7c368af43f2b0befbbb27a0d0778025325ef0",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 724,
+        "rotation": 1.6,
+        "blur": 0.25,
+        "contrast": 0.48,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P026",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "22ff56dd0cff78ad680c55c1bc7bb90e035954630de6099970e355fa90aa9d40",
+        "处方附件.pdf": "ad8154078f030d39c99e6783a5d3513bcb5b4ece279dccf0fe32c3525d2ba3f4",
+        "检验扫描.png": "6a4f01a5c953131ccf42d38cfe22012c91f750b18eea2f343d181632dbd78a50"
+      },
+      "goldHash": "2811430c1df3ef495d44bc3880b66914fa9e495c684d839ca9dd35c62d54093d",
+      "sourceHash": "13290be9d38e29490fdd621baf2a6df4838e597b61017e2c06f382461aeaeb8b",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 725,
+        "rotation": -1.6,
+        "blur": 0.45,
+        "contrast": 0.5599999999999999,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P027",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "aea3751aebd06439c2ca5e0f338fd9e034f0f2c6d721c2fe721fc055f712dde4",
+        "处方附件.txt": "e73608010edbdae0596955e81c73d88c5cdb0e93757dddb8a6b67c309eb2eaa8",
+        "随访补充.docx": "214e9cc99bce437c2e0eed199b81453b4536d5ca2fdf8d90975c72e3fe212b2f",
+        "检验扫描.png": "e992c24e72375a7a9f1a6b3df3dba89c74b0d9d8f8e8640a8ebeb69fef5667f4"
+      },
+      "goldHash": "807a062fef2aa9d9fa7d8876a88b5ebf9d4bd5e265ec1f1a22e984d6aed2dd68",
+      "sourceHash": "a90acad02f04868d49c2e3ec2fc9db002e5658c8569c8197b2a17fe5c2cbc88f",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 726,
+        "rotation": 4,
+        "blur": 0.8,
+        "contrast": 0.64,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P028",
+      "cluster": 2,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.txt",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "2a29c1713bdebda089714fa164246996cc501896811e060e4c845f413cd4a43a",
+        "检验扫描.png": "14aae11df08fc5a854e3e367027104dd3cbcb45606b9da433b491cb16995518a"
+      },
+      "goldHash": "7462b388373f757509b2b598736b9108ef5d111a36e717ec4540506b186767d1",
+      "sourceHash": "40f533ea2caeeedf62c94502e388c90fef112f08383b6ca4da701bb4d7cad5c2",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 727,
+        "rotation": 0.6,
+        "blur": 0.25,
+        "contrast": 0.72,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P029",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "e58a8c638ca0040822577072e3ec5cd6bd6c0b9aff9bd5a7b8e1cb525ca2ce03",
+        "处方附件.pdf": "7fa54785e3b786d641f22be3d7d0c72294f15aec22e9dd522f55ab8bca0d0fe8",
+        "检验扫描.png": "b79b5fa9d2e0b0b6f285aaeccda5388f47072c102aa992338e30642b6099abcf"
+      },
+      "goldHash": "a6f56d35a6eb06a1678c276fc3eda2763294f193cb82418b0abd75f044b523b4",
+      "sourceHash": "e6e01b023a6a4066752d77cee89f16f7f825ab6467f030245139660714ba7db0",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 728,
+        "rotation": 0.8,
+        "blur": 0.45,
+        "contrast": 0.48,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P030",
+      "cluster": 2,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "6baca8ecf453d1a2ec5f2f4c76e5e0a738837c4caec08499266c145a7073a253",
+        "处方附件.txt": "e0aed63be128b1c2d621549888e0f54e2634e6e59e6b577cc6a06d3d2c045b05",
+        "随访补充.docx": "2907bdcc1834888ece72fa7da4127491a29e76b23921ad6588d830bd60d620ec",
+        "检验扫描.png": "02f034c019d3f8eda0473b98f59e7cf9cf060fe6ccce9f0fe71512fdca131cd2"
+      },
+      "goldHash": "c97da5f4b8e44bb97040b2c197b2574499e7855dd18dddfe1f743da28cb956c8",
+      "sourceHash": "69daa4058e08f6cd12ed924fa6b7256063a45f868ab69248422db18ff6b6a41f",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 729,
+        "rotation": -3,
+        "blur": 0.8,
+        "contrast": 0.5599999999999999,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P031",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "525c10cf759474005da1ba837714854b71293102d823e9e69eaf794cc6bcdff5",
+        "检验扫描.png": "f9ca5a9cebf897981ffb858a916c8871f82c6614fe10a2e0c2fc21f0ec520cfb"
+      },
+      "goldHash": "c0d8fa6fa72c23373e42134456987278a6ee61d26ff324a554d2d8138089d84c",
+      "sourceHash": "f7ae10993ab916b3a1da01e1e3874f0398e8c1a79a5eb974355795e8a6db6c52",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 730,
+        "rotation": -1.6,
+        "blur": 0.25,
+        "contrast": 0.64,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P032",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "35077d9ef1d3e09fe209274e9448b75228a4ab046f3295fbf3551f623b908873",
+        "处方附件.pdf": "319f2c1ffe750047ae110bf6e9fe65dff1eeab833f68f2ee0828bea3050ab597",
+        "检验扫描.png": "bb8f1daa595449a5c473a23803908fd4c913d93ff602c776cdaa514776059f63"
+      },
+      "goldHash": "0beaf4f9402be3fef3aa31978607352fc90c23a83f9ad5b32fe93bcdd3a33191",
+      "sourceHash": "556f1aa19bb7340dfb656ed6b0612eadd5bacb89fcf32519ca098cdb1dfc8417",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 731,
+        "rotation": -0.8,
+        "blur": 0.45,
+        "contrast": 0.72,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P033",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.docx",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "15995a8d8176bffb9280fa542c640723554e31f315b5c87e01f8f0482c77c448",
+        "处方附件.txt": "a553e1a4662a30bc656bfed8a08937f24e4f3c069aa8b760465ef1c10185f93b",
+        "随访补充.docx": "47edb8744d53742d486fe44d9465cac73c0b28e7937fd4eca3abec44bfeced96",
+        "检验扫描.png": "5f8879f470c5e5dfc3797f59b204dfc6b57fc39c983ac3053c2e732474e39170"
+      },
+      "goldHash": "1775807196a55d5bb28957e64e3dec888ca651ac7e7ddb8b18f6d4a466224077",
+      "sourceHash": "1282026043fe24dd1dcbfdac085fbc619d5aa4516b27d4f75342b60a2c7986ef",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 732,
+        "rotation": 2,
+        "blur": 0.8,
+        "contrast": 0.48,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P034",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "5cb4f6fcc5552e6449f977c00b24be0a86f025f758e00c7e4fc0361f8aa3ec90",
+        "检验扫描.png": "b9fec40ed1cccd22e9de2b9996bfebf697b522ed2bdcaaf4ca2e9ff9e50b54d2"
+      },
+      "goldHash": "36f5e848c5bbff144d3c829fafb4da5bf479573c37c429720dc890fc195cc785",
+      "sourceHash": "c02f156f4a76663b60fa0cf03d99f4a6b84690a631d72e8049076d84245c609c",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 733,
+        "rotation": 0.8,
+        "blur": 0.25,
+        "contrast": 0.5599999999999999,
+        "noise": 12
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P035",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "32627a99e47398366273e66c18fcb531a8262fa359372775c005f36ddadbb208",
+        "处方附件.pdf": "399327183407e770636ffddfd5b396cff05e8bc197d42c28c0f6b903f2f98f0c",
+        "检验扫描.png": "05d91533d9e7137df2086dfd805948d5a9af1398c9fe29ee55cfbe5d1d6af555"
+      },
+      "goldHash": "6095e425c45827b979c4b901acc47014b8d231d03c6301b5238fd45d43c8efe7",
+      "sourceHash": "8864e7bf87a133bc9fa748ee389eb0453c3c87435151111efe7885c8c012846b",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 734,
+        "rotation": 1.6,
+        "blur": 0.45,
+        "contrast": 0.64,
+        "noise": 13
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P036",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.pdf",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.pdf": "5393108b56af1c2c6b26e082c0643809369f82291a802f74ede8a9520f92f303",
+        "处方附件.txt": "0e280192508d66d1756943fa0ac51d6a5c562635cdb4e8b0ff7e89a9460507f6",
+        "随访补充.docx": "27eaefdcf13010ffdeabb721149fee51cebbef8843b12570779b8a2b141c0f41",
+        "检验扫描.png": "16063fe4e908d8097cbd7f0aee03c6603c492ac16d62c14d0e5b4a042ee7dad9"
+      },
+      "goldHash": "276fb65617fa7fff6635f6323ed9e4f20055696fc2aaf17b57e704bb8b0d6a66",
+      "sourceHash": "ca900d7cd06d2508ef3ec93d8927f2af19ccff6a576835e9c416b5ec84d0f13b",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 735,
+        "rotation": -5,
+        "blur": 0.8,
+        "contrast": 0.72,
+        "noise": 14
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P037",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "362d9eccdb68e5dc87119cc028e691132b73db1737c7fe44ff75df43d8cb65ca",
+        "检验扫描.png": "559cda1c628edad0a1e8201273c898d10f2aca73567495f905e73fa7e8b80afb"
+      },
+      "goldHash": "c0b70a5a6848fac9233ac8190a00971189370af5920b694d34502bd69d91fd2f",
+      "sourceHash": "ff51808ad74c95346676235700fe80cd6dc67b36bb8f30f962d439a29032ca0c",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 736,
+        "rotation": -0.8,
+        "blur": 0.25,
+        "contrast": 0.48,
+        "noise": 9
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P038",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.pdf",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "c52354fdbd58a86eb4ce946dcdabed5dccf967fde954e7ee5055820c193284c7",
+        "处方附件.pdf": "9bed3a75916459521493bee6c25c0834cbefa998106558222a7d70a05a01c8d3",
+        "检验扫描.png": "4f5874a85acfaa1e77b76839cc77aae57e4a1269c0961b51732de260743a3298"
+      },
+      "goldHash": "2f527c552fed4ede5cbc930e866bb63bb4bc7669fcdb22dbc7013a8933712551",
+      "sourceHash": "c67b6bf7851986f67560589a2c15594ec8f7173e349830e9f4fe6f26e8b9afab",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 737,
+        "rotation": 0.6,
+        "blur": 0.45,
+        "contrast": 0.5599999999999999,
+        "noise": 10
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P039",
+      "cluster": 3,
+      "split": "learning",
+      "materials": [
+        "就诊材料.txt",
+        "处方附件.txt",
+        "随访补充.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.txt": "0e3d8c8efd30419bac7d4c3a0dff0d6daf6cfdaab3303316777da814825ccaa1",
+        "处方附件.txt": "f33732cde76fe20f00f98f0f29eab7faf336a760c42b4ee83a186ae7154f0bdb",
+        "随访补充.docx": "2513647a63f920d7f3ee756a4948abe9807b22117b82321a432f9db2901c85f3",
+        "检验扫描.png": "205cdbfcf6afa721f830a3ed9a0823b6642169f802177246ce3220fa41a11d59"
+      },
+      "goldHash": "d246f3e7df6e1b5da1eb08c9fc55e2fd63e018cf2cb66e603863c636f8a27600",
+      "sourceHash": "2a28f84381bbcad9416930234ac0f6821b289d350ba702b30617d41f534e24d9",
+      "degradation": {
+        "difficulty": "hard",
+        "jpegQuality": 0.44999999999999996,
+        "seed": 738,
+        "rotation": 4,
+        "blur": 0.8,
+        "contrast": 0.64,
+        "noise": 11
+      },
+      "humanReviewed": false
+    },
+    {
+      "id": "P040",
+      "cluster": 3,
+      "split": "holdout",
+      "materials": [
+        "就诊材料.docx",
+        "检验扫描.png"
+      ],
+      "materialHashes": {
+        "就诊材料.docx": "c15d921e9a4dc73280d6a8d29529e753c4176052e4a6df8d2bfbcd24e0f4796b",
+        "检验扫描.png": "ee376a8d63260fa49c0a41ccbe6724b0d4fbac7c8d5766ce4dd01cdd0e2910bf"
+      },
+      "goldHash": "11d7ee3e277135d12a33ad959856fc2a039ba43d5940822b2a7067f18374f30d",
+      "sourceHash": "e1dec0ce9b0ea1790c2ad895366bfe37820b1f98dcb482ce96d929c83a890dec",
+      "degradation": {
+        "difficulty": "standard",
+        "jpegQuality": null,
+        "seed": 739,
+        "rotation": 1.6,
+        "blur": 0.25,
+        "contrast": 0.72,
+        "noise": 12
+      },
+      "humanReviewed": false
+    }
+  ],
+  "diversity": {
+    "maxJaccard": 0.49156118143459915,
+    "closest": [
+      "P015",
+      "P035"
+    ],
+    "threshold": 0.7,
+    "method": "digit/identity-masked Unicode 5-character shingles"
+  },
+  "coverage": {
+    "D1": {
+      "terms": 25,
+      "glucose-unit": 20,
+      "creatinine-unit": 10,
+      "dates": 29,
+      "frequencies": 27,
+      "incidental-findings": 14,
+      "history-extraction": 20,
+      "summary-length": 30,
+      "summary-order": 30,
+      "trap-status": 20,
+      "trap-dose": 29
+    },
+    "D2": {
+      "terms": 19,
+      "glucose-unit": 10,
+      "creatinine-unit": 20,
+      "dates": 30,
+      "frequencies": 23,
+      "incidental-findings": 14,
+      "history-extraction": 19,
+      "summary-length": 27,
+      "summary-order": 30,
+      "trap-status": 20,
+      "trap-dose": 30
+    },
+    "D3": {
+      "terms": 25,
+      "glucose-unit": 20,
+      "creatinine-unit": 20,
+      "dates": 30,
+      "frequencies": 27,
+      "incidental-findings": 16,
+      "history-extraction": 19,
+      "summary-length": 15,
+      "summary-order": 30,
+      "trap-status": 20,
+      "trap-dose": 30
+    }
+  }
+}

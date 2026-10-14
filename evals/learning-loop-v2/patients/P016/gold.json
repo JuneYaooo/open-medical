@@ -1,0 +1,85 @@
+{
+  "name": "SYNTH_V2_P016_47692f5594de",
+  "gender": "female",
+  "birthYear": 1963,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "NAFLD",
+      "status": "confirmed",
+      "date": "2026/9/19"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/9/19"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年6月20日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "熊去氧胆酸",
+      "dose": "300mg",
+      "frequency": "每日两次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7.6,
+      "unit": "mmol/L",
+      "date": "2026/9/19"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.1,
+      "unit": "mg/dL",
+      "date": "2026年6月20日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 135,
+      "unit": "g/L",
+      "date": "26-07-21"
+    },
+    {
+      "item": "ALT",
+      "value": 40,
+      "unit": "U/L",
+      "date": "26-07-21"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 0.95,
+      "unit": "g/24h",
+      "date": "26-07-21"
+    }
+  ],
+  "visits": [
+    {
+      "date": "8月22日",
+      "reason": "影像随访",
+      "note": "发现转氨酶升高后停止保健品，等待复核病毒学结果"
+    },
+    {
+      "date": "2026年6月20日",
+      "reason": "康复评估",
+      "note": "带来随访登记册，核对晨间及睡前服药时点，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计18年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月4次少量饮酒"
+    }
+  ]
+}

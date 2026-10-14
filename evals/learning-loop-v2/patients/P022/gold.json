@@ -1,0 +1,77 @@
+{
+  "name": "SYNTH_V2_P022_8343fabe47c2",
+  "gender": "female",
+  "birthYear": 1969,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性肾脏病",
+      "status": "confirmed",
+      "date": "2026年7月10日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年7月10日"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-08-11"
+    }
+  ],
+  "medications": [
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 8.2,
+      "unit": "mmol/L",
+      "date": "2026年7月10日"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.22,
+      "unit": "mg/dL",
+      "date": "26-08-11"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 141,
+      "unit": "g/L",
+      "date": "9月12日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-06-13",
+      "reason": "肾功能复核",
+      "note": "泡沫尿持续存在，未见肉眼血尿，腰部没有叩击痛"
+    },
+    {
+      "date": "26-08-11",
+      "reason": "处方核对",
+      "note": "带来出院处方，比较水肿程度及每日体重变化，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计24年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月4次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}

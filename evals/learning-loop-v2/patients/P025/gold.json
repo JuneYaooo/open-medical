@@ -1,0 +1,62 @@
+{
+  "name": "SYNTH_V2_P025_d6bdd4945e03",
+  "gender": "male",
+  "birthYear": 1972,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "CKD",
+      "status": "confirmed",
+      "date": "2026-06-19"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-06-19"
+    }
+  ],
+  "medications": [
+    {
+      "name": "阿托伐他汀",
+      "dose": "10mg",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 156,
+      "unit": "mg/dL",
+      "date": "2026-06-19"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.28,
+      "unit": "mg/dL",
+      "date": "2026/7/20"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-09-22",
+      "reason": "肾功能复核",
+      "note": "夜尿增加影响睡眠，白天精神欠佳，未自行添加利尿药"
+    },
+    {
+      "date": "2026/7/20",
+      "reason": "家庭监测复核",
+      "note": "带来手写测量表，比较水肿程度及每日体重变化，未新增非处方药"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计27年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月1次少量饮酒"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "name": "SYNTH_V2_P040_ee95e13d6116",
+  "gender": "female",
+  "birthYear": 1987,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "confirmed",
+      "date": "2026-09-10"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-09-10"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/6/11"
+    }
+  ],
+  "medications": [
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "500mg",
+      "frequency": "每日三次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 10,
+      "unit": "mmol/L",
+      "date": "2026-09-10"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.58,
+      "unit": "mg/dL",
+      "date": "2026/6/11"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 159,
+      "unit": "g/L",
+      "date": "2026年7月12日"
+    },
+    {
+      "item": "ALT",
+      "value": 64,
+      "unit": "U/L",
+      "date": "2026年7月12日"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 2.15,
+      "unit": "g/24h",
+      "date": "2026年7月12日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-08-13",
+      "reason": "术后换药",
+      "note": "末次术后随访，伤口闭合完整，日常步行不再需要辅助"
+    },
+    {
+      "date": "2026/6/11",
+      "reason": "康复评估",
+      "note": "带来随访登记册，检查伤口周围皮肤和活动范围，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计42年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月4次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在木材加工岗位接触粉尘"
+    }
+  ]
+}

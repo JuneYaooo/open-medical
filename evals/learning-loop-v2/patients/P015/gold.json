@@ -1,0 +1,96 @@
+{
+  "name": "SYNTH_V2_P015_8fd2a5ba5fee",
+  "gender": "male",
+  "birthYear": 1962,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "脂肪肝",
+      "status": "confirmed",
+      "date": "2026-08-16"
+    },
+    {
+      "name": "慢性肾脏病",
+      "status": "suspected",
+      "date": "2026/9/17"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "2026-08-16"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-08-16"
+    }
+  ],
+  "medications": [
+    {
+      "name": "阿托伐他汀",
+      "dose": "20mg",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "呋塞米",
+      "dose": "20mg",
+      "frequency": "每日一次",
+      "status": "stopped"
+    },
+    {
+      "name": "二甲双胍",
+      "dose": "500mg",
+      "frequency": "tid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 136,
+      "unit": "mg/dL",
+      "date": "2026-08-16"
+    },
+    {
+      "item": "肌酐",
+      "value": 84,
+      "unit": "μmol/L",
+      "date": "2026/9/17"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 134,
+      "unit": "g/L",
+      "date": "2026年6月18日"
+    },
+    {
+      "item": "ALT",
+      "value": 39,
+      "unit": "U/L",
+      "date": "2026年6月18日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-07-19",
+      "reason": "影像随访",
+      "note": "住院后首次返诊，饮食以蒸煮为主，腹痛未再次发生"
+    },
+    {
+      "date": "2026/9/17",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，核对晨间及睡前服药时点，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计17年"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

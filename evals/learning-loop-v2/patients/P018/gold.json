@@ -1,0 +1,95 @@
+{
+  "name": "SYNTH_V2_P018_7cbfee60608b",
+  "gender": "female",
+  "birthYear": 1965,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "脂肪肝",
+      "status": "confirmed",
+      "date": "26-07-25"
+    },
+    {
+      "name": "CHD",
+      "status": "suspected",
+      "date": "8月26日"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "26-07-25"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-07-25"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "8月26日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "呋塞米",
+      "dose": "20mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "二甲双胍",
+      "dose": "500mg",
+      "frequency": "bid",
+      "status": "active"
+    },
+    {
+      "name": "比索洛尔",
+      "dose": "5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7.8,
+      "unit": "mmol/L",
+      "date": "26-07-25"
+    },
+    {
+      "item": "肌酐",
+      "value": 87,
+      "unit": "μmol/L",
+      "date": "8月26日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 137,
+      "unit": "g/L",
+      "date": "2026-09-27"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026/6/1",
+      "reason": "影像随访",
+      "note": "减重过程中偶有乏力，未采用极端节食，食欲尚可"
+    },
+    {
+      "date": "8月26日",
+      "reason": "处方核对",
+      "note": "带来出院处方，核对晨间及睡前服药时点，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月6次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}

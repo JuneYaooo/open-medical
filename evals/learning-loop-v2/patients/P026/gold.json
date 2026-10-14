@@ -1,0 +1,93 @@
+{
+  "name": "SYNTH_V2_P026_73d33dfaca58",
+  "gender": "female",
+  "birthYear": 1973,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性肾脏病",
+      "status": "confirmed",
+      "date": "2026/7/22"
+    },
+    {
+      "name": "脂肪肝",
+      "status": "suspected",
+      "date": "2026年8月23日"
+    },
+    {
+      "name": "电解质紊乱",
+      "status": "suspected",
+      "date": "2026/7/22"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/7/22"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年8月23日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "熊去氧胆酸",
+      "dose": "300mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "维生素D",
+      "dose": "800IU",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 8.6,
+      "unit": "mmol/L",
+      "date": "2026/7/22"
+    },
+    {
+      "item": "肌酐",
+      "value": 95,
+      "unit": "μmol/L",
+      "date": "2026年8月23日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 145,
+      "unit": "g/L",
+      "date": "26-09-24"
+    }
+  ],
+  "visits": [
+    {
+      "date": "6月25日",
+      "reason": "肾功能复核",
+      "note": "复核蛋白尿结果，近期感染已缓解，尿色接近淡黄色"
+    },
+    {
+      "date": "2026年8月23日",
+      "reason": "处方核对",
+      "note": "带来出院处方，比较水肿程度及每日体重变化，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计28年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月2次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}

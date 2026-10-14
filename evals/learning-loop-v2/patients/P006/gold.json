@@ -1,0 +1,95 @@
+{
+  "name": "SYNTH_V2_P006_8e2c9c868652",
+  "gender": "female",
+  "birthYear": 1953,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "高血压",
+      "status": "confirmed",
+      "date": "2026/7/16"
+    },
+    {
+      "name": "2型糖尿病",
+      "status": "suspected",
+      "date": "2026年8月17日"
+    },
+    {
+      "name": "心功能不全",
+      "status": "suspected",
+      "date": "2026/7/16"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/7/16"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年8月17日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "熊去氧胆酸",
+      "dose": "300mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "维生素D",
+      "dose": "800IU",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 6.6,
+      "unit": "mmol/L",
+      "date": "2026/7/16"
+    },
+    {
+      "item": "肌酐",
+      "value": 75,
+      "unit": "μmol/L",
+      "date": "2026年8月17日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 125,
+      "unit": "g/L",
+      "date": "26-09-18"
+    }
+  ],
+  "visits": [
+    {
+      "date": "6月19日",
+      "reason": "初诊评估",
+      "note": "夜班期间作息不规律，漏服过晨间药物，近期体重缓慢上升"
+    },
+    {
+      "date": "2026年8月17日",
+      "reason": "处方核对",
+      "note": "带来出院处方，记录饭后症状与活动的关系，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计8年"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "name": "SYNTH_V2_P023_6980cf775fec",
+  "gender": "male",
+  "birthYear": 1970,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "CKD",
+      "status": "confirmed",
+      "date": "26-08-13"
+    },
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "suspected",
+      "date": "9月14日"
+    },
+    {
+      "name": "电解质紊乱",
+      "status": "suspected",
+      "date": "26-08-13"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-08-13"
+    }
+  ],
+  "medications": [
+    {
+      "name": "缬沙坦",
+      "dose": "80mg",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "熊去氧胆酸",
+      "dose": "300mg",
+      "frequency": "每日两次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 152,
+      "unit": "mg/dL",
+      "date": "26-08-13"
+    },
+    {
+      "item": "肌酐",
+      "value": 92,
+      "unit": "μmol/L",
+      "date": "9月14日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 142,
+      "unit": "g/L",
+      "date": "2026-06-15"
+    },
+    {
+      "item": "ALT",
+      "value": 47,
+      "unit": "U/L",
+      "date": "2026-06-15"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026/7/16",
+      "reason": "肾功能复核",
+      "note": "复诊时带来称重表，踝部水肿消退，活动耐量有所恢复"
+    },
+    {
+      "date": "9月14日",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，比较水肿程度及每日体重变化，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月5次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

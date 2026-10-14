@@ -1,0 +1,101 @@
+{
+  "name": "SYNTH_V2_P039_16bf7357b18b",
+  "gender": "male",
+  "birthYear": 1986,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "COPD",
+      "status": "confirmed",
+      "date": "8月7日"
+    },
+    {
+      "name": "AF",
+      "status": "suspected",
+      "date": "2026-09-08"
+    },
+    {
+      "name": "CHD",
+      "status": "confirmed",
+      "date": "2026/6/9"
+    },
+    {
+      "name": "伤口感染",
+      "status": "suspected",
+      "date": "8月7日"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "8月7日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "维生素D",
+      "dose": "800IU",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    },
+    {
+      "name": "阿托伐他汀",
+      "dose": "20mg",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 184,
+      "unit": "mg/dL",
+      "date": "8月7日"
+    },
+    {
+      "item": "肌酐",
+      "value": 108,
+      "unit": "μmol/L",
+      "date": "2026-09-08"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 158,
+      "unit": "g/L",
+      "date": "2026/6/9"
+    },
+    {
+      "item": "ALT",
+      "value": 63,
+      "unit": "U/L",
+      "date": "2026/6/9"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026年7月10日",
+      "reason": "术后换药",
+      "note": "恢复工作前评估活动限制，上肢抬举尚有牵扯感"
+    },
+    {
+      "date": "2026-09-08",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，检查伤口周围皮肤和活动范围，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计41年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月3次少量饮酒"
+    }
+  ]
+}

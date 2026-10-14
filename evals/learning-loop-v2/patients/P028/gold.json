@@ -1,0 +1,81 @@
+{
+  "name": "SYNTH_V2_P028_13bf31c4b0f4",
+  "gender": "female",
+  "birthYear": 1975,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性肾脏病",
+      "status": "confirmed",
+      "date": "26-09-01"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-09-01"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "6月2日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "呋塞米",
+      "dose": "20mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 8.8,
+      "unit": "mmol/L",
+      "date": "26-09-01"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.34,
+      "unit": "mg/dL",
+      "date": "6月2日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 147,
+      "unit": "g/L",
+      "date": "2026-07-03"
+    },
+    {
+      "item": "ALT",
+      "value": 52,
+      "unit": "U/L",
+      "date": "2026-07-03"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 1.55,
+      "unit": "g/24h",
+      "date": "2026-07-03"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026/8/4",
+      "reason": "肾功能复核",
+      "note": "准备接受营养指导，主食摄入偏少，肌肉力量主观下降"
+    },
+    {
+      "date": "6月2日",
+      "reason": "康复评估",
+      "note": "带来随访登记册，比较水肿程度及每日体重变化，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在木材加工岗位接触粉尘"
+    }
+  ]
+}

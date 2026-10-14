@@ -1,0 +1,112 @@
+{
+  "name": "SYNTH_V2_P036_dda7dba54dd2",
+  "gender": "female",
+  "birthYear": 1983,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "confirmed",
+      "date": "2026/9/25"
+    },
+    {
+      "name": "AF",
+      "status": "suspected",
+      "date": "2026年6月26日"
+    },
+    {
+      "name": "冠心病",
+      "status": "confirmed",
+      "date": "26-07-27"
+    },
+    {
+      "name": "伤口感染",
+      "status": "suspected",
+      "date": "2026/9/25"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/9/25"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年6月26日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "熊去氧胆酸",
+      "dose": "300mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "维生素D",
+      "dose": "800IU",
+      "frequency": "qd",
+      "status": "stopped"
+    },
+    {
+      "name": "氨氯地平",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 9.6,
+      "unit": "mmol/L",
+      "date": "2026/9/25"
+    },
+    {
+      "item": "肌酐",
+      "value": 105,
+      "unit": "μmol/L",
+      "date": "2026年6月26日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 155,
+      "unit": "g/L",
+      "date": "26-07-27"
+    },
+    {
+      "item": "ALT",
+      "value": 60,
+      "unit": "U/L",
+      "date": "26-07-27"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 1.95,
+      "unit": "g/24h",
+      "date": "26-07-27"
+    }
+  ],
+  "visits": [
+    {
+      "date": "8月1日",
+      "reason": "术后换药",
+      "note": "康复训练后局部酸胀，休息能够缓解，没有新出现的肢体麻木"
+    },
+    {
+      "date": "2026年6月26日",
+      "reason": "康复评估",
+      "note": "带来随访登记册，检查伤口周围皮肤和活动范围，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月6次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在木材加工岗位接触粉尘"
+    }
+  ]
+}

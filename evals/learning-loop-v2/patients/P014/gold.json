@@ -1,0 +1,89 @@
+{
+  "name": "SYNTH_V2_P014_51b7a1e62325",
+  "gender": "female",
+  "birthYear": 1961,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "非酒精性脂肪性肝病",
+      "status": "confirmed",
+      "date": "7月13日"
+    },
+    {
+      "name": "DM",
+      "status": "suspected",
+      "date": "2026-08-14"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "7月13日"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "7月13日"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-08-14"
+    }
+  ],
+  "medications": [
+    {
+      "name": "比索洛尔",
+      "dose": "5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    },
+    {
+      "name": "碳酸氢钠",
+      "dose": "500mg",
+      "frequency": "tid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7.4,
+      "unit": "mmol/L",
+      "date": "7月13日"
+    },
+    {
+      "item": "肌酐",
+      "value": 83,
+      "unit": "μmol/L",
+      "date": "2026-08-14"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 133,
+      "unit": "g/L",
+      "date": "2026/9/15"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026年6月16日",
+      "reason": "影像随访",
+      "note": "复查肝胆影像，近期无发热，右肩牵涉不适已缓解"
+    },
+    {
+      "date": "2026-08-14",
+      "reason": "处方核对",
+      "note": "带来出院处方，核对晨间及睡前服药时点，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月2次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}
