@@ -290,4 +290,31 @@ test("proposal tray feedback becomes observed signals and consolidates", async (
   const confirmedSignal = f.server.doctor.memories({ status: "open" }).find((row) => row.source.type === "proposal_confirmed");
   assert.ok(confirmedSignal);
   assert.match(confirmedSignal.content, /下午三点/);
+  const sixth = await propose("记录新的写法");
+  const confirmed = await f.json(`/api/pending-actions/${sixth.id}/confirm`, "POST", { note: "以后诊断都写中文全称" });
+  assert.equal(confirmed.status, 200);
+  assert.deepEqual(confirmed.data.remembered.map(m => m.content), ["以后诊断都写中文全称"]);
+});
+
+test("habit list includes all active preferences plus paused and deleted, excluding candidates and dismissed versions", async (t) => {
+  const { fixture } = await import("./helpers.mjs");
+  const f = await fixture(t), doctor = f.server.doctor;
+  const manual = doctor.addMemory({ content: "手动写下的偏好" });
+  const repeated = doctor.addMemory({ kind: "consolidated", status: "confirmed", content: "重复说明形成的偏好", source: { type: "repeated_feedback" } });
+  doctor.addMemory({ kind: "consolidated", content: "待确认偏好" });
+  doctor.addMemory({ kind: "observed", content: "学习信号" });
+  const old = doctor.addMemory({ content: "已忽略的偏好" });
+  doctor.dismissMemory(old.id);
+  let habits = (await f.json("/api/learning/habits")).data.habits;
+  assert.deepEqual(new Set(habits.map(h => h.id)), new Set([manual.id, repeated.id]));
+  assert.ok(habits.every(h => h.ledger.applied === 0));
+  await f.json(`/api/learning/habits/${manual.id}/decision`, "POST", { decision: "disable" });
+  await f.json(`/api/learning/habits/${repeated.id}/decision`, "POST", { decision: "delete" });
+  habits = (await f.json("/api/learning/habits")).data.habits;
+  assert.equal(habits.find(h => h.id === manual.id).status, "paused");
+  assert.equal(habits.find(h => h.id === repeated.id).status, "deleted");
+  await f.json(`/api/learning/habits/${manual.id}/decision`, "POST", { decision: "edit", content: "修改后的偏好" });
+  habits = (await f.json("/api/learning/habits")).data.habits;
+  assert.equal(habits.filter(h => h.content === "修改后的偏好").length, 1);
+  assert.ok(!habits.some(h => h.id === manual.id));
 });

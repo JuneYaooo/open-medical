@@ -420,12 +420,12 @@ export class ReviewLog {
         .sort((a, b) => b.count - a.count),
     };
   }
-  details(section) {
+  details(section, field = null) {
     return this.db
       .prepare(
-        `SELECT d.*,s.patient_id FROM review_diffs d JOIN review_sessions s ON s.id=d.session_id WHERE d.section=? AND d.superseded=0 ORDER BY d.id DESC LIMIT 10`,
+        `SELECT d.*,s.patient_id FROM review_diffs d JOIN review_sessions s ON s.id=d.session_id WHERE s.kind='intake' AND s.superseded=0 AND d.section=? AND (? IS NULL OR d.field=?) AND d.superseded=0 ORDER BY d.id DESC LIMIT 10`,
       )
-      .all(section)
+      .all(section, field, field)
       .map((r) => ({
         id: r.id,
         section: r.section,

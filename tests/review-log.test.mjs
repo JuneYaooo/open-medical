@@ -189,3 +189,21 @@ test("pilot exports only numeric aggregates and preserves assignment without rev
     /禁止导出|HTN|2026-01-01|patient_id|ai_snapshot/,
   );
 });
+
+test("review details filter section and field, exclude other workflows and superseded edits", async (t) => {
+  const f = await fixture(t);
+  const p = f.server.pending.propose({ type: "patient-create", summary: "明细筛选", payload: draft("合成筛选患者") });
+  f.server.pending.confirm(p.id, { payload: { ...p.payload, diagnoses: [{ name: "高血压", status: "confirmed" }], labs: [{ ...p.payload.labs[0], unit: "mmol/l", value: 6 }] } });
+  const names = await f.json("/api/review-details?section=diagnoses&field=name");
+  assert.equal(names.status, 200);
+  assert.equal(names.data.diffs.length, 1);
+  assert.equal(names.data.diffs[0].after, "高血压");
+  const units = (await f.json("/api/review-details?section=labs&field=unit")).data.diffs;
+  assert.deepEqual(units.map(d => [d.section, d.field]), [["labs", "unit"]]);
+  assert.equal((await f.json("/api/review-details?section=labs&field=missing")).data.diffs.length, 0);
+  assert.equal((await f.json("/api/review-details?section=diagnoses")).data.diffs.length, 2);
+  f.server.store.db.prepare("UPDATE review_sessions SET kind='artifact'").run();
+  assert.equal(f.server.pending.reviewLog.details("diagnoses", "name").length, 0);
+  f.server.store.db.prepare("UPDATE review_sessions SET kind='intake',superseded=1").run();
+  assert.equal(f.server.pending.reviewLog.details("diagnoses", "name").length, 0);
+});
