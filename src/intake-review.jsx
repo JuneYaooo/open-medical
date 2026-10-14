@@ -6,6 +6,7 @@ import {
   reviewCounts,
 } from "../shared/review-diff.mjs";
 import "./intake-review.css";
+const DELETE_REASONS = ["资料里没有", "重复", "不该算诊断", "不重要", "其他"];
 const labels = {
   diagnoses: "诊断与问题",
   medications: "用药",
@@ -348,7 +349,7 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
     <div className="intake-review">
       <div className="review-heading">
         <h3>核对建档草稿</h3>
-        <span>已改 {counts.total} 处</span>
+        {counts.total > 0 && <span>已改 {counts.total} 处</span>}
         {counts.total > 0 && (
           <button className="text-button" onClick={() => setResetConfirm(true)}>
             全部还原
@@ -394,7 +395,7 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
           {saveStatus}
         </p>
       )}
-      <section aria-label="身份信息">
+      <section aria-label="身份信息" className="review-row">
         <p>
           <b>{payload.name}</b> · {statusText[payload.gender] || "性别待补充"}
           {payload.birthYear ? ` · ${payload.birthYear} 年生` : ""}
@@ -460,7 +461,16 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
         {editForm("clinicalSummary")}
       </section>
       {Object.entries(labels).map(([section, label]) => (
-        <section key={section} aria-label={label}>
+        <section
+          key={section}
+          aria-label={label}
+          className={
+            !(payload[section]?.length || original[section]?.length) &&
+            editing?.section !== section
+              ? "review-empty"
+              : undefined
+          }
+        >
           <div className="review-heading">
             <h4>
               {label}（{payload[section]?.length || 0}）
@@ -478,6 +488,36 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
             >
               添加{label}
             </button>
+            {section === "allergies" && (
+              <label className="review-allergy-status">
+                过敏史
+                <select
+                  value={payload.allergyStatus || "unknown"}
+                  onChange={(e) =>
+                    change({ ...payload, allergyStatus: e.target.value })
+                  }
+                >
+                  <option
+                    value="unknown"
+                    disabled={!!payload.allergies?.length}
+                  >
+                    待核对
+                  </option>
+                  <option
+                    value="none_known"
+                    disabled={!!payload.allergies?.length}
+                  >
+                    已核对无已知过敏
+                  </option>
+                  <option
+                    value="recorded"
+                    disabled={!payload.allergies?.length}
+                  >
+                    已记录过敏原
+                  </option>
+                </select>
+              </label>
+            )}
           </div>
           {alignReviewItems(
             section,
@@ -520,21 +560,63 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
                 r,
               );
             };
+            const habitChips =
+              j !== null &&
+              (original.habitChanges || [])
+                .filter(
+                  (c) =>
+                    c.section === section &&
+                    (c.afterIndex ?? c.index) === i &&
+                    c.after &&
+                    (c.fields || Object.keys(c.after)).every(
+                      (field) =>
+                        JSON.stringify(item[field]) ===
+                        JSON.stringify(c.after[field]),
+                    ),
+                )
+                .map((c) => (
+                  <button
+                    className="review-habit"
+                    title="点此还原为 AI 原文"
+                    aria-label={`按习惯「${c.content}」改写，点此还原`}
+                    key={c.habitId}
+                    onClick={() => {
+                      const list = [...payload[section]];
+                      list[j] = {
+                        ...list[j],
+                        ...Object.fromEntries(
+                          (c.fields || Object.keys(c.before)).map((field) => [
+                            field,
+                            c.before[field],
+                          ]),
+                        ),
+                      };
+                      change({ ...payload, [section]: list });
+                    }}
+                  >
+                    按习惯：{c.content} ↺
+                  </button>
+                ));
             return (
               <div
                 className={`review-item ${j === null ? "review-deleted" : ""}`}
                 key={`${section}:${i ?? `new-${j}`}`}
               >
-                <p>{describe(item)}</p>
-                {typeof item === "object" && (
-                  <small>
-                    来源：
-                    {(item.sources?.length
-                      ? item.sources
-                      : [item.source].filter(Boolean)
-                    ).join("；") || (i === null ? "医生补充" : "待核对出处")}
-                  </small>
-                )}
+                <div className="review-item-main">
+                  <p>
+                    {describe(item)}
+                    {habitChips}
+                  </p>
+                  {typeof item === "object" && (
+                    <small>
+                      来源：
+                      {(item.sources?.length
+                        ? item.sources
+                        : [item.source].filter(Boolean)
+                      ).join("；") || (i === null ? "医生补充" : "待核对出处")}
+                    </small>
+                  )}
+                </div>
                 <div className="review-item-actions">
                   {j !== null && (
                     <>
@@ -588,65 +670,33 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
                   j !== null &&
                   editForm(section)}
                 {j === null && (
-                  <label>
-                    删除原因（可选）
-                    <select
-                      aria-label={`${label}第${n + 1}条删除原因`}
-                      value={reasons[`${section}:${i}`] || ""}
-                      onChange={(e) =>
-                        change(payload, {
-                          ...reasons,
-                          [`${section}:${i}`]: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="">跳过</option>
-                      {[
-                        "资料里没有",
-                        "重复",
-                        "不该算诊断",
-                        "不重要",
-                        "其他",
-                      ].map((r) => (
-                        <option key={r}>{r}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <div
+                    className="review-reasons"
+                    role="group"
+                    aria-label={`${label}第${n + 1}条删除原因`}
+                  >
+                    <span>为什么删（可选）</span>
+                    {DELETE_REASONS.map((r) => {
+                      const key = `${section}:${i}`,
+                        active = reasons[key] === r;
+                      return (
+                        <button
+                          key={r}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() =>
+                            change(payload, {
+                              ...reasons,
+                              [key]: active ? "" : r,
+                            })
+                          }
+                        >
+                          {r}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-                {(original.habitChanges || [])
-                  .filter(
-                    (c) =>
-                      c.section === section &&
-                      (c.afterIndex ?? c.index) === i &&
-                      c.after &&
-                      (c.fields || Object.keys(c.after)).every(
-                        (field) =>
-                          JSON.stringify(item[field]) ===
-                          JSON.stringify(c.after[field]),
-                      ),
-                  )
-                  .map((c) => (
-                    <button
-                      className="review-habit"
-                      title={c.content}
-                      key={c.habitId}
-                      onClick={() => {
-                        const list = [...payload[section]];
-                        list[j] = {
-                          ...list[j],
-                          ...Object.fromEntries(
-                            (c.fields || Object.keys(c.before)).map((field) => [
-                              field,
-                              c.before[field],
-                            ]),
-                          ),
-                        };
-                        change({ ...payload, [section]: list });
-                      }}
-                    >
-                      按习惯 H{c.habitId} · 还原
-                    </button>
-                  ))}
               </div>
             );
           })}
@@ -671,7 +721,8 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
             .map((c) => (
               <button
                 className="review-habit"
-                title={c.content}
+                title="点此重新列出"
+                aria-label={`按习惯「${c.content}」未列出「${c.before.name}」，点此重新列出`}
                 key={`${c.habitId}:${c.index}`}
                 onClick={() =>
                   change({
@@ -680,30 +731,11 @@ export function IntakeReview({ action, ref, onChange, onEditing }) {
                   })
                 }
               >
-                按习惯 H{c.habitId} 未列出「{c.before.name}」· 还原
+                按习惯未列出「{c.before.name}」（{c.content}）↺
               </button>
             ))}
         </section>
       ))}
-      <label>
-        过敏史
-        <select
-          value={payload.allergyStatus || "unknown"}
-          onChange={(e) =>
-            change({ ...payload, allergyStatus: e.target.value })
-          }
-        >
-          <option value="unknown" disabled={!!payload.allergies?.length}>
-            待核对
-          </option>
-          <option value="none_known" disabled={!!payload.allergies?.length}>
-            已核对无已知过敏
-          </option>
-          <option value="recorded" disabled={!payload.allergies?.length}>
-            已记录过敏原
-          </option>
-        </select>
-      </label>
       {payload.note && (
         <details>
           <summary>资料备注与待核对信息</summary>

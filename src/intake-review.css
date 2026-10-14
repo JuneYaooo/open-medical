@@ -1,10 +1,23 @@
 .intake-review {
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 .intake-review section {
   border-top: 1px solid var(--border, #ddd);
-  padding-top: 12px;
+  padding-top: 10px;
+}
+.intake-review h4 {
+  margin: 0 0 4px;
+}
+.review-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.review-row > p {
+  margin: 0;
+  flex: 1;
 }
 .review-heading {
   display: flex;
@@ -17,22 +30,37 @@
   margin: 0;
   flex: 1;
 }
+/* One row per item: content and source on the left, actions on the right. */
 .review-item {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border, #ddd);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border, #eee);
+}
+.review-item:last-of-type {
+  border-bottom: 0;
+}
+.review-item > :not(.review-item-main):not(.review-item-actions) {
+  grid-column: 1 / -1;
 }
 .review-item p {
-  margin: 0 0 4px;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 .review-item small {
-  color: var(--muted, #666);
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted, #8a948c);
 }
 .review-item-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  white-space: nowrap;
 }
-.review-deleted > p {
+.review-deleted .review-item-main > p {
   text-decoration: line-through;
   opacity: 0.6;
 }
@@ -59,13 +87,28 @@
   background: #fff2d6;
   border-radius: 6px;
 }
-.review-habit {
-  font-size: 12px;
-  border: 1px solid #bacdc6;
-  border-radius: 6px;
-  background: #eff7f3;
-  color: #285342;
-  padding: 3px 7px;
+.intake-review .review-habit,
+.medical-shell .intake-review .review-habit {
+  display: inline-block;
+  min-height: 0;
+  height: auto;
+  max-width: 260px;
+  margin-inline-start: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 30px;
+  border: 0;
+  border-radius: 15px;
+  background: #eaf3ee;
+  color: #3d6b56;
+  padding: 0 8px;
+}
+.intake-review .review-habit:hover {
+  background: #dcebe3;
 }
 
 .intake-review section > .text-button {
@@ -73,4 +116,113 @@
 }
 .intake-review section > small + button {
   margin-inline-start: 12px;
+}
+
+/* Intake dialog in review state: one-line source bar, confirm pinned to the bottom. */
+.intake-source-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted, #6b766d);
+}
+.intake-source-bar .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.intake-confirm-bar {
+  position: sticky;
+  bottom: -25px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 -25px -25px;
+  padding: 14px 25px;
+  background: white;
+  border-top: 1px solid #e0e9d6;
+  box-shadow: 0 -8px 20px #1f402710;
+}
+.intake-confirm-bar > span {
+  flex: 1;
+  font-size: 13px;
+}
+
+.review-reasons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted, #6b766d);
+}
+.intake-review .review-reasons button,
+.medical-shell .intake-review .review-reasons button {
+  min-height: 32px;
+  height: auto;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 30px;
+  border: 1px solid #d6e0d0;
+  border-radius: 11px;
+  background: white;
+  color: #44524a;
+}
+.intake-review .review-reasons button[aria-pressed="true"] {
+  border-color: #2e6a50;
+  background: #2e6a50;
+  color: white;
+}
+
+.intake-rerun-choice {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e0e9d6;
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+.intake-rerun-choice p {
+  margin: 0;
+  color: var(--ink);
+}
+.modal-form .intake-rerun-choice label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.modal-form .intake-rerun-choice input {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+}
+.intake-rerun-choice > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.intake-review section.review-empty {
+  padding-top: 6px;
+}
+.review-empty h4 {
+  color: var(--muted, #6b766d);
+  font-weight: 500;
+}
+.modal-form .review-allergy-status {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+  font-size: 13px;
+}
+.modal-form .review-allergy-status select {
+  width: auto;
 }

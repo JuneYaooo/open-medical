@@ -148,8 +148,9 @@ test(
       .nth(1)
       .click();
     await diagnoses
-      .getByLabel("诊断与问题第2条删除原因")
-      .selectOption("不该算诊断");
+      .getByRole("group", { name: "诊断与问题第2条删除原因" })
+      .getByRole("button", { name: "不该算诊断", exact: true })
+      .click();
     await dialog.getByRole("button", { name: "添加标签", exact: true }).click();
     const tags = dialog.getByRole("region", { name: "标签", exact: true });
     await tags.getByLabel("标签", { exact: true }).fill("吸烟史");
@@ -369,7 +370,10 @@ test(
     dialog = page.getByRole("dialog", { name: "上传资料建档" });
     await upload();
     await dialog
-      .getByRole("button", { name: `按习惯 H${memory.id} · 还原`, exact: true })
+      .getByRole("button", {
+        name: `按习惯「${memory.content}」改写，点此还原`,
+        exact: true,
+      })
       .click();
     await dialog.getByText(/未使用历史档案（当前为云端模型/).waitFor();
     await dialog.getByRole("button", { name: "编辑身份信息" }).click();

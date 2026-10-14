@@ -215,15 +215,20 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
   const closeReview = async () => { try { await review.current?.flush(); onClose(); } catch (err) { setError(err.message); } };
   return <Modal title="上传资料建档" wide onClose={closeReview}>
     <div className="modal-form">
-      <p>上传病历、检查报告或病史描述，自动整理为患者档案。你只需核对结果。</p>
+      {/* Once a draft exists the dialog is about reviewing it; upload guidance shrinks to one line. */}
+      {!proposal && <>
+        <p>上传病历、检查报告或病史描述，自动整理为患者档案。你只需核对结果。</p>
+        <p className="muted">支持图片、PDF、Word、Excel、TXT、Markdown、JSON；可一次选择同一患者的多份资料。选择后自动开始解析，相关内容将交由当前配置的模型处理。</p>
+      </>}
       {busy && <><p role="status">可以关闭此窗口，任务会继续处理。资料上传完毕后，刷新页面也不会中断解析。</p><button className="secondary" onClick={closeReview}>后台处理，关闭窗口</button></>}
-      <p className="muted">支持图片、PDF、Word、Excel、TXT、Markdown、JSON；可一次选择同一患者的多份资料。选择后自动开始解析，相关内容将交由当前配置的模型处理。</p>
-      <h3>{sessionId.current ? "当前患者的建档任务" : "新患者建档"}</h3>
-      <p className="muted">{sessionId.current ? "补充的资料仅加入当前任务。要处理另一位患者，请先新建任务。" : "这里上传的资料会创建独立任务，不会加入之前的患者资料。"}</p>
-      {!busy && sessionId.current && <button className="secondary" disabled={restoring} onClick={startNew}>为另一位患者新建</button>}
+      {!proposal && <>
+        <h3>{sessionId.current ? "当前患者的建档任务" : "新患者建档"}</h3>
+        <p className="muted">{sessionId.current ? "补充的资料仅加入当前任务。要处理另一位患者，请先新建任务。" : "这里上传的资料会创建独立任务，不会加入之前的患者资料。"}</p>
+      </>}
+      {!busy && sessionId.current && !proposal && <button className="secondary" disabled={restoring} onClick={startNew}>为另一位患者新建</button>}
       <input ref={chooser} type="file" accept={MATERIAL_ACCEPT} multiple hidden onChange={event => { const selected = [...event.target.files]; event.target.value = ""; if (selected.length) parse(selected); }} />
       {!busy && !!files.length && !proposal && <button className="primary" disabled={restoring || !configured} onClick={() => parse()}>继续解析已保存资料</button>}
-      {<button className={files.length ? "secondary" : "primary"} disabled={busy || restoring || !configured} onClick={() => chooser.current.click()}><Upload size={16} />{sessionId.current ? "补充当前患者资料并重新解析" : "选择资料并自动解析"}</button>}
+      {!proposal && <button className={files.length ? "secondary" : "primary"} disabled={busy || restoring || !configured} onClick={() => chooser.current.click()}><Upload size={16} />{sessionId.current ? "补充当前患者资料并重新解析" : "选择资料并自动解析"}</button>}
       {!configured && <p role="alert">请先在设置中配置模型，再上传资料自动建档。</p>}
       {restoring && <p role="status">正在载入所选任务…</p>}
       {!sessionId.current && <section aria-label="未完成的建档任务">
@@ -240,25 +245,31 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
         </article>)}
       </section>}
       {!!remembered.length && <RememberedNotice key={remembered.map(m => m.id).join(",")} memories={remembered} />}
-      {progress && <p role="status">{busy && <Loader2 size={15} className="spin" />} {progress}{busy && `（已用时 ${elapsed} 秒）`}</p>}
+      {progress && (busy || !proposal) && <p role="status">{busy && <Loader2 size={15} className="spin" />} {progress}{busy && `（已用时 ${elapsed} 秒）`}</p>}
+      {proposal && <div className="intake-source-bar">
+        <button className="text-button" disabled={busy || restoring || !configured} onClick={() => chooser.current.click()}><Upload size={14} />补充当前患者资料并重新解析</button>
+        {!busy && <button className="text-button" disabled={restoring} onClick={startNew}>为另一位患者新建</button>}
+      </div>}
       {!!files.length && <details><summary>已保存 {files.length} 份资料 · {files.filter(f => f.extraction?.ocr?.status === "ready" || (!f.extraction?.artifactId && !f.extraction?.pageImages?.length)).length} 份识别完成</summary><ul aria-label="已上传资料">{files.map(file => { const level = materialQualityLevel(file); return <li key={file.id}>{file.name}{file.extraction?.ocr?.status === "ready" ? ` · 已识别${level && level !== "good" ? `（${OCR_QUALITY_LABELS[level]}，建议在患者档案的资料库里对照原图` : ""}）` : ""}</li>; })}</ul></details>}
       {!!skipped.length && <p>已自动跳过 {skipped.length} 份重复资料，保留已有内容，不影响解析。</p>}
       {!!failedUploads.length && <p>有 {failedUploads.length} 份资料未纳入本次整理，其余有效资料继续处理。可更换文件补充，或重试失败资料。</p>}
       {failedUploads.map(({ file, error }) => <p className="error-text" key={file.name}>{file.name}：{error}</p>)}
       {error && <p className="error-text" role="alert">{error}</p>}
       {proposal && <section aria-label="自动解析的建档草稿">
-        <IntakeReview key={proposal.id} action={proposal} ref={review} onEditing={setReviewEditing} onChange={({ count }) => setEditCount(count)} />
         <PersonalReferences action={proposal} />
-        <p className="muted">确认后保存档案，并关联本次上传的资料。</p>
-        {!!failedUploads.length && <label><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />我已知晓上述资料未纳入，先保存这份不完整草稿</label>}
-        <button className="primary" disabled={busy || reviewEditing || (!!failedUploads.length && !acknowledged)} onClick={confirm}>{editCount ? `确认建档（含你的 ${editCount} 处修改）` : "确认建档"}</button>
+        <IntakeReview key={proposal.id} action={proposal} ref={review} onEditing={setReviewEditing} onChange={({ count }) => setEditCount(count)} />
       </section>}
-      {reorganize !== null && <section role="alert" aria-label="重新整理修改处理"><p>重新整理会生成一份新草稿。你手动做的 {review.current?.count || 0} 处修改怎么处理？</p><label><input type="radio" name="reviewMode" checked={reviewMode === 'preserve'} onChange={() => setReviewMode('preserve')} />告诉 AI 我改了什么，让它在新草稿里保留</label><label><input type="radio" name="reviewMode" checked={reviewMode === 'discard'} onChange={() => setReviewMode('discard')} />丢弃我的修改</label><button className="secondary" onClick={() => setReorganize(null)}>取消</button><button onClick={() => { const files = reorganize; setReorganize(null); parse(files, reviewMode); }}>继续重新整理</button></section>}
+      {reorganize !== null && <section role="alert" aria-label="重新整理修改处理" className="intake-rerun-choice"><p>重新整理会生成一份新草稿。你手动做的 {review.current?.count || 0} 处修改怎么处理？</p><label><input type="radio" name="reviewMode" checked={reviewMode === 'preserve'} onChange={() => setReviewMode('preserve')} />告诉 AI 我改了什么，让它在新草稿里保留</label><label><input type="radio" name="reviewMode" checked={reviewMode === 'discard'} onChange={() => setReviewMode('discard')} />丢弃我的修改</label><div><button className="secondary" onClick={() => setReorganize(null)}>取消</button><button className="primary" onClick={() => { const files = reorganize; setReorganize(null); parse(files, reviewMode); }}>继续重新整理</button></div></section>}
       {!busy && reply && <p style={{ whiteSpace: "pre-wrap" }}>{reply}</p>}
       {!busy && (!!files.length || !!failedUploads.length) && <>
         <label>需要补充或纠正？直接告诉我<textarea value={correction} onChange={event => setCorrection(event.target.value)} placeholder="例如：第二份报告是术前检查；患者姓名为……" /></label>
         <button className="secondary" disabled={busy || restoring || reviewEditing || (proposal && !correction.trim() && !failedUploads.length)} onClick={() => parse(failedUploads.filter(item => item.stage === "upload" && item.file instanceof File).map(item => item.file))}>{failedUploads.length ? "重试读取资料" : proposal ? "按补充内容重新整理" : "继续解析"}</button>
       </>}
+      {proposal && <div className="intake-confirm-bar">
+        <span className="muted">{reviewEditing ? "先保存或取消正在编辑的条目" : "确认后保存档案，并关联本次上传的资料。"}</span>
+        {!!failedUploads.length && <label><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />我已知晓上述资料未纳入，先保存这份不完整草稿</label>}
+        <button className="primary" disabled={busy || reviewEditing || (!!failedUploads.length && !acknowledged)} onClick={confirm}>{editCount ? `确认建档（含你的 ${editCount} 处修改）` : "确认建档"}</button>
+      </div>}
       <div className="toolbar-actions">
         {busy && <button className="secondary" onClick={stop}>停止解析</button>}
         {!busy && sessionId.current && <button className="secondary" onClick={() => onOpenWorkspace(sessionId.current)}>打开资料工作区</button>}
