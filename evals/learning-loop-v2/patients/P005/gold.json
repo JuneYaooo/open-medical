@@ -1,0 +1,78 @@
+{
+  "name": "SYNTH_V2_P005_4e001f65287c",
+  "gender": "male",
+  "birthYear": 1952,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "HTN",
+      "status": "confirmed",
+      "date": "2026-06-13"
+    },
+    {
+      "name": "T2DM",
+      "status": "suspected",
+      "date": "2026/7/14"
+    },
+    {
+      "name": "心功能不全",
+      "status": "suspected",
+      "date": "2026-06-13"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-06-13"
+    }
+  ],
+  "medications": [
+    {
+      "name": "阿托伐他汀",
+      "dose": "500mg",
+      "frequency": "qw",
+      "status": "active"
+    },
+    {
+      "name": "呋塞米",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 116,
+      "unit": "mg/dL",
+      "date": "2026-06-13"
+    },
+    {
+      "item": "肌酐",
+      "value": 74,
+      "unit": "μmol/L",
+      "date": "2026/7/14"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-09-16",
+      "reason": "初诊评估",
+      "note": "下午视物模糊，远处文字不清，眼底筛查结果尚未出具"
+    },
+    {
+      "date": "2026/7/14",
+      "reason": "家庭监测复核",
+      "note": "带来手写测量表，记录饭后症状与活动的关系，未新增非处方药"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月5次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在印刷岗位接触粉尘"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "name": "SYNTH_V2_P020_bae63c26abd4",
+  "gender": "female",
+  "birthYear": 1967,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "非酒精性脂肪性肝病",
+      "status": "confirmed",
+      "date": "2026-09-04"
+    },
+    {
+      "name": "HTN",
+      "status": "suspected",
+      "date": "2026/6/5"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "2026-09-04"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-09-04"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/6/5"
+    }
+  ],
+  "medications": [
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "500mg",
+      "frequency": "每周一次",
+      "status": "active"
+    },
+    {
+      "name": "缬沙坦",
+      "dose": "2.5mg",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 8,
+      "unit": "mmol/L",
+      "date": "2026-09-04"
+    },
+    {
+      "item": "肌酐",
+      "value": 89,
+      "unit": "μmol/L",
+      "date": "2026/6/5"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 139,
+      "unit": "g/L",
+      "date": "2026年7月6日"
+    },
+    {
+      "item": "ALT",
+      "value": 44,
+      "unit": "U/L",
+      "date": "2026年7月6日"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 1.15,
+      "unit": "g/24h",
+      "date": "2026年7月6日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-08-07",
+      "reason": "影像随访",
+      "note": "随访胆囊息肉大小，近期饮食规律，疼痛与体位无关"
+    },
+    {
+      "date": "2026/6/5",
+      "reason": "康复评估",
+      "note": "带来随访登记册，核对晨间及睡前服药时点，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计22年"
+    }
+  ]
+}

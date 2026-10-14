@@ -1,0 +1,101 @@
+{
+  "name": "SYNTH_V2_P032_a5824c9ec63a",
+  "gender": "female",
+  "birthYear": 1979,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "confirmed",
+      "date": "2026年9月13日"
+    },
+    {
+      "name": "房颤",
+      "status": "suspected",
+      "date": "26-06-14"
+    },
+    {
+      "name": "伤口感染",
+      "status": "suspected",
+      "date": "2026年9月13日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年9月13日"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-06-14"
+    }
+  ],
+  "medications": [
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "阿托伐他汀",
+      "dose": "50mg",
+      "frequency": "tid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 9.2,
+      "unit": "mmol/L",
+      "date": "2026年9月13日"
+    },
+    {
+      "item": "肌酐",
+      "value": 101,
+      "unit": "μmol/L",
+      "date": "26-06-14"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 151,
+      "unit": "g/L",
+      "date": "7月15日"
+    },
+    {
+      "item": "ALT",
+      "value": 56,
+      "unit": "U/L",
+      "date": "7月15日"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 1.75,
+      "unit": "g/24h",
+      "date": "7月15日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-08-16",
+      "reason": "术后换药",
+      "note": "术后步行距离逐渐延长，夜间伤口瘙痒，没有红肿扩散"
+    },
+    {
+      "date": "26-06-14",
+      "reason": "康复评估",
+      "note": "带来随访登记册，检查伤口周围皮肤和活动范围，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月2次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在木材加工岗位接触粉尘"
+    }
+  ]
+}

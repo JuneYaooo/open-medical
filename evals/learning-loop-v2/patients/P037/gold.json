@@ -1,0 +1,58 @@
+{
+  "name": "SYNTH_V2_P037_4a746f359cb2",
+  "gender": "male",
+  "birthYear": 1984,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "COPD",
+      "status": "confirmed",
+      "date": "2026年6月1日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年6月1日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "碳酸氢钠",
+      "dose": "5mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 180,
+      "unit": "mg/dL",
+      "date": "2026年6月1日"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.52,
+      "unit": "mg/dL",
+      "date": "26-07-02"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-09-04",
+      "reason": "术后换药",
+      "note": "术后复查发现轻微贫血，自觉耐力不足，未观察到活动性出血"
+    },
+    {
+      "date": "26-07-02",
+      "reason": "家庭监测复核",
+      "note": "带来手写测量表，检查伤口周围皮肤和活动范围，未新增非处方药"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在印刷岗位接触粉尘"
+    }
+  ]
+}

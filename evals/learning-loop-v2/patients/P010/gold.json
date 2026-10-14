@@ -1,0 +1,69 @@
+{
+  "name": "SYNTH_V2_P010_494555e6ac65",
+  "gender": "female",
+  "birthYear": 1957,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "高血压",
+      "status": "confirmed",
+      "date": "2026-07-01"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-07-01"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/8/2"
+    }
+  ],
+  "medications": [
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "500mg",
+      "frequency": "每周一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7,
+      "unit": "mmol/L",
+      "date": "2026-07-01"
+    },
+    {
+      "item": "肌酐",
+      "value": 0.98,
+      "unit": "mg/dL",
+      "date": "2026/8/2"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 129,
+      "unit": "g/L",
+      "date": "2026年9月3日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-06-04",
+      "reason": "初诊评估",
+      "note": "希望评估长期口服方案，近期增加骑车活动，睡眠较前改善"
+    },
+    {
+      "date": "2026/8/2",
+      "reason": "处方核对",
+      "note": "带来出院处方，记录饭后症状与活动的关系，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在矿石加工岗位接触粉尘"
+    }
+  ]
+}

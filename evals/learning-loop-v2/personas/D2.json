@@ -1,0 +1,93 @@
+{
+  "id": "D2",
+  "termDirection": "short",
+  "rules": [
+    {
+      "id": "terms",
+      "kind": "term",
+      "direction": "short",
+      "learnable": true
+    },
+    {
+      "id": "glucose-unit",
+      "kind": "unit",
+      "item": "血糖",
+      "to": "mg/dL",
+      "learnable": true
+    },
+    {
+      "id": "creatinine-unit",
+      "kind": "unit",
+      "item": "肌酐",
+      "to": "mg/dL",
+      "learnable": true
+    },
+    {
+      "id": "dates",
+      "kind": "date",
+      "format": "slash",
+      "learnable": true
+    },
+    {
+      "id": "frequencies",
+      "kind": "frequency",
+      "direction": "short",
+      "learnable": true
+    },
+    {
+      "id": "incidental-findings",
+      "kind": "exclude",
+      "names": [
+        "肾囊肿",
+        "肺微小结节"
+      ],
+      "learnable": true
+    },
+    {
+      "id": "history-extraction",
+      "kind": "omission",
+      "history": "饮酒史",
+      "learnable": true
+    },
+    {
+      "id": "summary-length",
+      "kind": "summary-cap",
+      "max": 210,
+      "learnable": true
+    },
+    {
+      "id": "summary-order",
+      "kind": "summary-order",
+      "order": "chronological",
+      "learnable": true
+    },
+    {
+      "id": "trap-status",
+      "kind": "trap-status",
+      "from": "suspected",
+      "to": "confirmed",
+      "learnable": false
+    },
+    {
+      "id": "trap-dose",
+      "kind": "trap-dose",
+      "to": "40mg",
+      "learnable": false
+    }
+  ],
+  "stated": [
+    {
+      "ruleId": "terms",
+      "text": "以后诊断都写缩写"
+    },
+    {
+      "ruleId": "summary-order",
+      "text": "以后病史摘要按时间先后整理"
+    }
+  ],
+  "patientOnly": "本患者第二份报告是术前检查",
+  "patientOnlyConcepts": [
+    "术前",
+    "第二份"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "name": "SYNTH_V2_P024_6ed7342fe473",
+  "gender": "female",
+  "birthYear": 1971,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性肾脏病",
+      "status": "confirmed",
+      "date": "9月16日"
+    },
+    {
+      "name": "AF",
+      "status": "suspected",
+      "date": "2026-06-17"
+    },
+    {
+      "name": "电解质紊乱",
+      "status": "suspected",
+      "date": "9月16日"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "9月16日"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-06-17"
+    }
+  ],
+  "medications": [
+    {
+      "name": "比索洛尔",
+      "dose": "250mg",
+      "frequency": "隔日一次",
+      "status": "active"
+    },
+    {
+      "name": "碳酸氢钠",
+      "dose": "500mg",
+      "frequency": "qw",
+      "status": "active"
+    },
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 8.4,
+      "unit": "mmol/L",
+      "date": "9月16日"
+    },
+    {
+      "item": "肌酐",
+      "value": 93,
+      "unit": "μmol/L",
+      "date": "2026-06-17"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 143,
+      "unit": "g/L",
+      "date": "2026/7/18"
+    },
+    {
+      "item": "ALT",
+      "value": 48,
+      "unit": "U/L",
+      "date": "2026/7/18"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 1.35,
+      "unit": "g/24h",
+      "date": "2026/7/18"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026年8月19日",
+      "reason": "肾功能复核",
+      "note": "外院发现肌酐波动，近期曾腹泻，饮水较日常减少"
+    },
+    {
+      "date": "2026-06-17",
+      "reason": "康复评估",
+      "note": "带来随访登记册，比较水肿程度及每日体重变化，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计26年"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在木材加工岗位接触粉尘"
+    }
+  ]
+}

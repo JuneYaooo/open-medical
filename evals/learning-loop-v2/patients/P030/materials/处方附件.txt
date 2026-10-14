@@ -1,0 +1,10 @@
+合成随访记录
+姓名 SYNTH_V2_P030_32dbc7fd2a09
+女，1977年生
+评估结论
+2026-07-07 慢性肾脏病 [confirmed]；2026/8/8 COPD [suspected]；2026-07-07 电解质紊乱 [suspected]；2026-07-07 胆囊息肉 [finding]；2026/8/8 肝囊肿 [finding]
+
+药物清单
+对乙酰氨基酚 500mg，每周一次，active
+缬沙坦 2.5mg，qd，active
+熊去氧胆酸 5mg，每日两次，active

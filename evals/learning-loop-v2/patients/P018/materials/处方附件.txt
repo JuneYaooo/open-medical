@@ -1,0 +1,10 @@
+合成随访记录
+姓名 SYNTH_V2_P018_7cbfee60608b
+女，1965年生
+评估结论
+26-07-25 脂肪肝 [confirmed]；8月26日 CHD [suspected]；26-07-25 胆道感染 [suspected]；26-07-25 肾囊肿 [finding]；8月26日 肺微小结节 [finding]
+
+药物清单
+呋塞米 50mg，每日三次，active
+二甲双胍 250mg，qod，active
+比索洛尔 500mg，每周一次，active

@@ -1,0 +1,94 @@
+{
+  "name": "SYNTH_V2_P035_a1197ef595f2",
+  "gender": "male",
+  "birthYear": 1982,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "COPD",
+      "status": "confirmed",
+      "date": "2026-08-22"
+    },
+    {
+      "name": "房颤",
+      "status": "suspected",
+      "date": "2026/9/23"
+    },
+    {
+      "name": "伤口感染",
+      "status": "suspected",
+      "date": "2026-08-22"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-08-22"
+    }
+  ],
+  "medications": [
+    {
+      "name": "阿托伐他汀",
+      "dose": "500mg",
+      "frequency": "qw",
+      "status": "active"
+    },
+    {
+      "name": "呋塞米",
+      "dose": "2.5mg",
+      "frequency": "每日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 176,
+      "unit": "mg/dL",
+      "date": "2026-08-22"
+    },
+    {
+      "item": "肌酐",
+      "value": 104,
+      "unit": "μmol/L",
+      "date": "2026/9/23"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 154,
+      "unit": "g/L",
+      "date": "2026年6月24日"
+    },
+    {
+      "item": "ALT",
+      "value": 59,
+      "unit": "U/L",
+      "date": "2026年6月24日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-07-25",
+      "reason": "术后换药",
+      "note": "带来术中记录复核，进食已恢复，排气排便较为规律"
+    },
+    {
+      "date": "2026/9/23",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，检查伤口周围皮肤和活动范围，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计37年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月5次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

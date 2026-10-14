@@ -1,0 +1,93 @@
+{
+  "id": "D1",
+  "termDirection": "full",
+  "rules": [
+    {
+      "id": "terms",
+      "kind": "term",
+      "direction": "full",
+      "learnable": true
+    },
+    {
+      "id": "glucose-unit",
+      "kind": "unit",
+      "item": "血糖",
+      "to": "mmol/L",
+      "learnable": true
+    },
+    {
+      "id": "creatinine-unit",
+      "kind": "unit",
+      "item": "肌酐",
+      "to": "μmol/L",
+      "learnable": true
+    },
+    {
+      "id": "dates",
+      "kind": "date",
+      "format": "iso",
+      "learnable": true
+    },
+    {
+      "id": "frequencies",
+      "kind": "frequency",
+      "direction": "full",
+      "learnable": true
+    },
+    {
+      "id": "incidental-findings",
+      "kind": "exclude",
+      "names": [
+        "肝囊肿",
+        "甲状腺结节"
+      ],
+      "learnable": true
+    },
+    {
+      "id": "history-extraction",
+      "kind": "omission",
+      "history": "吸烟史",
+      "learnable": true
+    },
+    {
+      "id": "summary-length",
+      "kind": "summary-cap",
+      "max": 140,
+      "learnable": true
+    },
+    {
+      "id": "summary-order",
+      "kind": "summary-order",
+      "order": "diagnosis-first",
+      "learnable": true
+    },
+    {
+      "id": "trap-status",
+      "kind": "trap-status",
+      "from": "suspected",
+      "to": "confirmed",
+      "learnable": false
+    },
+    {
+      "id": "trap-dose",
+      "kind": "trap-dose",
+      "to": "20mg",
+      "learnable": false
+    }
+  ],
+  "stated": [
+    {
+      "ruleId": "terms",
+      "text": "以后诊断都写中文全称"
+    },
+    {
+      "ruleId": "summary-order",
+      "text": "以后病史摘要先写主诊断"
+    }
+  ],
+  "patientOnly": "本患者第二份报告是术前检查",
+  "patientOnlyConcepts": [
+    "术前",
+    "第二份"
+  ]
+}

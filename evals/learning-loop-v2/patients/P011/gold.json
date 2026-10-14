@@ -1,0 +1,86 @@
+{
+  "name": "SYNTH_V2_P011_10269ef9505b",
+  "gender": "male",
+  "birthYear": 1958,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "非酒精性脂肪性肝病",
+      "status": "confirmed",
+      "date": "2026/8/4"
+    },
+    {
+      "name": "冠心病",
+      "status": "suspected",
+      "date": "2026年9月5日"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "2026/8/4"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/8/4"
+    }
+  ],
+  "medications": [
+    {
+      "name": "二甲双胍",
+      "dose": "2.5mg",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "比索洛尔",
+      "dose": "5mg",
+      "frequency": "每日两次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 128,
+      "unit": "mg/dL",
+      "date": "2026/8/4"
+    },
+    {
+      "item": "肌酐",
+      "value": 80,
+      "unit": "μmol/L",
+      "date": "2026年9月5日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 130,
+      "unit": "g/L",
+      "date": "26-06-06"
+    },
+    {
+      "item": "ALT",
+      "value": 35,
+      "unit": "U/L",
+      "date": "26-06-06"
+    }
+  ],
+  "visits": [
+    {
+      "date": "7月7日",
+      "reason": "影像随访",
+      "note": "油腻饮食后右上腹隐痛，停止进餐后减轻，无皮肤黄染"
+    },
+    {
+      "date": "2026年9月5日",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，核对晨间及睡前服药时点，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计13年"
+    }
+  ]
+}

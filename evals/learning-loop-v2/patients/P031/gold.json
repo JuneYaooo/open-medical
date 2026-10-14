@@ -1,0 +1,78 @@
+{
+  "name": "SYNTH_V2_P031_e1de48855b2f",
+  "gender": "male",
+  "birthYear": 1978,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "COPD",
+      "status": "confirmed",
+      "date": "2026/8/10"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/8/10"
+    }
+  ],
+  "medications": [
+    {
+      "name": "二甲双胍",
+      "dose": "2.5mg",
+      "frequency": "qd",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 168,
+      "unit": "mg/dL",
+      "date": "2026/8/10"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.4,
+      "unit": "mg/dL",
+      "date": "2026年9月11日"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 150,
+      "unit": "g/L",
+      "date": "26-06-12"
+    },
+    {
+      "item": "ALT",
+      "value": 55,
+      "unit": "U/L",
+      "date": "26-06-12"
+    }
+  ],
+  "visits": [
+    {
+      "date": "7月13日",
+      "reason": "术后换药",
+      "note": "切口拆线后复诊，局部轻度牵拉感，无渗血及分泌物"
+    },
+    {
+      "date": "2026年9月11日",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，检查伤口周围皮肤和活动范围，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计33年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月1次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "name": "SYNTH_V2_P002_ca0177a804c6",
+  "gender": "female",
+  "birthYear": 1949,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "高血压",
+      "status": "confirmed",
+      "date": "2026年7月4日"
+    },
+    {
+      "name": "DM2",
+      "status": "suspected",
+      "date": "26-08-05"
+    },
+    {
+      "name": "心功能不全",
+      "status": "suspected",
+      "date": "2026年7月4日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年7月4日"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-08-05"
+    }
+  ],
+  "medications": [
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "阿托伐他汀",
+      "dose": "50mg",
+      "frequency": "tid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 6.2,
+      "unit": "mmol/L",
+      "date": "2026年7月4日"
+    },
+    {
+      "item": "肌酐",
+      "value": 71,
+      "unit": "μmol/L",
+      "date": "26-08-05"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 121,
+      "unit": "g/L",
+      "date": "9月6日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-06-07",
+      "reason": "初诊评估",
+      "note": "爬楼时头部发胀，晨起测量偏高，午后休息可以缓解"
+    },
+    {
+      "date": "26-08-05",
+      "reason": "处方核对",
+      "note": "带来出院处方，记录饭后症状与活动的关系，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计4年"
+    }
+  ]
+}

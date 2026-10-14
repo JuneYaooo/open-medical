@@ -1,0 +1,73 @@
+{
+  "name": "SYNTH_V2_P034_adae7f05b6f0",
+  "gender": "female",
+  "birthYear": 1981,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性阻塞性肺疾病",
+      "status": "confirmed",
+      "date": "7月19日"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "7月19日"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-08-20"
+    }
+  ],
+  "medications": [
+    {
+      "name": "比索洛尔",
+      "dose": "250mg",
+      "frequency": "隔日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 9.4,
+      "unit": "mmol/L",
+      "date": "7月19日"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.46,
+      "unit": "mg/dL",
+      "date": "2026-08-20"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 153,
+      "unit": "g/L",
+      "date": "2026/9/21"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026年6月22日",
+      "reason": "术后换药",
+      "note": "评估术后恢复进度，咳嗽时切口疼痛，静息时基本无不适"
+    },
+    {
+      "date": "2026-08-20",
+      "reason": "处方核对",
+      "note": "带来出院处方，检查伤口周围皮肤和活动范围，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计36年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月4次少量饮酒"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "name": "SYNTH_V2_P030_32dbc7fd2a09",
+  "gender": "female",
+  "birthYear": 1977,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "慢性肾脏病",
+      "status": "confirmed",
+      "date": "2026-07-07"
+    },
+    {
+      "name": "COPD",
+      "status": "suspected",
+      "date": "2026/8/8"
+    },
+    {
+      "name": "电解质紊乱",
+      "status": "suspected",
+      "date": "2026-07-07"
+    },
+    {
+      "name": "胆囊息肉",
+      "status": "finding",
+      "date": "2026-07-07"
+    },
+    {
+      "name": "肝囊肿",
+      "status": "finding",
+      "date": "2026/8/8"
+    }
+  ],
+  "medications": [
+    {
+      "name": "对乙酰氨基酚",
+      "dose": "500mg",
+      "frequency": "每周一次",
+      "status": "active"
+    },
+    {
+      "name": "缬沙坦",
+      "dose": "2.5mg",
+      "frequency": "qd",
+      "status": "active"
+    },
+    {
+      "name": "熊去氧胆酸",
+      "dose": "5mg",
+      "frequency": "每日两次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 9,
+      "unit": "mmol/L",
+      "date": "2026-07-07"
+    },
+    {
+      "item": "肌酐",
+      "value": 99,
+      "unit": "μmol/L",
+      "date": "2026/8/8"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 149,
+      "unit": "g/L",
+      "date": "2026年9月9日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "26-06-10",
+      "reason": "肾功能复核",
+      "note": "年度肾功能随访，食盐摄入已减少，未出现气促或端坐呼吸"
+    },
+    {
+      "date": "2026/8/8",
+      "reason": "处方核对",
+      "note": "带来出院处方，比较水肿程度及每日体重变化，近期未使用草药制剂"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计32年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月6次少量饮酒"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "name": "SYNTH_V2_P012_d2f528ebf2e9",
+  "gender": "female",
+  "birthYear": 1959,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "脂肪肝",
+      "status": "confirmed",
+      "date": "2026年9月7日"
+    },
+    {
+      "name": "胆道感染",
+      "status": "suspected",
+      "date": "2026年9月7日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年9月7日"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-06-08"
+    }
+  ],
+  "medications": [
+    {
+      "name": "氨氯地平",
+      "dose": "5mg",
+      "frequency": "每日两次",
+      "status": "active"
+    },
+    {
+      "name": "阿托伐他汀",
+      "dose": "50mg",
+      "frequency": "tid",
+      "status": "active"
+    },
+    {
+      "name": "呋塞米",
+      "dose": "250mg",
+      "frequency": "隔日一次",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 7.2,
+      "unit": "mmol/L",
+      "date": "2026年9月7日"
+    },
+    {
+      "item": "肌酐",
+      "value": 81,
+      "unit": "μmol/L",
+      "date": "26-06-08"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 131,
+      "unit": "g/L",
+      "date": "7月9日"
+    },
+    {
+      "item": "ALT",
+      "value": 36,
+      "unit": "U/L",
+      "date": "7月9日"
+    },
+    {
+      "item": "尿蛋白",
+      "value": 0.75,
+      "unit": "g/24h",
+      "date": "7月9日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-08-10",
+      "reason": "影像随访",
+      "note": "体检超声提示回声增粗，自觉胃口正常，平日有夜宵习惯"
+    },
+    {
+      "date": "26-06-08",
+      "reason": "康复评估",
+      "note": "带来随访登记册，核对晨间及睡前服药时点，所有停药情况均已单独记录"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：已戒烟，累计14年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月6次少量饮酒"
+    }
+  ]
+}

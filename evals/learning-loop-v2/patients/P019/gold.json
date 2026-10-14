@@ -1,0 +1,70 @@
+{
+  "name": "SYNTH_V2_P019_bff3f9474d58",
+  "gender": "male",
+  "birthYear": 1966,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "NAFLD",
+      "status": "confirmed",
+      "date": "8月1日"
+    },
+    {
+      "name": "肺微小结节",
+      "status": "finding",
+      "date": "8月1日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "维生素D",
+      "dose": "250mg",
+      "frequency": "qod",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 144,
+      "unit": "mg/dL",
+      "date": "8月1日"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.16,
+      "unit": "mg/dL",
+      "date": "2026-09-02"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 138,
+      "unit": "g/L",
+      "date": "2026/6/3"
+    },
+    {
+      "item": "ALT",
+      "value": 43,
+      "unit": "U/L",
+      "date": "2026/6/3"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026年7月4日",
+      "reason": "影像随访",
+      "note": "既往胆绞痛间断发作，本次只来核对影像及处方记录"
+    },
+    {
+      "date": "2026-09-02",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，核对晨间及睡前服药时点，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在喷漆岗位接触粉尘"
+    }
+  ]
+}

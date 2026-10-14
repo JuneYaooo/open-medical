@@ -1,0 +1,66 @@
+{
+  "name": "SYNTH_V2_P013_421949870566",
+  "gender": "male",
+  "birthYear": 1960,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "NAFLD",
+      "status": "confirmed",
+      "date": "26-06-10"
+    },
+    {
+      "name": "肾囊肿",
+      "status": "finding",
+      "date": "26-06-10"
+    }
+  ],
+  "medications": [
+    {
+      "name": "缬沙坦",
+      "dose": "50mg",
+      "frequency": "tid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 132,
+      "unit": "mg/dL",
+      "date": "26-06-10"
+    },
+    {
+      "item": "肌酐",
+      "value": 1.04,
+      "unit": "mg/dL",
+      "date": "7月11日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026/9/13",
+      "reason": "影像随访",
+      "note": "恶心伴腹部胀满，早餐食量下降，排便次数没有明显改变"
+    },
+    {
+      "date": "7月11日",
+      "reason": "家庭监测复核",
+      "note": "带来手写测量表，核对晨间及睡前服药时点，未新增非处方药"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计15年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月1次少量饮酒"
+    },
+    {
+      "kind": "职业接触史",
+      "text": "职业接触史：曾在印刷岗位接触粉尘"
+    }
+  ]
+}

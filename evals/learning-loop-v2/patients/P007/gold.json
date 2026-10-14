@@ -1,0 +1,74 @@
+{
+  "name": "SYNTH_V2_P007_b6eb7b7116a8",
+  "gender": "male",
+  "birthYear": 1954,
+  "tags": [],
+  "diagnoses": [
+    {
+      "name": "HTN",
+      "status": "confirmed",
+      "date": "2026年8月19日"
+    },
+    {
+      "name": "甲状腺结节",
+      "status": "finding",
+      "date": "2026年8月19日"
+    }
+  ],
+  "medications": [
+    {
+      "name": "碳酸氢钠",
+      "dose": "5mg",
+      "frequency": "bid",
+      "status": "active"
+    }
+  ],
+  "labs": [
+    {
+      "item": "血糖",
+      "value": 120,
+      "unit": "mg/dL",
+      "date": "2026年8月19日"
+    },
+    {
+      "item": "肌酐",
+      "value": 0.92,
+      "unit": "mg/dL",
+      "date": "26-09-20"
+    },
+    {
+      "item": "血红蛋白",
+      "value": 126,
+      "unit": "g/L",
+      "date": "6月21日"
+    },
+    {
+      "item": "ALT",
+      "value": 31,
+      "unit": "U/L",
+      "date": "6月21日"
+    }
+  ],
+  "visits": [
+    {
+      "date": "2026-07-22",
+      "reason": "初诊评估",
+      "note": "双足发凉但无破溃，鞋袜无渗液，既往伤口已完全愈合"
+    },
+    {
+      "date": "26-09-20",
+      "reason": "营养随访",
+      "note": "带来社区转诊单，记录饭后症状与活动的关系，没有自行调整原来剂量"
+    }
+  ],
+  "historyFacts": [
+    {
+      "kind": "吸烟史",
+      "text": "吸烟史：仍吸烟，累计9年"
+    },
+    {
+      "kind": "饮酒史",
+      "text": "饮酒史：每月1次少量饮酒"
+    }
+  ]
+}
