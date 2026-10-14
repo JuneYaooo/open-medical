@@ -133,6 +133,7 @@ export function createMedicalWorkspaceDomain({
       return [
         workspace.modeFlags?.global && patients ? `全局助手 · ${rosterDigest(patients())}` : "",
         workspace.modeFlags?.global ? GLOBAL_ASSISTANT_GUIDANCE : "",
+        "检验页面展示偏好：用户要求调整指标排序、日期对比、折叠或隐藏时，先 patient_lab_display_get，再 patient_lab_display_update 实际保存。只改变当前患者的页面展示，不创建病历提案、技能或自动化规则；未指定范围时只用于当前患者。保存成功后准确说明改动。",
         workspace.patientId ? `当前已关联患者编号：${workspace.patientId}。可调用 read_patient_brief 读取最新档案；不必让医生重新输入已有病史。` : "",
         run.policy?.workflow === "patient-assessment" ? ASSESSMENT_GUIDANCE : "",
         run.policy?.workflow === "similar-case-search" ? SIMILAR_CASE_GUIDANCE : "",

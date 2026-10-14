@@ -1,3 +1,4 @@
+import { labDisplayTools } from "./medical/lab-display-tools.mjs";
 import { PersonalRegression } from './medical/personal-regression.mjs';
 import { PersonalContext, learningPrefs, saveLearningPrefs } from "./medical/personal-context.mjs";
 import { ChatFollowups } from "./chat-followups.mjs";
@@ -533,6 +534,7 @@ export function createServer(options = {}) {
         ...localPlugins(careTools(() => care, pending)),
       ...localPlugins(trialTools(() => trialCandidates, pending)),
       ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(labDisplayTools(() => patients)),
       ...localPlugins(extensionTools(() => extensions, pending)),
       ],
       // 会话叠层：医疗核心工具经 runTool 分发这些插件（材料 sources、
@@ -544,6 +546,7 @@ export function createServer(options = {}) {
         ...localPlugins(careTools(() => care, pending)),
       ...localPlugins(trialTools(() => trialCandidates, pending)),
       ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(labDisplayTools(() => patients)),
       ...localPlugins(extensionTools(() => extensions, pending)),
       ],
       skills,
@@ -575,6 +578,7 @@ export function createServer(options = {}) {
       ...localPlugins(careTools(() => care, pending)),
       ...localPlugins(trialTools(() => trialCandidates, pending)),
       ...localPlugins(scheduleTools(() => schedule)),
+      ...localPlugins(labDisplayTools(() => patients)),
       ...localPlugins(extensionTools(() => extensions, pending)),
     ],
     contextBudget:
@@ -663,7 +667,7 @@ export function createServer(options = {}) {
   const knowledgeBot = new FeishuKnowledgeBot(store, models.vault, guidelines, { getProvider: () => providerConfigured(provider) ? provider : null, ...options.knowledgeBotOptions });
   const doctorNotifications = new DoctorNotifications(store, models.vault, options.doctorNotificationOptions);
   const patientImporter = new PatientImporter(store, patients);
-  runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending), ...trialTools(() => trialCandidates, pending), ...scheduleTools(() => schedule), ...extensionTools(() => extensions, pending)]);
+  runtime.registerPlugins([...pendingActionTools(pending, doctor), ...careTools(() => care, pending), ...trialTools(() => trialCandidates, pending), ...scheduleTools(() => schedule), ...labDisplayTools(() => patients), ...extensionTools(() => extensions, pending)]);
   const swapProvider = (next) => {
     provider = next;
     runtime.provider = provider;
@@ -1929,6 +1933,10 @@ export function createServer(options = {}) {
         }
         if (parts[3] === "labs" && parts.length === 5 && parts[4] === "new" && req.method === "GET") return send(res, 200, { labs: schedule.newLabs(pid) });
         if (parts[3] === "labs" && parts.length === 5 && parts[4] === "reviewed" && req.method === "POST") return send(res, 200, schedule.markLabsReviewed(pid, (await body(req)).keys));
+        if (parts[3] === "lab-display" && parts.length === 4) {
+          if (req.method === "GET") return send(res, 200, patients.labDisplay(pid));
+          if (req.method === "PATCH") return send(res, 200, patients.updateLabDisplay(pid, await body(req)));
+        }
         if (parts[3] === "lab-monitors") {
           if (parts.length === 4 && req.method === "GET") return send(res, 200, { monitors: risks.listMonitors(pid) });
           if (parts.length === 4 && req.method === "POST") {

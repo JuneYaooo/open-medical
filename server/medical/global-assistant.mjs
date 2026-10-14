@@ -10,13 +10,14 @@ export const GLOBAL_ASSISTANT_DISCIPLINE = `
 工作方式：
 - 查患者先用 list_patients 按姓名/编号/标签定位；同名患者要列出编号、性别、年龄让医生选择，不要猜。需要临床细节再 read_patient_chart。
 - 「找出一批患者」的请求（如术后三个月内、血糖未达标、60 岁以上）先用 patient_scan 把意图转成结构化条件做确定性扫描，不要逐个患者核对；对扫描结果有疑问的患者再用 read_patient_chart 抽查。扫描没有覆盖的条件（如具体术式、并发症）如实说明，让医生补充。
-- 一切写入只能通过 *_propose 工具生成待确认提案，由医生在「待确认」面板核对后生效。提案后如实告知已生成提案、等待确认，不得声称已完成。
+- 病历与业务数据写入只能通过 *_propose 工具生成待确认提案，由医生在「待确认」面板核对后生效。提案后如实告知已生成提案、等待确认，不得声称已完成。
+- 检验页面展示习惯：定位患者后，用 patient_lab_display_get 读取、patient_lab_display_update 保存排序、对照、折叠或隐藏偏好。这是可恢复的页面设置，用户明确要求时直接保存，不改变病历或提醒规则。
 - 分组提案（patient_grouping_propose）每位患者必须写明分组依据（来自扫描证据或档案事实）；没有依据的患者不列入，宁可少列也不凑数。分组名称用医生的原话，简洁明确。
 - 知识库检索先 knowledge_collections 选适用库，再 knowledge_search 指定 collection；2–3 组短术语，英文原文用英文关键词。只有已读正文能支撑结论，证据不足直接说明缺口。
 - 随访安排用 followup_create_propose（只提醒医生本人联系，不会给患者发消息）。
 - 回答简短直接，先给结果再说过程；不确定就问。所有临床内容均为供医生复核的参考，不替代医生判断；不得编造患者数据、诊断或文献。`;
 
-export const GLOBAL_ASSISTANT_GUIDANCE = `本轮是全局助手对话：先判断医生意图——查询类用只读工具直接回答；批量筛选或分组用 patient_scan 转结构化条件 → 逐人核对依据 → patient_grouping_propose 生成提案；随访安排用 followup_create_propose。写入操作只生成待确认提案并明确告知医生到「待确认」面板确认。普通问答直接回答，不额外创建草稿或提案。`;
+export const GLOBAL_ASSISTANT_GUIDANCE = `本轮是全局助手对话：先判断医生意图——查询类用只读工具直接回答；批量筛选或分组用 patient_scan 转结构化条件 → 逐人核对依据 → patient_grouping_propose 生成提案；随访安排用 followup_create_propose。病历与业务数据写入只生成待确认提案并明确告知医生到「待确认」面板确认；检验页面的展示偏好可通过 patient_lab_display_get / patient_lab_display_update 直接保存。普通问答直接回答，不额外创建草稿或提案。`;
 
 // 花名册摘要注入系统提示，让助手不用首轮工具调用就知道患者规模和在用
 // 分组，避免对空花名册或分组名做无意义检索。
@@ -190,7 +191,7 @@ export function configureGlobalAssistantTools(
   if (dispatch) {
     for (const plugin of sessionPlugins) {
       const name = plugin.definition.function.name;
-      if (!["knowledge_collections", "knowledge_search", "followup_create_propose"].includes(name)) continue;
+      if (!["knowledge_collections", "knowledge_search", "followup_create_propose", "patient_lab_display_get", "patient_lab_display_update"].includes(name)) continue;
       registry.register({
         permission: "tools.execute",
         capability: plugin.capability,

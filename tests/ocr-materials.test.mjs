@@ -99,3 +99,22 @@ test("自动发起病历重新整理：未关联患者时给出明确错误，�
   assert.match(chained.data.refreshError, /尚未关联患者/, "chained refresh failure surfaces without failing the OCR");
   assert.ok(chained.data.file.text.includes("合成患者记录"), "re-transcribed text is kept");
 });
+
+
+test("OCR immediately classifies anonymous uploads and re-recognition preserves manual category", async t => {
+  const provider = visionProvider();
+  provider.complete = async () => ({ message: { content: "检验报告：血红蛋白 105 g/L，检验日期 2026-03-02。" } });
+  const f = await fixture(t, {provider});
+  const {session,file} = await sessionWithImage(f,"IMG_001.png");
+  assert.equal(file.category,"其他");
+  const path = `/api/sessions/${session.id}/files/${file.id}`;
+  const prepared = await f.json(`${path}/prepare`,"POST",{});
+  assert.equal(prepared.status,200);
+  assert.equal(prepared.data.file.category,"检验报告");
+  assert.equal(prepared.data.file.categorySource,"auto");
+  assert.equal((await f.json(`/api/sessions/${session.id}`)).data.files[0].category,"检验报告");
+  await f.json(`${path}/meta`,"PATCH",{category:"住院记录"});
+  const repeated = await f.json(`${path}/prepare`,"POST",{force:true});
+  assert.equal(repeated.data.file.category,"住院记录");
+  assert.equal(repeated.data.file.categorySource,"manual");
+});

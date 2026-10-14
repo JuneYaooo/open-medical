@@ -1,6 +1,6 @@
 // Deterministic patient-material classification for the report-folder view.
 // Keyword rules over the file name (highest signal) then the extracted text
-// head; the result is a suggestion the doctor confirms — never a final write.
+// head; automatic categories remain editable and never overwrite manual choices.
 export const MATERIAL_CATEGORIES = ["检验报告", "影像报告", "门诊病历", "住院记录", "用药记录", "其他"];
 
 const RULES = [
@@ -23,9 +23,24 @@ export function classifyMaterial({ name, text } = {}) {
     { haystack: hayText, field: "正文" },
   ]) {
     if (!source.haystack) continue;
+    if (source.field === "正文") {
+      // Prefer an explicit report heading to tests mentioned later in a discharge note.
+      const headings = [
+        ["住院记录", /出院记录|出院小结|住院记录|入院记录|手术记录|病程记录|住院病历/],
+        ["门诊病历", /门诊病历|急诊病历|门诊记录|就诊记录|诊疗记录/],
+        ["检验报告", /检验报告|化验报告|生化报告|血常规报告/],
+        ["影像报告", /影像报告|超声报告|病理报告|心电图报告/],
+        ["用药记录", /处方笺|用药清单|用药记录|医嘱单/],
+      ].map(([category, pattern]) => ({ category, match: source.haystack.match(pattern) }))
+        .filter(hit => hit.match).sort((a, b) => a.match.index - b.match.index);
+      if (headings.length) return { category: headings[0].category, reason: `正文含「${headings[0].match[0]}」` };
+    }
+
     for (const rule of RULES)
       for (const keyword of rule.keywords)
-        if (source.haystack.includes(keyword.toLowerCase()))
+        if (/^[a-z]+$/i.test(keyword)
+          ? new RegExp(`(?<![a-z])${keyword}(?![a-z])`, "i").test(source.haystack)
+          : source.haystack.includes(keyword.toLowerCase()))
           return { category: rule.category, reason: `${source.field}含「${keyword}」` };
   }
   return null;
@@ -46,4 +61,18 @@ export function suggestDocumentDate({ name, text } = {}) {
     if (Number.isFinite(Date.parse(iso))) return iso;
   }
   return null;
+}
+
+// Apply on ingestion and after OCR; legacy explicit categories count as manual.
+export function autoClassifyMaterial(file) {
+  const suggestion = classifyMaterial(file);
+  const manual = file.categorySource === "manual" || (file.category && file.categorySource !== "auto");
+  return {
+    ...file,
+    ...(!manual ? {
+      category: suggestion?.category || "其他",
+      categorySource: "auto",
+      categorySuggestion: suggestion,
+    } : {}),
+  };
 }

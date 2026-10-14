@@ -1,7 +1,7 @@
 import { HabitSuggestion, SimilarCaseCard } from "./learning-loop";
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, CalendarDays, Pill, ArrowUpRight } from 'lucide-react';
-import { dashboardLabGroups, dashboardHistory } from '../shared/patient-dashboard.mjs';
+import { dashboardLabGroups, dashboardLabLayout, dashboardHistory } from '../shared/patient-dashboard.mjs';
 import { groupDiagnoses, sortDiagnoses } from '../shared/diagnoses.mjs';
 import { MATERIAL_CATEGORIES } from '../shared/material-classify.mjs';
 import { groupMaterials } from '../shared/material-folder.mjs';
@@ -55,7 +55,8 @@ function summaryParagraphs(text) {
 export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace, view = "overview", focusFile = null, onChanged, onError }) {
   const [editing, setEditing] = useState(false);
   const titles = {overview:'患者概览',diagnoses:'诊断与病史',medications:'用药与过敏',labs:'检验趋势',visits:'就诊经过',library:'资料库'};
-  const [selected, setSelected] = useState('');
+  const [display, setDisplay] = useState(patient.labDisplay || { revision: 0 });
+  const [displayBusy, setDisplayBusy] = useState(false);
   const [materialQuery, setMaterialQuery] = useState('');
   const [visionSupported, setVisionSupported] = useState(false);
   const [ocrBulk, setOcrBulk] = useState('');
@@ -66,7 +67,8 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
   const [monitorBusy, setMonitorBusy] = useState(false);
   const groups = useMemo(()=>dashboardLabGroups(patient.labs || []),[patient.labs]);
   const [libraryFilter, setLibraryFilter] = useState('');
-  const group = groups.find(g=>g.key===selected) || groups.find(g=>g.distinctDates>1) || groups[0];
+  const layout = dashboardLabLayout(patient.labs || [], display, monitors);
+  const comparisonDates = [...new Set(layout.comparison.flatMap(g => g.records.map(r => r.date || '日期未记录')))].sort().reverse();
   const diagnoses=patient.diagnoses || [], meds=patient.medications || [], visits=patient.visits || [], allergies=patient.allergies || [];
   const history=dashboardHistory(patient);
   const files=session.files || [];
@@ -87,6 +89,23 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
     }).catch(() => {});
   };
   useEffect(() => { loadMonitors(); }, [patient.id]);
+  useEffect(() => { setDisplay(patient.labDisplay || { revision: 0 }); }, [patient.id, patient.labDisplay]);
+  const saveDisplay = async patch => {
+    setDisplayBusy(true);
+    try {
+      const result = await api(`/api/patients/${patient.id}/lab-display`, 'PATCH', { expectedRevision: display.revision, ...patch });
+      setDisplay(result.preferences);
+      onChanged?.();
+    } catch (error) {
+      onError?.(error.message);
+      try { const result = await api(`/api/patients/${patient.id}/lab-display`); setDisplay(result.preferences); } catch {}
+    } finally { setDisplayBusy(false); }
+  };
+  const toggleDisplay = (field, key) => {
+    const current = display[field] || (field === 'compare' ? groups.map(g => g.key) : []);
+    saveDisplay({ [field]: current.includes(key) ? current.filter(k => k !== key) : [...current, key] });
+  };
+  const startMonitor = group => setMonitorForm({item: group.item, unit: group.unit || '', op: 'gt', threshold: '', recheckDays: '', severity: 'warning', note: ''});
   const submitMonitor = async (event) => {
     event.preventDefault();
     const threshold = Number(monitorForm.threshold);
@@ -170,17 +189,46 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
       {view === 'medications' && <section id="chart-medications" className="chart-section" aria-label="用药与过敏记录"><header><h3>用药与过敏</h3><small>{meds.length} 条用药</small></header><div className={`chart-allergies ${allergies.length ? 'recorded' : ''}`}><b>过敏史</b><p>{allergies.length ? allergies.map(a=>typeof a==='string'?a:[a.substance,a.reaction].filter(Boolean).join('：')).join('；') : patient.allergyStatus==='none_known' ? '已核对：无已知过敏' : '尚未核对'}</p></div>{meds.length ? <ul className="chart-meds">{meds.map((m,i)=><li key={i}><div className="chart-med-title"><b>{m.name}</b><span className={`chart-med-status ${m.status || 'unknown'}`}>{status[m.status] || status.unknown}</span></div><p>{[m.dose,m.frequency].filter(Boolean).join(' · ') || '剂量与频次未记录'}</p>{m.note && <p className="muted">{m.note}</p>}<Source value={m.source}/></li>)}</ul> : <p className="chart-empty">暂无用药记录，不代表未使用药物。</p>}</section>}
     </div>
     {view === 'labs' && <section className="chart-section chart-labs" aria-label="检验资料与趋势"><header><div><h3>检验资料与趋势</h3><p>同项目、同单位分别展示；趋势仅呈现记录，不自动判断正常或异常。</p></div><small>{patient.labs?.length || 0} 条检验</small></header>
-      {group ? <><label className="chart-lab-picker">查看检验项目<select value={group.key} onChange={e=>setSelected(e.target.value)}>{groups.map(g=><option key={g.key} value={g.key}>{g.item} · {g.unit || '单位未记录'} · {g.records.length} 次</option>)}</select></label>
-      <div className="chart-lab-summary"><b>{group.item}</b><span>{group.records.length} 次记录 · {group.unit || '单位未记录'}</span></div>
-      {group.canPlot ? <><LabPlot group={group}/>
-        {group.conflict && <p className="chart-lab-hint">同一天存在不同数值，散点并列、暂不连线（并列数值没有先后），请核对下方记录及来源。</p>}
-        {group.distinctDates === 1 && <p className="chart-lab-hint">这些记录都在同一天，还连不成趋势线；再录入其他日期的同项目检验，这里会自动连线。</p>}
-        {!group.unit && <p className="chart-lab-hint">单位未记录，纵轴只表示数值相对高低。</p>}
-      </> : <p className="chart-empty">这些检验缺有效日期或数值，暂无可绘制的记录，先看下方明细。</p>}
-      <div className="chart-table-wrap"><table><caption>{group.item} · 全部记录</caption><thead><tr><th>日期</th><th>结果</th><th>单位</th><th>来源</th></tr></thead><tbody>{group.records.toReversed().map((r,i)=><tr key={i}><td>{r.date || '日期未记录'}</td><td><b>{r.value}</b></td><td>{r.unit || '未记录'}</td><td>{r.source || '来源未记录'}</td></tr>)}</tbody></table></div></> : <p className="chart-empty">资料中尚无结构化检验记录。</p>}
-      {(!!group || !!monitors.length) && <div className="chart-monitors" aria-label="个性化检验监测">
-        <header><div><h4>个性化监测</h4><p>按这位患者的目标设阈值或复查间隔；越界或到期会进入今日待办的风险提示，只提醒不自动处理。</p></div>
-        {!!group && <button className="secondary" onClick={()=>setMonitorForm({item: group.item, unit: group.unit || '', op: 'gt', threshold: '', recheckDays: '', severity: 'warning', note: ''})}>为「{group.item}」设监测</button>}</header>
+      <div className="chart-display-toolbar">
+        <p>默认展示全部指标，监测项目、同日数值冲突和多次检验优先。可以对 AI 说“把血红蛋白放前面，折叠其余指标”。</p>
+        <button className="secondary" onClick={()=>onOpenWorkspace(session.id, {draft: `请帮我调整当前患者的检验趋势展示习惯（患者 ID：${patient.id}）。先读取当前展示偏好和指标，我想调整：`})}>和 AI 调整展示</button>
+        <button className="text-button" disabled={displayBusy} onClick={()=>saveDisplay({reset:true})}>恢复默认展示</button>
+      </div>
+      {!!layout.comparison.length && <div className="chart-table-wrap chart-lab-comparison"><table>
+        <caption>检验结果对照 · {layout.comparison.length} 项</caption>
+        <thead><tr><th>检验项目 / 单位</th>{comparisonDates.map(date=><th key={date}>{date}</th>)}</tr></thead>
+        <tbody>{layout.comparison.map(g=><tr key={g.key}><th>{g.item}<small>{g.unit || '单位未记录'}</small></th>{comparisonDates.map(date=>{
+          const records = g.records.filter(r=>(r.date || '日期未记录') === date);
+          return <td key={date} title={records.map(r=>r.source || '来源未记录').join('；')}>{records.length ? records.map(r=>r.value).join(' / ') : '—'}</td>;
+        })}</tr>)}</tbody>
+      </table></div>}
+      <div className="chart-lab-grid">{layout.visible.map(group=>{
+        const collapsed = layout.collapsed.has(group.key);
+        const latest = group.records.at(-1);
+        return <article className="chart-lab-card" key={group.key} aria-label={`${group.item} ${group.unit || '单位未记录'}`}>
+          <header><div><h4>{group.item}</h4><small>{group.unit || '单位未记录'} · {group.records.length} 次记录</small></div>
+            <div className="chart-lab-latest"><b>{group.conflict ? '数值待核对' : latest?.value}</b><small>{latest?.date || '日期未记录'}</small></div>
+          </header>
+          <div className="chart-lab-actions">
+            <button className="text-button" disabled={displayBusy} onClick={()=>saveDisplay({order:[group.key, ...layout.groups.map(g=>g.key).filter(k=>k!==group.key)]})}>排在最前</button>
+            <button className="text-button" disabled={displayBusy} aria-pressed={layout.comparison.some(g=>g.key===group.key)} onClick={()=>toggleDisplay('compare',group.key)}>{layout.comparison.some(g=>g.key===group.key) ? '移出对照' : '加入对照'}</button>
+            <button className="text-button" disabled={displayBusy} aria-expanded={!collapsed} onClick={()=>toggleDisplay('collapsed',group.key)}>{collapsed ? '展开趋势' : '折叠趋势'}</button>
+            <button className="text-button" disabled={displayBusy} onClick={()=>toggleDisplay('hidden',group.key)}>隐藏</button>
+            <button className="text-button" onClick={()=>startMonitor(group)}>设监测</button>
+          </div>
+          {!collapsed && <>
+            {group.canPlot ? <LabPlot group={group}/> : <p className="chart-empty">缺少有效日期或数值，请核对明细。</p>}
+            {group.conflict && <p className="chart-lab-hint">同一天存在不同数值，散点并列、暂不连线，请核对记录及来源。</p>}
+            {group.distinctDates === 1 && <p className="chart-lab-hint">目前只有一天的记录，还连不成趋势线。</p>}
+            {!group.unit && <p className="chart-lab-hint">单位未记录，纵轴只表示数值相对高低。</p>}
+            <details className="chart-lab-records"><summary>全部记录与来源 · {group.records.length} 条</summary><div className="chart-table-wrap"><table><caption>{group.item} · 全部记录</caption><thead><tr><th>日期</th><th>结果</th><th>单位</th><th>来源</th></tr></thead><tbody>{group.records.toReversed().map((r,i)=><tr key={i}><td>{r.date || '日期未记录'}</td><td><b>{r.value}</b></td><td>{r.unit || '未记录'}</td><td>{r.source || '来源未记录'}</td></tr>)}</tbody></table></div></details>
+          </>}
+        </article>;
+      })}</div>
+      {!!layout.hidden.length && <details className="chart-hidden-labs"><summary>已隐藏 {layout.hidden.length} 项检验 · 展开后可恢复</summary>{layout.hidden.map(g=><div key={g.key}><span>{g.item} · {g.unit || '单位未记录'}</span><button className="text-button" disabled={displayBusy} onClick={()=>toggleDisplay('hidden',g.key)}>恢复展示</button></div>)}</details>}
+      {!groups.length && <p className="chart-empty">资料中尚无结构化检验记录。</p>}
+      {(!!groups.length || !!monitors.length) && <div className="chart-monitors" aria-label="个性化检验监测">
+        <header><div><h4>个性化监测</h4><p>在指标上点“设监测”可设阈值或复查间隔；越界或到期进入今日待办的风险提示。隐藏指标不影响监测。</p></div></header>
         {monitorForm && <form className="chart-monitor-form" onSubmit={submitMonitor}>
           <div className="chart-monitor-row"><b>{monitorForm.item}</b><label>条件<select value={monitorForm.op} onChange={e=>setMonitorForm({...monitorForm, op: e.target.value})}><option value="gt">高于</option><option value="lt">低于</option></select></label>
           <label>阈值<input type="number" step="any" required value={monitorForm.threshold} onChange={e=>setMonitorForm({...monitorForm, threshold: e.target.value})}/><span>{monitorForm.unit || '单位未记录'}</span></label>
@@ -210,7 +258,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
         return <li key={i}><time>{v.date || '日期未记录'}</time><h4>{v.reason}</h4>{v.note && <p>{v.note}</p>}{target && <button className="text-button" onClick={()=>onClinical('library', { focusFile: target.id })}>查看原文 {target.name}</button>}</li>;
       })}</ol> : <p className="chart-empty">暂无就诊记录。</p>}</section>}
       {view === 'library' && <section id="chart-library" className="chart-section chart-library" aria-label="资料库">
-        <header><div><h3>资料库</h3><p>按类型 × 资料日期归类；「推测」分类来自文件名与识别文本的关键词，点开资料即可确认或修改。</p></div><button className="text-button" onClick={()=>onOpenWorkspace(session.id,{tab:'materials'})}>打开资料工作区</button><small>{files.length} 份资料</small></header>
+        <header><div><h3>资料库</h3><p>提取资料时自动按类型归类；点开资料可以修改类型与日期。</p></div><button className="text-button" onClick={()=>onOpenWorkspace(session.id,{tab:'materials'})}>打开资料工作区</button><small>{files.length} 份资料</small></header>
         {!!reviewFiles.length && <div className={`ocr-review-banner ${poorCount ? 'poor' : ''}`} role="status">
           <p><b>{poorCount && fairCount ? `${poorCount} 份资料识别质量较低、${fairCount} 份待核对` : poorCount ? `${poorCount} 份资料识别质量较低` : `${fairCount} 份资料识别待核对`}</b>：识别文字可能有缺字、错字或漏掉数值，会影响病历整理的准确性。建议对照原图核对，或用视觉模型重新识别。</p>
           <p className="muted">涉及：{reviewFiles.map(x => x.file.name).join('、')}</p>
@@ -234,7 +282,7 @@ export function PatientDashboard({ patient, session, onClinical, onOpenWorkspace
           <div className="chart-files">{g.files.map(file=><details key={file.id} open={focusFile ? focusFile === file.id : undefined} ref={el => { if (focusFile === file.id) el?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }}>
             <summary>
               <FileText size={15}/><span>{file.name}</span>
-              <span className={`lib-cat ${file.category ? 'confirmed' : 'guess'}`}>{file.category || file.categorySuggestion?.category || '未分类'}{!file.category && file.categorySuggestion ? '（推测）' : ''}</span>
+              <span className={`lib-cat ${file.categorySource === 'auto' ? 'guess' : 'confirmed'}`}>{file.category || '未分类'}{file.categorySource === 'auto' ? '（自动）' : ''}</span>
               {!!file.documentDate && <small>{file.documentDate}</small>}
               {(() => { const level = materialQualityLevel(file); return level ? <span className={`ocr-badge ${level}`}>{level === 'good' ? '识别良好' : level === 'fair' ? '识别待核对' : '识别质量低'}</span> : null; })()}
             </summary>

@@ -10,7 +10,7 @@ import { assessmentQuestion } from "./medical/assessment-tools.mjs";
 // 患者页、随访、计划任务、消息摘要通过 dispatcher 对两类引擎透明。
 import { imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 import { assessOcrQuality } from "../shared/ocr-quality.mjs";
-import { classifyMaterial, suggestDocumentDate, MATERIAL_CATEGORIES } from "../shared/material-classify.mjs";
+import { autoClassifyMaterial, suggestDocumentDate, MATERIAL_CATEGORIES } from "../shared/material-classify.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
@@ -18,14 +18,11 @@ import { join } from "node:path";
 import { AppError, check, string } from "./errors.mjs";
 import { medicalPolicy } from "../shared/medical.mjs";
 
-// 确定性资料归类/日期建议:报告文件夹视图的初始提示,最终分类由医生确认。
+// Classify immediately; the date remains a separate, reviewable suggestion.
 const materialSuggestions = (name, text) => {
-  const category = classifyMaterial({ name, text });
+  const { category, categorySource, categorySuggestion } = autoClassifyMaterial({ name, text });
   const date = suggestDocumentDate({ name, text });
-  return {
-    ...(category ? { categorySuggestion: category } : {}),
-    ...(date ? { dateSuggestion: date } : {}),
-  };
+  return { category, categorySource, categorySuggestion, ...(date ? { dateSuggestion: date } : {}) };
 };
 import { runTool, localWork } from "./medical-core.mjs";
 import { consultationNotice, publicSession } from "./runtime.mjs";
@@ -448,11 +445,7 @@ export class SessionBridge {
       };
       target.extraction.originalText = file.extraction.originalText || file.text;
       target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text;
-      // 识别文本落地后补一次归类/日期建议;医生已确认的字段不被覆盖。
-      if (!target.category) {
-        const suggestion = classifyMaterial({ name: target.name, text: target.text });
-        if (suggestion) target.categorySuggestion = suggestion;
-      }
+      Object.assign(target, autoClassifyMaterial(target));
       if (!target.documentDate) {
         const date = suggestDocumentDate({ name: target.name, text: target.text });
         if (date) target.dateSuggestion = date;
@@ -522,6 +515,7 @@ export class SessionBridge {
       check(target, "NOT_FOUND", "材料不存在", 404);
       target.text = value;
       target.hash = hashText(value);
+      Object.assign(target, autoClassifyMaterial(target));
       target.extraction.edited = { at: iso() };
       const quality = assessOcrQuality(value);
       if (target.extraction.ocr) target.extraction.ocr.quality = quality;
@@ -540,8 +534,9 @@ export class SessionBridge {
       const target = current.materials.find((item) => item.id === fileId);
       check(target, "NOT_FOUND", "材料不存在", 404);
       if (input.category !== undefined) {
-        check(MATERIAL_CATEGORIES.includes(input.category), "INVALID_INPUT", "资料类型无效");
+        check((input.category === "" || MATERIAL_CATEGORIES.includes(input.category)), "INVALID_INPUT", "资料类型无效");
         target.category = input.category;
+        target.categorySource = "manual";
       }
       if (input.documentDate !== undefined) {
         if (input.documentDate === "" || input.documentDate === null) {
@@ -672,7 +667,7 @@ export class SessionBridge {
       updatedAt: new Date(w.updatedAt).toISOString(),
       revision: w.revision,
       messages,
-      files: (w.materials || []).map((f) => ({ ...f })),
+      files: (w.materials || []).map(autoClassifyMaterial),
       intakeIssues: w.intakeIssues || [],
       intakeJob: w.intakeJob || null,
       artifacts: runs.flatMap((run) => run.artifacts.filter(a => !run.draftsArchived || a.status !== "draft")),

@@ -1,3 +1,4 @@
+import { dashboardLabLayout } from "../shared/patient-dashboard.mjs";
 import { ReviewLog } from "./medical/review-log.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
@@ -210,7 +211,20 @@ export class PatientRegistry {
       if (input.allergies !== undefined)
         patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
       patient.allergyStatus = allergyState(patient, input);
-      if (input.labs !== undefined) patient.labs = optionalLabs(input.labs);
+      if (input.labs !== undefined) {
+        patient.labs = optionalLabs(input.labs);
+        if (patient.labDisplay) {
+          const valid = new Set(dashboardLabLayout(patient.labs).groups.map(g => g.key));
+          let changed = false;
+          for (const field of ["order", "compare", "collapsed", "hidden"]) {
+            const previous = patient.labDisplay[field];
+            if (!previous) continue;
+            patient.labDisplay[field] = previous.filter(key => valid.has(key));
+            changed ||= previous.length !== patient.labDisplay[field].length;
+          }
+          if (changed) patient.labDisplay.revision++;
+        }
+      }
       if (input.visits !== undefined)
         patient.visits = optionalVisits(input.visits);
       if (input.archived !== undefined) {
@@ -230,6 +244,33 @@ export class PatientRegistry {
         patientId: id,
       });
       return { ...patient, counts: this.counts(id) };
+    });
+  }
+  labDisplay(id) {
+    const patient = this.row(id);
+    const preferences = patient.labDisplay || { revision: 0 };
+    return { patientId: id, preferences, groups: dashboardLabLayout(patient.labs, preferences).groups.map(g => ({ key: g.key, item: g.item, unit: g.unit, records: g.records.length })) };
+  }
+  updateLabDisplay(id, input) {
+    return sqliteTransaction(this.store.db, () => {
+      const patient = this.row(id);
+      check(input && typeof input === "object" && !Array.isArray(input), "INVALID_INPUT", "展示偏好无效");
+      const current = patient.labDisplay || { revision: 0 };
+      check(input.expectedRevision === current.revision, "REVISION_CONFLICT", "展示偏好已变化，请刷新后重试", 409);
+      check(Object.keys(input).every(k => ["expectedRevision", "reset", "order", "compare", "collapsed", "hidden"].includes(k)), "INVALID_INPUT", "未知展示偏好");
+      check(input.reset === undefined || typeof input.reset === "boolean", "INVALID_INPUT", "重置选项无效");
+      const next = input.reset ? {} : { ...current };
+      const keys = new Set(dashboardLabLayout(patient.labs).groups.map(g => g.key));
+      for (const field of ["order", "compare", "collapsed", "hidden"]) {
+        if (input[field] === undefined) continue;
+        check(!input.reset && Array.isArray(input[field]) && input[field].length <= 1000 && input[field].every(k => typeof k === "string" && keys.has(k)) && new Set(input[field]).size === input[field].length, "INVALID_INPUT", "请使用当前患者的有效检验指标，不能重复");
+        next[field] = input[field];
+      }
+      next.revision = current.revision + 1;
+      patient.labDisplay = next;
+      this.save(patient);
+      this.store.audit(patient.sessionId, "patient.lab_display.updated", { patientId: id, preferences: next });
+      return this.labDisplay(id);
     });
   }
   save(patient) {

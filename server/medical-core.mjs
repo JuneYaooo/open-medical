@@ -195,15 +195,15 @@ export async function runTool(
     if (type === "string" && !optionalEmpty) string(value, key, 6000);
     if (type === "integer")
       check(
-        Number.isInteger(value) && value > 0,
+        Number.isInteger(value) && value >= (schema.properties[key].minimum ?? 1) && value <= (schema.properties[key].maximum ?? Infinity),
         "INVALID_TOOL_ARGS",
-        `${key} 必须是正整数`,
+        `${key} 必须是符合范围的整数`,
       );
     if (type === "array") {
       check(
-        Array.isArray(value) && value.length <= 40,
+        Array.isArray(value) && value.length <= (schema.properties[key].maxItems ?? 40),
         "INVALID_TOOL_ARGS",
-        `${key} 需要最多 40 条条目`,
+        `${key} 需要最多 ${schema.properties[key].maxItems ?? 40} 条条目`,
       );
       // 仅约束字符串数组；对象数组（如建档提案的 diagnoses/medications）
       // 由各工具 execute 内的结构化校验负责。

@@ -23,3 +23,18 @@ export function dashboardLabGroups(labs = []) {
 export function dashboardHistory(patient) {
   return [...(patient.visits || [])].sort((a,b)=>String(a.date || "9999").localeCompare(String(b.date || "9999")));
 }
+
+// Display preferences affect presentation only; observations and alerts are unchanged.
+export function dashboardLabLayout(labs = [], preferences = {}, monitors = []) {
+  const groups = dashboardLabGroups(labs);
+  const score = g => (monitors.some(m => m.status !== 'paused' && m.item === g.item && (!m.unitHint || m.unitHint === g.unit)) ? 4 : 0) + (g.conflict ? 2 : 0) + (g.distinctDates > 1 ? 1 : 0);
+  const order = preferences.order || [];
+  groups.sort((a, b) => {
+    const ai = order.indexOf(a.key), bi = order.indexOf(b.key);
+    return (ai < 0 ? Infinity : ai) - (bi < 0 ? Infinity : bi) || score(b) - score(a) || a.item.localeCompare(b.item, 'zh-CN') || a.unit.localeCompare(b.unit);
+  });
+  const hidden = new Set(preferences.hidden || []), collapsed = new Set(preferences.collapsed || []);
+  const visible = groups.filter(g => !hidden.has(g.key));
+  return { groups, visible, hidden: groups.filter(g => hidden.has(g.key)), collapsed,
+    comparison: visible.filter(g => !preferences.compare || preferences.compare.includes(g.key)) };
+}

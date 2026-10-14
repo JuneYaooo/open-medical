@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./helpers.mjs";
-import { classifyMaterial, suggestDocumentDate, MATERIAL_CATEGORIES } from "../shared/material-classify.mjs";
+import { autoClassifyMaterial, classifyMaterial, suggestDocumentDate, MATERIAL_CATEGORIES } from "../shared/material-classify.mjs";
 import { groupMaterials } from "../shared/material-folder.mjs";
 
 test("material classifier is deterministic and explains its keyword hit", () => {
@@ -51,6 +51,8 @@ test("file meta API accepts confirmed category and date, rejects invalid values"
   assert.ok(file.categorySuggestion);
   assert.equal(file.categorySuggestion.category, "检验报告");
   assert.equal(file.dateSuggestion, "2026-09-01");
+  assert.equal(file.category, "检验报告");
+  assert.equal(file.categorySource, "auto");
   // 确认分类与日期。
   const confirmed = await f.json(`/api/sessions/${patient.sessionId}/files/${file.id}/meta`, "PATCH", {
     category: "检验报告",
@@ -70,4 +72,17 @@ test("file meta API accepts confirmed category and date, rejects invalid values"
   const cleared = await f.json(`/api/sessions/${patient.sessionId}/files/${file.id}/meta`, "PATCH", { documentDate: "" });
   assert.equal(cleared.status, 200);
   assert.equal(cleared.data.documentDate, "");
+});
+
+test("automatic classification updates after recognition but preserves manual corrections", () => {
+  const image = autoClassifyMaterial({ name: "IMG_001.jpg", text: "" });
+  assert.equal(image.category, "其他");
+  const ocr = autoClassifyMaterial({ ...image, text: "生化检验报告" });
+  assert.equal(ocr.category, "检验报告");
+  assert.equal(autoClassifyMaterial({ ...ocr, text: "门诊病历" }).category, "门诊病历");
+  assert.equal(autoClassifyMaterial({ ...ocr, category: "住院记录", categorySource: "manual" }).category, "住院记录");
+  assert.equal(autoClassifyMaterial({ ...ocr, category: "", categorySource: "manual" }).category, "");
+  assert.equal(classifyMaterial({ name: "instructions.txt", text: "" }), null);
+  assert.equal(classifyMaterial({name:"IMG.jpg",text:"出院记录：复查血常规，完善CT检查，附用药清单"}).category,"住院记录");
+  assert.equal(groupMaterials([{name:"血常规.txt",text:""}])[0].category,"检验报告");
 });

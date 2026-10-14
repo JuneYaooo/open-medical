@@ -1,9 +1,9 @@
-import { MATERIAL_CATEGORIES } from "./material-classify.mjs";
+import { MATERIAL_CATEGORIES, autoClassifyMaterial } from "./material-classify.mjs";
 
-// Report-folder grouping: files bucketed by their confirmed category
-// (suggestion shown when unset), newest document date first inside each
-// bucket. Pure and shared so the UI and tests agree on ordering.
+// Group by manual or automatic category, newest document date first.
+// Legacy uploads without a saved category use the same classifier.
 export function groupMaterials(files = []) {
+  files = files.map(autoClassifyMaterial);
   const fileDate = (file) => file.documentDate || String(file.createdAt || "").slice(0, 10) || "";
   return MATERIAL_CATEGORIES
     .map((category) => [

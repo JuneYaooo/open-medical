@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { dashboardLabGroups } from '../shared/patient-dashboard.mjs';
+import { dashboardLabGroups, dashboardLabLayout } from '../shared/patient-dashboard.mjs';
 import { fixture } from './helpers.mjs';
 
 test('lab visualization keeps units separate, preserves zero and still draws single-day or conflicting records as scatter',()=>{
@@ -50,16 +50,25 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   assert.match(await panel.innerText(),/病史摘要：合成验收资料/);
   await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
   await panel.getByRole('img',{name:'验收指标 U/L 检验趋势，2 次记录'}).waitFor();
-  const table=panel.getByRole('table');assert.match(await table.innerText(),/0/);
-  const select=panel.getByLabel('查看检验项目');
-  await select.selectOption(JSON.stringify(['验收指标','mg/L']));
+  assert.equal(await panel.getByLabel('查看检验项目').count(),0);
+  assert.equal(await panel.getByRole('img',{name:/检验趋势/}).count(),3);
+  const primary = panel.getByRole('article',{name:'验收指标 U/L',exact:true});
+  const otherUnit = panel.getByRole('article',{name:'验收指标 mg/L',exact:true});
+  const conflict = panel.getByRole('article',{name:'冲突指标 U/L',exact:true});
+  await otherUnit.getByText(/还连不成趋势线/).waitFor();
+  await conflict.getByText(/散点并列、暂不连线/).waitFor();
+  await conflict.getByText('全部记录与来源 · 2 条').click();
+  assert.equal(await conflict.getByRole('table').locator('tbody tr').count(),2);
+  assert.match(await panel.locator('.chart-lab-comparison').innerText(),/0/);
+  await primary.getByRole('button',{name:'排在最前'}).click();
+  await page.waitForFunction(()=>document.querySelector('.chart-lab-card')?.getAttribute('aria-label')==='验收指标 U/L');
+  await otherUnit.getByRole('button',{name:'移出对照'}).click();
+  await otherUnit.getByRole('button',{name:'加入对照'}).waitFor();
+  await otherUnit.getByRole('button',{name:'折叠趋势'}).click();
+  await otherUnit.getByRole('button',{name:'展开趋势'}).waitFor();
+  await conflict.getByRole('button',{name:'隐藏',exact:true}).click();
+  await panel.getByText('已隐藏 1 项检验 · 展开后可恢复').waitFor();
   assert.equal(await panel.getByRole('img',{name:/检验趋势/}).count(),1);
-  await panel.getByText(/还连不成趋势线/).waitFor();
-  assert.match(await panel.getByRole('table').innerText(),/8/);
-  await select.selectOption(JSON.stringify(['冲突指标','U/L']));
-  await panel.getByText(/散点并列、暂不连线/).waitFor();
-  assert.equal(await panel.getByRole('img',{name:/散点展示/}).count(),1);
-  assert.equal(await panel.getByRole('table').locator('tbody tr').count(),2);
   await tabs.getByRole('button',{name:'就诊经过',exact:true}).click();
   assert.deepEqual(await panel.getByRole('region',{name:'就诊时间轴'}).locator('time').allTextContents(),['2026-02-01','2026-01-01']);
   await tabs.getByRole('button',{name:'资料库',exact:true}).click();
@@ -69,13 +78,40 @@ test('patient chart opens a complete visual dashboard with interactive trends, t
   await library.getByLabel('查找文件').fill('不存在');await library.getByText('没有匹配的文件。').waitFor();
   await library.getByLabel('查找文件').fill('');
   await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
-  await select.selectOption(JSON.stringify(['验收指标','U/L']));
+  await otherUnit.getByRole('button',{name:'展开趋势'}).waitFor();
+  await panel.getByText('已隐藏 1 项检验 · 展开后可恢复').click();
+  await panel.getByRole('button',{name:'恢复展示'}).click();
+  await conflict.waitFor();
   await panel.getByRole('heading',{name:'检验趋势',exact:true}).scrollIntoViewIfNeeded();
-  await page.screenshot({path:'output/patient-dashboard-desktop.png',fullPage:true});
+  await panel.screenshot({path:'output/patient-dashboard-desktop.png'});
   await page.setViewportSize({width:820,height:1000});
   assert.ok(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.screenshot({path:'output/patient-dashboard-narrow.png',fullPage:true});
+  await panel.screenshot({path:'output/patient-dashboard-narrow.png'});
   await panel.getByRole('button',{name:'核对与编辑'}).click();
   await page.getByRole('button',{name:'概览',exact:true}).click();await panel.waitFor();
+  await tabs.getByRole('button',{name:'检验趋势',exact:true}).click();
+  await panel.getByRole('button',{name:'和 AI 调整展示',exact:true}).click();
+  const composer = page.getByRole('textbox',{name:'医疗工作需求',exact:true});
+  await composer.waitFor();
+  await page.waitForFunction(id => document.querySelector('textarea[aria-label="医疗工作需求"]')?.value.includes(id),p.id);
+  assert.match(await composer.inputValue(),new RegExp(p.id));
+  assert.match(await composer.inputValue(),/检验趋势展示习惯/);
   assert.deepEqual(errors,[]);
+});
+
+test('lab layout prioritizes monitored/conflicting/repeated groups and obeys saved choices', () => {
+  const labs = [
+    { item: 'A', value: 1, unit: 'U', date: '2026-01-01' },
+    { item: 'B', value: 2, unit: 'U', date: '2026-01-01' },
+    { item: 'B', value: 3, unit: 'U', date: '2026-02-01' },
+    { item: 'C', value: 3, unit: 'U', date: '2026-01-01' },
+  ];
+  const key = item => JSON.stringify([item, 'U']);
+  assert.deepEqual(dashboardLabLayout(labs, {}, [{item:'C',status:'active'}]).visible.map(g=>g.item), ['C','B','A']);
+  const layout = dashboardLabLayout(labs, {order:[key('A')],hidden:[key('C')],collapsed:[key('B')],compare:[key('A'),key('C')]});
+  assert.deepEqual(layout.visible.map(g=>g.item), ['A','B']);
+  assert.deepEqual(layout.comparison.map(g=>g.item), ['A']);
+  assert.ok(layout.collapsed.has(key('B')));
+  assert.equal(dashboardLabLayout(labs,{compare:[]}).comparison.length,0);
+  assert.equal(labs.length,4);
 });

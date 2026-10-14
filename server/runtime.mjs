@@ -1,3 +1,4 @@
+import { autoClassifyMaterial } from "../shared/material-classify.mjs";
 import { medicalToolAllowed } from "./medical-core.mjs";
 import { providerConfigured } from "./core/provider-status.mjs";
 import { randomUUID, createHash } from "node:crypto";
@@ -71,6 +72,7 @@ export function publicSession(session) {
   const { runs, ...rest } = session;
   return {
     ...rest,
+    files: (rest.files || []).map(autoClassifyMaterial),
     // run.status 保留引擎原始取值（兼容旧客户端）；derivedStatus 是 §12
     // 目标状态的唯一派生结果（run-status.mjs），等待/受阻时附 waitingReason。
     runs: runs.map(({ providerMessages: _providerMessages, ...run }) => {
@@ -1042,6 +1044,7 @@ export class MedicalRuntime {
       "相同内容已在本会话中",
       409,
     );
+    Object.assign(file, autoClassifyMaterial(file));
     this.store.mutate(sessionId, (s) => s.files.push(file));
     this.store.audit(sessionId, "file.added", {
       fileId: file.id,
