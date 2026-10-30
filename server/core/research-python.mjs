@@ -249,10 +249,11 @@ ${env.exec.map((p) => `(allow process-exec (literal ${q(p)}))`).join("\n")}
         "-MemoryMb", String(this.memoryMb),
       ],
       cwd: workdir,
-      // 启动器本身需要的 Windows 基础变量（缺 PATHEXT 时 PowerShell 不认 .exe）；
+      // 启动器本身需要的 Windows 基础变量（缺 PATHEXT 时 PowerShell 不认 .exe）。
+      // 不传 PSModulePath：从 PowerShell 7 环境继承时会让 5.1 加载不了内置模块。
       // 沙箱内 Python 另用最小环境，不继承这些。
       env: Object.fromEntries(
-        ["SystemRoot", "windir", "PATH", "PATHEXT", "ComSpec", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PSModulePath"]
+        ["SystemRoot", "windir", "PATH", "PATHEXT", "ComSpec", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA"]
           .filter((key) => process.env[key] !== undefined)
           .map((key) => [key, process.env[key]]),
       ),

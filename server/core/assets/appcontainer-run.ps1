@@ -161,7 +161,7 @@ $sid = [OmAppContainer]::SidString($ContainerName)
 # SID (or ALL APPLICATION PACKAGES, S-1-15-2-1, e.g. Program Files) already
 # has access, so we do not rewrite large ACL trees on every run.
 foreach ($dir in ($ReadDirs -split "\|" | Where-Object { $_ })) {
-  $rules = (Get-Acl -LiteralPath $dir).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+  $rules = [System.IO.Directory]::GetAccessControl($dir).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
   $granted = $rules | Where-Object { $_.AccessControlType -eq "Allow" -and ($_.IdentityReference.Value -eq $sid -or $_.IdentityReference.Value -eq "S-1-15-2-1") }
   if (-not $granted) {
     & "$env:SystemRoot\System32\icacls.exe" $dir /grant "*${sid}:(OI)(CI)RX" /Q | Out-Null
