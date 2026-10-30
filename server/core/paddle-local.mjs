@@ -21,7 +21,7 @@ const PINNED_PACKAGES = ["paddleocr==2.7.3", "paddlepaddle==2.6.2", "numpy<2"];
 // 国内网络下 pypi 官方源常不可达；镜像逐个试，最后回退官方。
 // 末档是明文 http 镜像：部分机器的 TLS 中间设备会掐断 python 旧版 OpenSSL
 // 的 https 握手（实测 SSLEOFError），http + trusted-host 是那类机器的生路。
-const PIP_MIRRORS = [
+export const PIP_MIRRORS = [
   { url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
   { url: "https://mirrors.aliyun.com/pypi/simple" },
   { url: "" },
@@ -349,7 +349,7 @@ function join2(base, path) {
 // 的 https 和 Paddle 模型下载全部拖死成 SSLEOF/ProxyError）。医生显式设置
 // 了环境代理时尊重之；否则压掉代理直连——镜像与 bcebos 模型源都是国内
 // CDN，直连可达。
-function directChildEnv(env = process.env) {
+export function directChildEnv(env = process.env) {
   const explicit = env.HTTPS_PROXY || env.https_proxy || env.ALL_PROXY || env.all_proxy;
   if (explicit) return env;
   return { ...env, NO_PROXY: "*", no_proxy: "*" };

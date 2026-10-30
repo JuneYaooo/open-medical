@@ -1,0 +1,38 @@
+name: research-sandbox
+
+# 科研计算沙箱的真实隔离测试：macOS（Seatbelt）与 Windows（AppContainer）。
+# 只依赖 Node 内置模块和一个装好科研包的 Python，不需要 npm 依赖。
+on:
+  push:
+    paths:
+      - server/core/research-python.mjs
+      - server/core/python-sandbox.mjs
+      - server/core/assets/appcontainer-run.ps1
+      - tests/core/research-sandbox.test.mjs
+      - .github/workflows/research-sandbox.yml
+  workflow_dispatch:
+
+jobs:
+  sandbox:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create research environment
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/rpy"
+          if [ "$RUNNER_OS" = "Windows" ]; then PY="$RUNNER_TEMP/rpy/Scripts/python.exe"; else PY="$RUNNER_TEMP/rpy/bin/python"; fi
+          "$PY" -m pip install -q "numpy>=1.24,<3" "pandas>=2.0,<3" "scipy>=1.10" "statsmodels>=0.14" "lifelines>=0.27" "scikit-learn>=1.3" "matplotlib>=3.7"
+          echo "MEDICAL_RESEARCH_PYTHON=$PY" >> "$GITHUB_ENV"
+      - name: Sandbox tests
+        run: node --test tests/core/research-sandbox.test.mjs

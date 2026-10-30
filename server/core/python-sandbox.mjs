@@ -139,92 +139,15 @@ export class PythonSandbox {
     try {
       directory = await mkdtemp(join(tmpdir(), "workspace-sandbox-"));
       signal?.throwIfAborted();
-      const output = await new Promise((resolve, reject) => {
-        const child = spawn(
-          "/usr/bin/sandbox-exec",
-          ["-p", this.profile(), this.python, "-I", "-S", "-B", "-c", WRAPPER],
-          {
-            cwd: directory,
-            env: { LANG: "en_US.UTF-8" },
-            detached: true,
-            stdio: ["pipe", "pipe", "pipe"],
-          },
-        );
-        const outDecoder = new StringDecoder("utf8"),
-          errDecoder = new StringDecoder("utf8");
-        let closed = false;
-        let stdout = "",
-          stderr = "",
-          bytes = 0,
-          failure;
-        const stop = (error) => {
-          if (closed) return;
-          failure ||= error;
-          try {
-            process.kill(-child.pid, "SIGKILL");
-          } catch {
-            child.kill("SIGKILL");
-          }
-        };
-        const abort = () => stop(new AppError("CANCELLED", "沙箱已停止", 409));
-        signal?.addEventListener("abort", abort, { once: true });
-        if (signal?.aborted) abort();
-        const timer = setTimeout(
-          () =>
-            stop(new AppError("SANDBOX_TIMEOUT", "沙箱达到执行时间上限", 422)),
-          this.timeoutMs,
-        );
-        let sampling = false;
-        const memoryTimer = setInterval(() => {
-          if (sampling || !child.pid) return;
-          sampling = true;
-          execFile(
-            "/bin/ps",
-            ["-o", "rss=", "-p", String(child.pid)],
-            { timeout: 1000, maxBuffer: 1024 },
-            (error, rss) => {
-              sampling = false;
-              if (!error && Number(rss.trim()) > 256 * 1024)
-                stop(
-                  new AppError("SANDBOX_MEMORY", "沙箱达到内存监测上限", 422),
-                );
-            },
-          );
-        }, 100);
-        const collect = (chunk, target) => {
-          bytes += chunk.length;
-          if (bytes > this.maxOutput)
-            return stop(
-              new AppError("SANDBOX_OUTPUT", "沙箱输出超过上限", 422),
-            );
-          if (target === "out") stdout += outDecoder.write(chunk);
-          else stderr += errDecoder.write(chunk);
-        };
-        child.stdout.on("data", (chunk) => collect(chunk, "out"));
-        child.stderr.on("data", (chunk) => collect(chunk, "err"));
-        child.stdin.on("error", () => {});
-        child.once("error", (error) => {
-          failure = error;
-        });
-        child.once("close", (exitCode) => {
-          closed = true;
-          stdout += outDecoder.end();
-          stderr += errDecoder.end();
-          clearTimeout(timer);
-          clearInterval(memoryTimer);
-          signal?.removeEventListener("abort", abort);
-          if (failure) return reject(failure);
-          if (exitCode !== 0)
-            return reject(
-              new AppError(
-                "SANDBOX_EXECUTION",
-                `沙箱执行失败：${stderr.slice(-1500)}`,
-                422,
-              ),
-            );
-          resolve(stdout);
-        });
-        child.stdin.end(input);
+      const output = await runSeatbelt({
+        profile: this.profile(),
+        argv: [this.python, "-I", "-S", "-B", "-c", WRAPPER],
+        cwd: directory,
+        input,
+        timeoutMs: this.timeoutMs,
+        maxOutput: this.maxOutput,
+        memoryKb: 256 * 1024,
+        signal,
       });
       let parsed;
       try {
@@ -253,4 +176,91 @@ export class PythonSandbox {
       this.active--;
     }
   }
+}
+
+// Shared runner for every Seatbelt-confined Python process: process-group
+// kill on cancel/timeout, bounded output, sampled RSS watchdog.
+export function runSeatbelt({ profile, argv, ...options }) {
+  return runConfined({ command: "/usr/bin/sandbox-exec", args: ["-p", profile, ...argv], ...options });
+}
+
+// 平台无关部分：command 本身负责隔离（macOS sandbox-exec / Windows
+// AppContainer 启动器）。memoryKb 为空时不做 RSS 采样（Windows 由 Job
+// 对象硬限制内存）。
+export function runConfined({ command, args, cwd, input = "", env = { LANG: "en_US.UTF-8" }, timeoutMs, maxOutput, memoryKb, signal }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      detached: process.platform !== "win32",
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const outDecoder = new StringDecoder("utf8"),
+      errDecoder = new StringDecoder("utf8");
+    let closed = false;
+    let stdout = "",
+      stderr = "",
+      bytes = 0,
+      failure;
+    const stop = (error) => {
+      if (closed) return;
+      failure ||= error;
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const abort = () => stop(new AppError("CANCELLED", "沙箱已停止", 409));
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const timer = setTimeout(
+      () => stop(new AppError("SANDBOX_TIMEOUT", "沙箱达到执行时间上限", 422)),
+      timeoutMs,
+    );
+    let sampling = false;
+    const memoryTimer = setInterval(() => {
+      if (!memoryKb || sampling || !child.pid) return;
+      sampling = true;
+      execFile(
+        "/bin/ps",
+        ["-o", "rss=", "-p", String(child.pid)],
+        { timeout: 1000, maxBuffer: 1024 },
+        (error, rss) => {
+          sampling = false;
+          if (!error && Number(rss.trim()) > memoryKb)
+            stop(new AppError("SANDBOX_MEMORY", "沙箱达到内存监测上限", 422));
+        },
+      );
+    }, 100);
+    const collect = (chunk, target) => {
+      bytes += chunk.length;
+      if (bytes > maxOutput)
+        return stop(new AppError("SANDBOX_OUTPUT", "沙箱输出超过上限", 422));
+      if (target === "out") stdout += outDecoder.write(chunk);
+      else stderr += errDecoder.write(chunk);
+    };
+    child.stdout.on("data", (chunk) => collect(chunk, "out"));
+    child.stderr.on("data", (chunk) => collect(chunk, "err"));
+    child.stdin.on("error", () => {});
+    child.once("error", (error) => {
+      failure = error;
+    });
+    child.once("close", (exitCode) => {
+      closed = true;
+      stdout += outDecoder.end();
+      stderr += errDecoder.end();
+      clearTimeout(timer);
+      clearInterval(memoryTimer);
+      signal?.removeEventListener("abort", abort);
+      if (failure) return reject(failure);
+      if (exitCode !== 0)
+        return reject(
+          new AppError("SANDBOX_EXECUTION", `沙箱执行失败：${stderr.slice(-1500)}`, 422),
+        );
+      resolve(stdout);
+    });
+    child.stdin.end(input);
+  });
 }
