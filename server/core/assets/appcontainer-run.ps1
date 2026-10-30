@@ -135,11 +135,11 @@ public static class OmAppContainer {
     Marshal.FreeHGlobal(list);
     Marshal.FreeHGlobal(capsPtr);
     Marshal.FreeHGlobal(env);
-    if (!ok) throw new Win32Exception(error, "CreateProcess in AppContainer failed");
+    if (!ok) throw new Win32Exception(error, "CreateProcess in AppContainer failed: error " + error + " (" + new Win32Exception(error).Message + ")");
     if (!AssignProcessToJobObject(job, pi.hProcess)) {
       int assignError = Marshal.GetLastWin32Error();
       TerminateProcess(pi.hProcess, 1);
-      throw new Win32Exception(assignError, "AssignProcessToJobObject failed");
+      throw new Win32Exception(assignError, "AssignProcessToJobObject failed: error " + assignError + " (" + new Win32Exception(assignError).Message + ")");
     }
     ResumeThread(pi.hThread);
     WaitForSingleObject(pi.hProcess, 0xFFFFFFFF);
