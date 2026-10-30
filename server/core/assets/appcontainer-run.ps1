@@ -164,11 +164,11 @@ foreach ($dir in ($ReadDirs -split "\|" | Where-Object { $_ })) {
   $rules = (Get-Acl -LiteralPath $dir).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
   $granted = $rules | Where-Object { $_.AccessControlType -eq "Allow" -and ($_.IdentityReference.Value -eq $sid -or $_.IdentityReference.Value -eq "S-1-15-2-1") }
   if (-not $granted) {
-    & icacls.exe $dir /grant "*${sid}:(OI)(CI)RX" /Q | Out-Null
+    & "$env:SystemRoot\System32\icacls.exe" $dir /grant "*${sid}:(OI)(CI)RX" /Q | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Cannot grant sandbox read access: $dir" }
   }
 }
-& icacls.exe $WorkDir /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
+& "$env:SystemRoot\System32\icacls.exe" $WorkDir /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Cannot grant sandbox work directory: $WorkDir" }
 
 # Minimal environment for the child; no secrets.

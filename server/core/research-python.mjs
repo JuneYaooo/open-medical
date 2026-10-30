@@ -249,7 +249,13 @@ ${env.exec.map((p) => `(allow process-exec (literal ${q(p)}))`).join("\n")}
         "-MemoryMb", String(this.memoryMb),
       ],
       cwd: workdir,
-      env: { SystemRoot: process.env.SystemRoot || "C:\\Windows", PATH: process.env.PATH || "" },
+      // 启动器本身需要的 Windows 基础变量（缺 PATHEXT 时 PowerShell 不认 .exe）；
+      // 沙箱内 Python 另用最小环境，不继承这些。
+      env: Object.fromEntries(
+        ["SystemRoot", "windir", "PATH", "PATHEXT", "ComSpec", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PSModulePath"]
+          .filter((key) => process.env[key] !== undefined)
+          .map((key) => [key, process.env[key]]),
+      ),
       timeoutMs: this.timeoutMs + 30000, // 首次需编译启动器
       maxOutput: 4_000_000,
       signal,
