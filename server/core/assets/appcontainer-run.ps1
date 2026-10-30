@@ -171,8 +171,25 @@ foreach ($dir in ($ReadDirs -split "\|" | Where-Object { $_ })) {
 & "$env:SystemRoot\System32\icacls.exe" $WorkDir /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Cannot grant sandbox work directory: $WorkDir" }
 
-# Minimal environment for the child; no secrets.
-$envBlock = "SystemRoot=$env:SystemRoot`0TEMP=$WorkDir`0TMP=$WorkDir`0USERPROFILE=$WorkDir`0HOME=$WorkDir`0MPLCONFIGDIR=$WorkDir`0PYTHONIOENCODING=utf-8`0PYTHONUTF8=1`0OPENBLAS_NUM_THREADS=1`0OMP_NUM_THREADS=1`0MKL_NUM_THREADS=1`0`0"
+# Minimal environment for the child; no secrets. AppContainer process
+# creation rewrites LOCALAPPDATA/TEMP to the container's own folders and fails
+# with ERROR_ENVVAR_NOT_FOUND (203) when the profile variables are missing, so
+# the system path variables are passed through.
+$vars = [ordered]@{}
+foreach ($name in @("SystemRoot", "windir", "SystemDrive", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramData", "HOMEDRIVE", "HOMEPATH")) {
+  $value = [Environment]::GetEnvironmentVariable($name)
+  if ($value) { $vars[$name] = $value }
+}
+$vars["TEMP"] = $WorkDir
+$vars["TMP"] = $WorkDir
+$vars["HOME"] = $WorkDir
+$vars["MPLCONFIGDIR"] = $WorkDir
+$vars["PYTHONIOENCODING"] = "utf-8"
+$vars["PYTHONUTF8"] = "1"
+$vars["OPENBLAS_NUM_THREADS"] = "1"
+$vars["OMP_NUM_THREADS"] = "1"
+$vars["MKL_NUM_THREADS"] = "1"
+$envBlock = (($vars.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join "`0") + "`0`0"
 $arguments = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($ArgumentsBase64))
 $commandLine = '"' + $Python + '" ' + $arguments
 $code = [OmAppContainer]::Run($ContainerName, $Python, $commandLine, $WorkDir, $envBlock, [long]$MemoryMb * 1MB)
