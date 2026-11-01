@@ -99,6 +99,17 @@ test("今日待办", async ({ page }) => {
   });
 });
 
+test("复诊名单", async ({ page }) => {
+  await open(page, "/?view=schedule");
+  await expect(page.getByRole("heading", { name: "复诊名单", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^待复诊/ })).toBeVisible();
+  await capture(page, "05b-revisit-upcoming.png", { scroll: ".work-directory.schedule-page" });
+
+  await page.getByRole("button", { name: "到诊记录" }).click();
+  await expect(page.getByRole("heading", { name: /^到诊 \d+ 人次/ })).toBeVisible();
+  await capture(page, "05c-revisit-records.png", { scroll: ".work-directory.schedule-page" });
+});
+
 test("知识库", async ({ page }) => {
   await open(page, "/?view=knowledge");
   await expect(

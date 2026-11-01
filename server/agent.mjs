@@ -40,7 +40,6 @@ import { LabImporter } from "./medical/lab-import.mjs";
 import { Backups } from "./medical/backups.mjs";
 import { DemoPack } from "./medical/demo-pack.mjs";
 import { PatientSchedule } from "./medical/patient-schedule.mjs";
-import { lostPatients } from "./medical/lost-followup.mjs";
 import { Extensions } from "./medical/extensions.mjs";
 import { extensionTools } from "./medical/extension-tools.mjs";
 import { DoctorOverview } from "./medical/doctor-overview.mjs";
@@ -1895,7 +1894,6 @@ export function createServer(options = {}) {
         if (parts.length === 4 && parts[3] === "rollback" && req.method === "POST") return send(res, 200, extensions.rollback(parts[2], (await body(req)).version));
       }
       if (path === "/api/appointments" && req.method === "GET") return send(res, 200, schedule.range(url.searchParams.get("from"), url.searchParams.get("to"), { includeCancelled: url.searchParams.get("cancelled") === "1" }));
-      if (path === "/api/patients-lost" && req.method === "GET") return send(res, 200, lostPatients(schedule, { days: url.searchParams.get("days") || 90, busyPatientIds: () => followupService()?.followups?.activePatientIds?.() || [] }));
       if (parts[0] === "api" && parts[1] === "appointments" && parts.length === 3 && req.method === "PATCH") return send(res, 200, schedule.update(parts[2], await body(req)));
       if (parts[0] === "api" && parts[1] === "patients" && parts[2]) {
         const pid = identifier(parts[2]);

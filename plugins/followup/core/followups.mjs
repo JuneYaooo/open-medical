@@ -64,13 +64,6 @@ export class FollowUpManager {
     check(row, "NOT_FOUND", "患者不存在", 404);
     return JSON.parse(row.data);
   }
-  // 有进行中的随访计划或待处理提醒的患者，供「失访患者」盘点排除。
-  activePatientIds() {
-    const ids = new Set();
-    for (const r of this.store.db.prepare("SELECT DISTINCT patient_id FROM follow_ups WHERE status IN ('active','running')").all()) ids.add(r.patient_id);
-    for (const r of this.store.db.prepare("SELECT DISTINCT patient_id FROM reminders WHERE status='pending'").all()) ids.add(r.patient_id);
-    return [...ids];
-  }
   list(patientId) {
     this.patientRow(patientId);
     return this.store.db

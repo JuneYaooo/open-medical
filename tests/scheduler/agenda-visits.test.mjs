@@ -50,7 +50,7 @@ test("PatientSchedule.range：跨患者按日期列出，同日有时间的在�
   assert.equal(week.appointments[2].id, a.id);
   assert.equal(schedule.range("2026-03-11", "2026-03-11", { includeCancelled: true }).appointments.length, 1);
   assert.throws(() => schedule.range("2026-03-16", "2026-03-10"), /日期范围/);
-  assert.throws(() => schedule.range("2026-01-01", "2026-06-01"), /62 天/);
+  assert.throws(() => schedule.range("2026-01-01", "2027-03-01"), /一年/);
 });
 
 test("今日待办：未定时间的复诊排在定时复诊之后，带时间与预约版本；复评生成的随访不重复出现", () => {

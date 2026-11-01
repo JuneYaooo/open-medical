@@ -1,47 +1,46 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
 import { api } from "./agent-runtime";
 import "./clinic-schedule.css";
 
-// 门诊日程：全部患者的复诊预约（按日 / 按周），以及失访患者。
-const LOST_DAYS = 90;
-const STATUS = { scheduled: ["已预约", "is-info"], attended: ["已到诊", "is-ok"], missed: ["未到诊", "is-danger"], cancelled: ["已取消", ""] };
+// 复诊名单：接下来谁要来复诊，以及最近谁来了、谁没来。
+const RANGES = [[1, "1个月"], [3, "3个月"], [6, "半年"]];
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const pad = (n) => String(n).padStart(2, "0");
 const localDay = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parse = (day) => new Date(`${day}T12:00:00`);
 const addDays = (day, n) => { const d = parse(day); d.setDate(d.getDate() + n); return localDay(d); };
-const monday = (day) => addDays(day, -((parse(day).getDay() + 6) % 7));
-const short = (day) => { const d = parse(day); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+const addMonths = (day, n) => { const d = parse(day); d.setMonth(d.getMonth() + n); return localDay(d); };
+const dateLabel = (day) => { const d = parse(day); return `${d.getMonth() + 1}月${d.getDate()}日 ${WEEKDAYS[d.getDay()]}`; };
+const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
+// 预约日已过但没登记的，往回多看 60 天。
+const UNREGISTERED_LOOKBACK = 60;
 
 export function ClinicSchedule({ onPatient }) {
   const today = localDay();
-  const [mode, setMode] = useState("day");
-  const [anchor, setAnchor] = useState(today);
+  const [mode, setMode] = useState("upcoming");
+  const [months, setMonths] = useState(3);
   const [data, setData] = useState(null);
-  const [lost, setLost] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(null);
   const [reload, setReload] = useState(0);
-  const from = mode === "week" ? monday(anchor) : anchor;
-  const to = mode === "week" ? addDays(from, 6) : anchor;
+  const from = mode === "upcoming" ? addDays(today, -UNREGISTERED_LOOKBACK) : addMonths(today, -months);
+  const to = mode === "upcoming" ? addMonths(today, months) : today;
 
   useEffect(() => {
     let alive = true;
     setLoading(true); setError("");
-    const request = mode === "lost"
-      ? api(`/api/patients-lost?days=${LOST_DAYS}`).then((result) => alive && setLost(result))
-      : api(`/api/appointments?from=${from}&to=${to}`).then((result) => alive && setData(result));
-    request.catch((err) => alive && setError(err.message)).finally(() => alive && setLoading(false));
+    api(`/api/appointments?from=${from}&to=${to}`)
+      .then((result) => alive && setData(result))
+      .catch((err) => alive && setError(err.message))
+      .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [mode, from, to, reload]);
+  }, [from, to, reload]);
 
-  const show = (next) => { setMode(next); setAnchor(today); setNotice(""); };
-  const shift = (sign) => setAnchor((day) => addDays(day, sign * (mode === "week" ? 7 : 1)));
   const openPatient = (patientId) => onPatient({ id: patientId, tab: "appointments" });
-  // 与今日待办相同：带版本号登记到诊结果，别处改过会提示刷新。
+  // 带版本号登记到诊结果，别处改过会提示刷新。
   const outcome = async (a, status) => {
     if (acting) return;
     setActing(a.id); setError(""); setNotice("");
@@ -52,72 +51,66 @@ export function ClinicSchedule({ onPatient }) {
     } catch (err) { setError(err.message); }
     finally { setActing(null); }
   };
-  const chip = (a) => {
-    const [label, tone] = a.status === "scheduled" && a.date < today ? ["未登记", "is-caution"] : STATUS[a.status] || [a.status, ""];
-    return <em className={`om-chip ${tone}`}>{label}</em>;
-  };
-  const actions = (a) => a.status === "scheduled" && a.date <= today && <span className="schedule-actions">
+
+  const all = data?.from === from && data?.to === to ? data.appointments : null;
+  const scheduled = all?.filter((a) => a.status === "scheduled") || [];
+  const unregistered = scheduled.filter((a) => a.date < today);
+  const upcoming = scheduled.filter((a) => a.date >= today);
+  const records = (all?.filter((a) => a.status === "attended" || a.status === "missed") || []).reverse();
+  const attendedCount = records.filter((a) => a.status === "attended").length;
+
+  const name = (a) => <button className="om-link schedule-patient" onClick={() => openPatient(a.patientId)}>{a.patientName || "未命名患者"}{a.patientNumber && <small>{a.patientNumber}</small>}</button>;
+  const register = (a) => <span className="schedule-actions">
     <button className="text-button" disabled={Boolean(acting)} onClick={() => outcome(a, "attended")}>已到诊</button>
     <button className="text-button" disabled={Boolean(acting)} onClick={() => outcome(a, "missed")}>未到诊</button>
   </span>;
-  const name = (a) => <button className="om-link schedule-patient" onClick={() => openPatient(a.patientId)}>{a.patientName || "未命名患者"}{a.patientNumber && <small>{a.patientNumber}</small>}</button>;
-  const appointments = data?.from === from && data?.to === to ? data.appointments : null;
+  const row = (a, extra) => <li key={a.id}>
+    <span className="schedule-date">{dateLabel(a.date)}{a.time && <small>{a.time}</small>}</span>
+    {name(a)}
+    <span className="schedule-detail">{a.reason || ""}</span>
+    {extra}
+  </li>;
+  const until = (a) => { const n = daysBetween(today, a.date); return <span className="schedule-detail">{n === 0 ? "今天" : `${n} 天后`}</span>; };
 
   return (
-    <section className="clinic-schedule" aria-label="门诊日程" aria-busy={loading}>
+    <section className="clinic-schedule" aria-label="复诊名单" aria-busy={loading}>
       <div className="om-page-head schedule-head">
-        <div><h1>门诊日程</h1>
-          <span className="om-page-meta">{mode === "lost" ? `未到诊后未再预约，或超过 ${LOST_DAYS} 天未复诊且没有随访安排的患者。` : "全部患者的复诊预约，点姓名可打开患者的复诊预约。"}</span></div>
+        <div><h1>复诊名单</h1>
+          <span className="om-page-meta">{mode === "upcoming" ? "接下来要来复诊的患者。点姓名打开患者的复诊预约。" : "最近来了和没来的患者。没来的可以点进去重新预约。"}</span></div>
         <button className="icon-button" title="刷新" aria-label="刷新" disabled={loading} onClick={() => setReload((n) => n + 1)}><RotateCw size={16} /></button>
       </div>
       <div className="schedule-toolbar">
-        <div className="agenda-filters" role="group" aria-label="查看方式">
-          {[["day", "今天"], ["week", "本周"], ["lost", "失访患者"]].map(([id, label]) => <button key={id} aria-pressed={mode === id} className={mode === id ? "active" : ""} onClick={() => show(id)}>{label}{id === "lost" && lost && <span>{lost.patients.length}</span>}</button>)}
+        <div className="agenda-filters" role="group" aria-label="查看内容">
+          {[["upcoming", "待复诊"], ["records", "到诊记录"]].map(([id, label]) => <button key={id} aria-pressed={mode === id} className={mode === id ? "active" : ""} onClick={() => { setMode(id); setNotice(""); }}>{label}</button>)}
         </div>
-        {mode !== "lost" && <div className="schedule-nav">
-          <button className="icon-button" aria-label={mode === "week" ? "上一周" : "前一天"} onClick={() => shift(-1)}><ChevronLeft size={16} /></button>
-          <b>{mode === "week" ? `${short(from)} – ${short(to)}` : `${short(from)} ${WEEKDAYS[parse(from).getDay()]}${from === today ? "（今天）" : ""}`}</b>
-          <button className="icon-button" aria-label={mode === "week" ? "下一周" : "后一天"} onClick={() => shift(1)}><ChevronRight size={16} /></button>
-        </div>}
+        <div className="agenda-filters" role="group" aria-label="时间范围">
+          {RANGES.map(([n, label]) => <button key={n} aria-pressed={months === n} className={months === n ? "active" : ""} onClick={() => setMonths(n)}>{mode === "upcoming" ? `未来${label}` : `近${label}`}</button>)}
+        </div>
       </div>
       {notice && <p className="notice" role="status">{notice}</p>}
       {error && <p className="form-error" role="alert">{error}<button className="text-button" onClick={() => setReload((n) => n + 1)}>重试</button></p>}
 
-      {mode === "day" && appointments && (appointments.length ? <ul className="schedule-day">
-        {appointments.map((a) => <li key={a.id}>
-          <span className="schedule-time">{a.time || "未定时间"}</span>
-          {name(a)}
-          <span className="schedule-detail">{[a.reason, a.place].filter(Boolean).join(" · ")}</span>
-          {chip(a)}
-          {actions(a)}
-        </li>)}
-      </ul> : <p className="om-empty">这一天没有复诊预约。</p>)}
+      {mode === "upcoming" && all && <>
+        {unregistered.length > 0 && <>
+          <h2 className="schedule-section">预约日已过，还没登记 <span>{unregistered.length}</span></h2>
+          <ul className="schedule-list">{unregistered.map((a) => row(a, register(a)))}</ul>
+        </>}
+        <h2 className="schedule-section">待复诊 <span>{upcoming.length}</span></h2>
+        {upcoming.length
+          ? <ul className="schedule-list">{upcoming.map((a) => row(a, a.date === today ? register(a) : until(a)))}</ul>
+          : <p className="om-empty">这段时间没有复诊预约。</p>}
+      </>}
 
-      {mode === "week" && appointments && <div className="schedule-week">
-        {Array.from({ length: 7 }, (_, i) => addDays(from, i)).map((day) => {
-          const items = appointments.filter((a) => a.date === day);
-          return <div key={day} className={day === today ? "schedule-col is-today" : "schedule-col"}>
-            <button className="schedule-col-head" onClick={() => { setMode("day"); setAnchor(day); }}>{WEEKDAYS[parse(day).getDay()]} <small>{short(day)}</small>{items.length > 0 && <span>{items.length}</span>}</button>
-            {items.map((a) => <div key={a.id} className="schedule-cell">
-              <small>{a.time || "未定时间"}</small>
-              {name(a)}
-              {chip(a)}
-            </div>)}
-          </div>;
-        })}
-      </div>}
+      {mode === "records" && all && <>
+        <h2 className="schedule-section">到诊 {attendedCount} 人次 · 未到 {records.length - attendedCount} 人次</h2>
+        {records.length
+          ? <ul className="schedule-list">{records.map((a) => row(a, a.status === "attended"
+            ? <em className="om-chip is-ok">已到诊</em>
+            : <span className="schedule-actions"><em className="om-chip is-danger">未到诊</em><button className="text-button" onClick={() => openPatient(a.patientId)}>重新预约</button></span>))}</ul>
+          : <p className="om-empty">这段时间没有到诊记录。</p>}
+      </>}
 
-      {mode === "lost" && lost && (lost.patients.length ? <ul className="schedule-day schedule-lost">
-        {lost.patients.map((p) => <li key={p.patientId}>
-          {name(p)}
-          <span className="schedule-detail">{p.reason === "missed"
-            ? <><em className="om-chip is-danger">未到诊</em> {p.lastDate} 预约未到，之后没有再预约</>
-            : <><em className="om-chip is-caution">超过 {lost.days} 天未复诊</em> 上次 {p.lastDate}，已 {p.daysSince} 天</>}</span>
-          <button className="secondary" onClick={() => openPatient(p.patientId)}>预约复诊</button>
-        </li>)}
-      </ul> : <p className="om-empty">目前没有失访患者。</p>)}
-
-      {loading && !(mode === "lost" ? lost : appointments) && <p className="muted" role="status">正在读取…</p>}
+      {loading && !all && <p className="muted" role="status">正在读取…</p>}
     </section>
   );
 }

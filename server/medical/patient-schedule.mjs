@@ -133,7 +133,7 @@ export class PatientSchedule {
   // request. Timed visits come first within a day, untimed ones after.
   range(from, to, { includeCancelled = false } = {}) {
     check(DATE.test(from || "") && DATE.test(to || "") && from <= to, "INVALID_INPUT", "日期范围须为 YYYY-MM-DD，且开始不晚于结束");
-    check(Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`) <= 62 * 86400000, "INVALID_INPUT", "一次最多查看 62 天的预约");
+    check(Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`) <= 366 * 86400000, "INVALID_INPUT", "一次最多查看一年的预约");
     const rows = this.db.prepare(`SELECT a.data, p.data patient FROM appointments a JOIN patients p ON p.id=a.patient_id WHERE a.date BETWEEN ? AND ?${includeCancelled ? "" : " AND a.status<>'cancelled'"}`).all(from, to);
     const appointments = [];
     for (const row of rows) {

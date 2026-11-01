@@ -1,32 +1,19 @@
-/* 门诊日程：按日列表、按周七列、失访患者列表。 */
+/* 复诊名单：待复诊 / 到诊记录两个列表。 */
 .clinic-schedule .schedule-head { align-items: flex-end; margin-bottom: 8px; }
 .clinic-schedule .schedule-head h1 { font-size: var(--title-size, 24px); font-weight: 650; margin: 0; }
 .clinic-schedule .schedule-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 16px 0 14px; }
 .clinic-schedule .agenda-filters button { font-size: var(--meta-size, 14px); padding: 6px 12px; min-height: 36px; }
-.clinic-schedule .schedule-nav { display: flex; align-items: center; gap: 8px; }
-.clinic-schedule .schedule-nav b { font-size: var(--body-size, 16px); font-weight: 600; min-width: 9em; text-align: center; }
-.clinic-schedule .schedule-day { list-style: none; margin: 0; padding: 0; background: var(--card, #fff); border: 1px solid var(--border); border-radius: var(--card-radius, 10px); overflow: hidden; }
-.clinic-schedule .schedule-day li { display: grid; grid-template-columns: 84px minmax(120px, 180px) minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--line); }
-.clinic-schedule .schedule-day li:first-child { border-top: 0; }
-.clinic-schedule .schedule-lost li { grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto; }
-.clinic-schedule .schedule-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.clinic-schedule .schedule-section { font-size: var(--body-size, 16px); font-weight: 600; margin: 18px 0 8px; }
+.clinic-schedule .schedule-section span { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.clinic-schedule .schedule-list { list-style: none; margin: 0; padding: 0; background: var(--card, #fff); border: 1px solid var(--border); border-radius: var(--card-radius, 10px); overflow: hidden; }
+.clinic-schedule .schedule-list li { display: grid; grid-template-columns: 130px minmax(120px, 180px) minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--line); }
+.clinic-schedule .schedule-list li:first-child { border-top: 0; }
+.clinic-schedule .schedule-date { font-weight: 600; font-variant-numeric: tabular-nums; }
+.clinic-schedule .schedule-date small { display: block; color: var(--muted); font-weight: 400; font-size: var(--small-size, 13px); }
 .clinic-schedule .schedule-patient { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 650; text-align: left; }
 .clinic-schedule .schedule-patient small { color: var(--muted); font-weight: 400; font-size: var(--small-size, 13px); }
 .clinic-schedule .schedule-detail { color: var(--muted); font-size: var(--meta-size, 14px); overflow-wrap: anywhere; }
-.clinic-schedule .schedule-actions { display: inline-flex; gap: 8px; white-space: nowrap; }
-.clinic-schedule .schedule-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--card, #fff); border: 1px solid var(--border); border-radius: var(--card-radius, 10px); overflow: hidden; }
-.clinic-schedule .schedule-col { min-height: 160px; border-left: 1px solid var(--line); padding-bottom: 8px; }
-.clinic-schedule .schedule-col:first-child { border-left: 0; }
-.clinic-schedule .schedule-col.is-today { background: var(--accent-soft); }
-.clinic-schedule .schedule-col-head { display: flex; width: 100%; align-items: baseline; gap: 6px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; font-weight: 600; cursor: pointer; text-align: left; }
-.clinic-schedule .schedule-col-head small { color: var(--muted); font-weight: 400; }
-.clinic-schedule .schedule-col-head span { margin-left: auto; color: var(--accent); }
-.clinic-schedule .schedule-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 10px; }
-.clinic-schedule .schedule-cell small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.clinic-schedule .schedule-actions { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 @media (max-width: 760px) {
-  .clinic-schedule .schedule-day li,
-  .clinic-schedule .schedule-lost li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
-  .clinic-schedule .schedule-week { grid-template-columns: minmax(0, 1fr); }
-  .clinic-schedule .schedule-col { min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
-  .clinic-schedule .schedule-col:first-child { border-top: 0; }
+  .clinic-schedule .schedule-list li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
 }
