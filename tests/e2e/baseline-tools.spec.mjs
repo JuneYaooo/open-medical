@@ -288,13 +288,13 @@ test("设置 工具与服务", async ({ page }) => {
   });
 });
 
-test("设置 消息渠道 飞书分身", async ({ page }) => {
+test("设置 消息渠道 医生分身", async ({ page }) => {
   await open(page, "/?view=settings&settingsTab=knowledge-bot");
   await expect(
     page.getByRole("heading", { name: "设置", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "飞书分身", exact: true }),
+    page.getByRole("heading", { name: "医生分身", exact: true }),
   ).toBeVisible();
   await expect(
     page

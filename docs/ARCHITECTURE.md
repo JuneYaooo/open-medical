@@ -225,16 +225,17 @@ HTTP 面统一经 `guard()`：localhost Host 校验 + 同源 + 启动时生成�
 | `channel-wecom` | 企业微信：连接器、通讯录/客户/群、客服与智能机器人、会话存档、`wecom_*` 表与旧 `/api/wecom/*` 路由；客户/群工具提示。 |
 | `clinical-ref` | 临床速查：量表、检验参考、ICD-9/10、不良反应，工具目录卡片与 `legacyViews` 页面。 |
 | `doctor-notifications` | 医生提醒：微信医生号/飞书 Webhook 每日摘要、设置面板；摘要不含患者姓名与病历内容。 |
-| `drg` | DRG 示例测算：分组规则、示例费率、`legacyViews` 页面与测算 API。 |
-| `feishu-knowledge-bot` | 飞书分身：按医生习惯与勾选的知识库在飞书群/单聊答复，自动记录会话、危险信号与回复复核、AI 会话洞察、待办来源 `avatar`；`knowledge_bot_*` 表与设置面板；依赖知识库能力。 |
+| `care-packs` | 专病管理包：`packs/*.json` 描述病种随访节点、问卷、检验监测阈值与患教素材；安装写入随访模板（`pack_<id>`）与「患教素材」知识库，`care-packs.apply` 提案为患者生成随访与监测；设置面板位于「技能与规则」。 |
+| `drg` | 默认关闭（`keepEnabledOnUpgrade`，升级用户保持开启）。DRG 示例测算：分组规则、示例费率、`legacyViews` 页面与测算 API。 |
+| `feishu-knowledge-bot` | 医生分身：根据医生知识库对外科普，目前支持飞书渠道；按医生习惯与勾选的知识库在群/单聊答复，自动记录会话、危险信号与回复复核、AI 会话洞察、待办来源 `avatar`；`knowledge_bot_*` 表与设置面板；依赖知识库能力。 |
 | `followup` | 随访与患者消息：计划/问卷、聊天随访、自动随访、企微机器人业务层、care 引擎、`follow_*`/`followup_*`/`chat_*`/`care_*` 表、`followup`/`messages` 待办、患者页沟通 tab、7 个历史提案 type、旧随访/care 路由；需至少一个已连接渠道才激活。 |
 | `learning` | 学习与规则：医生习惯/记忆候选、自动化规则、专科模板包、`review_*`/`habit_*`/`learning_*`/`workbench_*`/`automation_*`/`evolution_*` 表、设置面板与 `custom` 待办来源。 |
 | `legacy-agenda`（已撤销） | 过渡期的待办来源集合；各 kind 已迁入 `followup`、`risk-rules`、`trials`、`care-tasks`、`learning`，目录在 T11c 删除。 |
 | `literature` | 文献研究：PubMed/Europe PMC 检索、文章导入会话材料、证据校验工作流、`legacyViews` 页面与旧 `/api/literature/*` 路由。 |
-| `research-stats` | 科研统计与脱敏导出：描述统计、组间比较、样本量、脱敏 CSV；`legacyViews` 与工具卡片。 |
+| `research-stats` | 默认关闭（同上）。科研统计与脱敏导出：描述统计、组间比较、样本量、脱敏 CSV；`legacyViews` 与工具卡片。 |
 | `risk-rules` | 风险规则：阈值/趋势/监测规则、`risk_alerts`/`lab_*` 表、`risk` 待办、患者简报风险计数与旧 `/api/risk*` 路由。 |
 | `similar-cases` | 相似病例：本地病例库确定性相似度、在线病例报告、`similar-case-search` 工作流、`similar_cases` 结果卡片。 |
-| `trials` | 临床试验入组：方案库、规则预筛、批量 AI 初筛 job、医生核对/入组提案、`trial_*` 表、`trial` 待办与工具卡片。 |
+| `trials` | 默认关闭（同上）。临床试验入组：方案库、规则预筛、批量 AI 初筛 job、医生核对/入组提案、`trial_*` 表、`trial` 待办与工具卡片。 |
 
 ### 6.5 前端插槽
 

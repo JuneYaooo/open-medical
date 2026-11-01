@@ -1,0 +1,95 @@
+{
+  "id": "diabetes",
+  "version": "1.0.0",
+  "name": "2 型糖尿病管理包",
+  "disease": "E11 2 型糖尿病",
+  "summary": "2 型糖尿病一年随访：血糖与低血糖自测问卷、糖化血红蛋白和低血糖监测、并发症筛查节点，以及低血糖处理、足部护理等患教。",
+  "references": ["中国糖尿病防治指南（2024 版）", "国家基层糖尿病防治管理指南"],
+  "plan": {
+    "name": "2 型糖尿病管理包 · 一年随访",
+    "nodes": [
+      {
+        "offsetDays": 14,
+        "title": "2 周随访",
+        "items": ["血糖监测记录", "低血糖事件", "用药依从性与胃肠道反应"],
+        "questionnaire": {
+          "title": "糖尿病 2 周自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "fpg", "text": "最近 3 天早上空腹血糖平均是多少？", "type": "number", "unit": "mmol/L", "min": 1, "max": 35, "required": true, "alertIf": { "op": "gt", "value": 13.9 } },
+            { "id": "lowest", "text": "这两周测到的最低一次血糖是多少？没测过可写 0", "type": "number", "unit": "mmol/L", "min": 0, "max": 35, "required": true, "alertIf": { "op": "lt", "value": 3.9 } },
+            { "id": "hypo", "text": "有没有出现心慌、出冷汗、手抖、特别饿的情况？", "type": "single", "required": true, "options": [{ "label": "有，不止一次", "score": 3 }, { "label": "有过一次", "score": 2 }, { "label": "没有", "score": 0 }] },
+            { "id": "adherence", "text": "降糖药或胰岛素是否按时使用？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
+            { "id": "note", "text": "还有什么想告诉医生的？", "type": "text" }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 3, "severity": "warning", "message": "疑似低血糖或依从性差，建议尽快联系患者复核用药。" } }
+        }
+      },
+      {
+        "offsetDays": 30,
+        "title": "1 个月随访",
+        "items": ["空腹及餐后血糖是否接近目标", "低血糖事件", "饮食与运动执行情况"],
+        "questionnaire": {
+          "title": "糖尿病月度自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "fpg", "text": "最近一周早上空腹血糖平均是多少？", "type": "number", "unit": "mmol/L", "min": 1, "max": 35, "required": true, "alertIf": { "op": "gt", "value": 13.9 } },
+            { "id": "lowest", "text": "这个月测到的最低一次血糖是多少？没测过可写 0", "type": "number", "unit": "mmol/L", "min": 0, "max": 35, "required": true, "alertIf": { "op": "lt", "value": 3.9 } },
+            { "id": "adherence", "text": "降糖药或胰岛素是否按时使用？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
+            { "id": "exercise", "text": "最近一周运动了几天（每次 30 分钟左右）？", "type": "single", "required": true, "options": [{ "label": "5 天以上", "score": 0 }, { "label": "2–4 天", "score": 1 }, { "label": "1 天或没有", "score": 2 }] },
+            { "id": "foot", "text": "脚上有没有伤口、水泡、发红或麻木？", "type": "single", "required": true, "options": [{ "label": "有", "score": 3 }, { "label": "没有", "score": 0 }] }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 3, "severity": "warning", "message": "依从性、运动或足部问题评分偏高，建议尽快联系患者。" } }
+        }
+      },
+      {
+        "offsetDays": 90,
+        "title": "3 个月随访",
+        "items": ["糖化血红蛋白（多数患者目标 <7%，需个体化）", "体重、腰围、血压", "血脂、肾功能"]
+      },
+      {
+        "offsetDays": 180,
+        "title": "半年并发症筛查",
+        "items": ["眼底检查", "尿白蛋白/肌酐比与 eGFR", "足部检查（感觉、足背动脉）", "糖化血红蛋白"],
+        "questionnaire": {
+          "title": "糖尿病半年自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "fpg", "text": "最近一周早上空腹血糖平均是多少？", "type": "number", "unit": "mmol/L", "min": 1, "max": 35, "required": true, "alertIf": { "op": "gt", "value": 13.9 } },
+            { "id": "vision", "text": "最近视力有没有变模糊？", "type": "single", "required": true, "options": [{ "label": "有", "score": 2 }, { "label": "没有", "score": 0 }] },
+            { "id": "numb", "text": "手脚有没有麻木、刺痛或像戴了手套袜子？", "type": "single", "required": true, "options": [{ "label": "经常", "score": 2 }, { "label": "偶尔", "score": 1 }, { "label": "没有", "score": 0 }] },
+            { "id": "foot", "text": "脚上有没有伤口、水泡、发红？", "type": "single", "required": true, "options": [{ "label": "有", "score": 3 }, { "label": "没有", "score": 0 }] }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 3, "severity": "warning", "message": "可能存在眼、神经或足部并发症线索，建议安排筛查。" } }
+        }
+      },
+      {
+        "offsetDays": 365,
+        "title": "年度评估",
+        "items": ["全年血糖控制总结", "年度并发症筛查：眼底、尿白蛋白、足部、心电图", "决定下一年度管理计划"]
+      }
+    ]
+  },
+  "labMonitors": [
+    { "item": "糖化血红蛋白", "unit": "%", "op": "gt", "threshold": 9, "severity": "warning", "recheckDays": 90, "note": "糖尿病管理包：血糖控制明显不佳" },
+    { "item": "血糖", "unit": "mmol/L", "op": "lt", "threshold": 3.9, "severity": "critical", "note": "糖尿病管理包：低血糖" }
+  ],
+  "education": [
+    {
+      "title": "低血糖怎么认、怎么处理",
+      "body": "常见表现：心慌、出冷汗、手抖、头晕、特别饿，严重时意识不清。\n\n处理：\n1. 能测就先测，血糖低于 3.9 mmol/L 就要处理；测不了但症状明显，也先按低血糖处理。\n2. 马上吃 15 克左右的糖：如 3–4 块方糖、半杯（约 150 毫升）果汁或含糖饮料。\n3. 15 分钟后再测，仍低于 3.9 就再吃一次。\n4. 好转后如果离下顿饭还早，吃点饼干或面包。\n5. 意识不清时不要喂食，立即拨打 120。\n\n经常出现低血糖，一定要告诉医生调整用药。本材料为科普参考，具体以医生建议为准。"
+    },
+    {
+      "title": "糖尿病足部护理",
+      "body": "1. 每天检查双脚，看有没有伤口、水泡、红肿、颜色变化，看不到脚底可以用镜子或请家人帮忙。\n2. 每天用温水（低于 37℃，先用手肘试温）洗脚，擦干脚趾缝。\n3. 皮肤干可以涂润肤霜，但不要涂在脚趾缝里。\n4. 剪趾甲要平剪，不要剪得太短。\n5. 穿合脚、透气的鞋袜，穿鞋前检查鞋里有没有异物，不要赤脚走路。\n6. 不要自己处理鸡眼、老茧，不用热水袋、电热毯直接暖脚。\n\n发现伤口、水泡或红肿，尽快就医。本材料为科普参考。"
+    },
+    {
+      "title": "糖尿病饮食和运动",
+      "body": "饮食：\n1. 定时定量，主食粗细搭配，每餐有蔬菜和优质蛋白（鱼、蛋、豆制品、瘦肉）。\n2. 少吃甜食、含糖饮料和油炸食品；水果放在两餐之间，适量吃。\n3. 吃饭顺序可以先吃菜、再吃肉、最后吃主食。\n\n运动：\n1. 每周至少 150 分钟中等强度运动，如快走、骑车、游泳，分到 5 天左右。\n2. 饭后 1 小时左右运动较好，避免空腹运动。\n3. 用胰岛素或促泌剂的人，运动时随身带糖果，预防低血糖。\n\n本材料为科普参考，具体以医生建议为准。"
+    },
+    {
+      "title": "在家测血糖要注意什么",
+      "body": "1. 测前洗手、擦干，不要用酒精没干的手指采血。\n2. 采指尖两侧，轮换手指，不要用力挤。\n3. 注意试纸有效期，开封后按说明保存。\n4. 记录日期、时间（空腹、餐后 2 小时、睡前）和数值，复诊时带给医生。\n5. 测多少次、什么时候测，按医生的安排来；血糖不稳、调整用药或身体不舒服时要多测。\n\n本材料为科普参考，具体以医生建议为准。"
+    }
+  ]
+}

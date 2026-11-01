@@ -60,6 +60,7 @@ test("MEDICAL_PLUGIN_DIRS 按 path.delimiter 追加到默认 plugins/ 目录，�
   assert.deepEqual(
     list.body.plugins.map((plugin) => plugin.id),
     [
+      "care-packs",
       "care-tasks",
       "channel",
       "channel-wechat",

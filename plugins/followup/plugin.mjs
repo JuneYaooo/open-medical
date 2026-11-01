@@ -3,7 +3,7 @@ import { createFollowupService } from "./service.mjs";
 import { createFollowupApi, FOLLOWUP_LEGACY_API_PATHS } from "./api/followup.mjs";
 import { registerFollowupTools } from "./tools.mjs";
 import { followupAgendaSources } from "./agenda.mjs";
-import { legacyFollowupProposals } from "./proposals.mjs";
+import { followupPlanProposals, legacyFollowupProposals } from "./proposals.mjs";
 import { messagingConnected } from "./connection.mjs";
 
 export default definePlugin({
@@ -21,6 +21,8 @@ export default definePlugin({
   // follow-ups) is gated inside the plugin by status().connected.
   capabilities: ["followup.agenda", "followup.tools"],
   legacyProposalTypes: legacyFollowupProposals(),
+  proposals: followupPlanProposals(),
+  skills: "./skills",
   migrations: "./migrations",
   // The plugin owns four historical table families. They stay in their
   // original names and shapes; migrations only add missing tables.
@@ -138,6 +140,9 @@ export default definePlugin({
       channelWecom: ctx.plugins["channel-wecom"]?.service || null,
       channelWechat: ctx.plugins["channel-wechat"]?.service || null,
       options: host.options || {},
+      // Auto-collected questionnaires re-run risk rules so an alert reaches
+      // the agenda right away; the risk engine may set up after followup.
+      risks: () => ctx.services.risks || null,
     });
   },
   status(ctx) {

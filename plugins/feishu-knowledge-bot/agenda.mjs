@@ -41,7 +41,7 @@ export const avatarAgendaSources = Object.freeze([
             detail: c.attentionReason || "请查看会话记录",
             at: c.attentionAt || c.lastAt,
             weight: c.attentionKind === "red-flag" ? 1 : 3,
-            fallbackName: "飞书分身",
+            fallbackName: "医生分身",
             action,
           });
         if (c.followUpAt && c.followUpAt <= current)
@@ -53,7 +53,7 @@ export const avatarAgendaSources = Object.freeze([
             detail: c.followUpNote || "你在分身会话记录中设置了稍后联系",
             at: c.followUpAt,
             weight: 4,
-            fallbackName: "飞书分身",
+            fallbackName: "医生分身",
             action,
           });
       }

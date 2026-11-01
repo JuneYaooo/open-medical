@@ -23,6 +23,7 @@ export default definePlugin({
   migrations: "./migrations",
   tablePrefix: "wecom_",
   prompt: "./prompt.md",
+  skills: "./skills",
   promptWhen: wecomContactConfigured,
   legacyApiPaths: WECOM_LEGACY_API_PATHS,
   setup(ctx) {

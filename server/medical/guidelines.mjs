@@ -253,7 +253,7 @@ export class GuidelineLibrary {
         doc.allowExternalUse = input.allowExternalUse;
       } else if (changedSource || status === "retired") doc.allowExternalUse = false;
       if (input.avatarExcluded !== undefined) {
-        check(typeof input.avatarExcluded === "boolean", "INVALID_INPUT", "飞书分身设置须为布尔值");
+        check(typeof input.avatarExcluded === "boolean", "INVALID_INPUT", "医生分身设置须为布尔值");
         doc.avatarExcluded = input.avatarExcluded;
       }
       doc.revision = (doc.revision || 0) + 1;

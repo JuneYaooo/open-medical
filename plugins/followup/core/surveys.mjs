@@ -10,6 +10,8 @@ import { check, identifier, string } from "../../../server/errors.mjs";
 // model is never in the collection loop. Scoring is pure local arithmetic;
 // threshold breaches surface through the same risk-alert loop as the lab rules.
 export const QUESTION_TYPES = ["single", "multi", "number", "text"];
+// 企业微信客户联系 / 微信客服，经随访插件的 CareEngine 发送。
+export const CARE_CHANNELS = ["wecom-kf", "wecom-contact"];
 const ANSWER_CONFIDENCE = ["exact", "partial", "manual", "raw"];
 const clip = (value, n) => {
   const s = String(value ?? "");
@@ -265,10 +267,10 @@ export function scoreSurvey(questionnaire, answers) {
 }
 
 export class FollowUpSurveys {
-  constructor(store, followups, { now = () => Date.now(), provider = null, channels = {} } = {}) {
+  constructor(store, followups, { now = () => Date.now(), provider = null, channels = {}, onCollected = null } = {}) {
     this.store = store;
     this.followups = followups;
-    Object.assign(this, { now, provider, channels });
+    Object.assign(this, { now, provider, channels, onCollected });
     // followup_surveys is created by the plugin migrations before setup.
   }
   save(row) {
@@ -382,6 +384,15 @@ export class FollowUpSurveys {
         409,
       );
       await this.channels.sendAibot(patientId, text);
+    } else if (CARE_CHANNELS.includes(channel)) {
+      check(
+        typeof this.channels?.sendCare === "function",
+        "CHAT_CHANNEL",
+        "企业微信通道未接入",
+        409,
+      );
+      const outcome = await this.channels.sendCare(channel, patientId, text, `survey_${survey.id}`);
+      survey.channelDetail = outcome?.detail || "";
     } else {
       check(channel === "manual", "INVALID_INPUT", "发送渠道无效");
     }
@@ -411,6 +422,7 @@ export class FollowUpSurveys {
       return `问卷部分作答已记录，还缺 ${missing.length} 题`;
     }
     const row = this.collect(patientId, survey.id, { answers: merged }, { via: survey.channel });
+    this.onCollected?.(patientId);
     return `问卷已回收，得分 ${row.score}${row.alert ? "，触发预警" : ""}`;
   }
   collect(patientId, surveyId, input = {}, { via = "manual" } = {}) {
@@ -463,7 +475,7 @@ export class FollowUpSurveys {
     // retry after a partial failure cannot double-record the survey.
     const contactedAt = survey.sentAt || survey.createdAt;
     const channelMethod =
-      { wechat: "wechat", aibot: "wecom", manual: "phone" }[via || survey.channel] ||
+      { wechat: "wechat", aibot: "wecom", "wecom-kf": "wecom", "wecom-contact": "wecom", manual: "phone" }[via || survey.channel] ||
       "unspecified";
     const summary = `问卷「${survey.questionnaire.title}」得分 ${score}${alert ? "，触发预警" : ""}。` +
       survey.questionnaire.questions

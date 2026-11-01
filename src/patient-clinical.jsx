@@ -465,7 +465,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           <label>开始日期（可选）<input type="date" value={newMed.startDate || ""} onChange={e=>setNewMed({...newMed,startDate:e.target.value})}/></label>
           <label>处方来源<input maxLength={200} value={newMed.source} onChange={e=>setNewMed({...newMed,source:e.target.value})}/></label>
           <select aria-label="新增用药状态" value={newMed.status} onChange={(e) => setNewMed({ ...newMed, status: e.target.value })}><option value="active">目前在用</option><option value="unknown">状态未记录</option><option value="stopped">已停用</option></select>
-          {medWarnings.length > 0 && <p role="alert" className="error clinical-allergy-warning">注意：{medWarnings.map(w => `「${w.medication}」与过敏史「${w.allergy}」匹配`).join("；")}。请核对后再添加。（仅按药名文字匹配，不能识别同类药物交叉过敏）</p>}
+          {medWarnings.length > 0 && <p role="alert" className="error clinical-allergy-warning">注意：{medWarnings.map(w => w.message).join(" ")} 请核对后再添加。（用药辅助提醒按药名和药物类别匹配，可能漏报。）</p>}
           <button
             className="secondary"
             onClick={addMedication}

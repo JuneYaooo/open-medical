@@ -20,6 +20,7 @@ export function definePlugin(spec = {}) {
     title,
     requires = {},
     enabledByDefault = true,
+    keepEnabledOnUpgrade = false,
     migrations,
     tablePrefix,
     legacyTables = [],
@@ -66,6 +67,11 @@ export function definePlugin(spec = {}) {
     typeof enabledByDefault === "boolean",
     "PLUGIN_SPEC",
     `插件 ${id} 的 enabledByDefault 必须是布尔值`,
+  );
+  check(
+    typeof keepEnabledOnUpgrade === "boolean",
+    "PLUGIN_SPEC",
+    `插件 ${id} 的 keepEnabledOnUpgrade 必须是布尔值`,
   );
   check(isObject(requires), "PLUGIN_SPEC", `插件 ${id} 的 requires 必须是对象`);
   const rawRequiredPlugins = requires.plugins ?? {};
@@ -498,6 +504,7 @@ export function definePlugin(spec = {}) {
       anyOf: Object.freeze(anyOf.map((group) => Object.freeze([...group]))),
     }),
     enabledByDefault,
+    keepEnabledOnUpgrade,
     migrations,
     tablePrefix,
     legacyTables: Object.freeze([...legacyTables]),

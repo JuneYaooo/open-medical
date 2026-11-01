@@ -165,11 +165,11 @@ export const MEDICAL_WORKFLOWS = [
   },
   {
     id: "med-safety",
-    title: "用药安全核查",
+    title: "用药辅助提醒",
     icon: ShieldCheck,
     category: "clinical",
     desc: "整理已记录用药、过敏史和需要进一步核对的事项",
-    output: "用药安全提示清单 · 内置规则（非穷尽）",
+    output: "用药辅助提醒清单 · 规则提醒，可能漏报",
     template: "med-safety",
     prompt: TASK_TEMPLATES["med-safety"].request,
   },

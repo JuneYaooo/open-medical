@@ -68,6 +68,8 @@ export async function startTestServer({
       provider,
       // 测试不访问内置脱敏服务；需要时由用例注入自己的假 worker。
       privacyBuiltinService: null,
+      // 现有用例覆盖 DRG、临床试验、科研统计；它们新安装默认关闭，这里显式开启。
+      pluginsEnabled: { drg: true, trials: true, "research-stats": true },
       ...serverOptions,
     });
     await new Promise((resolve, reject) => {

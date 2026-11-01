@@ -217,7 +217,7 @@
             "type": "patient"
           },
           "birthYear": 1966,
-          "detail": "联系患者后登记随访结果",
+          "detail": "问卷「示例·复诊资料回收」待下发，或电话随访后代填",
           "kind": "followup",
           "patientName": "示例·李婉珍",
           "patientNumber": "",

@@ -17,6 +17,9 @@ export const riskAgendaSources = Object.freeze([
           "SELECT id,patient_id,severity,updated_at,data FROM risk_alerts WHERE status='active'",
         )
         .all()) {
+        // General tips (info) stay on the patient page; the agenda lists
+        // only what needs action today.
+        if (row.severity === "info") continue;
         const data = JSON.parse(row.data);
         items.push({
           id: `risk:${row.id}`,

@@ -127,6 +127,10 @@ requires: {
 
 首次启动、`plugin_state` 还没有记录时的默认启用状态。测试插件、示例插件通常设为 `false`，避免影响截图基线和默认体验。
 
+#### `keepEnabledOnUpgrade`（可选，boolean，默认 `false`）
+
+和 `enabledByDefault: false` 搭配，用于“原来默认开启、现在改为默认关闭”的插件。全新安装时默认关闭；已有数据的升级用户（有插件迁移记录或已有患者）保持开启。首次判断结果写入 `plugin_state`，之后以医生的设置为准。
+
 #### `migrations`（可选，string）
 
 相对插件目录的迁移目录，例如 `"./migrations"`。宿主按文件名排序执行未应用的 `.sql`，每个文件一个事务，并写入 `plugin_migrations(plugin_id,name,applied_at)`。迁移幂等由宿主保证；SQL 仍应使用 `IF NOT EXISTS`。已应用的迁移不能修改，只能追加新文件。

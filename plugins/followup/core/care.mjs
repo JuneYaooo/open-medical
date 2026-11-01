@@ -318,6 +318,27 @@ export class CareEngine {
     this.store.audit(patient.sessionId, "care.message.triaged", { messageId: id, level: triage.level, category, status, replyId });
     return this.message(id);
   }
+  // Replies to a sent follow-up questionnaire are parsed and scored locally,
+  // whether or not model triage is enabled. A reply that also mentions red-flag
+  // symptoms stays pending so triage still raises the urgent alert.
+  collectSurveyReplies() {
+    if (!this.surveys) return 0;
+    let collected = 0;
+    const rows = this.db.prepare(`SELECT s.message_id, s.patient_id FROM care_message_state s JOIN patient_messages m ON m.id=s.message_id
+      WHERE s.status='pending' AND m.direction='in' AND s.patient_id IS NOT NULL ORDER BY s.message_id LIMIT 50`).all();
+    for (const row of rows) {
+      if (!this.surveys.pendingSurvey(row.patient_id)) continue;
+      const msg = this.message(row.message_id);
+      let summary = null;
+      try { summary = this.surveys.tryCollect(row.patient_id, msg.text); }
+      catch (error) { summary = null; this.lastError = `问卷回收失败：${error.message}`; }
+      if (!summary) continue;
+      collected++;
+      if (detectRedFlags(msg.text, this.settings().redFlags.extra).length) continue;
+      this.setState(row.message_id, { status: "handled", level: "routine", category: "survey_reply", reasons: [summary] });
+    }
+    return collected;
+  }
   withDisclaimer(text) { return this.settings().autoReply.disclaimer ? `${text}\n${AI_DISCLAIMER}` : text; }
   markMessage(id, status) {
     check(["handled", "skipped", "pending"].includes(status), "INVALID_INPUT", "状态须为 handled/skipped/pending");
@@ -951,6 +972,7 @@ export class CareEngine {
       await directory?.refreshAwaiting();
     }
     this.discover();
+    this.collectSurveyReplies();
     const processing = this.settings().processing.enabled;
     if (processing) {
       for (const row of this.db.prepare("SELECT message_id FROM care_message_state WHERE status='pending' ORDER BY message_id LIMIT 10").all()) {

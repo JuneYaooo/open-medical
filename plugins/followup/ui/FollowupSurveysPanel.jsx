@@ -14,7 +14,7 @@ const STATUS_LABELS = {
   collected: "已回收",
   cancelled: "已取消",
 };
-const CHANNEL_LABELS = { manual: "手动复制发送", wechat: "微信（已验证发送）", aibot: "企微机器人推送" };
+const CHANNEL_LABELS = { "wecom-contact": "企业微信客户联系", "wecom-kf": "微信客服", aibot: "企微机器人推送", wechat: "微信（已验证发送）", manual: "手动复制发送" };
 const fmtTime = followupDate;
 
 function answerOf(survey, questionId) {
@@ -202,6 +202,7 @@ function PatientSurveys({ patientId, refreshKey = 0, onRefresh, onChanged, focus
                 {survey.sentAt ? ` · ${survey.channel === "manual" ? "渠道登记于" : "发送于"} ${fmtTime(survey.sentAt)}` : ""}
                 {survey.collectedAt ? ` · 回收于 ${fmtTime(survey.collectedAt)}` : ""}
               </small>
+              {survey.status === "sent" && survey.channelDetail && <p className="muted">{survey.channelDetail}</p>}
               {["pending_send", "sent", "expired"].includes(survey.status) && survey.linkedReminder?.outcome && <details className="survey-contact-context" open>
                 <summary>此轮已登记联系：{contactOutcomeLabels[survey.linkedReminder.outcome.status] || "结果待核对"} · {fmtTime(survey.linkedReminder.outcome.contactedAt || survey.linkedReminder.outcome.recordedAt)}；问卷仍为{STATUS_LABELS[survey.status]}</summary>
                 <p className="muted">联系记录与问卷分别保存。可保留问卷、明确取消，或按实际答案代填；代填回收会新增独立的问卷联系记录，不覆盖电话记录。</p>

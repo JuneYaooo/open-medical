@@ -236,6 +236,17 @@ export class PluginHost {
   }
 
   _ensureTables() {
+    // An install with plugin migrations or patients predates this boot. Used
+    // by keepEnabledOnUpgrade: plugins that became off-by-default stay on for
+    // existing users instead of silently disappearing.
+    // Databases from before the plugin host have no migration rows but do
+    // have patients, so either signal counts.
+    const hasRows = (table) =>
+      Boolean(
+        this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table) &&
+          this.db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get(),
+      );
+    this.upgradedInstall = hasRows("plugin_migrations") || hasRows("patients");
     this.db.exec(`CREATE TABLE IF NOT EXISTS plugin_state (
       plugin_id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL,
@@ -263,6 +274,15 @@ export class PluginHost {
     if (row) return row.enabled === 1;
     if (Object.hasOwn(this.initialEnabled, spec.id))
       return this.initialEnabled[spec.id] === true;
+    if (spec.keepEnabledOnUpgrade && !spec.enabledByDefault) {
+      // Decide once and persist, so a fresh install stays off after its
+      // first boot has written migration rows.
+      const enabled = this.upgradedInstall;
+      this.db
+        .prepare("INSERT OR IGNORE INTO plugin_state(plugin_id,enabled,updated_at) VALUES (?,?,?)")
+        .run(spec.id, enabled ? 1 : 0, new Date().toISOString());
+      return enabled;
+    }
     return spec.enabledByDefault;
   }
 

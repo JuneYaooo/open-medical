@@ -15,6 +15,19 @@ const dueWeight = (at, now) => (time(at) < now - DAY ? 1 : 5);
 const reviewCover = (patientId, source) =>
   source?.kind === "treatment-review" && source.reviewDate ? `plan-review:${patientId}:${source.reviewDate}` : undefined;
 
+// What the doctor does next for a reminder that carries a questionnaire.
+const SURVEY_HINT = {
+  pending_send: (title) => `问卷「${title}」待下发，或电话随访后代填`,
+  sent: (title) => `问卷「${title}」已发出，等待患者回复，或电话随访后代填`,
+};
+function surveyHint(db, reminderId) {
+  if (!hasTable(db, "followup_surveys")) return "";
+  const row = db.prepare("SELECT data FROM followup_surveys WHERE json_extract(data,'$.reminderId')=? ORDER BY rowid DESC LIMIT 1").get(reminderId);
+  if (!row) return "";
+  const survey = JSON.parse(row.data);
+  return SURVEY_HINT[survey.status]?.(survey.questionnaire?.title || "随访问卷") || "";
+}
+
 const followup = {
   kind: "followup",
   label: "随访",
@@ -27,7 +40,7 @@ const followup = {
       const data = JSON.parse(row.data);
       const covers = row.plan ? reviewCover(row.patient_id, JSON.parse(row.plan).source) : undefined;
       items.push({ id: `reminder:${row.id}`, kind: "followup", patientId: row.patient_id, title: data.title,
-        detail: [overdue(row.due_at, current), "联系患者后登记随访结果"].filter(Boolean).join("，"), at: row.due_at,
+        detail: [overdue(row.due_at, current), surveyHint(db, row.id) || "联系患者后登记随访结果"].filter(Boolean).join("，"), at: row.due_at,
         weight: dueWeight(row.due_at, current), reminderId: row.id, ...(covers ? { covers } : {}),
         action: { type: "patient", tab: "followups", label: "登记随访" } });
     }

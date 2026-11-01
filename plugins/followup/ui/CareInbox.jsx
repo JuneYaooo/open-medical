@@ -12,7 +12,7 @@ import "./followup-clarity.css";
 
 const TABS = [["alerts", "提醒", Bell], ["drafts", "待回复草稿", MessageSquare], ["messages", "全部消息", Inbox], ["contacts", "客户与群", Contact], ["settings", "设置", Settings2]];
 const LEVEL = { urgent: "紧急", attention: "需关注", routine: "常规" };
-const CATEGORY = { emergency: "急症", clinical: "病情", medication: "用药", report: "报告", education: "科普", admin: "行政", followup_reply: "随访回复", chitchat: "寒暄", other: "其他" };
+const CATEGORY = { emergency: "急症", clinical: "病情", medication: "用药", report: "报告", education: "科普", admin: "行政", followup_reply: "随访回复", survey_reply: "问卷回复", chitchat: "寒暄", other: "其他" };
 const STATUS = { pending: "待分诊", unassigned: "未关联患者", auto_replied: "已自动回复", drafted: "已生成草稿", alerted: "已提醒医生", recorded: "已记录", handled: "已处理", skipped: "已跳过", failed: "处理失败" };
 const STEP = { scheduled: "待发送", draft: "草稿待发送", sending: "发送中", sent: "已发送", awaiting_member: "待成员确认", unknown: "发送结果未知", replied: "已回复", recorded: "已记录", no_reply: "未回复", failed: "失败", skipped: "已跳过", cancelled: "已取消" };
 const CAMPAIGN = { active: "进行中", paused: "已暂停", completed: "已完成", cancelled: "已取消" };

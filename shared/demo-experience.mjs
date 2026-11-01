@@ -20,7 +20,7 @@ export const DEMO_KNOWLEDGE = [
 ];
 export const DEMO_SCENARIOS = [
   { id: "chart", group: "临床与患者", title: "看懂患者档案", detail: "打开张沪生的诊断、用药、检验趋势、就诊记录与原始材料。", patient: 0, tab: "overview", question: "请概括这位示例患者的病历，列出需要补充核对的信息，并保留材料出处。", next: "依次打开检验、用药、资料库；也可在任务里继续追问。" },
-  { id: "intake", group: "临床与患者", title: "病历整理与检验解读", detail: "已有病历、检验参考范围和用药清单，可以直接开始整理。", patient: 0, flow: "intake-full", tab: "library", next: "试试整理病历、摘录检验、用药安全核查和病历草稿。" },
+  { id: "intake", group: "临床与患者", title: "病历整理与检验解读", detail: "已有病历、检验参考范围和用药清单，可以直接开始整理。", patient: 0, flow: "intake-full", tab: "library", next: "试试整理病历、摘录检验、用药辅助提醒和病历草稿。" },
   { id: "labs-trend", group: "临床与患者", title: "检验趋势解读", detail: "李婉珍的 HbA1c 有三次记录，可对照原报告参考范围看趋势。", patient: 1, tab: "labs", question: "请解读这位示例患者的 HbA1c 与空腹血糖趋势：对照材料中的报告参考范围说明变化方向，列出缺失的采样时间和单位信息；只依据材料，不给出治疗建议。", next: "在检验页查看趋势和原始报告；也可以继续追问复查前需要补齐哪些信息。" },
   { id: "discharge", group: "临床与患者", title: "出院小结与交班", detail: "王建国的入院、手术、复查与出院记录已经备齐。", patient: 2, flow: "discharge-summary", tab: "library", next: "生成小结后追问：请改写为交班记录，并指出材料缺失的信息。" },
   { id: "gaps", group: "临床与患者", title: "出院资料缺口核对", detail: "王建国的出院记录刻意留有缺口（如未记录出院带药），练习让助手指出缺失。", patient: 2, question: "请核对该患者的出院与复查材料，列出缺失或未记录的信息，生成一份待补充清单并注明每项的出处；不要推断缺失内容。", next: "把待补充项交给医生核对后，可登记到治疗方案或复诊计划。" },

@@ -1,0 +1,7 @@
+.care-packs .care-pack { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 0 0 16px; background: var(--panel, #fff); }
+.care-packs .care-pack header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.care-packs .care-pack h3 { margin: 0; }
+.care-packs .care-pack-facts { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 6px; font-size: 14px; line-height: 1.6; }
+.care-packs .care-pack-facts b { display: inline-block; min-width: 5.5em; margin-right: 8px; color: var(--muted); font-weight: 500; }
+.care-packs .care-pack-apply { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.care-packs .care-pack-apply label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }

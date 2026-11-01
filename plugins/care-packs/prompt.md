@@ -1,0 +1,1 @@
+- 专病管理包（高血压、2 型糖尿病等）：医生说“把这个患者按高血压管起来”“纳入糖尿病管理”时，按技能 care-pack-enroll，先 care_pack_list，再 care_pack_apply_propose 生成提案。

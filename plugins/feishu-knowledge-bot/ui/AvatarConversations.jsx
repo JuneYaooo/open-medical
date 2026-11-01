@@ -223,7 +223,7 @@ export function AvatarConversations({ connected = true, modelReady = false, onSt
           <div className="avatar-bubbles">{thread.turns.map(turn => <Bubble key={turn.id} turn={turn} target={turn.id === targetTurn} />)}</div>
           {(c.paused || mode === 'reply') && <form className="avatar-composer" onSubmit={e => { e.preventDefault(); act(async () => { await api(`${BASE}/conversations/${c.chatId}/reply`, 'POST', { text: draft }); setDraft(''); }, '已通过飞书发送，并记入会话。'); }}>
             <label htmlFor="avatar-manual-reply">以你本人身份回复（经飞书发送，不带 AI 标识）</label>
-            <textarea id="avatar-manual-reply" maxLength={2000} value={draft} onChange={e => setDraft(e.target.value)} placeholder={connected ? '输入回复内容' : '飞书分身未连接，暂时只能在飞书中直接回复'} disabled={!connected} />
+            <textarea id="avatar-manual-reply" maxLength={2000} value={draft} onChange={e => setDraft(e.target.value)} placeholder={connected ? '输入回复内容' : '医生分身未连接，暂时只能在飞书中直接回复'} disabled={!connected} />
             <div className="avatar-actions"><button type="submit" className="primary" disabled={busy || !draft.trim() || !connected}>发送</button><span className="avatar-hint">你的回复会作为分身后续回答的口径参考。</span></div>
           </form>}
           <Insights chatId={c.chatId} onOpenTurn={openTurn} modelReady={modelReady} />

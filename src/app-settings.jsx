@@ -16,6 +16,7 @@ import "./settings-clarity.css";
 const CHANNEL_SECTIONS = [["channels", "私聊助手"]];
 const PERSONAL_SECTIONS = [
   ["skills", "技能"],
+  ["care-packs", "专病管理包"],
   ["workbench", "自动化规则"],
   ["learning", "学习与记忆"],
 ];
@@ -28,6 +29,7 @@ const LEGACY_TAB_GROUPS = {
   followup: "channels",
   workbench: "personal",
   learning: "personal",
+  "care-packs": "personal",
 };
 const SECTION_ORDER = {
   channels: 10,
@@ -169,6 +171,7 @@ const PANEL_LOCATION = {
   followup: "消息渠道",
   workbench: "技能与规则",
   learning: "技能与规则",
+  "care-packs": "技能与规则",
 };
 
 function PluginSettings({ onPluginsChanged, onOpenSection }) {

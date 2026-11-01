@@ -42,12 +42,13 @@ export function isFollowupImportRoute(path, method) {
 
 // Routes that reach patients or patient chat history. They need a connected
 // WeChat/WeCom channel; follow-up plans, reminders, contact records and
-// manually recorded questionnaire answers do not.
+// manually recorded questionnaire answers do not. Questionnaire send is gated
+// per channel in its handler: the manual channel only records that the doctor
+// copied the text, so it works without a connection.
 export function isFollowupMessagingRoute(path, method) {
   if (isFollowupConnectionRoute(path, method)) return false;
   if (isFollowupImportRoute(path, method)) return false;
-  if (/^\/api\/(?:care|chat-followups|chat-autofollow|chat-aibot)\//.test(path)) return true;
-  return method === "POST" && /^\/api\/patients\/[^/]+\/followup-surveys\/[^/]+\/send$/.test(path);
+  return /^\/api\/(?:care|chat-followups|chat-autofollow|chat-aibot)\//.test(path);
 }
 
 // All followup-private legacy routes. Paths, status codes and response bodies
@@ -154,8 +155,12 @@ export function createFollowupApi(ctx) {
           });
         if (parts.length === 6 && req.method === "POST") {
           const surveyId = identifier(parts[4]);
-          if (parts[5] === "send")
-            return REPLY(send, 200, await surveys.send(pid, surveyId, await body()));
+          if (parts[5] === "send") {
+            const input = await body();
+            if ((input?.channel || "manual") !== "manual" && !messagingConnected(ctx))
+              return REPLY(send, 409, { ...MESSAGING_DISCONNECTED });
+            return REPLY(send, 200, await surveys.send(pid, surveyId, input));
+          }
           if (parts[5] === "collect") {
             const row = surveys.collect(pid, surveyId, await body());
             risks?.evaluatePatient(pid);

@@ -242,14 +242,29 @@ export class FollowUpManager {
           offsetDays: node.offsetDays,
           title: string(node.title, "节点标题", 100),
           items,
+          questionnaire: node.questionnaire ? normalizeQuestionnaire(node.questionnaire) : null,
         };
       }),
       createdAt: this.now(),
     };
+    if (input.source) plan.source = { kind: string(input.source.kind, "模板来源", 40), id: string(input.source.id, "来源编号", 80), version: input.source.version ? string(input.source.version, "来源版本", 20) : "" };
     this.store.db
       .prepare("INSERT INTO followup_plans VALUES (?,?)")
       .run(plan.id, JSON.stringify(plan));
     return plan;
+  }
+  // Install or update a template under a fixed id (care packs). Same
+  // validation as createPlan; an existing row with that id is replaced.
+  installPlan(id, input) {
+    identifier(id);
+    this.listPlans();
+    const plan = this.createPlan(input);
+    const existing = this.store.db.prepare("SELECT data FROM followup_plans WHERE id=?").get(id);
+    const createdAt = existing ? JSON.parse(existing.data).createdAt : plan.createdAt;
+    const row = { ...plan, id, createdAt };
+    this.store.db.prepare("DELETE FROM followup_plans WHERE id=? OR id=?").run(id, plan.id);
+    this.store.db.prepare("INSERT INTO followup_plans VALUES (?,?)").run(id, JSON.stringify(row));
+    return row;
   }
   removePlan(id) {
     const plan = this.planRow(id);

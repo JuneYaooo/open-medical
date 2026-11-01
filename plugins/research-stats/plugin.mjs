@@ -39,7 +39,10 @@ export default definePlugin({
   id: "research-stats",
   version: "1.0.0",
   title: "科研统计与脱敏导出",
-  enabledByDefault: true,
+  // 私域与诊所患者管理的非核心场景：新安装默认关闭，可在设置中开启；
+  // 升级用户保持原有开启状态。
+  enabledByDefault: false,
+  keepEnabledOnUpgrade: true,
   provides: { service: "research-stats", apiVersion: 1 },
   prompt: "./prompt.md",
   legacyApiPaths: [

@@ -7,7 +7,7 @@ import './avatar.css';
 const DEFAULT_NAME = '医生的 AI 助手';
 const disclosure = name => `—— ${(name || '').trim() || DEFAULT_NAME}（AI 自动回复，非医生本人）`;
 
-// 飞书分身: the doctor's AI avatar in Feishu chats. Abilities = the doctor's
+// 医生分身: the doctor's AI avatar for public health education (Feishu only for now). Abilities = the doctor's
 // habits + ticked knowledge bases; conversations are recorded automatically.
 export function FeishuKnowledgeBotSettings() {
   const [config, setConfig] = useState(null), [form, setForm] = useState(null);
@@ -28,12 +28,12 @@ export function FeishuKnowledgeBotSettings() {
   const states = { disabled: '未启用', connecting: '正在连接', connected: '已连接', reconnecting: '正在重连', failed: '连接失败' };
   const attention = stats?.attention || 0;
 
-  return <section className="doctor-notifications" aria-label="飞书分身">
-    <h2>飞书分身</h2>
-    <p>你在飞书里的 AI 分身：按你的习惯和你勾选的知识库，在授权的群（@ 它）或单聊里替你答复常见问题。每条回复都会标明是 AI 助手，所有往来自动记录，可随时接手。</p>
+  return <section className="doctor-notifications" aria-label="医生分身">
+    <h2>医生分身</h2>
+    <p>根据你的知识库对外提供科普：按你的习惯和勾选的知识库，在授权的群（@ 它）或单聊里回答患者、家属和公众的常见问题。不做个体诊断，每条回复都会标明是 AI 助手，所有往来自动记录，可随时接手。<span className="om-chip">目前支持飞书渠道</span></p>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!form ? <button className="secondary" disabled={busy} onClick={() => action(async () => accept(await api('/api/knowledge-bot')))}>重新加载</button> : <>
-      {config.hasSecret && <div className="avatar-tabs" role="group" aria-label="飞书分身页面">
+      {config.hasSecret && <div className="avatar-tabs" role="group" aria-label="医生分身页面">
         <button type="button" className="secondary" aria-pressed={tab !== 'records'} onClick={() => setTab('settings')}>分身设置</button>
         <button type="button" className="secondary" aria-pressed={tab === 'records'} onClick={() => setTab('records')}>分身会话记录{attention > 0 && <span className="om-chip is-danger">需关注 {attention}</span>}</button>
       </div>}
@@ -59,7 +59,7 @@ export function FeishuKnowledgeBotSettings() {
             <label className="notification-checkbox"><input type="checkbox" checked={form.persona.useHabits} onChange={e => setPersona({ useHabits: e.target.checked })} />按我已确认的习惯与偏好来说话</label>
             <p className="avatar-hint">{config.habitsAvailable ? '使用「学习与记忆」中你已确认的偏好，只影响措辞和口径。' : '目前还没有已确认的习惯；在「学习与记忆」确认后会自动用上。'}</p>
             <h4>可以引用的知识库</h4>
-            <p>勾选一个知识库，就表示分身可以引用其中的资料，之后新加入的资料也包括在内；你在资料的「来源与版本」里勾选「不让飞书分身使用」的资料和已停用资料不会使用。患者档案和病例库始终不参与。</p>
+            <p>勾选一个知识库，就表示分身可以引用其中的资料，之后新加入的资料也包括在内；你在资料的「来源与版本」里勾选「不让医生分身使用」的资料和已停用资料不会使用。患者档案和病例库始终不参与。</p>
             {config.collectionScope === 'external-only' && <p className="avatar-hint">当前仍只引用逐篇勾选了「允许对外引用」的资料；保存后改为按知识库授权。</p>}
             {!config.availableCollections.length && <p>请先到「知识库」建立资料库并导入资料。</p>}
             {config.availableCollections.map(c => <label className="notification-checkbox" key={c.name}><input type="checkbox" checked={form.collections.includes(c.name)} onChange={() => toggle('collections', c.name)} />{c.name} · 可引用 {c.allowedCount ?? c.sharedCount} 篇{c.excludedCount ? ` · ${c.excludedCount} 篇已设为不对外` : ''}</label>)}
@@ -82,14 +82,14 @@ export function FeishuKnowledgeBotSettings() {
           <div className="avatar-section">
             <h3>5. 启用</h3>
             <label className="avatar-field">会话记录保留<select value={form.retentionDays} onChange={e => setForm({ ...form, retentionDays: Number(e.target.value) })}>{[30, 90, 180, 365, 730].map(d => <option key={d} value={d}>{d} 天</option>)}{![30, 90, 180, 365, 730].includes(form.retentionDays) && <option value={form.retentionDays}>{form.retentionDays} 天</option>}</select><small>记录只保存在本机，超过期限自动清理。</small></label>
-            <label className="notification-checkbox"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />启用飞书分身</label>
+            <label className="notification-checkbox"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />启用医生分身</label>
             <button type="submit" className="primary">保存设置</button>
           </div>
         </fieldset>
       </form>
       <div className="settings-bot-actions"><button className="secondary" disabled={busy} onClick={() => action(async () => { accept(await api('/api/knowledge-bot')); setNotice('会话列表与设置已刷新。'); })}>刷新群与连接状态</button>
       <button className="secondary" disabled={busy} onClick={() => action(async () => { const result = await api('/api/knowledge-bot/reset-context', 'POST', { expectedRevision: config.revision }); setNotice(result.message); })}>清空所有对话上下文</button>
-      <button className="text-button danger" disabled={busy} onClick={() => { if (window.confirm('断开飞书分身？已导入资料会保留。')) action(async () => accept(await api('/api/knowledge-bot', 'DELETE', { expectedRevision: config.revision }))); }}>断开连接</button>
+      <button className="text-button danger" disabled={busy} onClick={() => { if (window.confirm('断开医生分身？已导入资料会保留。')) action(async () => accept(await api('/api/knowledge-bot', 'DELETE', { expectedRevision: config.revision }))); }}>断开连接</button>
       </div>
       </>}
       </>}

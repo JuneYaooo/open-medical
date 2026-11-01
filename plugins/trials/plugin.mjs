@@ -184,7 +184,10 @@ export default definePlugin({
   id: "trials",
   version: "1.0.0",
   title: "临床试验入组",
-  enabledByDefault: true,
+  // 私域与诊所患者管理的非核心场景：新安装默认关闭，可在设置中开启；
+  // 升级用户保持原有开启状态。
+  enabledByDefault: false,
+  keepEnabledOnUpgrade: true,
   provides: { service: "trials", apiVersion: 1 },
   migrations: "./migrations",
   tablePrefix: ["trial_"],

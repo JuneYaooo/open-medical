@@ -57,6 +57,7 @@
 .patient-overview > .risk-list { margin: 0 0 16px; }
 .risk-history .risk-card { background: var(--surface, #fafbf9); border-color: var(--border); }
 .risk-history .r-head { color: var(--muted); }
+.risk-list .risk-note { margin: 8px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .patient-attention .attention-refresh { justify-content: flex-end; gap: 12px; }
 .attention-routine > summary span { margin-left: 8px; font-variant-numeric: tabular-nums; }
 .attention-routine > summary small { margin-left: 16px; color: var(--muted); font-size: inherit; }

@@ -69,5 +69,5 @@ test("clinical-ref：停用后接口 404、量表/ADR 工具不注册，检验�
     method: "POST",
     body: { medications: ["华法林", "阿司匹林"] },
   });
-  assert.equal(safety.status, 200, "用药安全核查属于固定风险引擎");
+  assert.equal(safety.status, 200, "用药辅助提醒属于固定风险引擎");
 });

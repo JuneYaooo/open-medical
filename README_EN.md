@@ -177,7 +177,7 @@ Open these from Example walkthroughs → Task templates. Templates prepare the p
 | **Lab extraction** | Extract test names, values and units for source checking. |
 | **Medication reconciliation** | Organize medication records and identify missing fields. |
 | **Visit-note draft** | Structure presenting concerns, history and examination, flagging missing information. |
-| **Medication safety review** | Check allergies, interactions and duplication using the limited built-in rules. |
+| **Medication reminders** | Flag allergies and cross-allergies, class-based interactions, same-class duplication and special-population cautions. Rules may miss risks; no reminder does not mean no risk. |
 | **Patient education** | Rewrite existing plans and explanations in patient-friendly language. |
 | **Lab-report explanation** | Prepare an explanation using the reference ranges printed in the report. |
 | **Discharge-summary draft** | Summarize the admission, discharge medication and documented follow-up instructions. |
@@ -245,13 +245,13 @@ Use connected WeCom or personal WeChat channels for follow-up. The personal WeCh
 </details>
 
 <details>
-<summary><strong>Private assistants, knowledge bots and reminders</strong></summary>
+<summary><strong>Private assistants, Doctor Avatar and reminders</strong></summary>
 
-Configure private assistants, a Feishu knowledge bot and doctor reminders separately. Knowledge replies are limited to sources approved for external use; reminder timing and content are configurable. Each channel requires its own account and setup.
+Configure private assistants, the Doctor Avatar and doctor reminders separately. The Doctor Avatar answers public health-education questions from your knowledge bases, never gives individual diagnoses, and currently runs on Feishu only; reminder timing and content are configurable. Each channel requires its own account and setup.
 
-![Private assistants, knowledge bots and reminders](docs/assets/features/settings-knowledge-bot.png)
+![Private assistants, Doctor Avatar and reminders](docs/assets/features/settings-knowledge-bot.png)
 
-![Private assistants, knowledge bots and reminders](docs/assets/features/settings-notifications.png)
+![Private assistants, Doctor Avatar and reminders](docs/assets/features/settings-notifications.png)
 
 </details>
 
@@ -459,7 +459,7 @@ Manage login startup, system reminders and app maintenance in Settings. Open the
 
 - **Local storage.** Patient records, messages, follow-ups and conversations are stored in local SQLite. Model connection keys are encrypted in a local credential vault. **The patient database itself is not encrypted.**
 - **Explicit authorization.** Model requests follow the scope authorized in the UI. Scheduled tasks and automatic follow-up summaries need separate authorization. File proposals and diffs are available; workspace settings determine the approval mode.
-- **Doctor review.** AI output assists organization and preparation. Clinical effectiveness has not been validated, and output cannot replace professional judgment. Built-in medication and lab rules have limited coverage and do not provide comprehensive medication safety checks.
+- **Doctor review.** AI output assists organization and preparation. Clinical effectiveness has not been validated, and output cannot replace professional judgment. Built-in medication and lab rules are reminders, not a complete drug knowledge base, and may miss risks.
 - **Single-doctor use.** Multi-user permissions, institution-grade audit, HIS / EMR / FHIR integration and institutional deployment validation are not implemented.
 
 <details>
@@ -498,7 +498,7 @@ Most detailed guides are currently in Chinese.
 | :--- | :--- |
 | First use and doctor workflows | [Doctor workflow guide](docs/DOCTOR_WORKBENCH_GUIDE.md) |
 | Desktop installation, builds and data | [Desktop setup](docs/DESKTOP.md) |
-| Doctor reminders and Feishu knowledge bot | [Connection guide](docs/doctor-assistant-channels.md) |
+| Doctor reminders and Doctor Avatar | [Connection guide](docs/doctor-assistant-channels.md) |
 | WeChat, WeCom and message archiving | [Chat connectors](docs/chat-connectors.md) |
 | Patient, message and follow-up data | [Patient management](docs/PATIENTS.md) |
 | Clinical interface, interaction rules and task validation | [Development guide](docs/DEVELOPMENT_GUIDE.md) |

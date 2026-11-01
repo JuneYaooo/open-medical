@@ -91,9 +91,9 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
     setError("");
     setNotice("");
     try {
-      await action();
+      const extra = await action();
       setDeleting(null);
-      if (message) setNotice(message);
+      if (message) setNotice(typeof extra === "string" && extra ? `${message}${extra}` : message);
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -101,6 +101,8 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
       setBusy(false);
     }
   };
+  const selectedPlan = plans.find((p) => p.id === apply.planId);
+  const packId = selectedPlan?.source?.kind === "care-pack" ? selectedPlan.source.id : null;
   const applyPlan = () =>
     run(async () => {
       await api(`/api/patients/${apply.patientId}/followups/apply`, "POST", {
@@ -113,11 +115,24 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
         })),
         requestId: apply.requestId,
       });
+      // 专病管理包的模板同时带检验监测阈值；随访已排好，监测失败只提示不回滚。
+      let monitorNote = "";
+      if (packId) {
+        try {
+          const added = await api(`/api/p/care-packs/packs/${packId}/monitors`, "POST", { patientId: apply.patientId });
+          monitorNote = added.monitorsUnavailable
+            ? "检验监测未添加：风险规则插件未启用。"
+            : `已加上 ${added.monitors} 项检验监测${added.monitorsSkipped ? `（${added.monitorsSkipped} 项已存在）` : ""}。`;
+        } catch (err) {
+          monitorNote = `检验监测未添加：${err.message}`;
+        }
+      }
       setApply((old) => ({
         ...old,
         patientId: "",
         requestId: crypto.randomUUID(),
       }));
+      return monitorNote;
     }, "随访模板已应用到患者，节点已排入计划。");
   const createPlan = () =>
     run(async () => {
@@ -411,6 +426,9 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                 应用
               </button>
             </div>
+            {packId && (
+              <p className="muted">来自专病管理包：应用后会同时加上包内的检验监测阈值（已有的同项监测不重复添加）。</p>
+            )}
             {apply.planId && (
               <section className="followup-customize">
                 <h4>核对这位患者的安排</h4>

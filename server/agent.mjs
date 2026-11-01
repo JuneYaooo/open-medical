@@ -228,6 +228,12 @@ export function createServer(options = {}) {
     db: store.db,
     store,
     services: pluginServices,
+    // Explicit enable map for tests/E2E; MEDICAL_ENABLE_PLUGINS=a,b turns on
+    // off-by-default plugins without touching saved settings.
+    enabled: options.pluginsEnabled || Object.fromEntries(
+      String(process.env.MEDICAL_ENABLE_PLUGINS || "")
+        .split(",").map((id) => id.trim()).filter(Boolean).map((id) => [id, true]),
+    ),
     ...(options.pluginDirs !== undefined
       ? { pluginDirs: options.pluginDirs }
       : process.env.MEDICAL_PLUGIN_DIRS
@@ -452,7 +458,7 @@ export function createServer(options = {}) {
         function: {
           name: "medication_safety_check",
           description:
-            "对用药清单做确定性安全核查（过敏匹配、内置相互作用对、重复用药），可选 populations 做特殊人群（妊娠/儿童/肾功能不全/肝功能不全/老年）提示。内置规则集非穷尽，结果为提示性草稿。",
+            "用药辅助提醒：对用药清单做确定性规则核对（过敏及交叉过敏、按药物类别的相互作用、同类重复用药），可选 populations 做特殊人群（pregnancy/pediatric/renal/hepatic/elderly）提示。规则可能漏报，unrecognized 列出未参与核对的药物；向医生转述结果时必须说明可能漏报、没有提醒不代表没有风险，不得称为“安全核查通过”。",
           parameters: {
             type: "object",
             properties: {

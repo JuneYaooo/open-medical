@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError, check, identifier, string } from "../../../server/errors.mjs";
-import { evaluateMedicationSafety } from "../../../server/medical/med-safety.mjs";
+import { evaluateMedicationSafety, specialPopulationCautions } from "../../../server/medical/med-safety.mjs";
 
 // Deterministic, data-driven risk rules evaluated against the structured
 // clinical fields of a patient record. Alerts are advisory only: they never
@@ -478,15 +478,19 @@ export class RiskEngine {
   }
   medicationAlerts(patient) {
     const alerts = [];
+    const medications = (patient.medications || []).filter((medication) => medication.status !== "stopped");
     const result = evaluateMedicationSafety({
-      medications: (patient.medications || []).filter((medication) => medication.status !== "stopped"),
+      medications,
       allergies: patient.allergies || [],
     });
     for (const match of result.allergyMatches)
       alerts.push({
-        ruleKey: `med_allergy_${match.allergy}`,
-        severity: "critical",
-        title: "用药与过敏史匹配",
+        // Direct matches keep the original key so upgraded alerts stay put.
+        ruleKey: match.kind === "direct"
+          ? `med_allergy_${match.allergy}`
+          : `med_allergy_${match.kind}_${match.allergy}_${match.matchedGeneric}`,
+        severity: match.severity,
+        title: match.kind === "cross" ? "用药与过敏史可能交叉过敏" : "用药与过敏史匹配",
         message: match.message,
         evidence: [{ medication: match.medication, allergy: match.allergy }],
       });
@@ -500,15 +504,44 @@ export class RiskEngine {
       });
     for (const duplicate of result.duplicates)
       alerts.push({
-        ruleKey: `med_duplicate_${duplicate.medication}`,
-        severity: "warning",
-        title: "重复用药",
+        ruleKey: duplicate.kind === "class" ? `med_duplicate_${duplicate.key}` : `med_duplicate_${duplicate.medication}`,
+        severity: duplicate.severity,
+        title: duplicate.kind === "class" ? "同类重复用药" : "重复用药",
         message: duplicate.message,
-        evidence: [
-          { medication: duplicate.medication, count: duplicate.count },
-        ],
+        evidence: duplicate.medications.map((medication) => ({ medication })),
       });
+    const populations = this.patientPopulations(patient);
+    if (medications.length && populations.length) {
+      const { cautions } = specialPopulationCautions({ medications, populations: populations.map((item) => item.key) });
+      for (const population of populations) {
+        const matched = cautions.filter((caution) => caution.population === population.key);
+        if (!matched.length) continue;
+        alerts.push({
+          ruleKey: `med_population_${population.key}`,
+          severity: "info",
+          title: `${population.label}用药提醒`,
+          message: `${population.reason}。${matched.map((caution) => `${caution.medication}：${caution.caution}`).join(" ")}`,
+          evidence: matched.map((caution) => ({ medication: caution.medication, population: caution.populationLabel })),
+        });
+      }
+    }
     return alerts;
+  }
+  // Populations inferred from the chart: age from birth year, renal impairment
+  // from the latest eGFR. Pregnancy is never inferred.
+  patientPopulations(patient) {
+    const out = [];
+    const age = Number.isInteger(patient.birthYear) ? new Date().getFullYear() - patient.birthYear : null;
+    if (age !== null && age >= 65) out.push({ key: "elderly", label: "老年", reason: `患者约 ${age} 岁` });
+    const egfr = (patient.labs || [])
+      .filter((lab) =>
+        Number.isFinite(lab.value) &&
+        Number.isFinite(Date.parse(lab.date)) &&
+        ["egfr", "估算肾小球滤过率", "肾小球滤过率", "估算的肾小球滤过率"].includes(normalizeItem(lab.item)))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    if (egfr && egfr.value < 60)
+      out.push({ key: "renal", label: "肾功能不全", reason: `最近 eGFR ${formatValue(egfr.value)}${egfr.unit ? ` ${egfr.unit}` : ""}（${egfr.date}）` });
+    return out;
   }
   followupAlerts(patient, now) {
     if (!this.followups) return [];

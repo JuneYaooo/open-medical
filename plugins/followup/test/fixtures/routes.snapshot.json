@@ -695,7 +695,7 @@
           "kind": "followup",
           "patientId": "<uuid>",
           "title": "随访：示例·血糖控制季度随访",
-          "detail": "联系患者后登记随访结果",
+          "detail": "问卷「示例·复诊资料回收」待下发，或电话随访后代填",
           "at": 1793265634095,
           "weight": 5,
           "reminderId": "<uuid>",

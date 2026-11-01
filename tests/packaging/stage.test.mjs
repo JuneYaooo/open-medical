@@ -207,8 +207,9 @@ test("桌面打包 stage 包含运行时插件但排除测试资产", async (t) 
   );
   assert.deepEqual(
     plugins.map((plugin) => ({ id: plugin.id, status: plugin.status })),
-    ids.map((id) => ({ id, status: "ready" })),
-    "打包后所有领域插件必须 ready",
+    // 非核心插件在全新安装里默认停用，其余必须 ready。
+    ids.map((id) => ({ id, status: ["drg", "research-stats", "trials"].includes(id) ? "disabled" : "ready" })),
+    "打包后核心领域插件必须 ready，非核心插件默认停用",
   );
   assert.equal(
     plugins.some((plugin) => plugin.id === "channel-fake"),

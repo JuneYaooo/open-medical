@@ -17,6 +17,7 @@ export function createFollowupService({
   channelWecom = null,
   channelWechat = null,
   options = {},
+  risks = () => null,
 } = {}) {
   check(store, "PLUGIN_SPEC", "followup 插件缺少 store");
   const followups = new FollowUpManager(store, runtime, {
@@ -74,6 +75,13 @@ export function createFollowupService({
 
   const surveys = new FollowUpSurveys(store, followups, {
     provider: getProvider,
+    onCollected(patientId) {
+      try {
+        risks()?.evaluatePatient(patientId);
+      } catch {
+        // The survey is saved; the next risk evaluation picks up its alert.
+      }
+    },
     channels: {
       async sendWechat(patientId, text) {
         const binding = chatFollowups.wechatBindingByPatient(patientId);
@@ -109,6 +117,36 @@ export function createFollowupService({
           text: { content: text },
         });
       },
+      // 企业微信客户联系 / 微信客服：复用 CareEngine 的通道与发送限制。
+      async sendCare(channel, patientId, text, requestId) {
+        const outcome = await care.channels.send(channel, {
+          patientId,
+          text,
+          requestId,
+          targets: care.targets(patientId),
+        });
+        check(
+          outcome.status !== "unknown",
+          "CHAT_CHANNEL",
+          "发送结果未知，请先在企业微信核实患者是否收到，勿重复发送",
+          409,
+        );
+        check(
+          ["sent", "awaiting_member"].includes(outcome.status),
+          "CHAT_CHANNEL",
+          outcome.detail || "企业微信发送失败",
+          409,
+        );
+        if (outcome.status === "sent") {
+          store.db
+            .prepare(
+              "INSERT OR IGNORE INTO patient_messages(patient_id,channel,direction,time,external_id,processed,data) VALUES (?,?,?,?,?,1,?)",
+            )
+            .run(patientId, channel, "out", new Date(care.now()).toISOString(), `${requestId}:out`, JSON.stringify({ text }));
+          care.discover();
+        }
+        return outcome;
+      },
     },
   });
   followups.surveys = surveys;
@@ -133,6 +171,7 @@ export function createFollowupService({
     // The channel-wecom plugin lifecycle owns directory due/refresh timing.
     directorySync: false,
   });
+  care.surveys = surveys;
   const chatAutoFollow = new WechatAutoFollow({
     chat: chatFollowups,
     followups,

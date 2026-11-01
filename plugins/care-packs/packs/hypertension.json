@@ -1,0 +1,94 @@
+{
+  "id": "hypertension",
+  "version": "1.0.0",
+  "name": "高血压管理包",
+  "disease": "I10 原发性高血压",
+  "summary": "启动或调整降压治疗后的一年随访：家庭血压自测问卷、电解质与肾功能监测、生活方式与家庭测压患教。",
+  "references": ["中国高血压防治指南（2024 年修订版）", "国家基层高血压防治管理指南"],
+  "plan": {
+    "name": "高血压管理包 · 一年随访",
+    "nodes": [
+      {
+        "offsetDays": 7,
+        "title": "用药 1 周",
+        "items": ["家庭血压记录是否规范", "头晕、乏力、干咳、踝部水肿等不良反应", "是否按时服药"],
+        "questionnaire": {
+          "title": "降压治疗第 1 周自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "sbp", "text": "最近 3 天早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
+            { "id": "dbp", "text": "同一时间的舒张压（低压）平均是多少？", "type": "number", "unit": "mmHg", "min": 30, "max": 160, "required": true, "alertIf": { "op": "gt", "value": 110 } },
+            { "id": "symptom", "text": "这一周有没有头晕、站起来眼前发黑？", "type": "single", "required": true, "options": [{ "label": "经常有", "score": 2 }, { "label": "偶尔", "score": 1 }, { "label": "没有", "score": 0 }] },
+            { "id": "side", "text": "有没有新出现下面的情况？（可多选）", "type": "multi", "options": [{ "label": "干咳", "score": 1 }, { "label": "脚踝浮肿", "score": 1 }, { "label": "心慌", "score": 1 }, { "label": "都没有", "score": 0 }] },
+            { "id": "note", "text": "还有什么想告诉医生的？", "type": "text" }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 3, "severity": "warning", "message": "用药初期症状或不良反应评分偏高，建议尽快复核降压方案与耐受情况。" } }
+        }
+      },
+      {
+        "offsetDays": 30,
+        "title": "1 个月随访",
+        "items": ["血压是否达标（一般 <140/90 mmHg，能耐受者 <130/80 mmHg）", "服药依从性", "使用 ACEI/ARB/利尿剂者复查血钾、肌酐"],
+        "questionnaire": {
+          "title": "高血压月度自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
+            { "id": "days", "text": "最近一周测了几天血压？", "type": "single", "required": true, "options": [{ "label": "5 天以上", "score": 0 }, { "label": "2–4 天", "score": 1 }, { "label": "1 天或没测", "score": 2 }] },
+            { "id": "adherence", "text": "降压药是否每天按时吃？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
+            { "id": "dizzy", "text": "近一周有没有头晕或头痛？", "type": "single", "required": true, "options": [{ "label": "经常", "score": 2 }, { "label": "偶尔", "score": 1 }, { "label": "没有", "score": 0 }] }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 4, "severity": "warning", "message": "血压监测、依从性或症状评分偏高，建议尽快联系患者复核。" } }
+        }
+      },
+      {
+        "offsetDays": 90,
+        "title": "3 个月随访",
+        "items": ["血压达标评估", "血钾、肌酐与 eGFR", "血脂、空腹血糖", "生活方式：限盐、体重、运动、戒烟限酒"],
+        "questionnaire": {
+          "title": "高血压季度自测",
+          "replyWindowHours": 72,
+          "questions": [
+            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
+            { "id": "adherence", "text": "降压药是否每天按时吃？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
+            { "id": "salt", "text": "现在做菜放盐和以前比？", "type": "single", "required": true, "options": [{ "label": "明显少了", "score": 0 }, { "label": "少了一点", "score": 1 }, { "label": "没变", "score": 2 }] },
+            { "id": "weight", "text": "现在的体重是多少？", "type": "number", "unit": "kg", "min": 25, "max": 250 }
+          ],
+          "scoring": { "alert": { "op": "gte", "value": 4, "severity": "warning", "message": "依从性或生活方式评分偏高，建议复诊时重点沟通。" } }
+        }
+      },
+      {
+        "offsetDays": 180,
+        "title": "半年评估",
+        "items": ["靶器官损害筛查：尿白蛋白/肌酐比、心电图", "心血管风险再评估", "调整随访频率"]
+      },
+      {
+        "offsetDays": 365,
+        "title": "年度评估",
+        "items": ["全年血压控制情况总结", "年度体检：血脂、血糖、肾功能、尿常规、心电图", "决定下一年度管理计划"]
+      }
+    ]
+  },
+  "labMonitors": [
+    { "item": "血钾", "unit": "mmol/L", "op": "gt", "threshold": 5.5, "severity": "warning", "note": "高血压管理包：使用 ACEI/ARB/保钾利尿剂时关注高钾" },
+    { "item": "血钾", "unit": "mmol/L", "op": "lt", "threshold": 3.5, "severity": "warning", "note": "高血压管理包：使用噻嗪类或袢利尿剂时关注低钾" }
+  ],
+  "education": [
+    {
+      "title": "在家怎么量血压才准",
+      "body": "1. 用上臂式电子血压计，袖带和心脏在同一高度。\n2. 测量前 30 分钟不喝咖啡、不抽烟、不运动，排空小便，安静坐 5 分钟。\n3. 早上起床后 1 小时内（吃药和早饭前）、晚上睡觉前各测一次，每次连测 2 遍，间隔 1 分钟，记录平均值。\n4. 刚开始吃药或调整药物时，连续测 7 天；血压稳定后每周测 1–2 天。\n5. 把日期、时间和数值记下来，复诊时带给医生。\n\n本材料为科普参考，具体以医生建议为准。"
+    },
+    {
+      "title": "高血压的生活方式：少盐、控重、多动",
+      "body": "1. 少盐：每天食盐不超过 5 克（大约一个啤酒瓶盖的量），少吃咸菜、腊肉、方便面，注意酱油、蚝油里也有盐。\n2. 控制体重：腰围男性尽量小于 90 厘米、女性小于 85 厘米。\n3. 多活动：每周至少 5 天、每天 30 分钟左右的快走、骑车、游泳等中等强度运动。\n4. 戒烟，尽量不喝酒。\n5. 规律作息，保持情绪平稳。\n\n生活方式调整和吃药同样重要，但不能代替药物。本材料为科普参考，具体以医生建议为准。"
+    },
+    {
+      "title": "降压药常见问题",
+      "body": "1. 血压降下来了能不能停药？不能自己停药。血压正常往往是药物在起作用，停药后血压可能反弹。需要减药请先问医生。\n2. 忘记吃药怎么办？想起来时如果离下次吃药还早，可以补上；如果快到下次吃药的时间，就跳过这次，不要一次吃双倍。不同药物可能有区别，请按医生交代。\n3. 出现干咳、脚踝浮肿、头晕乏力，先记录下来，及时告诉医生，不要自己换药。\n\n本材料为科普参考，具体以医生建议为准。"
+    },
+    {
+      "title": "血压出现这些情况要马上就医",
+      "body": "出现以下任何一种情况，请立即到医院急诊或拨打 120：\n- 血压 ≥180/110 mmHg，同时有剧烈头痛、胸痛、胸闷、气短；\n- 突然一侧手脚无力或麻木、口角歪斜、说话不清；\n- 突然视物模糊、意识不清。\n\n只是血压偏高、没有不舒服时，休息后复测，并尽快联系医生。本材料为科普参考。"
+    }
+  ]
+}

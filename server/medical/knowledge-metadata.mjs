@@ -15,7 +15,7 @@ export function externalUseChoice(doc) {
   return typeof doc?.allowExternalUse === "boolean" ? doc.allowExternalUse : null;
 }
 // Collection-level authorization (the Feishu avatar): every active document in
-// a ticked collection is usable unless the doctor ticked "不让飞书分身使用".
+// a ticked collection is usable unless the doctor ticked "不让医生分身使用".
 // This is a separate flag: allowExternalUse is reset automatically on every
 // source/text edit, so reusing it would silently drop documents from the avatar.
 export function collectionUseAllowed(doc) {

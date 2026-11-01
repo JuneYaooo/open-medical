@@ -17,12 +17,13 @@ import { hasCurrentArtifactReview } from "../shared/artifact-review-display.mjs"
 import { eventDateWarnings } from "../shared/timeline-display.mjs";
 import { diagnosisStatus, DIAGNOSIS_STATUS_SHORT } from "../shared/diagnoses.mjs";
 import { recentLabs } from "../shared/recent-labs.mjs";
+import { MISSED_ALERT_NOTE } from "../server/medical/med-safety-rules.mjs";
 
 /* ---------- 工具名中文名（医疗 + 通用） ---------- */
 const TOOL_NAMES = {
   extract_clinical_timeline: "整理病历时间线",
   extract_observations: "摘录检验数值",
-  medication_safety_check: "用药安全核查",
+  medication_safety_check: "用药辅助提醒",
   make_review_checklist: "生成复核清单",
   draft_treatment_review: "起草治疗评估",
   finish_similar_case_search: "整理相似病例结果",
@@ -487,7 +488,7 @@ export function RiskList({ alerts, onAck, onResolve, onDraft, draftBlocked = "",
   const card = (r) => (
         <div className={`risk-card ${r.severity === "critical" && r.status === "active" ? "red" : ""}`} key={r.id}>
           <div className="r-head">
-            {r.severity === "critical" ? "用药/检验风险 · 高" : r.severity === "warning" ? "风险提示" : "提示"}
+            {r.severity === "critical" ? "辅助提醒 · 高" : r.severity === "warning" ? "辅助提醒 · 中" : "辅助提醒 · 提示"}
             {r.status === "acknowledged" && <span className="badge ok">已确认</span>}
             {r.status === "resolved" && <span className="badge ok">{r.autoResolved ? "当前资料未触发" : "已处理"}</span>}
           </div>
@@ -523,6 +524,7 @@ export function RiskList({ alerts, onAck, onResolve, onDraft, draftBlocked = "",
     {actionError && <p className="form-error" role="alert">{actionError}</p>}
     {active.map(card)}
     {history.length > 0 && <details className="risk-history workspace-optional"><summary>已确认与已处理记录 · {history.length}</summary>{history.map(card)}</details>}
+    <p className="risk-note">{MISSED_ALERT_NOTE}</p>
   </section>;
 }
 

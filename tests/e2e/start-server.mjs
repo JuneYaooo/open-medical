@@ -37,6 +37,7 @@ mkdirSync(tempDir, { recursive: true });
 const env = {
   ...process.env,
   PORT: "18787",
+  MEDICAL_ENABLE_PLUGINS: "drg,trials,research-stats",
   TZ: "Asia/Shanghai",
   MEDICAL_DATABASE: join(dataDir, "medical.sqlite"),
   TMPDIR: tempDir,

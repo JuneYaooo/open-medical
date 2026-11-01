@@ -78,7 +78,7 @@ function createKnowledgeBotApi(ctx) {
         )
       )
         return REPLY(io.send, 409, {
-          error: "该应用正在用于医生助手，请为飞书分身使用独立的应用。",
+          error: "该应用正在用于医生助手，请为医生分身使用独立的应用。",
           code: "CONNECTION_CONFLICT",
         });
       return REPLY(io.send, 200, await bot.save(input));
@@ -151,7 +151,7 @@ async function insightRoutes(bot, req, io, parts) {
 export default definePlugin({
   id: "feishu-knowledge-bot",
   version: "1.0.0",
-  title: "飞书分身",
+  title: "医生分身",
   enabledByDefault: true,
   requires: { plugins: { channel: "*" } },
   provides: { service: "feishu-knowledge-bot", apiVersion: 1 },
