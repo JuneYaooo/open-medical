@@ -7,6 +7,13 @@ const time = (value) => typeof value === "number" ? value : Date.parse(value) ||
 const moment = (now) => typeof now === "number" ? now : Date.parse(now) || Date.now();
 const hasTable = (db, name) => db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
 const overdue = (at, now) => { const days = Math.floor((now - time(at)) / DAY); return days >= 1 ? `已逾期 ${days} 天` : ""; };
+// Snoozed reminders (due_at in the future) stay off the agenda until then.
+// Anything more than a day past due ranks with urgent work; otherwise it waits behind today's visits.
+const dueWeight = (at, now) => (time(at) < now - DAY ? 1 : 5);
+// A follow-up generated from a treatment-plan review date is the same work as
+// the shell's plan-review row; `covers` names that row so the host shows it once.
+const reviewCover = (patientId, source) =>
+  source?.kind === "treatment-review" && source.reviewDate ? `plan-review:${patientId}:${source.reviewDate}` : undefined;
 
 const followup = {
   kind: "followup",
@@ -16,11 +23,12 @@ const followup = {
     const db = ctx.db;
     const current = moment(now);
     const items = [];
-    for (const row of db.prepare("SELECT id,patient_id,due_at,data FROM reminders WHERE status='pending'").all()) {
+    for (const row of db.prepare("SELECT r.id,r.patient_id,r.due_at,r.data,f.data plan FROM reminders r LEFT JOIN follow_ups f ON f.id=json_extract(r.data,'$.followUpId') WHERE r.status='pending' AND (json_extract(r.data,'$.snooze') IS NULL OR r.due_at<=?)").all(current)) {
       const data = JSON.parse(row.data);
+      const covers = row.plan ? reviewCover(row.patient_id, JSON.parse(row.plan).source) : undefined;
       items.push({ id: `reminder:${row.id}`, kind: "followup", patientId: row.patient_id, title: data.title,
         detail: [overdue(row.due_at, current), "联系患者后登记随访结果"].filter(Boolean).join("，"), at: row.due_at,
-        weight: row.due_at < current - DAY ? 1 : 5,
+        weight: dueWeight(row.due_at, current), reminderId: row.id, ...(covers ? { covers } : {}),
         action: { type: "patient", tab: "followups", label: "登记随访" } });
     }
     for (const row of db.prepare("SELECT id,patient_id,status,next_due,data FROM follow_ups WHERE status='paused' OR (status='active' AND next_due<=?)").all(current)) {
@@ -31,8 +39,10 @@ const followup = {
           action: { type: "patient", tab: "followups", label: "检查计划" } });
         continue;
       }
+      const covers = reviewCover(row.patient_id, data.source);
       items.push({ id: `schedule:${row.id}`, kind: "followup", patientId: row.patient_id, title: data.name,
-        detail: [overdue(row.next_due, current), "随访到期，联系患者"].filter(Boolean).join("，"), at: row.next_due, weight: 5,
+        detail: [overdue(row.next_due, current), "随访到期，联系患者"].filter(Boolean).join("，"), at: row.next_due,
+        weight: dueWeight(row.next_due, current), ...(covers ? { covers } : {}),
         action: { type: "patient", tab: "followups", label: "查看随访" } });
     }
     return items;

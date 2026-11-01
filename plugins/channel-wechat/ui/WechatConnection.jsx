@@ -1,4 +1,5 @@
 import { MacPermissionHelp } from '../../../src/mac-permission-help';
+import { ExperimentalChip, ExperimentalNote } from './ExperimentalNote.jsx';
 import { AutomaticSettings } from '../../channel/ui/ConnectionForm.jsx';
 import { useEffect, useState } from 'react';
 import { api, refreshPlugins } from '../../../src/agent-runtime';
@@ -9,7 +10,7 @@ export function WechatConnection({ initial, onSaved }) {
   async function run(fn) { setBusy(true); setError(''); try { await fn(); } catch(e) { setError(e.message); } finally { setBusy(false); } }
   const check = () => run(async () => { setStatus(await api('/api/chat-followups/connections/wechat/test', 'POST', {})); await refreshPlugins().catch(() => {}); });
   useEffect(() => { check(); }, []);
-  return <section className="chat-setup"><h3>本机微信</h3><p>在微信桌面版扫码登录后，工作台可以读取你授权的患者会话。</p>
+  return <section className="chat-setup"><h3>本机微信 <ExperimentalChip /></h3><ExperimentalNote /><p>在微信桌面版扫码登录后，工作台可以读取你授权的患者会话。</p>
     <p role="status">{status?.message || '正在检查微信…'}</p>
     <button disabled={busy} onClick={check}>检查微信与权限</button>
     {status && !status.ready && (saved.platform === 'darwin' || !saved.platform) && <MacPermissionHelp onRecheck={check} busy={busy} />}

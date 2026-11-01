@@ -109,6 +109,7 @@
       "suggested": [
         "<uuid>"
       ],
+      "suggestedBy": "rough",
       "trial": {
         "id": "<uuid>",
         "title": "迁移快照试验",
@@ -122,7 +123,8 @@
           "sources": [
             "年龄 18–75 岁"
           ]
-        }
+        },
+        "screening": null
       },
       "candidates": [
         {
@@ -143,7 +145,8 @@
               "「2型糖尿病」与入选条件相关",
               "「示例·糖尿病」与入选条件相关"
             ],
-            "warnings": []
+            "warnings": [],
+            "rough": true
           },
           "ai": null,
           "review": null,
@@ -155,7 +158,13 @@
             "consentDate": null,
             "updatedAt": null
           },
-          "next": "建议 AI 初筛"
+          "next": "未设置筛选条件，可 AI 逐条初筛",
+          "screen": {
+            "source": "none",
+            "status": "unclear",
+            "label": "未设置筛选条件",
+            "open": []
+          }
         },
         {
           "patientId": "<uuid>",
@@ -174,7 +183,8 @@
             "reasons": [
               "年龄约 74 岁，在范围内"
             ],
-            "warnings": []
+            "warnings": [],
+            "rough": true
           },
           "ai": null,
           "review": null,
@@ -186,7 +196,13 @@
             "consentDate": null,
             "updatedAt": null
           },
-          "next": "资料不足，可 AI 初筛"
+          "next": "未设置筛选条件，可 AI 逐条初筛",
+          "screen": {
+            "source": "none",
+            "status": "unclear",
+            "label": "未设置筛选条件",
+            "open": []
+          }
         },
         {
           "patientId": "<uuid>",
@@ -205,7 +221,8 @@
             "reasons": [
               "年龄约 48 岁，在范围内"
             ],
-            "warnings": []
+            "warnings": [],
+            "rough": true
           },
           "ai": null,
           "review": null,
@@ -217,7 +234,13 @@
             "consentDate": null,
             "updatedAt": null
           },
-          "next": "资料不足，可 AI 初筛"
+          "next": "未设置筛选条件，可 AI 逐条初筛",
+          "screen": {
+            "source": "none",
+            "status": "unclear",
+            "label": "未设置筛选条件",
+            "open": []
+          }
         }
       ],
       "counts": {
@@ -239,7 +262,13 @@
           "mismatch": 0
         },
         "aiDone": 0,
-        "awaitingReview": 0
+        "awaitingReview": 0,
+        "screen": {
+          "source": "none",
+          "match": 0,
+          "unclear": 0,
+          "mismatch": 0
+        }
       },
       "batch": null
     }

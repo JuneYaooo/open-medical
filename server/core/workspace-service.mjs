@@ -1836,7 +1836,8 @@ export class WorkspaceService {
   // Browser screenshots go to a vision-capable model as an image, never as
   // base64 text in the conversation. Returns null when no model can see.
   async analyzeScreenshot(shot, question, signal) {
-    if (this.privacy?.rawImagesBlocked?.()) return null;
+    const blocked = this.privacy?.screenshotsBlocked ? this.privacy.screenshotsBlocked() : this.privacy?.rawImagesBlocked?.();
+    if (blocked) return null;
     const model = this.provider.vision === true ? this.provider : this.getOcrModel?.();
     if (!model) return null;
     const result = await model.complete(

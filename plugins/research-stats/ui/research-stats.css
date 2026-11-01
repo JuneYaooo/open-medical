@@ -43,3 +43,40 @@
 .tool-page .research-groups {
   max-width: 520px;
 }
+/* 研究问题入口（主入口）与 CSV 高级分析折叠区 */
+.tool-page .research-question-form {
+  display: grid;
+  gap: 10px;
+}
+.tool-page .research-question-form textarea {
+  width: 100%;
+  min-height: 84px;
+  font: inherit;
+  resize: vertical;
+}
+.tool-page .research-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-page .research-examples button {
+  text-align: left;
+  white-space: normal;
+}
+.tool-page .research-data-summary p {
+  margin: 4px 0;
+}
+.tool-page .research-advanced {
+  margin-top: 16px;
+}
+.tool-page .research-advanced > summary {
+  cursor: pointer;
+  min-height: 40px;
+  font-weight: 600;
+}
+.tool-page .research-data-summary details { margin: 0 0 12px; }
+.medical-shell .tool-page .research-data-summary details > summary {
+  font-size: var(--meta-size, 14px);
+  font-weight: 500;
+  color: var(--accent);
+}

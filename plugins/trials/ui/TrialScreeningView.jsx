@@ -1,5 +1,6 @@
 import {TrialAIReview} from "./TrialAIReview";
 import { EnrollmentSelect, TrialCandidatesPanel } from "./TrialCandidates";
+import { PatientTrialMatches, TrialAskBox, useTrialAgent } from "./TrialAssist";
 import {splitEligibility} from "../../../shared/trial-protocol.mjs";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../src/agent-runtime";
@@ -34,7 +35,22 @@ function EnrollmentControl({ trialId, patientId }) {
   </div>;
 }
 
-export function TrialScreeningView({ onOpenPatient }) {
+// 患者侧入口：选一位患者，看各试验按筛选条件的预筛结论（本机判断，不经模型）。
+function PatientMatchSection({ patients, onOpenTrial }) {
+  const [patientId, setPatientId] = useState("");
+  return <details className="trial-patient-match">
+    <summary>查看某位患者适合的试验</summary>
+    <label>选择患者
+      <select aria-label="查看适合试验的患者" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+        <option value="">请选择患者</option>
+        {patients.map((p) => <option key={p.id} value={p.id}>{patientOptionLabel(p, patients)}</option>)}
+      </select>
+    </label>
+    <PatientTrialMatches patientId={patientId} onOpenTrial={onOpenTrial} />
+  </details>;
+}
+
+export function TrialScreeningView({ onOpenPatient, onOpenTask, config, onSettings }) {
   const [patientBrief, setPatientBrief] = useState(null);
   const [registryId, setRegistryId] = useState(""),
     [trials, setTrials] = useState([]),
@@ -57,6 +73,7 @@ export function TrialScreeningView({ onOpenPatient }) {
     [notice, setNotice] = useState("");
   const request = useRef(0);
   const inFlight = useRef(false);
+  const agent = useTrialAgent({ config, onOpenTask, onSettings, onError: setError });
   const [draftConflict, setDraftConflict] = useState(null);
   const draftKey =
     trial && patientId
@@ -227,6 +244,7 @@ export function TrialScreeningView({ onOpenPatient }) {
           添加试验方案
         </button>
       </div>
+      {!form && <TrialAskBox agent={agent} trial={trial} />}
       {(!trial || form) && <details className="trial-import"><summary>按注册号导入或查找方案</summary>
       <form
         className="trial-registry-search"
@@ -405,7 +423,7 @@ export function TrialScreeningView({ onOpenPatient }) {
               ))}
             </select>
           </label>
-          {!patientId && <TrialCandidatesPanel trial={trial} onScreen={setPatientId} onOpenPatient={onOpenPatient} />}
+          {!patientId && <TrialCandidatesPanel trial={trial} onScreen={setPatientId} onOpenPatient={onOpenPatient} agent={agent} />}
           {patientId && <div className="trial-patient-bar">
             <button className="text-button" disabled={busy} onClick={() => setPatientId("")}>← 返回候选患者</button>
             <EnrollmentControl trialId={trial.id} patientId={patientId} />
@@ -607,7 +625,8 @@ export function TrialScreeningView({ onOpenPatient }) {
                 </p>
                 <div className="trial-card-chips">
                   <span className={`om-chip ${/招募中|recruiting/i.test(t.recruitment || "") && !/不招募/.test(t.recruitment || "") ? "is-ok" : ""}`}>{t.recruitment || "招募状态未记录"}</span>
-                  <span className="om-chip">{t.criteria.length} 项条件</span>
+                  <span className="om-chip">{t.criteria.length} 项入排标准</span>
+                  <span className={`om-chip ${t.screeningSpec ? "is-ok" : ""}`}>{t.screeningSpec ? `筛选条件 ${t.screeningSpec.conditions.length} 条` : "未设置筛选条件"}</span>
                 </div>
               </div>
               <button
@@ -624,11 +643,12 @@ export function TrialScreeningView({ onOpenPatient }) {
           ))}
           {!trials.length && (
             <p className="om-empty trial-empty">
-              先添加一份试验方案，再选择患者逐项排查。可从上方注册平台查找方案与研究中心。
+              先添加一份试验方案，再选择患者逐项排查。可从上方注册平台查找方案与研究中心，或让助手检索并导入。
             </p>
           )}
         </div>
       )}
+      {!trial && !form && trials.length > 0 && <PatientMatchSection patients={patients} onOpenTrial={(id) => { const t = trials.find((x) => x.id === id); if (t) { setTrial(t); setPatientId(""); setError(""); } }} />}
     </div>
   );
 }

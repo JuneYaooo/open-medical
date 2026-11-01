@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../src/agent-runtime";
+import { AiConsentNote, useAiConsent } from "../../../src/ai-consent.jsx";
 const labels = {
   running: "正在自动核对",
   completed: "AI 初筛已完成",
@@ -14,6 +15,7 @@ export function TrialAIReview({ trial, patientId, onAdopt, renderReview }) {
     [filter, setFilter] = useState("attention"),
     [consent, setConsent] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const { granted: aiGranted } = useAiConsent();
   const base = `/api/trials/${trial.id}/screenings/${patientId}/ai`;
   useEffect(() => {
     let live = true,
@@ -70,11 +72,11 @@ export function TrialAIReview({ trial, patientId, onAdopt, renderReview }) {
       </div>
       <details className="trial-run-options" open={!job || job.status === "running"}>
         <summary>{job ? "重新初筛设置" : "开始初筛"}</summary>
-        <label className="trial-consent-check">
+        {aiGranted ? <p className="muted">开始后可离开此页，结果保存在本机。<AiConsentNote /></p> : <label className="trial-consent-check">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
           <span>同意把该患者的病历资料交给当前配置的模型分析（档案快照不含姓名和电话，上传的病历文件按原样发送）。开始后可离开此页，结果保存在本机。</span>
-        </label>
-        <button className="primary" disabled={busy || !consent || job?.status === "running"} onClick={() => action(() => api(base, "POST", { externalConsent: true }))}>
+        </label>}
+        <button className="primary" disabled={busy || !(consent || aiGranted) || job?.status === "running"} onClick={() => action(() => api(base, "POST", { externalConsent: true }))}>
           {job ? "重新自动初筛" : "开始自动初筛"}
         </button>
       </details>

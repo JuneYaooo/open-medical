@@ -64,6 +64,13 @@ export class FollowUpManager {
     check(row, "NOT_FOUND", "患者不存在", 404);
     return JSON.parse(row.data);
   }
+  // 有进行中的随访计划或待处理提醒的患者，供「失访患者」盘点排除。
+  activePatientIds() {
+    const ids = new Set();
+    for (const r of this.store.db.prepare("SELECT DISTINCT patient_id FROM follow_ups WHERE status IN ('active','running')").all()) ids.add(r.patient_id);
+    for (const r of this.store.db.prepare("SELECT DISTINCT patient_id FROM reminders WHERE status='pending'").all()) ids.add(r.patient_id);
+    return [...ids];
+  }
   list(patientId) {
     this.patientRow(patientId);
     return this.store.db
@@ -534,6 +541,31 @@ export class FollowUpManager {
       }));
   }
   createReminder(patient, followUp, detail) {
+    // A recurring plan whose previous reminder is still unrecorded keeps one
+    // pending reminder: refresh it (detail, due time, checklist) instead of
+    // stacking another row the doctor would have to close one by one.
+    const open = this.store.db
+      .prepare("SELECT id, data FROM reminders WHERE status='pending' AND kind='followup' AND patient_id=? AND json_extract(data,'$.followUpId')=? ORDER BY due_at DESC, rowid DESC LIMIT 1")
+      .get(patient.id, followUp.id);
+    if (open) {
+      const previous = JSON.parse(open.data);
+      if (!previous.outcome) {
+        const missed = (previous.missedOccurrences || 0) + 1;
+        const reminder = {
+          ...previous,
+          title: `随访：${followUp.name}`,
+          detail: `${detail}（之前 ${missed} 次到期尚未登记，已合并为这一条）`,
+          checklist: followUp.checklist,
+          missedOccurrences: missed,
+          reused: true,
+        };
+        const { reused: _reused, ...stored } = reminder;
+        this.store.db
+          .prepare("UPDATE reminders SET due_at=?, data=? WHERE id=?")
+          .run(this.now(), JSON.stringify(stored), open.id);
+        return reminder;
+      }
+    }
     const reminder = {
       id: randomUUID(),
       patientId: patient.id,
@@ -571,7 +603,10 @@ export class FollowUpManager {
             ? `有 ${messages.length} 条未处理消息`
             : "按计划到期的常规随访",
       );
-      if (job.questionnaire && this.surveys)
+      // A merged reminder already carries its survey unless none was made yet.
+      if (job.questionnaire && this.surveys && !(reminder.reused && this.store.db
+        .prepare("SELECT 1 FROM followup_surveys WHERE json_extract(data,'$.reminderId')=? LIMIT 1")
+        .get(reminder.id)))
         this.surveys.createForReminder(patient, job, reminder);
       result = { status: "completed", digest: false, reminderId: reminder.id };
       if (messages.length) {
@@ -711,6 +746,29 @@ export class FollowUpManager {
       .run(id);
     return { ok: true };
   }
+  // 推迟：把未登记的随访提醒挪到 N 天后再进今日待办，不改随访计划本身。
+  snoozeReminder(id, input = {}) {
+    identifier(id);
+    return sqliteTransaction(this.store.db, () => {
+      const row = this.store.db.prepare("SELECT status, due_at, data FROM reminders WHERE id=?").get(id);
+      check(row, "NOT_FOUND", "提醒不存在", 404);
+      const reminder = JSON.parse(row.data);
+      const days = input.days;
+      check(Number.isInteger(days) && days >= 1 && days <= 30, "INVALID_INPUT", "推迟天数须为 1–30 天");
+      const requestId = input.requestId === undefined ? null : identifier(input.requestId);
+      if (requestId && reminder.snooze?.requestId === requestId) {
+        check(reminder.snooze.days === days, "REQUEST_CONFLICT", "这次推迟已保存且天数不同，请刷新后再调整", 409);
+        return { ...reminder, dueAt: row.due_at };
+      }
+      check(row.status === "pending" && !reminder.outcome, "ALREADY_RECORDED", "这次随访已登记，无需推迟", 409);
+      check(!this.patientRow(reminder.patientId).archived, "PATIENT_ARCHIVED", "请先恢复患者档案", 409);
+      const dueAt = this.now() + days * 86400000;
+      reminder.snooze = { days, until: new Date(dueAt).toISOString(), at: new Date(this.now()).toISOString(), ...(requestId ? { requestId } : {}) };
+      this.store.db.prepare("UPDATE reminders SET due_at=?, data=? WHERE id=?").run(dueAt, JSON.stringify(reminder), id);
+      this.store.audit(reminder.sessionId, "followup.snoozed", { reminderId: id, days });
+      return { ...reminder, dueAt };
+    });
+  }
   recordContact(patientId, input = {}, { pendingReview = false } = {}) {
     identifier(patientId);
     return sqliteTransaction(this.store.db, () => {
@@ -807,7 +865,6 @@ export class FollowUpManager {
         "INVALID_INPUT",
         "请选择随访结果",
       );
-      const note = string(input.note, "随访记录", 5000);
       const contactedAt = input.contactedAt ? Date.parse(input.contactedAt) : this.now();
       check(Number.isFinite(contactedAt) && contactedAt <= this.now() + 60000 && contactedAt >= Date.parse("1900-01-01"), "INVALID_INPUT", "联系时间无效或晚于当前时间");
       const checkedItems = input.checkedItems || [];
@@ -818,6 +875,10 @@ export class FollowUpManager {
         "INVALID_INPUT",
         "核对条目须来自本次随访清单",
       );
+      // 已完成联系且勾选了核对条目时，勾选本身就是记录，文字可以不填。
+      const note = input.status === "completed" && checkedItems.length && !String(input.note ?? "").trim()
+        ? ""
+        : string(input.note, "随访记录", 5000);
       const noRetryReason = input.noRetryReason ? string(input.noRetryReason, "不再另行安排的原因", 1000) : "";
       check(input.status !== "unreachable" || input.nextDueAt || noRetryReason,
         "FOLLOWUP_NEXT_ACTION_REQUIRED", "未联系上：请安排下次联系时间，或明确填写不再另行安排的原因。");

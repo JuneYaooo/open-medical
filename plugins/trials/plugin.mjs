@@ -60,6 +60,15 @@ function createTrialApi(ctx) {
       );
       return REPLY(io.send, 200, jobs.cancel(job.id));
     }
+    // 患者侧：这位患者对照各方案的筛选条件（本机界面用，不经模型）。
+    if (parts.length === 4 && parts[2] === "match" && req.method === "GET")
+      return REPLY(io.send, 200, candidates.matchPatient(parts[3]));
+    // 医生在界面保存/删改/清除筛选条件；body { spec | null, manualCriteria, expectedRevision }。
+    if (parts.length === 4 && parts[3] === "screening-conditions" && req.method === "PUT") {
+      const body = await io.body();
+      const saved = screening.setScreeningSpec(identifier(parts[2]), body || {}, "doctor");
+      return REPLY(io.send, 200, saved);
+    }
     if (parts.length === 4 && parts[2] === "registry" && req.method === "GET")
       return REPLY(io.send, 200, await registry.lookup(parts[3]));
     if (
@@ -183,6 +192,23 @@ export default definePlugin({
   legacyProposalTypes: {
     "trial-batch": proposalHandler("trial-batch"),
     "trial-enrollment": proposalHandler("trial-enrollment"),
+    "trial-screening-conditions": proposalHandler("trial-screening-conditions"),
+    "trial-protocol": proposalHandler("trial-protocol"),
+  },
+  prompt: "./prompt.md",
+  // 试验页提交的任务上下文：针对某个方案整理筛选条件或回答医生的问题。
+  contexts: {
+    "trials-protocol": {
+      sticky: true,
+      validate: (ctx, context) => {
+        check(["conditions", "ask"].includes(context.scope.task), "INVALID_INPUT", "试验上下文的 task 无效");
+        if (context.scope.trialId) serviceOf(ctx).screening.get(identifier(context.scope.trialId));
+      },
+      guidance: (_ctx, { scope }) =>
+        scope.task === "conditions"
+          ? `医生要为试验（trialId=${JSON.stringify(scope.trialId)}）整理结构化筛选条件。先用 trial_protocol_criteria 读取入排标准原文，必要时用 research_data_dictionary 看本地诊断、用药和检验的写法与单位；再用 trial_screening_conditions_propose 提交条件草稿（无法结构化的写进 manualCriteria），向医生逐条说明口径、哪些条目需人工核对，以及试算的符合/待核对人数。不要直接声称患者符合入组。`
+          : `医生在临床试验页提问${scope.trialId ? `，当前打开的试验 trialId=${JSON.stringify(scope.trialId)}` : ""}。找患者时：已设置筛选条件的试验用 trial_candidates，临时条件用 cohort_query；查某位患者适合哪些试验用 trial_match_patient；查外部试验用 trial_registry_search（ChiCTR 用 web_search 限定 chictr.org.cn）；导入方案用 trial_protocol_propose。结果是预筛草稿，缺资料是待核对，不是不符合。`,
+    },
   },
   agendaSources: trialAgendaSources,
   hooks: {
@@ -243,7 +269,7 @@ export default definePlugin({
   tools(ctx, { registry }) {
     const service = serviceOf(ctx);
     for (const plugin of trialTools(
-      () => service.candidates,
+      () => service,
       ctx.services.pending,
     ))
       registry.register({

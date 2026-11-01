@@ -119,11 +119,13 @@ export class PatientRegistry {
             .map((d) => (typeof d === "string" ? d : d?.name || ""))
             .filter(Boolean)
             .join(" ");
+    const q = String(query || "").trim().toLowerCase();
     const patients = (summary ? this.summaries({ brief }) : this.all())
       .filter((p) => includeArchived || !p.archived)
       .filter((p) => !group || p.groups?.includes(group))
-      .filter((p) => [p.name, p.patientNumber, p.id, p.phone, ...(p.tags || []), diagnosisText(p)]
-        .some((value) => String(value || "").toLowerCase().includes(String(query || "").trim().toLowerCase())))
+      // 内部 ID 只在输入足够长时参与匹配，否则单个字母会命中所有患者。
+      .filter((p) => !q || [p.name, p.patientNumber, q.length >= 8 ? p.id : "", p.phone, ...(p.tags || []), diagnosisText(p)]
+        .some((value) => String(value || "").toLowerCase().includes(q)))
       .sort((a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt) || a.id.localeCompare(b.id));
     const appointments = brief ? this.upcomingAppointments() : null;
     return patients.map((p) => {
@@ -268,7 +270,7 @@ export class PatientRegistry {
       if (input.medications !== undefined)
         patient.medications = optionalMedications(input.medications);
       if (input.allergies !== undefined)
-        patient.allergies = optionalStrings(input.allergies, "过敏史", 20, 120);
+        patient.allergies = optionalAllergies(input.allergies);
       patient.allergyStatus = allergyState(patient, input);
       if (input.labs !== undefined) {
         patient.labs = optionalLabs(input.labs);
@@ -674,6 +676,22 @@ function optionalStrings(value, label, maxCount, maxLen) {
   );
   return items;
 }
+// 过敏史：旧数据为纯字符串；填写了反应时存为 { substance, reaction }。
+// 没有反应的对象收敛回字符串，保持与既有读取方兼容。
+function optionalAllergies(value) {
+  if (value === undefined || value === null) return [];
+  check(Array.isArray(value) && value.length <= 20, "INVALID_INPUT", "过敏史最多 20 个");
+  const items = value.map((v) => {
+    if (typeof v === "string") return string(v, "过敏史", 120).trim();
+    check(v && typeof v === "object" && !Array.isArray(v), "INVALID_INPUT", "过敏史格式无效");
+    const substance = string(v.substance, "过敏原", 120).trim();
+    const reaction = v.reaction === undefined || v.reaction === null || v.reaction === "" ? "" : string(v.reaction, "过敏反应", 120).trim();
+    return reaction ? { substance, reaction } : substance;
+  });
+  const names = items.map((item) => (typeof item === "string" ? item : item.substance));
+  check(new Set(names).size === names.length, "INVALID_INPUT", "过敏史不能重复");
+  return items;
+}
 const clinicalDate = (value, label) => {
   const text = string(value, label, 10);
   check(
@@ -720,7 +738,7 @@ export function validateClinicalInput(input = {}) {
       ? { medications: optionalMedications(input.medications) }
       : {}),
     ...(input.allergies !== undefined
-      ? { allergies: optionalStrings(input.allergies, "过敏史", 20, 120) }
+      ? { allergies: optionalAllergies(input.allergies) }
       : {}),
     ...(input.allergyStatus !== undefined
       ? { allergyStatus: optionalChoice(input.allergyStatus, ["unknown", "none_known", "recorded"]) || "unknown" }
@@ -810,6 +828,9 @@ function optionalMedications(value) {
     ...(item.frequency
       ? { frequency: string(item.frequency, "频次", 60) }
       : {}),
+    ...(item.startDate ? { startDate: clinicalDate(item.startDate, "开始用药日期") } : {}),
+    ...(item.stoppedAt ? { stoppedAt: clinicalDate(item.stoppedAt, "停药日期") } : {}),
+    ...(item.stopReason ? { stopReason: string(item.stopReason, "停药原因", 200) } : {}),
     ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
     ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
@@ -841,7 +862,7 @@ function optionalVisits(value) {
     reason: string(item.reason, "就诊事由", 200),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
     ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),
-    ...(item.note ? { note: string(item.note, "备注", 500) } : {}),
+    ...(item.note ? { note: string(item.note, "备注", 4000) } : {}),
   }));
 }
 
@@ -869,7 +890,7 @@ export function normalizePatientCreate(input) {
         diagnoses: optionalDiagnoses(input.diagnoses),
         ...(input.treatmentPlan !== undefined ? { treatmentPlan: optionalTreatmentPlan(input.treatmentPlan) } : {}),
         medications: optionalMedications(input.medications),
-        allergies: optionalStrings(input.allergies, "过敏史", 20, 120),
+        allergies: optionalAllergies(input.allergies),
         labs: optionalLabs(input.labs),
         visits: optionalVisits(input.visits),
   };

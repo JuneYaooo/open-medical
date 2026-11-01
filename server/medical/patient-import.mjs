@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parsePatientImport } from "../../shared/patient-import.mjs";
+import { parsePatientImportTable } from "../../shared/patient-import.mjs";
 import { check, identifier, AppError } from "../errors.mjs";
 import { sqliteTransaction } from "../sqlite-transaction.mjs";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -7,8 +7,8 @@ const hash = (value) => createHash("sha256").update(value).digest("hex");
 export class PatientImporter {
   constructor(store, patients) { Object.assign(this, { store, patients }); }
   preview(text) {
-    let rows;
-    try { rows = parsePatientImport(text); } catch (error) { throw new AppError("INVALID_IMPORT", error.message); }
+    let rows, ignoredColumns;
+    try { ({ rows, ignoredColumns } = parsePatientImportTable(text)); } catch (error) { throw new AppError("INVALID_IMPORT", error.message); }
     const people = this.patients.summaries();
     for (const row of rows) {
       const { input, errors } = row;
@@ -22,7 +22,7 @@ export class PatientImporter {
       row.matches = sameName.slice(0, 5).map(({ id, name, patientNumber, birthYear, archived }) => ({ id, name, patientNumber, birthYear, archived: Boolean(archived) }));
       row.sameBatchName = sameBatchName;
     }
-    return { rows, fingerprint: hash(text), counts: Object.fromEntries(["ready", "same_name", "existing", "invalid"].map((status) => [status, rows.filter((row) => row.status === status).length])) };
+    return { rows, ignoredColumns, fingerprint: hash(text), counts: Object.fromEntries(["ready", "same_name", "existing", "invalid"].map((status) => [status, rows.filter((row) => row.status === status).length])) };
   }
   commit(input) {
     check(input && typeof input === "object", "INVALID_IMPORT", "导入请求无效");

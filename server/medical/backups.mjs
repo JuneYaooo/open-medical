@@ -15,6 +15,28 @@ export class Backups {
     this.databasePath = this.memory ? null : resolve(databasePath);
     this.directory = this.memory ? null : join(dirname(this.databasePath), 'backups');
     this.maxKeep = maxKeep;
+    this.autoTimer = null;
+  }
+  // Daily automatic backup: runs once at start when the newest backup is older
+  // than a day, then checks again every interval. Never throws; timers are
+  // unref'd so they never keep the process alive.
+  startAuto({ intervalMs = DAY, checkMs = 60 * 60 * 1000, onError = () => {} } = {}) {
+    if (this.memory || this.autoTimer) return false;
+    const tick = () => {
+      try {
+        const latest = this.list()[0];
+        if (!latest || Date.now() - latest.createdAt >= intervalMs) this.run();
+      } catch (error) { try { onError(error); } catch { /* ignore */ } }
+    };
+    this.autoTimer = setInterval(tick, Math.min(checkMs, intervalMs));
+    this.autoTimer.unref?.();
+    this.autoStartTimer = setTimeout(tick, 0);
+    this.autoStartTimer.unref?.();
+    return true;
+  }
+  stopAuto() {
+    clearInterval(this.autoTimer); clearTimeout(this.autoStartTimer);
+    this.autoTimer = null; this.autoStartTimer = null;
   }
   directoryReady(create = false) {
     if (this.memory) return false;
@@ -40,7 +62,7 @@ export class Backups {
   status() {
     if (!this.memory) check(lstatSync(this.databasePath).isFile(), 'BACKUP_SOURCE', '数据库文件不可用，请检查数据位置。', 409);
     const items = this.list(), latest = items[0], age = latest ? Date.now() - latest.createdAt : null;
-    return { supported: !this.memory, databasePath: this.databasePath, databaseName: this.memory ? null : basename(this.databasePath), directory: this.directory, retention: this.maxKeep,
+    return { supported: !this.memory, autoBackup: Boolean(this.autoTimer), databasePath: this.databasePath, databaseName: this.memory ? null : basename(this.databasePath), directory: this.directory, retention: this.maxKeep,
       count: items.length, lastBackupAt: latest ? new Date(latest.createdAt).toISOString() : null,
       fresh: age !== null && age < DAY, warning: this.memory || age === null || age >= DAY,
       items: items.map(({name,size,createdAt,type}) => ({name,size,createdAt,type})) };

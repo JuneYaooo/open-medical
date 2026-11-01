@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { api } from "./agent-runtime";
 import { useHabitMutation } from "./habit-mutation";
+import { AiConsentNote, useAiConsent } from "./ai-consent";
 import { Check, Trash2, RotateCcw, Loader2, Sparkles, Eye } from "lucide-react";
 
 const TEXT_FIELDS = [
@@ -38,7 +39,9 @@ export function DoctorProfilePanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [modelConsent, setModelConsent] = useState(false);
+  const [localModelConsent, setModelConsent] = useState(false);
+  const { granted: aiGranted } = useAiConsent();
+  const modelConsent = aiGranted || localModelConsent;
   const [newMemory, setNewMemory] = useState("");
 
   const loadProfile = async (keepDraft = false) => {
@@ -338,14 +341,14 @@ export function DoctorProfilePanel() {
             >
               <Sparkles size={14} /> 把重复写过的说明记成习惯
             </button>
-            <label className="doctor-consent">
+            {aiGranted ? <AiConsentNote className="doctor-consent" /> : <label className="doctor-consent">
               <input
                 type="checkbox"
-                checked={modelConsent}
+                checked={localModelConsent}
                 onChange={(e) => setModelConsent(e.target.checked)}
               />
               允许把你写过的说明发送给当前模型，帮助归纳偏好
-            </label>
+            </label>}
             <button
               onClick={() => consolidate(true)}
               disabled={busy || !modelConsent}

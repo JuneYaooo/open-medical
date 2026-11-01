@@ -6,11 +6,12 @@ import {
   similarCaseQuestion,
   similarCaseSearchScope,
 } from "./server/similar-case-workflow.mjs";
+import { patientIdentityTerms } from "../../server/medical/outbound-query.mjs";
 
 // The local-only constraint used to be a second fixed line in runSystemExtras.
 // Keeping it beside the workflow guidance preserves the exact prompt order.
 const LOCAL_SEARCH_GUIDANCE =
-  "本轮医生限定仅本地检索：只使用本机患者档案和本地病例库，不进行网上检索。online_case_search 和 literature_fetch 不可用。完成一次 similar_case_search 后直接核对候选并提交 finish_similar_case_search；无候选也提交真实的本地检索结果。";
+  "本轮医生限定仅本地检索：只使用本机患者档案和本地病例库，不进行网上检索。online_case_search、literature_fetch、web_search 和 web_fetch 不可用。完成一次 similar_case_search 后直接核对候选并提交 finish_similar_case_search；无候选也提交真实的本地检索结果。";
 
 export default definePlugin({
   id: "similar-cases",
@@ -33,7 +34,13 @@ export default definePlugin({
           : SIMILAR_CASE_GUIDANCE;
       },
       configure(ctx, { registry, workspace, run }) {
-        configureSimilarCaseTools(registry, workspace, run);
+        let patient = null;
+        try {
+          patient = workspace.patientId ? ctx.services.patients?.row(workspace.patientId) : null;
+        } catch {}
+        configureSimilarCaseTools(registry, workspace, run, {
+          identities: patientIdentityTerms(patient),
+        });
       },
       prepared(workspace, runId) {
         const run = workspace?.runs?.find((item) => item.id === runId);

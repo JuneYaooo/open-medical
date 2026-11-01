@@ -41,6 +41,7 @@ function HomeCockpit({ onView, onPatient, onOpenTask, reloadKey }) {
   const [overviewError, setOverviewError] = useState("");
   const [pendingCount, setPendingCount] = useState(null);
   const [pendingError, setPendingError] = useState("");
+  const [todayVisits, setTodayVisits] = useState(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -50,8 +51,11 @@ function HomeCockpit({ onView, onPatient, onOpenTask, reloadKey }) {
       return Promise.allSettled([
         api("/api/doctor/overview?limit=6"),
         api("/api/pending-actions?status=pending&limit=5"),
-      ]).then(([a, b]) => {
+        api("/api/doctor/overview?kind=visit&limit=100"),
+      ]).then(([a, b, c]) => {
         if (!alive || request !== generation) return;
+        // 今日复诊：今天预约的复诊（按人数），未登记的过期复诊和明天的不算。
+        if (c.status === "fulfilled") setTodayVisits(new Set(c.value.items.filter((item) => new Date(item.at).toDateString() === new Date().toDateString()).map((item) => item.patientId)).size);
         if (a.status === "fulfilled") { setOverview(a.value); setOverviewError(""); }
         else { setOverview(null); setOverviewError(a.reason.message); }
         if (b.status === "fulfilled") {
@@ -78,13 +82,14 @@ function HomeCockpit({ onView, onPatient, onOpenTask, reloadKey }) {
     <div className="home-activity" aria-label="工作提醒">
       <h2>今天</h2>
       <button type="button" onClick={() => onView?.("agenda")}><CalendarClock size={16}/><span>今日待办</span><b>{overview?.total ?? "—"}</b><ArrowUpRight size={14}/></button>
+      {todayVisits > 0 && <button type="button" className="home-visits" onClick={() => onView?.("schedule")}><Stethoscope size={16}/><span>今日复诊</span><b>{todayVisits} 位</b><ArrowUpRight size={14}/></button>}
       {overview?.criticalCount > 0 && <span className="home-urgent om-chip is-danger" role="status">其中 {overview.criticalCount} 项高优先级</span>}
       <button type="button" onClick={() => requestPendingReview()}><ClipboardList size={16}/><span className="cockpit-label">待确认提案</span><b className="cockpit-number">{pendingCount ?? "—"}</b><ArrowUpRight size={14}/></button>
     </div>
     {(overviewError || pendingError) && <p role="alert" className="form-error">{overviewError ? `患者事项加载失败：${overviewError}` : `待确认提案加载失败：${pendingError}`}<button type="button" className="text-button" onClick={() => setRetry(value => value + 1)}>重试</button></p>}
     {overview && (items.length ? <ul className="home-today-list">
       {items.slice(0, 4).map((item) => <li key={item.id}><button type="button" className={item.severity === "critical" ? "is-critical" : ""} onClick={() => open(item)}>
-        <span className="home-today-who"><b>{item.patientName || "工作台"}</b>{item.title && <em>{item.title}</em>}</span>
+        <span className="home-today-who"><b>{item.patientName || "工作台"}</b>{item.title && <em>{item.title}{item.kind === "visit" && item.time ? ` ${item.time}` : ""}</em>}</span>
         <span className="home-today-detail">{item.detail}</span>
         <span className="home-today-action">{item.action?.label || "查看"}<ArrowUpRight size={13}/></span>
       </button></li>)}
@@ -285,7 +290,7 @@ function SetupChecklist({ modelConfigured, onModelSettings, onView }) {
   if (!remaining) return null;
   if (hidden) return <button type="button" className="setup-checklist-reopen" onClick={() => { setHidden(false); try { localStorage.removeItem(SETUP_HIDDEN_KEY); } catch { /* storage unavailable */ } }}>开始使用：还有 {remaining} 项未完成</button>;
   return <section className="setup-checklist" aria-label="开始使用检查清单">
-    <header><strong>开始使用</strong><span>还有 {remaining} 项未完成 · 也可以直接在对话里让助手引导完成</span>
+    <header><strong>开始使用</strong><span>还有 {remaining} 项未完成{modelConfigured ? " · 也可以直接在对话里让助手引导完成" : ""}</span>
       <button type="button" onClick={() => { setHidden(true); try { localStorage.setItem(SETUP_HIDDEN_KEY, "1"); } catch { /* storage unavailable */ } }}>收起</button></header>
     <ol>{items.map((item) => <li key={item.id} className={item.done ? "done" : ""}>
       <span aria-hidden="true">{item.done ? "✓" : "○"}</span><b>{item.label}</b><em>{item.state}</em>

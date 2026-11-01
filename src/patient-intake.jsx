@@ -4,7 +4,7 @@ import { intakeUploads } from "./intake-background";
 import { useEffect, useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import { Modal } from "./components";
-import { api } from "./agent-runtime";
+import { api, openModelSettings } from "./agent-runtime";
 import { importMaterial, uploadScannedPages, MATERIAL_ACCEPT } from "./import-material";
 import { materialQualityLevel } from "./material-details";
 import { OCR_QUALITY_LABELS } from "../shared/ocr-quality.mjs";
@@ -21,7 +21,7 @@ async function intakeActions(status = "pending", sourceSessionId) {
   return { actions };
 }
 
-export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspace, configured }) {
+export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspace, configured, onModelSettings = openModelSettings }) {
   const chooser = useRef(null);
   const review = useRef(null);
   const [reviewEditing, setReviewEditing] = useState(false);
@@ -235,7 +235,7 @@ export function PatientIntakeModal({ onClose, onCreated, onManual, onOpenWorkspa
       <input ref={chooser} type="file" accept={MATERIAL_ACCEPT} multiple hidden onChange={event => { const selected = [...event.target.files]; event.target.value = ""; if (selected.length) parse(selected); }} />
       {!busy && !!files.length && !proposal && <button className="primary" disabled={restoring || !configured} onClick={() => parse()}>继续解析已保存资料</button>}
       {!proposal && <button className={files.length ? "secondary" : "primary"} disabled={busy || restoring || !configured} onClick={() => chooser.current.click()}><Upload size={16} />{sessionId.current ? "补充当前患者资料并重新解析" : "选择资料并自动解析"}</button>}
-      {!configured && <p role="alert">请先在设置中配置模型，再上传资料自动建档。</p>}
+      {!configured && <p role="alert">需先连接模型，才能上传资料自动建档。 <button type="button" className="text-button" onClick={onModelSettings}>连接模型</button></p>}
       {restoring && <p role="status">正在载入所选任务…</p>}
       {!sessionId.current && <section aria-label="未完成的建档任务">
         <h3>建档任务</h3>

@@ -127,7 +127,7 @@ function ItemForm({ section, value, onSave, onCancel }) {
         !Number.isFinite(Date.parse(v)) ||
         new Date(v).toISOString().slice(0, 10) !== v)
     )
-      issues[key] = "日期须为 YYYY-MM-DD";
+      issues[key] = "日期格式如 2025-03-08";
     else if (max && String(v || "").length > max)
       issues[key] = `最多 ${max} 字`;
   }

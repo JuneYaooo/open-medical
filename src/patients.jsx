@@ -5,7 +5,7 @@ import { messageChannelLabel } from "../shared/message-provenance.mjs";
 import { PatientDashboard } from "./patient-dashboard";
 import { loadPatientCore, loadPatientOptional } from "./patient-detail-data";
 import { resolveCommunicationTab } from "./patient-tabs";
-import { patientAgeLabel, patientOptionLabel } from "./patient-labels";
+import { birthYearFromAge, patientAgeLabel, patientOptionLabel, patientQuickMatch, phoneDigits, rememberRecentPatient } from "./patient-labels";
 import { allergyState } from "../shared/patient-list-brief.mjs";
 import { FLAG_ARROW } from "../shared/lab-flags.mjs";
 import { localCalendarDate } from "../shared/calendar-date.mjs";
@@ -23,6 +23,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { api, PENDING_REFRESH_EVENT } from "./agent-runtime";
+import { useAiConsent } from "./ai-consent";
 import { Modal } from "./components";
 import { RiskList } from "./ui";
 import { requestSettingsTab } from "./extension-center";
@@ -30,7 +31,7 @@ import { ClinicalAssistance } from "./clinical-assistance";
 import { PatientIdentityModal } from "./patient-identity";
 import { PatientProposalBanner, PatientProposalModal, loadPatientUpdateProposals } from "./patient-proposal";
 import { PatientIntakeModal } from "./patient-intake";
-import { PatientImportModal } from "./patient-import";
+import { PatientImportModal, restoreArchivedPatient } from "./patient-import";
 import { LabImportModal } from "./lab-import";
 import { AppointmentsPanel, NewLabsNotice } from "./appointments";
 import { SlotItem, findPatientTab, mergePatientTabs, patientTabLabel, useActiveSlot, usePluginActive, usePluginConnected, useSlot } from "./plugin-slots";
@@ -44,10 +45,20 @@ function attentionScore(p, today) {
     (p.counts?.dueFollowups ? 3 : 0) +
     (p.counts?.unprocessedMessages ? 2 : 0);
 }
-const RECORD_TABS = [["overview", "概览"], ["diagnoses", "诊断与病史"], ["medications", "治疗与预后"], ["labs", "检验结果"], ["visits", "就诊经过"], ["library", "资料库"]];
+const RECORD_TABS = [["overview", "概览"], ["diagnoses", "诊断与病史"], ["medications", "用药与治疗"], ["labs", "检验结果"], ["visits", "就诊经过"], ["library", "资料库"]];
 const isRecordTab = tab => RECORD_TABS.some(([id]) => id === tab) || tab === "clinical";
 
 const GENDER = { male: "男", female: "女", unknown: "" };
+// 批量操作对单个患者的 PATCH 内容；无需改动时返回 null。
+export function bulkPatientPatch(patient, action, groupName = "") {
+  const groups = patient.groups || [];
+  const name = String(groupName).trim();
+  if (action === "add-group") return name && !groups.includes(name) ? { groups: [...groups, name] } : null;
+  if (action === "remove-group") return name && groups.includes(name) ? { groups: groups.filter((g) => g !== name) } : null;
+  if (action === "archive") return patient.archived ? null : { archived: true };
+  if (action === "restore") return patient.archived ? { archived: false } : null;
+  return null;
+}
 const fmtDate = followupDate;
 // 提案卡明细：渲染结构化字段而非原始 JSON
 const proposalDetail = (type, payload = {}) => {
@@ -78,7 +89,7 @@ const proposalDetail = (type, payload = {}) => {
         .join("、")}`,
     );
   if (payload.allergies?.length)
-    parts.push(`过敏 ${payload.allergies.join("、")}`);
+    parts.push(`过敏 ${payload.allergies.map((a) => (typeof a === "string" ? a : a?.substance || "")).filter(Boolean).join("、")}`);
   if (payload.labs?.length) parts.push(`检验 ${payload.labs.length} 项待录入`);
   if (payload.visits?.length)
     parts.push(`就诊 ${payload.visits.length} 次待录入`);
@@ -179,6 +190,9 @@ export function PatientsView({
   const locallyResolved = useRef(new Set());
   const [session, setSession] = useState(null);
   const [query, setQuery] = useState("");
+  // 摘要里的「今日复诊 / 有异常检验」可点选为快捷筛选，再点一次取消。
+  const [quickFilter, setQuickFilter] = useState("");
+  const searchInput = useRef(null);
   const [sortBy, setSortBy] = useState("updated");
   const [followupSource, setFollowupSource] = useState(null);
   const [followupFocus, setFollowupFocus] = useState(null);
@@ -191,26 +205,37 @@ export function PatientsView({
   }, [tab, followupFocus, followups]);
   const [patientPage, setPatientPage] = useState(0);
   const [group, setGroup] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkGroup, setBulkGroup] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
   const [archiveFilter, setArchiveFilter] = useState("active");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [modal, setModal] = useState(initialCreate ? "new-patient" : initialImport ? "import-patients" : null);
-  const [consent, setConsent] = useState(false);
-  useEffect(() => {
-    // 患者级授权开关的初始值取全局默认（默认关闭=每次询问）。
-    api("/api/learning/settings")
-      .then((prefs) => setConsent(Boolean(prefs.defaultExternalConsent)))
-      .catch(() => {});
-  }, []);
+  // 全局已授权 AI 使用患者资料时不再逐患者勾选；关闭全局授权后才回到逐次询问。
+  const { granted: aiGranted } = useAiConsent();
+  const [localConsent, setConsent] = useState(false);
+  const consent = aiGranted || localConsent;
   const [paste, setPaste] = useState("");
   const groups = [...new Set(patients.flatMap((p) => p.groups || []))].sort();
+  const tags = [...new Set(patients.flatMap((p) => p.tags || []))].sort();
+  const today = localCalendarDate();
+  const isTodayVisit = (p) => p.brief?.nextAppointment === today;
+  const hasAbnormalLabs = (p) => p.brief?.abnormalLabCount > 0;
+  const q = query.trim().toLowerCase();
+  // 内部 ID 只在输入足够长时参与匹配，否则单个字母会命中所有患者。
+  const matchesQuery = (p) => !q || patientQuickMatch(p, q) ||
+    [p.phone, ...(p.tags || []), p.diagnosisSummary].some((value) => String(value || "").toLowerCase().includes(q)) ||
+    (q.length >= 8 && String(p.id).toLowerCase().includes(q));
   const filtered = patients
     .filter((p) => archiveFilter === "archived" ? p.archived : !p.archived)
     .filter((p) => !group || p.groups?.includes(group))
-    .filter((p) => [p.name, p.patientNumber, p.id, p.phone, ...(p.tags || []), p.diagnosisSummary]
-      .some((value) => String(value || "").toLowerCase().includes(query.trim().toLowerCase())));
-  const today = localCalendarDate();
+    .filter((p) => !tagFilter || p.tags?.includes(tagFilter))
+    .filter((p) => quickFilter === "today" ? isTodayVisit(p) : quickFilter === "abnormal" ? hasAbnormalLabs(p) : true)
+    .filter(matchesQuery);
   const sortedFiltered = [...filtered].sort((a, b) => {
     if (sortBy === "name") return String(a.name).localeCompare(String(b.name), "zh-Hans-CN");
     if (sortBy === "visit") return String(b.lastVisitAt || "").localeCompare(String(a.lastVisitAt || ""));
@@ -221,13 +246,52 @@ export function PatientsView({
     return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
   });
   const activePatients = patients.filter((p) => !p.archived);
-  const listSummary = [
-    `${activePatients.length} 位在管`,
-    activePatients.filter((p) => p.brief?.abnormalLabCount > 0).length && `${activePatients.filter((p) => p.brief?.abnormalLabCount > 0).length} 位有异常检验`,
-    activePatients.filter((p) => p.brief?.nextAppointment === today).length && `${activePatients.filter((p) => p.brief?.nextAppointment === today).length} 位今日复诊`,
-  ].filter(Boolean).join(" · ");
+  const abnormalCount = activePatients.filter(hasAbnormalLabs).length;
+  const todayCount = activePatients.filter(isTodayVisit).length;
+  const toggleQuickFilter = (key) => {
+    setQuickFilter((current) => current === key ? "" : key);
+    setArchiveFilter("active");
+    setPatientPage(0);
+  };
+  const quickChip = (key, count, label) => (count > 0 || quickFilter === key) && <button type="button" className={`chip summary-chip ${quickFilter === key ? "active" : ""}`} aria-pressed={quickFilter === key} title={quickFilter === key ? "再点一次取消筛选" : "只看这些患者"} onClick={() => toggleQuickFilter(key)}>{count} 位{label}{quickFilter === key ? " ✕" : ""}</button>;
+  const listSummary = <span className="patient-list-summary">
+    <span>{activePatients.length} 位在管</span>
+    {quickChip("today", todayCount, "今日复诊")}
+    {quickChip("abnormal", abnormalCount, "有异常检验")}
+  </span>;
+  const filtersActive = Boolean(query || group || tagFilter || quickFilter);
+  const clearFilters = () => { setQuery(""); setGroup(""); setTagFilter(""); setQuickFilter(""); setPatientPage(0); };
+  // 选择在当前筛选内跨页保留；筛选或搜索变化时清空。
+  useEffect(() => { setSelected(new Set()); setBulkConfirm(false); }, [query, group, tagFilter, quickFilter, archiveFilter]);
+  // 「/」聚焦搜索框（正在输入或有弹窗时不拦截）。
+  useEffect(() => {
+    if (detail || modal) return;
+    const onKey = (event) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName)) return;
+      if (!searchInput.current) return;
+      event.preventDefault();
+      searchInput.current.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detail, modal]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / 24));
   const visiblePage = Math.min(patientPage, pageCount - 1);
+  const pagePatients = sortedFiltered.slice(visiblePage * 24, (visiblePage + 1) * 24);
+  const pageAllSelected = pagePatients.length > 0 && pagePatients.every((p) => selected.has(p.id));
+  const pageSomeSelected = pagePatients.some((p) => selected.has(p.id));
+  const toggleSelected = (id) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const togglePage = () => setSelected((current) => {
+    const next = new Set(current);
+    for (const p of pagePatients) { if (pageAllSelected) next.delete(p.id); else next.add(p.id); }
+    return next;
+  });
   const refresh = async () => {
     setListLoading(true);
     try {
@@ -284,6 +348,7 @@ export function PatientsView({
       const work = await api(`/api/sessions/${core.patient.sessionId}`);
       if (version !== patientGeneration.current) return;
       setTab(targetTab);
+      rememberRecentPatient(id);
       onSwitchCurrent?.(id);
       setDetail(core.patient);
       setRisks(core.risks);
@@ -298,7 +363,7 @@ export function PatientsView({
     await openPatient(detail.id, tab);
     await refresh();
   };
-  const resolveProposal = async (proposal, decision) => {
+  const resolveProposal = async (proposal, decision, payload) => {
     if (proposalInFlight.current) return;
     proposalInFlight.current = true;
     locallyResolved.current.add(proposal.id);
@@ -306,7 +371,7 @@ export function PatientsView({
     setError("");
     setNotice("");
     try {
-      await api(`/api/pending-actions/${proposal.id}/${decision}`, "POST", {});
+      await api(`/api/pending-actions/${proposal.id}/${decision}`, "POST", payload ? { payload } : {});
       setReviewProposal(null);
       if (detail) await refreshPatient();
       else await refresh();
@@ -459,27 +524,43 @@ export function PatientsView({
       setError(err.message);
     }
   };
-  const remove = async () => {
-    if (
-      !window.confirm(
-        `确认删除患者「${detail.name}」？\n将同时删除问诊工作台、消息与随访记录，且不可恢复。`,
-      )
-    )
-      return;
-    try {
-      await api(`/api/patients/${detail.id}`, "DELETE");
-      onLocationChange?.();
-      setDetail(null);
-      setSession(null);
-      await refresh();
-    } catch (err) {
-      setError(err.message);
+  // 批量操作：逐位调用 PATCH（带 revision），完成后汇总结果并刷新列表。
+  const runBulk = async (action) => {
+    const targets = patients.filter((p) => selected.has(p.id));
+    setBulkBusy(true); setError(""); setNotice("");
+    let updated = 0;
+    const failed = [];
+    for (const p of targets) {
+      const patch = bulkPatientPatch(p, action, bulkGroup);
+      if (!patch) { updated++; continue; }
+      try {
+        await api(`/api/patients/${p.id}`, "PATCH", { expectedRevision: p.revision, ...patch });
+        updated++;
+      } catch (err) { failed.push(`${p.name}（${err.message}）`); }
     }
+    setBulkConfirm(false);
+    setSelected(new Set());
+    setNotice(failed.length ? `已更新 ${updated} 位，${failed.length} 位失败：${failed.join("、")}` : `已更新 ${updated} 位。`);
+    await refresh().catch((err) => setError(err.message));
+    setBulkBusy(false);
+  };
+  const archiveSelected = () => { if (selected.size > 1) setBulkConfirm(true); else runBulk("archive"); };
+  // 永久删除由 DeletePatientModal 确认（需输入姓名）；成功后回到列表。
+  const removed = async (name) => {
+    setModal(null);
+    onLocationChange?.();
+    setDetail(null);
+    setSession(null);
+    setNotice(`已永久删除「${name}」的档案。`);
+    await refresh().catch((err) => setError(err.message));
   };
   const patientCards = (
     <div className="patient-grid patient-table" role="list">
-      {filtered.length > 0 && <div className="patient-table-head" aria-hidden="true"><span>患者</span><span>主要诊断</span><span>需关注</span><span>在用药物</span><span>复诊 / 就诊</span></div>}
-      {sortedFiltered.slice(visiblePage * 24, (visiblePage + 1) * 24).map((p) => {
+      {filtered.length > 0 && <div className="patient-row patient-row-head">
+        <label className="patient-select" title="选择本页全部患者"><input type="checkbox" aria-label="全选本页" checked={pageAllSelected} ref={(el) => { if (el) el.indeterminate = pageSomeSelected && !pageAllSelected; }} onChange={togglePage} /></label>
+        <div className="patient-table-head" aria-hidden="true"><span>患者</span><span>主要诊断</span><span>需关注</span><span>在用药物</span><span>复诊 / 就诊</span></div>
+      </div>}
+      {pagePatients.map((p) => {
         const brief = p.brief || {};
         const next = brief.nextAppointment || "";
         const nextRel = next ? relativeDay(next, today) : "";
@@ -491,11 +572,11 @@ export function PatientsView({
           ...(followupActive && p.counts.pendingReminders > 0 ? [{ key: "rem", tone: "", text: `${p.counts.pendingReminders} 条提醒` }] : []),
         ];
         return (
+        <div className={`patient-row ${selected.has(p.id) ? "is-selected" : ""}`} role="listitem" key={p.id}>
+        <label className="patient-select"><input type="checkbox" aria-label={`选择 ${p.name}`} checked={selected.has(p.id)} onChange={() => toggleSelected(p.id)} /></label>
         <button
           className="patient-card"
-          role="listitem"
           disabled={patientLoading}
-          key={p.id}
           onClick={() => {
             openPatient(p.id).catch((err) => setError(err.message));
           }}
@@ -523,14 +604,15 @@ export function PatientsView({
             <small>{p.lastVisitAt ? `末次就诊 ${p.lastVisitAt}` : "无就诊记录"}</small>
           </span>
         </button>
+        </div>
         );
       })}
       {!filtered.length && !listLoading && !listFailed && (
         <div className="patient-empty-state">
           <Stethoscope size={28} />
-          <h3>{query || group ? "没有匹配的患者" : archiveFilter === "archived" ? "暂无已归档患者" : "建立第一份患者档案"}</h3>
-          <p>{query || group ? "试试其他姓名、编号或标签，也可以清除筛选查看全部患者。" : archiveFilter === "archived" ? "归档后的患者会保留在这里，随时可以恢复到在管列表。" : "上传病例材料并核对整理结果，或直接填写基本信息。"}</p>
-          {query || group ? <button className="secondary" onClick={() => {setQuery(""); setGroup(""); setPatientPage(0);}}>清除筛选</button> : archiveFilter === "archived" ? <button className="secondary" onClick={() => setArchiveFilter("active")}>查看在管患者</button> : <div className="toolbar-actions"><button className="primary" onClick={() => setModal("new-patient")}>上传第一份病例</button><button className="secondary" onClick={() => setModal("manual-patient")}>手动填写基本信息</button></div>}
+          <h3>{filtersActive ? "没有匹配的患者" : archiveFilter === "archived" ? "暂无已归档患者" : "建立第一份患者档案"}</h3>
+          <p>{filtersActive ? "试试其他姓名、编号或标签，也可以清除筛选查看全部患者。" : archiveFilter === "archived" ? "归档后的患者会保留在这里，随时可以恢复到在管列表。" : "上传病例材料并核对整理结果，或直接填写基本信息。"}</p>
+          {filtersActive ? <button className="secondary" onClick={clearFilters}>清除筛选</button> : archiveFilter === "archived" ? <button className="secondary" onClick={() => setArchiveFilter("active")}>查看在管患者</button> : <div className="toolbar-actions"><button className="primary" onClick={() => setModal("new-patient")}>上传第一份病例</button><button className="secondary" onClick={() => setModal("manual-patient")}>手动填写基本信息</button></div>}
         </div>
       )}
     </div>
@@ -650,10 +732,19 @@ export function PatientsView({
             <label className="search">
               <Search size={14} />
               <input
+                ref={searchInput}
                 aria-label="搜索患者"
-                placeholder="搜索姓名、编号、电话、标签或诊断"
+                aria-keyshortcuts="/"
+                title="按 / 可快速定位到搜索框；只匹配到一位患者时按回车直接打开"
+                placeholder="搜索姓名、拼音首字母、编号、电话、标签或诊断（按 / 定位）"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setPatientPage(0); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && sortedFiltered.length === 1 && !patientLoading) {
+                    e.preventDefault();
+                    openPatient(sortedFiltered[0].id).catch((err) => setError(err.message));
+                  } else if (e.key === "Escape" && query) { setQuery(""); setPatientPage(0); }
+                }}
               />
             </label>
             <select aria-label="患者档案状态" title="切换显示在管患者或已归档患者" value={archiveFilter} onChange={(e) => { setArchiveFilter(e.target.value); setPatientPage(0); }}><option value="active">在管患者</option><option value="archived">已归档患者</option></select>
@@ -664,27 +755,50 @@ export function PatientsView({
               {followupActive && <option value="followup">随访到期优先</option>}
               <option value="name">按姓名</option>
             </select>
-            <button
-              className={`chip ${group === "" ? "active" : ""}`}
-              onClick={() => { setGroup(""); setPatientPage(0); }}
-            >
-              全部
-            </button>
-            {groups.map((g) => (
+            {tags.length > 0 && <select aria-label="按标签筛选" value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPatientPage(0); }}>
+              <option value="">全部标签</option>
+              {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>}
+            {groups.length > 6 ? <select aria-label="按分组筛选" value={group} onChange={(e) => { setGroup(e.target.value); setPatientPage(0); }}>
+              <option value="">全部分组</option>
+              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select> : <>
               <button
-                key={g}
-                className={`chip ${group === g ? "active" : ""}`}
-                onClick={() => { setGroup(g); setPatientPage(0); }}
+                className={`chip ${group === "" ? "active" : ""}`}
+                onClick={() => { setGroup(""); setPatientPage(0); }}
               >
-                {g}
+                全部
               </button>
-            ))}
+              {groups.map((g) => (
+                <button
+                  key={g}
+                  className={`chip ${group === g ? "active" : ""}`}
+                  onClick={() => { setGroup(g); setPatientPage(0); }}
+                >
+                  {g}
+                </button>
+              ))}
+            </>}
           </div>
+          {selected.size > 0 && <div className="patient-bulk-bar" role="region" aria-label="批量操作">
+            <b>已选 {selected.size} 位</b>
+            <input aria-label="分组名称" placeholder="选择或输入分组" list="bulk-group-options" value={bulkGroup} disabled={bulkBusy} onChange={(e) => setBulkGroup(e.target.value)} />
+            <datalist id="bulk-group-options">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+            <button className="secondary" disabled={bulkBusy || !bulkGroup.trim()} onClick={() => runBulk("add-group")}>加入分组</button>
+            <button className="secondary" disabled={bulkBusy || !bulkGroup.trim()} onClick={() => runBulk("remove-group")}>移出分组</button>
+            {archiveFilter === "archived"
+              ? <button className="secondary" disabled={bulkBusy} onClick={() => runBulk("restore")}>恢复</button>
+              : <button className="secondary" disabled={bulkBusy} onClick={archiveSelected}>归档</button>}
+            <button className="text-button" disabled={bulkBusy} onClick={() => setSelected(new Set())}>取消选择</button>
+            {bulkBusy && <Loader2 size={15} className="spin" aria-label="正在更新" />}
+          </div>}
           {patientCards}
-          {pageCount > 1 && <nav className="patient-pagination" aria-label="患者分页">
-            <small>共 {filtered.length} 位 · 第 {visiblePage + 1} / {pageCount} 页</small>
-            <button className="secondary" disabled={visiblePage === 0} onClick={() => setPatientPage(visiblePage - 1)}>上一页</button>
-            <button className="secondary" disabled={visiblePage + 1 >= pageCount} onClick={() => setPatientPage(visiblePage + 1)}>下一页</button>
+          {!listLoading && <nav className="patient-pagination" aria-label="患者分页">
+            <small role="status">共 {filtered.length} 位{pageCount > 1 ? ` · 第 ${visiblePage + 1} / ${pageCount} 页` : ""}</small>
+            {pageCount > 1 && <>
+              <button className="secondary" disabled={visiblePage === 0} onClick={() => setPatientPage(visiblePage - 1)}>上一页</button>
+              <button className="secondary" disabled={visiblePage + 1 >= pageCount} onClick={() => setPatientPage(visiblePage + 1)}>下一页</button>
+            </>}
           </nav>}
         </>
       )}
@@ -728,7 +842,7 @@ export function PatientsView({
 
               <details className="patient-more"><summary>更多</summary><div>
                 <button className="text-button" onClick={archive}>{detail.archived ? "恢复患者" : "归档患者"}</button>
-                <button className="text-button danger" onClick={remove}>删除患者档案</button>
+                <button className="text-button danger" onClick={(e) => { e.currentTarget.closest("details").open = false; setModal("delete-patient"); }}>删除患者档案</button>
                 {pluginActions.map((action) => <button key={`${action.pluginId}:${action.id}`} className="text-button" onClick={async () => {
                   try { setError(""); await action.run(detail, api); }
                   catch (err) { setError(err.message); }
@@ -737,14 +851,14 @@ export function PatientsView({
             </div>
           </div>
           <PatientProposalBanner proposals={updateProposals} busy={proposalBusy} onReview={(proposal) => { setError(""); setReviewProposal(proposal); }} />
-          {config?.modelConfigured && activePluginTab?.legacyTab === "messages" && (
+          {config?.modelConfigured && !aiGranted && activePluginTab?.legacyTab === "messages" && (
             <label className="consent">
               <input
                 type="checkbox"
-                checked={consent}
+                checked={localConsent}
                 onChange={(e) => setConsent(e.target.checked)}
               />
-              允许把该患者的材料与消息原文发送给所配置的模型服务（AI 总结需勾选）。
+              允许 AI 总结使用该患者的材料与消息原文。
             </label>
           )}
           <nav className="tab-row patient-area-tabs" aria-label="患者工作内容">
@@ -826,6 +940,7 @@ export function PatientsView({
       {modal === "new-patient" && <PatientIntakeModal configured={config?.modelConfigured} onClose={() => setModal(null)} onManual={() => setModal("manual-patient")} onOpenWorkspace={(id) => { setModal(null); onOpenWorkspace(id); }} onCreated={async (patient) => { setModal(null); await refresh(); await openPatient(patient.id); }} />}
       {modal === "manual-patient" && (
         <NewPatientModal
+          knownPatients={patients}
           existingGroups={groups}
           existingTags={[...new Set(patients.flatMap((x) => x.tags || []))]}
           onClose={() => setModal(null)}
@@ -836,10 +951,20 @@ export function PatientsView({
           }}
         />
       )}
-      {reviewProposal && detail && <PatientProposalModal patient={detail} proposal={reviewProposal} busy={proposalBusy} error={error} onClose={() => setReviewProposal(null)} onConfirm={() => resolveProposal(reviewProposal, "confirm")} onReject={() => resolveProposal(reviewProposal, "reject")} />}
-      {modal === "import-patients" && <PatientImportModal onClose={() => setModal(null)} onImported={async (result) => { await refresh(); setModal(null); setNotice(`已导入 ${result.count} 位患者，打开档案即可继续补充病例材料。`); }} onOpenPatient={(id) => { setModal(null); openPatient(id).catch((err) => setError(err.message)); }} />}
+      {reviewProposal && detail && <PatientProposalModal patient={detail} proposal={reviewProposal} busy={proposalBusy} error={error} onClose={() => setReviewProposal(null)} onConfirm={(payload) => resolveProposal(reviewProposal, "confirm", payload)} onReject={() => resolveProposal(reviewProposal, "reject")} />}
+      {modal === "import-patients" && <PatientImportModal onClose={() => setModal(null)} onImported={async (result) => { await refresh(); setModal(null); setNotice(`已导入 ${result.count} 位患者，打开档案即可继续补充病例材料。`); }} onOpenPatient={(id) => { setModal(null); openPatient(id).catch((err) => setError(err.message)); refresh().catch(() => {}); }} />}
       {modal === "import-labs" && <LabImportModal onClose={() => setModal(null)} onImported={async (result) => { await refresh(); setNotice(`已为 ${result.proposals.length} 位患者生成检验提案。打开患者档案点「核对」确认写入，或在「待确认」中逐条处理。`); }} />}
       {modal === "edit-patient" && detail && <PatientIdentityModal patient={detail} onClose={() => setModal(null)} onSaved={async () => { await refreshPatient(); setModal(null); setNotice("基本信息已保存"); }} />}
+      {bulkConfirm && <Modal title={`归档 ${selected.size} 位患者`} onClose={() => { if (!bulkBusy) setBulkConfirm(false); }}>
+        <div className="modal-form">
+          <p>归档后这些患者会从在管列表移走，资料完整保留，可在「已归档患者」中恢复。</p>
+          <div className="toolbar-actions">
+            <button type="button" className="primary" disabled={bulkBusy} onClick={() => runBulk("archive")}>{bulkBusy ? "正在归档…" : "确认归档"}</button>
+            <button type="button" className="secondary" disabled={bulkBusy} onClick={() => setBulkConfirm(false)}>取消</button>
+          </div>
+        </div>
+      </Modal>}
+      {modal === "delete-patient" && detail && <DeletePatientModal patient={detail} onClose={() => setModal(null)} onArchive={async () => { setModal(null); await archive(); }} onDeleted={() => removed(detail.name)} />}
       {modal === "group-suggest" && (
         <GroupSuggestModal
           onClose={() => setModal(null)}
@@ -852,7 +977,7 @@ export function PatientsView({
     </section>
   );
 }
-function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCreated }) {
+function NewPatientModal({ knownPatients = [], existingGroups = [], existingTags = [], onClose, onCreated }) {
   const [form, setForm] = useState({
     name: "",
     patientNumber: "",
@@ -869,7 +994,25 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
   const [saving, setSaving] = useState(false);
   const [matches, setMatches] = useState([]);
   const [phoneTouched, setPhoneTouched] = useState(false);
+  const [restoreFailed, setRestoreFailed] = useState(null);
   const phone = patientPhone(form.phone);
+  // 同号码核对：只比较数字，至少 7 位才比，避免输入一半就误报。
+  const typedDigits = phoneDigits(form.phone);
+  const phoneMatches = typedDigits.length >= 7 ? knownPatients.filter((p) => phoneDigits(p.phone) === typedDigits) : [];
+  const needsDistinctConfirm = matches.length > 0 || phoneMatches.length > 0;
+  // 打开已有档案；已归档的先恢复到在管列表。恢复失败时提示原因，仍可直接打开。
+  const openExisting = async (patient) => {
+    if (inFlight.current) return;
+    setError(""); setRestoreFailed(null);
+    if (patient.archived) {
+      inFlight.current = true; setSaving(true);
+      try { await restoreArchivedPatient(patient.id); }
+      catch (err) { setError(`恢复档案未成功：${err.message}`); setRestoreFailed(patient); return; }
+      finally { inFlight.current = false; setSaving(false); }
+    }
+    await onCreated(patient);
+  };
+  const existingLabel = (patient) => `${patient.name} · ${patient.patientNumber || "未编号"} · ${patientAgeLabel(patient) || "出生年未填"} · ${patient.phone ? `尾号 ${patient.phone.slice(-4)}` : "电话未填"} · ${patient.archived ? "已归档 · 打开并恢复档案" : "打开已有档案"}`;
   useEffect(() => {
     let live = true;
     setMatches([]);
@@ -880,12 +1023,12 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
     }, 250);
     return () => { live = false; clearTimeout(timer); };
   }, [form.name]);
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value, ...(key === "name" ? { confirmDistinctPatient: false } : {}) });
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value, ...(key === "name" || key === "phone" ? { confirmDistinctPatient: false } : {}) });
   const submit = async (e) => {
     e.preventDefault();
     if (inFlight.current) return;
     setPhoneTouched(true);
-    if (phone.error) return;
+    if (phone.error || (needsDistinctConfirm && !form.confirmDistinctPatient)) return;
     inFlight.current = true;
     setSaving(true);
     setError("");
@@ -930,10 +1073,10 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
         {matches.length > 0 && <section className="identity-matches" aria-label="同名患者核对">
           <b>找到 {matches.length} 位同名患者</b>
           <p>先核对已有档案，避免重复建档。</p>
-          {matches.map((patient) => <button key={patient.id} className="secondary" type="button" onClick={() => onCreated(patient)} disabled={saving}>
-            {patient.name} · {patient.patientNumber || "未编号"} · {patientAgeLabel(patient) || "出生年未填"} · {patient.phone ? `尾号 ${patient.phone.slice(-4)}` : "电话未填"} · {patient.archived ? "已归档 · 打开并恢复档案" : "打开已有档案"}
+          {matches.map((patient) => <button key={patient.id} className="secondary" type="button" onClick={() => openExisting(patient)} disabled={saving}>
+            {existingLabel(patient)}
           </button>)}
-          <label><input type="checkbox" checked={form.confirmDistinctPatient} onChange={(e) => setForm({ ...form, confirmDistinctPatient: e.target.checked })} />已核对，这是另一位同名患者</label>
+          {phoneMatches.length === 0 && <label><input type="checkbox" checked={form.confirmDistinctPatient} onChange={(e) => setForm({ ...form, confirmDistinctPatient: e.target.checked })} />已核对，确为另一人（不是上面的同名患者）</label>}
         </section>}
         <label>患者编号（可选）<input maxLength={40} value={form.patientNumber} onChange={set("patientNumber")} placeholder="院内编号或自己的患者编号" /></label>
         <div className="form-grid">
@@ -960,13 +1103,11 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
             <input
               type="number"
               min="0"
-              max="150"
+              max="120"
               value={form.ageText || ""}
               onChange={(e) => {
                 const age = e.target.value;
-                const year = age
-                  ? new Date().getFullYear() - Number(age)
-                  : "";
+                const year = age ? birthYearFromAge(age) : "";
                 setForm({
                   ...form,
                   ageText: age,
@@ -982,7 +1123,15 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
             <small id="create-phone-help" className={phoneTouched && phone.error ? "error-text" : "muted"}>{phoneTouched && phone.error ? phone.error : PATIENT_PHONE_HINT}</small>
           </label>
         </div>
-        {form.ageText !== undefined && form.ageText !== "" && <p className="muted">按{form.ageText}岁估算为{form.birthYear}年，请核对出生年。</p>}
+        {form.ageText !== undefined && form.ageText !== "" && <p className={form.birthYear === "" ? "error-text" : "muted"}>{form.birthYear === "" ? "年龄请填写 0–120 的整数。" : `按${form.ageText}岁估算为${form.birthYear}年，请核对出生年。`}</p>}
+        {phoneMatches.length > 0 && <section className="identity-matches" aria-label="电话相同患者核对">
+          <b>电话相同的患者：{phoneMatches.map((patient) => patient.name).join("、")}</b>
+          <p>同一号码可能是同一位患者，也可能是家属代留的电话，请先核对。</p>
+          {phoneMatches.map((patient) => <button key={patient.id} className="secondary" type="button" onClick={() => openExisting(patient)} disabled={saving}>
+            {existingLabel(patient)}
+          </button>)}
+          <label><input type="checkbox" checked={form.confirmDistinctPatient} onChange={(e) => setForm({ ...form, confirmDistinctPatient: e.target.checked })} />已核对，确为另一人（不是上面{matches.length ? "的同名或" : ""}电话相同的患者）</label>
+        </section>}
         <label>
           分组（逗号分隔，输入时可参考已有分组）
           <input value={form.groups} onChange={set("groups")} list="existing-group-options" />
@@ -998,9 +1147,9 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
           {existingTags.map((t) => <option key={t} value={t} />)}
         </datalist>
         </fieldset>
-        {error && <p className="error-text">{error}</p>}
+        {error && <p className="error-text" role="alert">{error}{restoreFailed && <> <button type="button" className="text-button" disabled={saving} onClick={() => { const patient = restoreFailed; setRestoreFailed(null); onCreated(patient); }}>仍然打开档案</button></>}</p>}
         <div className="toolbar-actions">
-          <button className="primary" disabled={!form.name.trim() || saving || (matches.length > 0 && !form.confirmDistinctPatient)}>
+          <button className="primary" disabled={!form.name.trim() || saving || (needsDistinctConfirm && !form.confirmDistinctPatient)}>
             创建患者档案
           </button>
         </div>
@@ -1010,6 +1159,38 @@ function NewPatientModal({ existingGroups = [], existingTags = [], onClose, onCr
       </form>
     </Modal>
   );
+}
+// 永久删除确认：先推荐归档（可恢复）；要删除须输入患者姓名，避免误点。
+function DeletePatientModal({ patient, onClose, onArchive, onDeleted }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const nameMatches = typed.trim() === String(patient.name || "").trim();
+  const remove = async () => {
+    if (busy || !nameMatches) return;
+    setBusy(true); setError("");
+    try {
+      await api(`/api/patients/${patient.id}`, "DELETE");
+      await onDeleted();
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return <Modal title="删除患者档案" onClose={() => { if (!busy) onClose(); }}>
+    <div className="modal-form delete-patient">
+      <p>永久删除会同时清除「{patient.name}」的病历、问诊工作台、消息和随访记录，<b>无法恢复</b>。</p>
+      {!patient.archived && <p className="notice">不再随访的患者建议<b>归档</b>：档案会从在管列表移走，资料完整保留，随时可以恢复。</p>}
+      <div className="toolbar-actions">
+        {!patient.archived && <button type="button" className="primary" disabled={busy} onClick={onArchive}>改为归档</button>}
+        <button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button>
+      </div>
+      <label>如确需永久删除，请输入患者姓名「{patient.name}」
+        <input value={typed} disabled={busy} onChange={(e) => setTyped(e.target.value)} autoComplete="off" aria-label="输入患者姓名以确认永久删除" />
+      </label>
+      {error && <p className="error-text" role="alert">{error}</p>}
+      <div className="toolbar-actions">
+        <button type="button" className="danger" disabled={busy || !nameMatches} onClick={remove}>{busy ? "正在删除…" : "永久删除"}</button>
+      </div>
+    </div>
+  </Modal>;
 }
 // 患者分组建议:按结构化诊断(ICD-10/名称)与常用药名确定性派生,
 // 生成待确认提案;确认前不改任何档案,确认时逐患者乐观更新并报告冲突。

@@ -13,3 +13,6 @@
 .case-open-cta:focus-visible{outline:2px solid var(--case-green);outline-offset:2px}
 .case-refresh{display:block;margin:10px auto 0;padding:4px 10px;border:0;background:transparent;color:var(--case-green);font:inherit;font-size:calc(14px * var(--text-scale, 1));min-height:36px;cursor:pointer}
 .case-refresh:focus-visible{outline:2px solid var(--case-green);outline-offset:2px}
+.similar-cases .case-web-source{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:2px 0 6px;font-size:calc(14px * var(--text-scale, 1));color:#5d7063;-webkit-line-clamp:unset}
+.similar-cases .case-web-source.lower span:first-child::before{content:"⚠ ";}
+.similar-cases .case-web-source a{display:inline-flex;align-items:center;gap:2px;overflow-wrap:anywhere;color:var(--case-green)}

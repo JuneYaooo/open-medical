@@ -10,6 +10,7 @@ import { SlotItem, findSettingsPanel, usePluginActive, usePluginConnected, useAc
 import { WorkspaceExtensionsPanel } from "./workspace-extensions";
 import { ExtensionCenter, takeSettingsTab } from "./extension-center";
 import { KnowledgeTranscriptionSettings } from "./knowledge-transcription-settings";
+import { PrivacySettings } from "./privacy-settings";
 import "./settings-clarity.css";
 
 const CHANNEL_SECTIONS = [["channels", "私聊助手"]];
@@ -75,6 +76,7 @@ function settingsGroup(section, legacyPanels = []) {
 
 const SETTINGS_GROUPS = [
   "general",
+  "privacy",
   "desktop",
   "connections",
   "channels",
@@ -307,6 +309,7 @@ export function AppSettingsView({ config, onModel, onDoctor, onProjects, onAsk, 
     <div className="app-settings-layout">
       <nav aria-label="设置分类" className="settings-nav">
         <button type="button" className="settings-nav-item" aria-pressed={group === "general"} onClick={() => setSection("general")}><span>模型与运行</span>{!config?.modelConfigured && <span className="om-chip is-caution">未配置</span>}</button>
+        <button type="button" className="settings-nav-item" aria-pressed={group === "privacy"} onClick={() => setSection("privacy")}><span>隐私保护</span></button>
         {medicalEnabled(config) && <button type="button" className="settings-nav-item" aria-pressed={group === "channels"} onClick={() => setSection("channels")}><span>消息渠道</span></button>}
         {medicalEnabled(config) && <button type="button" className="settings-nav-item" aria-pressed={group === "personal"} onClick={() => setSection("skills")}><span>技能与规则</span></button>}
         <button type="button" className="settings-nav-item" aria-pressed={group === "backup"} onClick={() => setSection("backup")}><span>备份与恢复</span></button>
@@ -316,6 +319,11 @@ export function AppSettingsView({ config, onModel, onDoctor, onProjects, onAsk, 
       </nav>
       <div className="app-settings-content">
         {section === "backup" && <BackupPanel />}
+        {section === "privacy" && <section className="settings-general" aria-label="隐私保护">
+          <h2>隐私保护</h2>
+          <p className="settings-lead">病历先在本机或脱敏服务去掉姓名、电话、证件号等身份信息，再交给模型。</p>
+          <div className="om-card settings-privacy-card"><PrivacySettings /></div>
+        </section>}
         {group === "plugins" && <PluginSettings onPluginsChanged={onPluginsChanged} onOpenSection={setSection} />}
         {group === "channels" && <>
           <SettingsSubnav label="消息渠道用途" items={channelSections} section={section === "plugins" ? "followup" : section} onSelect={setSection} />

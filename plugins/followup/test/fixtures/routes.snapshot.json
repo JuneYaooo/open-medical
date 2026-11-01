@@ -640,7 +640,10 @@
           "title": "今天复诊",
           "detail": "2026-10-29 10:00，示例·携带测量记录复诊 · 演示门诊，提前查看档案和近期结果",
           "at": 1793268000000,
+          "time": "10:00",
           "weight": 2,
+          "appointmentId": "<uuid>",
+          "revision": 0,
           "action": {
             "type": "patient",
             "tab": "appointments",
@@ -695,6 +698,7 @@
           "detail": "联系患者后登记随访结果",
           "at": 1793265634095,
           "weight": 5,
+          "reminderId": "<uuid>",
           "action": {
             "type": "patient",
             "tab": "followups",

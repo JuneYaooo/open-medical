@@ -3,6 +3,7 @@ import { messageChannelLabel, messageSpeakerLabel } from "../../../shared/messag
 import { usePluginEnabled } from "../../../src/plugin-slots.jsx";
 import { WeComPanel } from "../../channel-wecom/ui/WeComPanel.jsx";
 import { ChatFollowupsPanel } from "./ChatConnectionSettings.jsx";
+import { AiConsentNote, useAiConsent } from "../../../src/ai-consent.jsx";
 import "./followup-clarity.css";
 
 const fmtDate = followupDate;
@@ -21,6 +22,7 @@ export default function PatientMessagesTab({
   consent,
 }) {
   const wecomEnabled = usePluginEnabled("channel-wecom");
+  const { granted: aiGranted } = useAiConsent();
   const unprocessed = detail.counts.unprocessedMessages || 0;
   const digestBlocked = !config?.modelConfigured
     ? "需先连接模型"
@@ -52,6 +54,7 @@ export default function PatientMessagesTab({
                   >
                     AI 总结
                   </button>
+                  {aiGranted && config?.modelConfigured && <AiConsentNote />}
                 </div>
               </header>
               <div className="msg-list">

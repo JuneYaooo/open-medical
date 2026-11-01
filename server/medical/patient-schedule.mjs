@@ -128,6 +128,23 @@ export class PatientSchedule {
       .map((a) => ({ ...a, when: a.date < today ? "past" : a.date === today ? "today" : "tomorrow" }));
   }
 
+  // Clinic-wide appointments between two calendar dates (inclusive), for a
+  // day/week view. Archived patients are left out; cancelled ones only on
+  // request. Timed visits come first within a day, untimed ones after.
+  range(from, to, { includeCancelled = false } = {}) {
+    check(DATE.test(from || "") && DATE.test(to || "") && from <= to, "INVALID_INPUT", "日期范围须为 YYYY-MM-DD，且开始不晚于结束");
+    check(Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`) <= 62 * 86400000, "INVALID_INPUT", "一次最多查看 62 天的预约");
+    const rows = this.db.prepare(`SELECT a.data, p.data patient FROM appointments a JOIN patients p ON p.id=a.patient_id WHERE a.date BETWEEN ? AND ?${includeCancelled ? "" : " AND a.status<>'cancelled'"}`).all(from, to);
+    const appointments = [];
+    for (const row of rows) {
+      const patient = JSON.parse(row.patient);
+      if (patient.archived) continue;
+      appointments.push({ ...JSON.parse(row.data), patientName: patient.name || "", patientNumber: patient.patientNumber || "" });
+    }
+    appointments.sort((a, b) => a.date.localeCompare(b.date) || (a.time ? 0 : 1) - (b.time ? 0 : 1) || (a.time || "").localeCompare(b.time || "") || a.id.localeCompare(b.id));
+    return { from, to, today: this.today(), appointments };
+  }
+
   // ---------- new lab results ----------
   newLabs(patientId) {
     const patient = this.patients.row(identifier(patientId));

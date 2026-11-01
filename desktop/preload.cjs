@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("omwDesktop", {
   loginItemAtLogin: () => ipcRenderer.invoke("omw:login-item"),
   setLoginItemAtLogin: (open) => ipcRenderer.invoke("omw:set-login-item", open),
   relaunchApp: () => ipcRenderer.invoke("omw:relaunch"),
+  restoreBackup: (name) => ipcRenderer.invoke("omw:restore-backup", name),
   showNotification: (options) => ipcRenderer.invoke("omw:show-notification", options),
   onOpenView: (handler) => { ipcRenderer.on("omw:open-view", (_event, view) => handler(view)); },
   shareReport: (report) => ipcRenderer.invoke("omw:share-report", report),

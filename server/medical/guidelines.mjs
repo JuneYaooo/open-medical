@@ -252,6 +252,10 @@ export class GuidelineLibrary {
         check(!input.allowExternalUse || status !== "retired", "INVALID_INPUT", "已停用资料不能对外引用");
         doc.allowExternalUse = input.allowExternalUse;
       } else if (changedSource || status === "retired") doc.allowExternalUse = false;
+      if (input.avatarExcluded !== undefined) {
+        check(typeof input.avatarExcluded === "boolean", "INVALID_INPUT", "飞书分身设置须为布尔值");
+        doc.avatarExcluded = input.avatarExcluded;
+      }
       doc.revision = (doc.revision || 0) + 1;
       doc.updatedAt = Date.now();
       doc.metadataHistory = [...(doc.metadataHistory || []), { ...previous, replacedAt: doc.updatedAt }].slice(-50);

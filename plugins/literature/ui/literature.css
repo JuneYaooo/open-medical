@@ -79,3 +79,60 @@
   min-height: 36px;
   padding: 4px 12px;
 }
+/* 自然语言提问入口为主操作；手动 PubMed 检索折叠在下方。 */
+.tool-page .literature-ask .literature-ask-label {
+  flex-basis: 100%;
+  font-size: var(--reading-size, 18px);
+  font-weight: 600;
+  color: var(--ink);
+}
+.tool-page .literature-ask .literature-patient {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.tool-page .literature-ask .literature-patient select {
+  max-width: 100%;
+  padding: 6px 10px;
+}
+.tool-page .literature-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.tool-page .literature-examples .om-chip {
+  cursor: pointer;
+  text-align: left;
+  white-space: normal;
+  min-height: 32px;
+}
+.tool-page .literature-recent {
+  margin-top: 16px;
+}
+.tool-page .literature-recent h2 {
+  font-size: var(--meta-size, 14px);
+  margin: 0 0 6px;
+}
+.tool-page .literature-recent ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.tool-page .literature-manual {
+  margin-top: 18px;
+}
+.tool-page .literature-manual > summary {
+  cursor: pointer;
+  min-height: 40px;
+}
+.tool-page .literature-view .literature-manual-query {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 8px 12px;
+  font: inherit;
+}
+.literature-collected { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 10px 0 0; }

@@ -157,6 +157,31 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
         },
       );
     }, "随访计划已删除。");
+  // 改期：只挪这条计划的下次到期时间（当天上午 9 点；选今天且已过 9 点则立即到期）。
+  const [moving, setMoving] = useState(null);
+  const today = new Date().toLocaleDateString("en-CA");
+  const moveJob = (job, day) =>
+    run(async () => {
+      const at = new Date(`${day}T09:00:00`).getTime();
+      await api(`/api/patients/${job.patientId}/followups/${job.id}`, "PATCH", {
+        revision: job.revision,
+        firstDueAt: new Date(Math.max(at, Date.now() + 60000)).toISOString(),
+      });
+      setMoving(null);
+    }, `已改期到 ${day}。`);
+  const moveButton = (job) => (
+    <button className="icon-button" title="改期" aria-label="改期" disabled={busy || job.status === "running"}
+      onClick={() => setMoving(moving?.id === job.id ? null : { id: job.id, day: new Date(Math.max(job.nextDue, Date.now())).toLocaleDateString("en-CA") })}>
+      <CalendarClock size={14} />
+    </button>
+  );
+  const moveForm = (job) => moving?.id === job.id && (
+    <form className="followup-move" onSubmit={(e) => { e.preventDefault(); if (moving.day) moveJob(job, moving.day); }}>
+      <label>改到<input type="date" required min={today} value={moving.day} onChange={(e) => setMoving({ ...moving, day: e.target.value })} /></label>
+      <button className="primary" disabled={busy || !moving.day}>{busy ? "保存中…" : "保存改期"}</button>
+      <button type="button" className="secondary" disabled={busy} onClick={() => setMoving(null)}>取消</button>
+    </form>
+  );
   const removePlan = (id) =>
     run(async () => {
       await api(`/api/followup-plans/${id}`, "DELETE");
@@ -246,6 +271,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                     >
                       <Stethoscope size={14} />
                     </button>
+                    {moveButton(job)}
                     <button
                       className="icon-button"
                       title="暂停"
@@ -263,6 +289,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                       <Trash2 size={13} />
                     </button>
                   </div>
+                  {moveForm(job)}
                 </li>
               ))}
               {!loading && !loadFailed && !dueJobs.length && (
@@ -287,6 +314,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                   </div>
                   <div className="job-actions">
                     <button className="icon-button" title="打开患者" onClick={() => onOpenPatient?.(job.patientId)}><Stethoscope size={14} /></button>
+                    {job.status !== "completed" && moveButton(job)}
                     <button
                       className="icon-button"
                       title={job.status === "paused" ? "恢复" : "暂停"}
@@ -308,6 +336,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
                       <Trash2 size={13} />
                     </button>
                   </div>
+                  {moveForm(job)}
                 </li>
               ))}
               {!loading && !loadFailed && !upcoming.length && (

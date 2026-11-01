@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../src/agent-runtime';
 import { SavedConnection } from '../../channel/ui/ConnectionForm.jsx';
+import { ExperimentalNote, WECOM_BOT_NOTE } from '../../channel-wechat/ui/ExperimentalNote.jsx';
 const when = value => value ? new Date(value).toLocaleString() : '尚未同步';
 export function AibotConnectionForm(props) {
   const [saved, setSaved] = useState(props.initial);
   const accept = value => { setSaved(value); props.onSaved?.(value); };
   return <>
+    <ExperimentalNote text={WECOM_BOT_NOTE} />
     <SavedConnection {...props} onSaved={accept} key={`conn:${saved.revision}`} />
     {saved.enabled && <AibotReplySettings key={`reply:${saved.revision}`} initial={saved} onSaved={accept} />}
     {saved.enabled && <AibotGroups key={`groups:${saved.revision}`} authorized={Boolean(saved.groupAutoReply)} />}

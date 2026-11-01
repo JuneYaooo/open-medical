@@ -21,6 +21,15 @@ function dueState(record, now = Date.now()) {
   if (due < startOfToday.getTime() + 86400000) return { tone: "due", label: "今天到期" };
   return null;
 }
+// 下次联系时间快捷选项：从今天上午 9 点起算，填入 datetime-local 格式。
+const NEXT_CONTACT_CHIPS = [["+1周", 7, 0], ["+2周", 14, 0], ["+1月", 0, 1], ["+3月", 0, 3]];
+const nextContactAt = (days, months, from = new Date()) => {
+  const d = new Date(from.getFullYear(), from.getMonth() + months, from.getDate() + days, 9, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T09:00`;
+};
+// 已完成联系并勾选了核对条目时，文字记录可以不填（服务端同样放行）。
+const noteOptional = (form) => form.status === "completed" && form.checkedItems?.length > 0;
 const contactForm = (record = {}) => ({ requestId: crypto.randomUUID(), title: "主动联系记录", contactedAt: "", status: record.attempt ? "" : "completed", note: "", contactMethod: "unspecified", clinical: { symptoms: "", medications: "", results: "", plan: "" }, checkedItems: [], nextDueAt: "", nextName: "后续随访", noRetryReason: "" });
 const hasContactInput = form => [form.note, form.contactedAt, form.nextDueAt, form.noRetryReason, ...Object.values(form.clinical || {})].some(value => String(value || "").trim()) || form.checkedItems?.length || (form.title && form.title !== "主动联系记录") || (form.contactMethod && form.contactMethod !== "unspecified") || (form.status && form.status !== "completed");
 
@@ -308,7 +317,7 @@ export function FollowupRecords({
                     )}
                   </strong>
                   <small>录入时间：{date(record.outcome.recordedAt)}</small>
-                  <p className="followup-note">{record.outcome.note}{record.outcome.noRetryReason ? `；未另行安排：${record.outcome.noRetryReason}` : ""}</p>
+                  <p className="followup-note">{record.outcome.note || (record.outcome.checkedItems?.length ? `已核对：${record.outcome.checkedItems.join("、")}` : "")}{record.outcome.noRetryReason ? `；未另行安排：${record.outcome.noRetryReason}` : ""}</p>
                   {record.outcome.contactMethod &&
                     record.outcome.contactMethod !== "unspecified" && (
                       <small>
@@ -647,11 +656,11 @@ export function FollowupRecords({
               </details>
             )}
             <label>
-              随访记录
+              {noteOptional(form) ? "随访记录（已勾选核对条目，可不填）" : "随访记录"}
               <textarea
                 autoFocus
                 aria-label="随访记录"
-                required
+                required={!noteOptional(form)}
                 maxLength={5000}
                 rows={4}
                 placeholder="记录患者反馈、已核实的信息及后续安排；未联系上时记录尝试情况。"
@@ -668,6 +677,12 @@ export function FollowupRecords({
                   setForm({ ...form, nextDueAt: e.target.value })
                 }
               />
+              <span className="followup-date-chips" role="group" aria-label="下次联系快捷时间">
+                {NEXT_CONTACT_CHIPS.map(([label, days, months]) => {
+                  const value = nextContactAt(days, months);
+                  return <button key={label} type="button" className="text-button" aria-pressed={form.nextDueAt === value} onClick={() => setForm({ ...form, nextDueAt: value })}>{label}</button>;
+                })}
+              </span>
             </label>
             {form.status === "unreachable" && !form.nextDueAt && <label>
               不再另行安排的原因
@@ -687,7 +702,7 @@ export function FollowupRecords({
               </label>
             )}
             <div className="toolbar-actions">
-              <button className="primary" type="submit" disabled={!form.note.trim() || !contactAvailable}>
+              <button className="primary" type="submit" disabled={(!form.note.trim() && !noteOptional(form)) || !contactAvailable}>
                 {busy ? "保存中…" : "保存随访结果"}
               </button>
               <button

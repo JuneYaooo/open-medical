@@ -40,6 +40,7 @@ import { LabImporter } from "./medical/lab-import.mjs";
 import { Backups } from "./medical/backups.mjs";
 import { DemoPack } from "./medical/demo-pack.mjs";
 import { PatientSchedule } from "./medical/patient-schedule.mjs";
+import { lostPatients } from "./medical/lost-followup.mjs";
 import { Extensions } from "./medical/extensions.mjs";
 import { extensionTools } from "./medical/extension-tools.mjs";
 import { DoctorOverview } from "./medical/doctor-overview.mjs";
@@ -71,7 +72,8 @@ import { PaddleLocal } from "./core/paddle-local.mjs";
 import { ResearchPython } from "./core/research-python.mjs";
 import { DocumentPython } from "./core/document-python.mjs";
 import { AGENT_BROWSER_HEADER, registerSelfPort } from "./core/browser-tools.mjs";
-import { MaterialPrivacy, PrivacySettings, deidentifyViaService } from "./medical/privacy.mjs";
+import { MaterialPrivacy, PrivacySettings, builtinPrivacyService, deidentifyViaService } from "./medical/privacy.mjs";
+import { runCohortQuery } from "./medical/cohort-query.mjs";
 import { configureLocalOcrService, imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -357,7 +359,9 @@ export function createServer(options = {}) {
   // 失败不阻塞启动（识别层自动落回系统组件）。
   // 患者资料去隐私：开启后发给模型的资料文本先经 gpu-worker 脱敏（或本地
   // 规则兜底），原图不发给模型。身份只在本机用于建档回填。
-  const privacySettings = new PrivacySettings(models.vault, ocrSettings);
+  const privacySettings = new PrivacySettings(models.vault, ocrSettings, {
+    builtin: options.privacyBuiltinService !== undefined ? options.privacyBuiltinService : builtinPrivacyService(),
+  });
   const materialPrivacy =
     options.materialPrivacy ||
     new MaterialPrivacy({
@@ -728,6 +732,8 @@ export function createServer(options = {}) {
   const patientImporter = new PatientImporter(store, patients);
   const labImporter = new LabImporter(patients, pending);
   const backups = new Backups(databasePath);
+  // 测试进程（node --test）不做自动备份，避免在临时数据目录里起后台任务。
+  if (options.autoBackup !== false && !process.env.NODE_TEST_CONTEXT) backups.startAuto({ onError: (e) => console.error("自动备份失败", e) });
   const swapProvider = (next) => {
     provider = next;
     workspaces.provider = provider;
@@ -819,7 +825,8 @@ export function createServer(options = {}) {
       service: options.literature || null,
       options: options.literatureOptions || {},
       identifier,
-      addMaterial: (sessionId, input) => sessionBridge.addMaterial(sessionId, input),
+      // 文献摘要是公开资料，不走患者资料脱敏。
+      addMaterial: (sessionId, input) => sessionBridge.addMaterial(sessionId, input, { publicSource: true }),
     },
     researchHost: {
       sourcesOf: (sessionId) => {
@@ -1803,6 +1810,21 @@ export function createServer(options = {}) {
       if (path === "/api/demo-pack" && req.method === "GET") return send(res, 200, demoPack.status());
       if (path === "/api/demo-pack" && req.method === "POST") return send(res, 201, await demoPack.seed());
       if (path === "/api/demo-pack" && req.method === "DELETE") return send(res, 200, await demoPack.clear());
+      // 按条件找患者（本机界面用）：与 cohort_query 工具同一判断逻辑，
+      // 这里附上姓名和编号供医生打开档案；这些身份信息不进入模型。
+      if (path === "/api/cohort/query" && req.method === "POST") {
+        const input = await body(req);
+        const all = patients.all();
+        const result = runCohortQuery(all, input?.spec, { includeMismatch: input?.includeMismatch === true, limit: 500 });
+        const byId = new Map(all.map((p) => [p.id, p]));
+        return send(res, 200, {
+          ...result,
+          rows: result.rows.map((row) => {
+            const p = byId.get(row.patientId);
+            return { ...row, name: p?.name || "", patientNumber: p?.patientNumber || "", gender: p?.gender || "", birthYear: p?.birthYear || null };
+          }),
+        });
+      }
       if (path === "/api/patients" && req.method === "GET")
         return send(res, 200, {
           patients: patients.list({
@@ -1872,6 +1894,8 @@ export function createServer(options = {}) {
         if (parts.length === 4 && parts[3] === "status" && req.method === "POST") return send(res, 200, extensions.setStatus(parts[2], (await body(req)).status));
         if (parts.length === 4 && parts[3] === "rollback" && req.method === "POST") return send(res, 200, extensions.rollback(parts[2], (await body(req)).version));
       }
+      if (path === "/api/appointments" && req.method === "GET") return send(res, 200, schedule.range(url.searchParams.get("from"), url.searchParams.get("to"), { includeCancelled: url.searchParams.get("cancelled") === "1" }));
+      if (path === "/api/patients-lost" && req.method === "GET") return send(res, 200, lostPatients(schedule, { days: url.searchParams.get("days") || 90, busyPatientIds: () => followupService()?.followups?.activePatientIds?.() || [] }));
       if (parts[0] === "api" && parts[1] === "appointments" && parts.length === 3 && req.method === "PATCH") return send(res, 200, schedule.update(parts[2], await body(req)));
       if (parts[0] === "api" && parts[1] === "patients" && parts[2]) {
         const pid = identifier(parts[2]);
@@ -2345,6 +2369,7 @@ export function createServer(options = {}) {
     shutdownPromise = (async () => {
     workspaces.stopping = true;
     scheduler.stop();
+    backups.stopAuto();
     paddleLocal.stop();
     workspaces.scheduler.stop();
     workspaces.recovery.stop();

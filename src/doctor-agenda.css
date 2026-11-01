@@ -38,3 +38,5 @@
   .doctor-agenda .agenda-item,
   .agenda-page .doctor-agenda .agenda-item { grid-template-columns: 80px minmax(0, 1fr); gap: 8px 12px; }
 }
+/* 随访提醒行内「推迟」 */
+.doctor-agenda .agenda-snooze { font-size: calc(12px * var(--text-scale, 1)); padding: 2px 4px; border: 1px solid var(--line, #e3ead9); border-radius: 6px; background: transparent; color: inherit; }

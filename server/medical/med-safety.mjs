@@ -111,7 +111,9 @@ export function evaluateMedicationSafety({ medications = [], allergies = [] } = 
     .map((raw) => ({ raw, canonical: canonicalDrugName(raw) }));
   const canonicalList = entries.map((entry) => entry.canonical);
   const allergyMatches = [];
-  for (const allergy of allergies) {
+  // 过敏可为字符串或 { substance, reaction }；只用过敏原名称匹配。
+  for (const item of allergies) {
+    const allergy = typeof item === "string" ? item : item?.substance || "";
     const needle = normalizeName(allergy);
     if (!needle) continue;
     for (const entry of entries.filter((item) =>

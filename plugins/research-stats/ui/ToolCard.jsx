@@ -8,7 +8,7 @@ export default function ResearchStatsToolCard({ onNavigate }) {
     }}>
       <Sigma size={24} />
       <h2>科研统计</h2>
-      <p>上传 CSV，进行描述统计、组间比较、样本量估算与脱敏导出。</p>
+      <p>用一句话提出研究问题，助手从本地患者库建队列并做统计；也可上传 CSV 自行分析。</p>
       <footer>
         <small>本地</small>
       </footer>

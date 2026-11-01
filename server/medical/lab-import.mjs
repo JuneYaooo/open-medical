@@ -15,6 +15,17 @@ const HEADERS = {
   日期: "date", 报告日期: "date", 检验日期: "date", date: "date",
 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// LIS/Excel 常导出 2024/3/5 或 2024.3.5；统一补零为 YYYY-MM-DD，
+// 不合法的日历日（如 2024/2/30）原样返回，交给 DATE_RE 拒绝。
+export function normalizeLabDate(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})$/);
+  if (!match) return text;
+  const [, y, , m, d] = match;
+  const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : text;
+}
 
 // 与患者名单导入同一风格的 RFC 引号单元解析；拒绝畸形引号，
 // 不执行任何表格表达式。
@@ -68,6 +79,7 @@ export class LabImporter {
     }
     const out = rows.map((cells, index) => {
       const input = Object.fromEntries(columns.map((key, i) => [key, cells[i] || ""]));
+      if (input.date) input.date = normalizeLabDate(input.date);
       const row = { row: index + 2, item: input.item, unit: input.unit || "", ...input };
       const base = {
         item: input.item,
@@ -75,7 +87,7 @@ export class LabImporter {
         ...(DATE_RE.test(input.date) ? { date: input.date } : {}),
       };
       if (!input.item || !input.value || !input.date) return { ...row, status: "invalid", reason: "项目、数值、日期均为必填" };
-      if (!DATE_RE.test(input.date)) return { ...row, status: "invalid", reason: "日期须为 YYYY-MM-DD" };
+      if (!DATE_RE.test(input.date)) return { ...row, status: "invalid", reason: "日期须为有效日期，如 2024-03-05、2024/3/5 或 2024.3.5" };
       if (!Number.isFinite(Number(input.value))) return { ...row, status: "invalid", reason: "数值须为数字" };
       let patient = null;
       const number = String(input.patientNumber || "").trim();

@@ -19,6 +19,18 @@ import { scrubFreeText } from "./deidentify.mjs";
 // 原文与 API Key 是明文传输。
 
 const KEY = "platform:privacy-settings:v1";
+// 内置脱敏服务（medagent-gpu-worker 公共部署）。地址可公开；API Key 不写进
+// 代码，从 model.env 的 MEDICAL_PRIVACY_SERVICE_KEY 读取或在设置页填写。
+export const BUILTIN_PRIVACY_SERVICE_URL = "http://36.139.121.215:18090";
+
+// 由环境变量决定内置服务：MEDICAL_PRIVACY_SERVICE_URL 可改地址，设为 off 或空
+// 则不使用内置服务。
+export function builtinPrivacyService(env = process.env) {
+  const raw = env.MEDICAL_PRIVACY_SERVICE_URL;
+  const baseUrl = raw === undefined ? BUILTIN_PRIVACY_SERVICE_URL : String(raw).trim();
+  if (!baseUrl || baseUrl.toLowerCase() === "off") return null;
+  return { baseUrl: baseUrl.replace(/\/+$/, "").replace(/\/v1$/, ""), apiKey: String(env.MEDICAL_PRIVACY_SERVICE_KEY || "").trim() };
+}
 export const PRIVACY_MODES = Object.freeze({
   fallback: "规则兜底（推荐）：服务不可用时用本地规则先脱敏，服务恢复后可重新处理",
   strict: "严格：脱敏服务完成前，资料不发给模型",
@@ -30,21 +42,24 @@ const CONCURRENCY = 4;
 const hashText = (text) => createHash("sha256").update(String(text)).digest("hex");
 
 export class PrivacySettings {
-  constructor(vault, ocrSettings = null) {
+  constructor(vault, ocrSettings = null, { builtin = null } = {}) {
     this.vault = vault;
     this.ocrSettings = ocrSettings;
+    this.builtin = builtin;
   }
   saved() {
     return this.vault.get(KEY) || {};
   }
+  // 默认开启；只有医生明确关闭才关闭。
   enabled() {
-    return this.saved().enabled === true;
+    return this.saved().enabled !== false;
   }
   mode() {
     return PRIVACY_MODES[this.saved().mode] ? this.saved().mode : "fallback";
   }
-  // 自有配置优先；否则沿用 OCR 设置里的 worker（同一台 worker 同时提供
-  // OCR 与去隐私）。
+  // 自有配置优先；其次沿用 OCR 设置里的 worker（同一台 worker 同时提供
+  // OCR 与去隐私）；最后用内置服务。内置服务需要鉴权，没有 Key 时不使用，
+  // 避免每份资料都发一次必然 401 的请求（含原文）。
   service() {
     const saved = this.saved();
     if (saved.service?.baseUrl) return { ...saved.service, source: "privacy" };
@@ -52,7 +67,20 @@ export class PrivacySettings {
       const ocr = this.ocrSettings?.service?.();
       if (ocr?.baseUrl) return { ...ocr, source: "ocr" };
     }
+    const builtin = this.builtinService();
+    if (builtin) return builtin;
     return null;
+  }
+  // 内置服务默认开启，可在设置页关闭。Key 优先用设置页填写的，其次 model.env。
+  builtinKey() {
+    return this.saved().builtinApiKey || this.builtin?.apiKey || "";
+  }
+  builtinEnabled() {
+    return Boolean(this.builtin?.baseUrl) && this.saved().useBuiltin !== false;
+  }
+  builtinService() {
+    const apiKey = this.builtinKey();
+    return this.builtinEnabled() && apiKey ? { baseUrl: this.builtin.baseUrl, apiKey, source: "builtin" } : null;
   }
   candidateService(body) {
     try {
@@ -76,6 +104,14 @@ export class PrivacySettings {
       check(typeof body.useOcrService === "boolean", "PRIVACY_SETTINGS", "useOcrService 须为布尔值");
       next.useOcrService = body.useOcrService;
     }
+    if (body.useBuiltin !== undefined) {
+      check(typeof body.useBuiltin === "boolean", "PRIVACY_SETTINGS", "useBuiltin 须为布尔值");
+      next.useBuiltin = body.useBuiltin;
+    }
+    if (body.builtinApiKey !== undefined) {
+      check(typeof body.builtinApiKey === "string" && body.builtinApiKey.length <= 500, "PRIVACY_SETTINGS", "API Key 格式无效");
+      next.builtinApiKey = body.builtinApiKey.trim() || null;
+    }
     if (body.clearService === true) next.service = null;
     else if (body.service) {
       const previous = this.saved().service || null;
@@ -98,6 +134,16 @@ export class PrivacySettings {
       useOcrService: saved.useOcrService !== false,
       service: service ? { baseUrl: service.baseUrl, hasKey: Boolean(service.apiKey), source: service.source, insecure: serviceInsecure(service.baseUrl) } : null,
       ownService: saved.service?.baseUrl ? { baseUrl: saved.service.baseUrl, hasKey: Boolean(saved.service.apiKey) } : null,
+      builtin: this.builtin?.baseUrl
+        ? {
+            baseUrl: this.builtin.baseUrl,
+            enabled: this.builtinEnabled(),
+            hasKey: Boolean(this.builtinKey()),
+            keySource: saved.builtinApiKey ? "settings" : this.builtin.apiKey ? "env" : null,
+            active: service?.source === "builtin",
+            insecure: serviceInsecure(this.builtin.baseUrl),
+          }
+        : null,
       ...extra,
     };
   }
@@ -243,6 +289,11 @@ export class MaterialPrivacy {
   }
   rawImagesBlocked() {
     return this.enabled();
+  }
+  // 助手浏览器的网页截图不是导入的患者资料；默认可以交给视觉模型，
+  // 严格模式下仍然禁止（网页上可能有医院系统里的患者信息）。
+  screenshotsBlocked() {
+    return this.enabled() && this.strict();
   }
   hasService() {
     return Boolean(this.settings?.service());

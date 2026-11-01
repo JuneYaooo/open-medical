@@ -1,7 +1,23 @@
 import { sseFrames } from "../shared/sse.mjs";
 let auth;
+export const OFFLINE_MESSAGE = "无法连接本机服务，请稍后重试或重启 Open Medical";
+// fetch 在连不上本机服务时抛 TypeError("Failed to fetch")；换成医生能看懂的提示。
+// 主动取消（AbortError）保持原样，调用方据此判断。
+export async function localFetch(...args) {
+  try {
+    return await fetch(...args);
+  } catch (error) {
+    if (error instanceof TypeError) throw Object.assign(new Error(OFFLINE_MESSAGE), { code: "OFFLINE", cause: error });
+    throw error;
+  }
+}
 export const PENDING_REFRESH_EVENT = "care-pending-refresh";
 export const PLUGIN_CONFIG_EVENT = "medical-plugin-config-changed";
+// 任意组件都可请求打开「模型与识别」窗口（App 监听此事件），无需层层传 props。
+export const OPEN_MODEL_SETTINGS_EVENT = "om-open-model-settings";
+export function openModelSettings() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(OPEN_MODEL_SETTINGS_EVENT));
+}
 // App Shell 能力判定:优先读 bootstrap 的 capabilities(通用平台显式声明),
 // 医疗应用(旧 bootstrap 无 capabilities)回退到 patientsEnabled。
 // 返回 false 时前端不得请求 /api/sessions 等医疗接口、不渲染患者导航与医疗默认任务。
@@ -13,7 +29,7 @@ export function medicalEnabled(config) {
 export async function bootstrap(force = false) {
   if (force) auth = null;
   if (!auth)
-    auth = fetch("/api/bootstrap")
+    auth = localFetch("/api/bootstrap")
       .then(async (res) => {
         if (!res.ok) throw new Error("无法连接本地 Agent 运行时");
         return res.json();
@@ -43,7 +59,7 @@ export async function api(path, options = {}, dataOrRetried = false) {
     };
   }
   const config = await bootstrap();
-  const res = await fetch(path, {
+  const res = await localFetch(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",

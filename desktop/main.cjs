@@ -77,7 +77,8 @@ let runtime,
   quitting = false,
   relaunchRequested = false,
   shuttingDown = false,
-  shutdownComplete = false;
+  shutdownComplete = false,
+  pendingRestore = null;
 
 function requestRelaunch() {
   if (quitting) return;
@@ -151,7 +152,7 @@ function openWindow() {
       detail: "关闭、刷新或重启后，未保存的内容将丢失。",
     });
     if (choice === 1) event.preventDefault();
-    else { quitting = false; relaunchRequested = false; }
+    else { quitting = false; relaunchRequested = false; pendingRestore = null; }
   });
   // Windows/Linux 去掉应用菜单后，刷新与开发者工具的原生快捷键随菜单消失，
   // 这里手动补上；macOS 保留系统菜单栏，由菜单角色负责，不重复注册。
@@ -308,7 +309,7 @@ async function start() {
     });
   chmodSync(configuration, 0o600);
   const allowed =
-    /^(AI_PROVIDER|AI_REASONING_EFFORT|MODEL_PROVIDER|AI_API_KEY|AI_TIMEOUT_MS|AI_MAX_TOKENS|DEEPSEEK_(API_KEY|BASE_URL|MODEL|THINKING|MAX_TOKENS|TIMEOUT_MS)|OPENAI_(API_KEY|BASE_URL|MODEL)|OPENROUTER_(API_KEY|MODEL)|ANTHROPIC_(API_KEY|BASE_URL|MODEL|TIMEOUT_MS|MAX_TOKENS|THINKING|PROMPT_CACHE)|LOCAL_MODEL_(BASE_URL|NAME)|MEDICAL_SANDBOX_PYTHON|AGENT_DOCKER_EXECUTABLE|MCP_[A-Z0-9_]+_(TOKEN|API_KEY)|MEDICAL_EMBEDDING_(PROVIDER|URL|MODEL|KEY)|MEDICAL_WECOM_(CORP_ID|SECRET|CALLBACK_TOKEN|AES_KEY))$/;
+    /^(AI_PROVIDER|AI_REASONING_EFFORT|MODEL_PROVIDER|AI_API_KEY|AI_TIMEOUT_MS|AI_MAX_TOKENS|DEEPSEEK_(API_KEY|BASE_URL|MODEL|THINKING|MAX_TOKENS|TIMEOUT_MS)|OPENAI_(API_KEY|BASE_URL|MODEL)|OPENROUTER_(API_KEY|MODEL)|ANTHROPIC_(API_KEY|BASE_URL|MODEL|TIMEOUT_MS|MAX_TOKENS|THINKING|PROMPT_CACHE)|LOCAL_MODEL_(BASE_URL|NAME)|MEDICAL_SANDBOX_PYTHON|AGENT_DOCKER_EXECUTABLE|MCP_[A-Z0-9_]+_(TOKEN|API_KEY)|MEDICAL_EMBEDDING_(PROVIDER|URL|MODEL|KEY)|MEDICAL_PRIVACY_SERVICE_(URL|KEY)|MEDICAL_WECOM_(CORP_ID|SECRET|CALLBACK_TOKEN|AES_KEY))$/;
   for (const key of Object.keys(process.env))
     if (allowed.test(key)) delete process.env[key];
   for (const [key, value] of Object.entries(
@@ -480,6 +481,15 @@ async function start() {
     return app.getLoginItemSettings().openAtLogin;
   });
   ipcMain.handle("omw:relaunch", requestRelaunch);
+  // 一键恢复：只接受备份清单中的文件名；数据库关闭后在 will-quit 中替换，再重启。
+  ipcMain.handle("omw:restore-backup", (event, name) => {
+    if (!require("./permission-help.cjs").trustedFrame(event, window, origin)) throw Error("仅工作台主页面可请求此操作");
+    if (quitting) throw Error("应用正在退出，请稍后重试");
+    require("./backup-restore.cjs").resolveBackup(sharedDatabase, name);
+    pendingRestore = { databasePath: sharedDatabase, name };
+    requestRelaunch();
+    return { restarting: true };
+  });
   const showWorkspace = () => {
     if (quitting) return;
     if (window) {
@@ -648,7 +658,12 @@ else {
     event.preventDefault();
     if (shuttingDown) return;
     shuttingDown = true;
-    runtime.shutdown().catch(error => console.error("Runtime shutdown failed:", error)).finally(() => {
+    runtime.shutdown().then(() => {
+      // Restore only after a clean shutdown has closed the database.
+      if (!pendingRestore || !relaunchRequested) return;
+      try { require("./backup-restore.cjs").restoreBackup(pendingRestore); }
+      catch (error) { dialog.showErrorBox("恢复备份失败", error.message); }
+    }).catch(error => console.error("Runtime shutdown failed:", error)).finally(() => {
       shutdownComplete = true;
       if (relaunchRequested) app.relaunch();
       // Let Electron finish cancelling this will-quit event before trying again.

@@ -11,7 +11,7 @@ const states = {
   connected: "收消息连接正常",
   reconnecting: "正在重连",
   failed: "连接失败，请重试或重新扫码",
-  conflict: "应用已被知识库机器人使用",
+  conflict: "应用已被飞书分身使用",
 };
 const deliveryStates = {
   ignored: "未授权，仅登记账号",
@@ -409,7 +409,7 @@ export function MessageChannelSettings() {
               停止任务。电脑需保持运行并联网；关闭窗口可在后台运行，退出应用后停止。需要核对的医疗或文件修改回到工作台确认。
             </p>
             <p>
-              知识库机器人与医生助手使用独立的飞书应用和授权。微信历史导入、患者消息归档在「患者随访连接」管理。
+              飞书分身与医生助手使用独立的飞书应用和授权。微信历史导入、患者消息归档在「患者随访连接」管理。
             </p>
           </details>
         </fieldset>

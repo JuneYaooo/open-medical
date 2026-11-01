@@ -279,3 +279,81 @@ test("开启脱敏：图片识别后按脱敏结果打码，替换并删除原�
     assert.ok(pixel(200, 160) > 200, "诊断行不应被遮");
   }
 });
+
+test("脱敏默认开启；内置服务没有 Key 时不使用，有 Key 时作为最后一级", async () => {
+  const { PrivacySettings, builtinPrivacyService, BUILTIN_PRIVACY_SERVICE_URL } = await import("../../server/medical/privacy.mjs");
+  const store = new Map();
+  const vault = { get: (k) => store.get(k), set: (k, v) => store.set(k, v) };
+
+  assert.deepEqual(builtinPrivacyService({}), { baseUrl: BUILTIN_PRIVACY_SERVICE_URL, apiKey: "" });
+  assert.equal(builtinPrivacyService({ MEDICAL_PRIVACY_SERVICE_URL: "off" }), null);
+  assert.equal(builtinPrivacyService({ MEDICAL_PRIVACY_SERVICE_URL: "" }), null);
+  assert.equal(builtinPrivacyService({ MEDICAL_PRIVACY_SERVICE_URL: "http://10.0.0.2:18090/v1/" }).baseUrl, "http://10.0.0.2:18090");
+
+  const noKey = new PrivacySettings(vault, null, { builtin: builtinPrivacyService({}) });
+  assert.equal(noKey.enabled(), true);
+  assert.equal(noKey.service(), null);
+  assert.deepEqual(noKey.public().builtin, { baseUrl: BUILTIN_PRIVACY_SERVICE_URL, enabled: true, hasKey: false, keySource: null, active: false, insecure: true });
+
+  const withKey = new PrivacySettings(vault, null, { builtin: builtinPrivacyService({ MEDICAL_PRIVACY_SERVICE_KEY: "k" }) });
+  assert.equal(withKey.service().source, "builtin");
+  const ocrFirst = new PrivacySettings(vault, { service: () => ({ baseUrl: "http://127.0.0.1:1" }) }, { builtin: { baseUrl: "http://x", apiKey: "k" } });
+  assert.equal(ocrFirst.service().source, "ocr");
+
+  withKey.save({ enabled: false });
+  assert.equal(withKey.enabled(), false);
+  assert.equal(withKey.public().enabled, false);
+});
+
+test("内置脱敏服务可单独关闭，API Key 可在设置页填写", async () => {
+  const { PrivacySettings, BUILTIN_PRIVACY_SERVICE_URL } = await import("../../server/medical/privacy.mjs");
+  const store = new Map();
+  const vault = { get: (k) => store.get(k), set: (k, v) => store.set(k, v) };
+  const settings = new PrivacySettings(vault, null, { builtin: { baseUrl: BUILTIN_PRIVACY_SERVICE_URL, apiKey: "" } });
+  assert.equal(settings.service(), null);
+
+  settings.save({ builtinApiKey: " typed-key " });
+  assert.deepEqual(settings.service(), { baseUrl: BUILTIN_PRIVACY_SERVICE_URL, apiKey: "typed-key", source: "builtin" });
+  assert.equal(settings.public().builtin.keySource, "settings");
+  assert.equal(settings.public().builtin.active, true);
+  assert.ok(!JSON.stringify(settings.public()).includes("typed-key"), "Key 不回传给界面");
+
+  settings.save({ useBuiltin: false });
+  assert.equal(settings.service(), null);
+  assert.equal(settings.public().builtin.enabled, false);
+  assert.equal(settings.enabled(), true, "关闭内置服务不等于关闭脱敏");
+
+  settings.save({ useBuiltin: true, builtinApiKey: "" });
+  assert.equal(settings.service(), null, "清空 Key 后不再调用");
+  assert.throws(() => settings.save({ useBuiltin: "no" }), /useBuiltin/);
+});
+
+test("网页截图：规则兜底模式可交给视觉模型，严格模式禁止；导入的资料原图始终禁止", async () => {
+  const { MaterialPrivacy } = await import("../../server/medical/privacy.mjs");
+  const settings = (mode) => ({ enabled: () => true, mode: () => mode, service: () => null });
+  const fallback = new MaterialPrivacy({ settings: settings("fallback") });
+  assert.equal(fallback.screenshotsBlocked(), false);
+  assert.equal(fallback.rawImagesBlocked(), true);
+  assert.equal(new MaterialPrivacy({ settings: settings("strict") }).screenshotsBlocked(), true);
+});
+
+test("设置页填写的内置服务 API Key 在本机加密保存，数据库里没有明文", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { CredentialVault } = await import("../../server/core/oauth.mjs");
+  const { PrivacySettings } = await import("../../server/medical/privacy.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "privacy-vault-"));
+  try {
+    const db = new DatabaseSync(":memory:");
+    const settings = new PrivacySettings(new CredentialVault(db, dir), null, { builtin: { baseUrl: "http://x", apiKey: "" } });
+    settings.save({ builtinApiKey: "secret-worker-key-123" });
+    const raw = JSON.stringify(db.prepare("SELECT * FROM agent_credentials").all());
+    assert.ok(!raw.includes("secret-worker-key-123"), "数据库中不应有明文 Key");
+    const reopened = new PrivacySettings(new CredentialVault(db, dir), null, { builtin: { baseUrl: "http://x", apiKey: "" } });
+    assert.equal(reopened.service().apiKey, "secret-worker-key-123", "重启后可解密使用");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -3,19 +3,30 @@ import { api } from "../../../src/agent-runtime";
 import { requestSettingsTab } from "../../../src/extension-center";
 import "../../../src/tools-clarity.css";
 import "./literature.css";
-import { Search, Loader2, FilePlus, Copy, ExternalLink, Check } from "lucide-react";
+import { Search, Loader2, FilePlus, Copy, ExternalLink, Check, Sparkles } from "lucide-react";
+import { patientOptionLabel } from "../../../src/patient-labels.js";
 
-// Literature search view: queries PubMed / Europe PMC through the local
-// server. Only the query text leaves the machine; imports land as session
-// materials with SHA-256 provenance. Non-Latin queries (e.g. Chinese) are
-// handed to the assistant, which needs a configured model.
+// 文献页主入口是一句自然语言问题：由助手检索、阅读、比较并作答（需要模型）。
+// 手动 PubMed 检索保留在折叠区，只发送检索词；导入为会话材料并保留来源。
 const NON_LATIN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}]/u;
+const TASK_PREFIX = "文献研究 · ";
+const EXAMPLES = [
+  "老年 2 型糖尿病患者使用 SGLT2 抑制剂的心肾获益与风险，最新指南怎么推荐？",
+  "早期非小细胞肺癌术后辅助免疫治疗的证据与适用人群",
+  "比较国内外指南对高血压合并慢性肾病的降压目标",
+  "幽门螺杆菌根除的一线方案：中国共识与国际指南有何差异？",
+];
 export function LiteratureView({ onOpenTask, config, onSettings }) {
   const modelConfigured = Boolean(config?.modelConfigured);
   const openModelSettings = () => { requestSettingsTab("general"); onSettings?.(); };
   const [specialty, setSpecialty] = useState("");
+  const [question, setQuestion] = useState("");
+  const [patients, setPatients] = useState([]);
+  const [patientId, setPatientId] = useState("");
+  const [recent, setRecent] = useState([]);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState("research");
   const [source, setSource] = useState("pubmed");
   const [yearFrom, setYearFrom] = useState("");
   const [yearTo, setYearTo] = useState("");
@@ -25,7 +36,10 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
   const [expanded, setExpanded] = useState({});
   const importsInFlight = useRef(new Set());
   const searchInFlight = useRef(false);
-  const importSessions = useRef(new Map());
+  // 手动导入的文献都放进同一个任务：选了患者就进该患者会话，否则进本次
+  // 打开页面后新建的一个“文献收集”任务（首次导入时创建，并发导入共用）。
+  const collectSession = useRef(null);
+  const [collected, setCollected] = useState(null);
   const [importing, setImporting] = useState({});
   const [abstractErrors, setAbstractErrors] = useState({});
   const [abstracts, setAbstracts] = useState({});
@@ -36,14 +50,45 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
     api("/api/doctor/profile")
       .then((profile) => setSpecialty(profile.fields?.specialty || ""))
       .catch(() => {});
+    api("/api/patients")
+      .then((value) => setPatients((value.patients || []).filter((patient) => !patient.archived && patient.sessionId)))
+      .catch(() => {});
+    api("/api/sessions")
+      .then((value) => setRecent((value.sessions || []).filter((session) => session.title?.startsWith(TASK_PREFIX)).slice(0, 5)))
+      .catch(() => {});
   }, []);
+  // 一个问题 = 一次文献研究任务：选了患者就进入该患者会话，否则新建会话。
+  const startResearch = async (event, text = question) => {
+    event?.preventDefault();
+    const draft = text.trim();
+    if (!draft || starting) return;
+    if (!modelConfigured) {
+      setStartError("需先连接模型：文献研究由助手检索、阅读和综合，未连接模型时不能发送。问题已保留。");
+      return;
+    }
+    setStarting(true);
+    setStartError("");
+    try {
+      const patient = patients.find((item) => item.id === patientId);
+      const sessionId = patient ? patient.sessionId : (await api("/api/sessions", "POST", { title: `${TASK_PREFIX}${draft.slice(0, 40)}` })).id;
+      await onOpenTask(sessionId, {
+        submit: true,
+        draft,
+        workflow: "literature-research",
+        context: { kind: "literature-search", label: patient ? "文献研究 · 结合当前患者" : "文献研究", scope: { mode: "research" } },
+      });
+    } catch (err) {
+      setStartError(err.message);
+    } finally {
+      setStarting(false);
+    }
+  };
   const runSearch = async (event, options = {}) => {
     event?.preventDefault();
     const searchQuery = options.query ?? query;
     if (searchInFlight.current || !searchQuery.trim()) return;
-    const needsAssistant = mode === "research" || NON_LATIN.test(searchQuery);
-    if (needsAssistant && !modelConfigured) {
-      setError("需先连接模型：研究与综述、中文等非英文检索交给助手处理，未连接模型时不能发送。可改用英文关键词直接查找论文。");
+    if (NON_LATIN.test(searchQuery)) {
+      setError("手动检索只接受英文关键词、标题或 PMID。中文问题请在上方提问，由助手检索中英文文献。");
       return;
     }
     searchInFlight.current = true;
@@ -51,27 +96,6 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
     setError("");
     setResults(null);
     try {
-      if (needsAssistant) {
-        const session = await api("/api/sessions", "POST", { title: `${mode === "research" ? "文献研究" : "文献检索"} · ${searchQuery.slice(0, 40)}` });
-        // 医生的检索词原样作为提问；方式、来源和年份作为附带上下文。
-        await onOpenTask(session.id, {
-          submit: true,
-          draft: searchQuery,
-          context: {
-            kind: "literature-search",
-            label: `${mode === "research" ? "文献研究" : "查找论文"} · ${options.source || source}${yearFrom || yearTo ? ` · ${yearFrom || "不限"}–${yearTo || "不限"}` : ""}`,
-            scope: {
-              mode: mode === "research" ? "research" : "search",
-              source: options.source || source,
-              ...(yearFrom ? { yearFrom } : {}),
-              ...(yearTo ? { yearTo } : {}),
-              ...(options.sort === "date" ? { sort: "date" } : {}),
-            },
-          },
-          ...(mode === "research" ? { workflow: "literature-research" } : {}),
-        });
-        return;
-      }
       const params = new URLSearchParams({
         query: searchQuery,
         source: options.source || source,
@@ -120,18 +144,22 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
     setImporting(prev => ({ ...prev, [key]: true }));
     setError("");
     try {
-      let session = importSessions.current.get(key);
-      if (!session) {
-        session = await api("/api/sessions", "POST", { title: `文献 · ${(article.title || "未命名").slice(0, 40)}` });
-        importSessions.current.set(key, session);
+      const patient = patients.find((item) => item.id === patientId);
+      let target;
+      if (patient) target = { id: patient.sessionId, title: `${patient.name || "患者"}的会话` };
+      else {
+        collectSession.current ||= api("/api/sessions", "POST", { title: `文献收集 · ${new Date().toLocaleDateString("zh-CN")}` })
+          .then((session) => ({ id: session.id, title: "文献收集" }))
+          .catch((err) => { collectSession.current = null; throw err; });
+        target = await collectSession.current;
       }
       await api("/api/literature/import", "POST", {
-        sessionId: session.id,
+        sessionId: target.id,
         pmid: article.pmid || undefined,
         doi: article.pmid ? undefined : article.doi || undefined,
       });
+      setCollected((prev) => ({ ...target, count: prev?.id === target.id ? prev.count + 1 : 1 }));
       setImported((prev) => ({ ...prev, [article.pmid || article.doi]: true }));
-      await onOpenTask?.(session.id);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -168,33 +196,63 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
             <p className="module-phase">围绕问题查找、阅读和比较证据，形成有来源的总结。</p>
           </div>
         </div>
-        <section className="tool-section literature-search">
-          <div className="tool-section-head">
-            <div className="tool-segment" role="group" aria-label="文献工作方式"><button aria-pressed={mode === 'research'} onClick={() => setMode('research')}>研究与综述</button><button aria-pressed={mode === 'search'} onClick={() => setMode('search')}>查找论文</button></div>
-            {specialty && (
-              <button
-                className="om-link"
-                onClick={(event) =>
-                  runSearch(event, {
-                    query: specialty,
-                    source: "europepmc",
-                    sort: "date",
-                  })
-                }
-                disabled={busy}
-              >
-                {mode === 'research' ? '让助手研究我关注的领域：' : NON_LATIN.test(specialty) ? '让助手查找近期论文：' : '查找最新论文：'}{specialty} →
-              </button>
-            )}
-          </div>
-          <p className="om-meta literature-mode-hint">{mode === "research" ? "描述临床问题，助手检索并比较证据，生成带出处的总结（需已连接模型）。" : "按主题、标题、PMID 或英文关键词直接检索 PubMed / Europe PMC；中文等非英文检索词交给助手处理，需已连接模型。"}</p>
-          {!modelConfigured && (mode === "research" || NON_LATIN.test(query)) && <p className="notice" role="status">需先连接模型：{mode === "research" ? "研究与综述" : "非英文检索"}由助手执行，未连接模型时不能发送。<button type="button" className="text-button" onClick={openModelSettings}>连接模型</button></p>}
-          <form className="literature-form" onSubmit={runSearch}>
+        <section className="tool-section literature-ask" aria-label="文献研究提问">
+          <form className="literature-form" onSubmit={startResearch}>
+            <label className="literature-ask-label" htmlFor="literature-question">想研究什么问题？</label>
             <textarea
+              id="literature-question"
               rows={3}
               className="literature-query"
+              value={question}
+              placeholder="用一句话描述临床问题，例如：某治疗方案的证据、适用人群和局限；国内外指南有何差异"
+              onChange={(e) => setQuestion(e.target.value)}
+            />
+            {patients.length > 0 && (
+              <label className="literature-patient">
+                <span>结合患者（可选）</span>
+                <select aria-label="结合患者" value={patientId} onChange={(e) => setPatientId(e.target.value)} disabled={starting}>
+                  <option value="">不结合患者</option>
+                  {patients.map((patient) => <option key={patient.id} value={patient.id}>{patientOptionLabel(patient, patients)}</option>)}
+                </select>
+              </label>
+            )}
+            <button className="primary" type="submit" disabled={starting || !question.trim() || !modelConfigured} title={!modelConfigured ? "需先连接模型" : undefined}>
+              {starting ? <Loader2 className="spin" size={15} /> : <Sparkles size={15} />}
+              开始研究
+            </button>
+          </form>
+          <p className="om-meta literature-mode-hint">助手会检索 PubMed 英文文献，并检索中文指南、共识与期刊（中华医学期刊网、中华医学会、知网/万方等），阅读摘要或原文后比较证据，回答附来源链接，供你复核。{patientId ? "结合患者时会读取该患者档案，只把脱敏医学关键词发往网上。" : "联网只发送医学关键词。"}</p>
+          {!modelConfigured && <p className="notice" role="status">需先连接模型：文献研究由助手执行，未连接模型时不能发送。<button type="button" className="text-button" onClick={openModelSettings}>连接模型</button></p>}
+          {startError && <p className="form-error" role="alert">{startError}</p>}
+          <div className="literature-examples" aria-label="示例问题">
+            <span className="om-meta">示例：</span>
+            {EXAMPLES.map((example) => <button type="button" className="om-chip" key={example} onClick={() => setQuestion(example)}>{example}</button>)}
+            {specialty && <button type="button" className="om-chip" onClick={() => setQuestion(`${specialty}领域近两年有哪些重要的新研究和指南更新？`)}>我关注的领域：{specialty}</button>}
+          </div>
+          {recent.length > 0 && (
+            <div className="literature-recent">
+              <h2>最近的文献研究</h2>
+              <ul>{recent.map((task) => <li key={task.id}><button type="button" className="text-button" onClick={() => onOpenTask?.(task.id)}>{task.title.slice(TASK_PREFIX.length)}</button>{task.running && <span className="om-meta"> · 进行中</span>}</li>)}</ul>
+            </div>
+          )}
+        </section>
+
+        <details className="literature-manual om-disclosure">
+        <summary>手动检索 PubMed（高级）</summary>
+        <section className="tool-section literature-search">
+          {specialty && !NON_LATIN.test(specialty) && (
+            <div className="tool-section-head">
+              <button className="om-link" onClick={(event) => runSearch(event, { query: specialty, source: "europepmc", sort: "date" })} disabled={busy}>
+                查找最新论文：{specialty} →
+              </button>
+            </div>
+          )}
+          <p className="om-meta literature-mode-hint">按标题、PMID 或英文关键词直接检索 PubMed / Europe PMC，不经过助手，只发送检索词。</p>
+          <form className="literature-form" onSubmit={runSearch}>
+            <input
+              className="literature-manual-query"
               value={query}
-              aria-label="文献检索主题" placeholder={mode === "research" ? "描述你要解决的问题，例如：比较两种治疗方案的证据、适用人群和局限" : "论文主题、标题、PMID 或英文关键词"}
+              aria-label="PubMed 检索词" placeholder="英文关键词、标题或 PMID"
               onChange={(e) => setQuery(e.target.value)}
             />
             <details className="literature-options om-disclosure"><summary>检索范围：{source === "pubmed" ? "PubMed" : "Europe PMC"}{yearFrom || yearTo ? ` · ${yearFrom || "不限"}–${yearTo || "至今"}` : " · 不限年份"}</summary><div>
@@ -217,13 +275,12 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
               onChange={(e) => setYearTo(e.target.value.replace(/\D/g, ""))}
             />
             </div></details>
-            <button className="primary" type="submit" disabled={busy || !query.trim() || (!modelConfigured && (mode === "research" || NON_LATIN.test(query)))} title={!modelConfigured && (mode === "research" || NON_LATIN.test(query)) ? "需先连接模型" : undefined}>
+            <button className="secondary" type="submit" disabled={busy || !query.trim()}>
               {busy ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
-              {mode === "research" ? "开始研究" : NON_LATIN.test(query) ? "让助手查找" : "检索"}
+              检索
             </button>
           </form>
         </section>
-
         {error && (
           <p className="form-error" role="alert">
             {error}
@@ -307,9 +364,16 @@ export function LiteratureView({ onOpenTask, config, onSettings }) {
             <li className="tool-list-empty">没有检索到结果，可尝试更换检索词或文献源。</li>
           )}
         </ul>}
+        {collected && (
+          <p className="literature-collected" role="status">
+            已导入 {collected.count} 篇到「{collected.title}」。
+            <button type="button" className="text-button" onClick={() => onOpenTask?.(collected.id)}>打开该任务</button>
+          </p>
+        )}
         <p className="tool-footnote">
-          证据类型标签由出版类型映射而来，仅为提示，不构成质量结论；「导入为材料」只导入题录与摘要（含 MeSH 主题词），不下载全文。
+          {patientId ? "导入的文献放进所选患者的会话；" : "导入的文献都放进同一个“文献收集”任务；"}证据类型标签由出版类型映射而来，仅为提示，不构成质量结论；「导入为材料」只导入题录与摘要（含 MeSH 主题词），不下载全文。
         </p>
+        </details>
       </section>
     </div>
   );

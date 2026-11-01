@@ -5,8 +5,28 @@ import { Plus, X, Loader2, Search, Star, Share2 } from "lucide-react";
 import { ShareWizard } from "./share-wizard";
 
 import { useClinicalDraft } from "./clinical-drafts";
+import { localCalendarDate } from "../shared/calendar-date.mjs";
+import { evaluateMedicationSafety } from "../server/medical/med-safety.mjs";
+import "./clinical-entry.css";
+import { VISIT_SECTIONS, VITAL_FIELDS, batchLabs, emptyLabRow, emptyVisitSections, emptyVitals, labPanelRows, parseBloodPressure, serializeVisitSections, vitalLabs } from "./clinical-entry";
 
 const fmtDate = (value) => (value ? String(value).slice(0, 10) : "");
+const VISIT_NOTE_LIMIT = 4000;
+const emptyMed = () => ({ name: "", dose: "", frequency: "", status: "active", startDate: "", source: "" });
+const emptyLab = () => ({ item: "", value: "", unit: "", date: localCalendarDate(), source: "", note: "", referenceRange: "" });
+const allergyName = (a) => (typeof a === "string" ? a : a?.substance || "");
+const allergyLabel = (a) => (typeof a === "string" ? a : [a?.substance, a?.reaction ? `（${a.reaction}）` : ""].join(""));
+const emptyVisit = () => ({ date: localCalendarDate(), reason: "", note: "", source: "", mode: "free", sections: emptyVisitSections(), vitals: emptyVitals() });
+// Newest first by date; undated last; ties keep later entry first.
+const byDateDesc = (list) => list.map((_, i) => i).sort((a, b) => String(list[b].date || "").localeCompare(String(list[a].date || "")) || b - a);
+// Client-side allergy screen reuses the server's pure med-safety rules.
+function allergyWarnings(name, allergies) {
+  if (!String(name || "").trim() || !allergies.length) return [];
+  try {
+    const list = allergies.map(allergyName).filter(Boolean).slice(0, 20);
+    return evaluateMedicationSafety({ medications: [{ name }], allergies: list }).allergyMatches;
+  } catch { return []; }
+}
 
 // Structured clinical data panel for one patient: diagnoses (with ICD-10
 // helper), medications, allergies, labs and visits. Edits are local until
@@ -24,31 +44,45 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
   const [icdQuery, setIcdQuery] = useClinicalDraft(detail.id, "icd", "");
   const [icdResults, setIcdResults] = useState([]);
   const [newDiagnosis, setNewDiagnosis] = useClinicalDraft(detail.id, "diagnosis", "");
+  const [icdCode, setIcdCode] = useClinicalDraft(detail.id, "diagnosisCode", "");
   const [diagnosisMeta, setDiagnosisMeta] = useClinicalDraft(detail.id, "diagnosisMeta", { status: "needs_review", date: "", source: "" });
   const [medEdit, setMedEdit] = useClinicalDraft(detail.id, "medEdit", null);
   const [labEdit, setLabEdit] = useClinicalDraft(detail.id, "labEdit", null);
   const [labNotice, setLabNotice] = useState("");
   const [expandedRecords, setExpandedRecords] = useState({});
   useEffect(() => { setExpandedRecords({}); }, [detail.id]);
-  const labStart = expandedRecords.labs ? 0 : Math.max(0, draft.labs.length - 12);
-  const visitStart = expandedRecords.visits ? 0 : Math.max(0, draft.visits.length - 8);
+  const labOrder = byDateDesc(draft.labs);
+  const visitOrder = byDateDesc(draft.visits);
+  const shownLabs = expandedRecords.labs ? labOrder : labOrder.slice(0, 12);
+  const shownVisits = expandedRecords.visits ? visitOrder : visitOrder.slice(0, 8);
+  // Removal needs a second click; the pending target is tied to the revision
+  // it was chosen on so a refreshed list never deletes a different row.
+  const [confirmRemove, setConfirmRemove] = useState(null);
+  const [stopEdit, setStopEdit] = useState(null);
+  const removing = (kind, index) => confirmRemove?.kind === kind && confirmRemove.index === index && confirmRemove.revision === detail.revision;
+  const removeControl = (kind, index, label, onConfirm) => removing(kind, index)
+    ? <span className="clinical-confirm" role="group" aria-label={`确认删除${label}`}>确认删除？<button type="button" className="danger" onClick={async () => { setConfirmRemove(null); await onConfirm(); }}>删除</button><button type="button" onClick={() => setConfirmRemove(null)}>取消</button></span>
+    : <button type="button" className="icon-button" title="删除" aria-label={`删除${label}`} onClick={() => setConfirmRemove({ kind, index, revision: detail.revision })}><X size={13} /></button>;
   const [pendingMutation, setPendingMutation] = useClinicalDraft(detail.id, "mutation", null);
   const [labError, setLabError] = useState("");
-  const [newMed, setNewMed] = useClinicalDraft(detail.id, "medication", { name: "", dose: "", frequency: "", status: "unknown", source: "" });
+  const [newMed, setNewMed] = useClinicalDraft(detail.id, "medication", emptyMed());
   const [newAllergy, setNewAllergy] = useClinicalDraft(detail.id, "allergy", "");
-  const [newLab, setNewLab] = useClinicalDraft(detail.id, "lab", {
-    item: "",
-    value: "",
-    unit: "",
-    date: "", source: "", note: "", referenceRange: "",
-  });
-  const [newVisit, setNewVisit] = useClinicalDraft(detail.id, "visit", { date: "", reason: "", note: "", source: "" });
+  const [newAllergyReaction, setNewAllergyReaction] = useClinicalDraft(detail.id, "allergyReaction", "");
+  const [newLab, setNewLab] = useClinicalDraft(detail.id, "lab", emptyLab());
+  // 多项模式：一个日期/来源 + 多行；rows 为 null 表示尚未进入多项模式。
+  const [labBatch, setLabBatch] = useClinicalDraft(detail.id, "labBatch", { date: localCalendarDate(), source: "", rows: null });
+  const labBatchMode = Array.isArray(labBatch.rows);
+  const setLabRow = (index, field, value) => setLabBatch({ ...labBatch, rows: labBatch.rows.map((row, i) => i === index ? { ...row, [field]: value } : row) });
+  const [newVisit, setNewVisit] = useClinicalDraft(detail.id, "visit", emptyVisit());
+  const [visitError, setVisitError] = useState("");
+  const medWarnings = allergyWarnings(newMed.name, draft.allergies);
+  const visitNote = newVisit.mode === "structured" ? serializeVisitSections(newVisit.sections) : (newVisit.note || "");
   const [visitEdit, setVisitEdit] = useClinicalDraft(detail.id, "visitEdit", null);
   const additions = {
-    diagnoses: Boolean(newDiagnosis.trim() || icdQuery.trim() || diagnosisMeta.date || diagnosisMeta.source),
-    medications: Boolean(newAllergy.trim() || newMed.name || newMed.dose || newMed.frequency || newMed.source),
-    labs: Object.values(newLab).some(Boolean),
-    visits: Object.values(newVisit).some(Boolean),
+    diagnoses: Boolean(newDiagnosis.trim() || icdCode.trim() || icdQuery.trim() || diagnosisMeta.date || diagnosisMeta.source),
+    medications: Boolean(newAllergy.trim() || newAllergyReaction.trim() || newMed.name || newMed.dose || newMed.frequency || newMed.source),
+    labs: labBatchMode ? labBatch.rows.some(row => String(row.value || "").trim()) : Object.entries(newLab).some(([key, value]) => key !== "date" && Boolean(value)),
+    visits: Boolean(newVisit.reason || newVisit.note || newVisit.source || Object.values(newVisit.sections || {}).some(Boolean) || Object.values(newVisit.vitals || {}).some(Boolean)),
   };
   const hasAddition = section ? additions[section] : Object.values(additions).some(Boolean);
   const feedback = text => setSaveFeedback({ patientId: detail.id, text });
@@ -112,23 +146,39 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       return;
     searchVersion.current++;
     setNewDiagnosis("");
+    setIcdCode("");
     setDiagnosisMeta({ status: "needs_review", date: "", source: "" });
     setIcdQuery("");
     setIcdResults([]);
   };
   const addMedication = async () => {
     if (!newMed.name.trim()) return;
-    if (!(await saveMedications([...draft.medications, { ...newMed }], { medication: newMed }))) return;
-    setNewMed({ name: "", dose: "", frequency: "", status: "unknown", source: "" });
+    const { startDate, ...med } = newMed;
+    const entry = { ...med, name: med.name.trim(), ...(startDate ? { startDate } : {}) };
+    if (!(await saveMedications([...draft.medications, entry], { medication: newMed }))) return;
+    setNewMed(emptyMed());
   };
   const addAllergy = async () => {
-    const text = newAllergy.trim();
-    if (!text || draft.allergies.includes(text)) return;
-    if (!(await saveAllergies([...draft.allergies, text], { allergy: text }))) return;
+    const text = newAllergy.trim(), reaction = newAllergyReaction.trim();
+    if (!text || draft.allergies.some(a => allergyName(a) === text)) return;
+    const entry = reaction ? { substance: text, reaction } : text;
+    if (!(await saveAllergies([...draft.allergies, entry], { allergy: entry }))) return;
     setNewAllergy("");
+    setNewAllergyReaction("");
   };
   const addLab = async () => {
     setLabError("");
+    // 「血压 148/86」拆成收缩压、舒张压两条，单位 mmHg。
+    const bp = /^血压$/.test(newLab.item.trim()) ? parseBloodPressure(newLab.value) : null;
+    if (bp) {
+      if (!newLab.date) { setLabError("请填写检验日期；输入已保留。"); return; }
+      const result = vitalLabs(bp, newLab.date, newLab.source);
+      if (result.error) { setLabError(`${result.error}；输入已保留。`); return; }
+      if (!(await saveLabs([...draft.labs, ...result.labs], { lab: newLab }))) return;
+      setNewLab(emptyLab());
+      setLabNotice("血压已拆分为收缩压、舒张压两条记录保存。");
+      return;
+    }
     const value = Number(newLab.value);
     if (
       !newLab.item.trim() ||
@@ -136,7 +186,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       !newLab.value.trim() ||
       !Number.isFinite(value)
     ) {
-      setLabError("此处仅支持精确数值（如 0、6.2）。阳性、阴性及 <0.01 等结果暂不支持；请保留原文于资料库，不要去掉比较符或改成精确值。输入已保留。");
+      setLabError("请输入数字；阴性、<0.01 等结果请上传原报告到资料库");
       return;
     }
     if (
@@ -152,12 +202,44 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       ], { lab: newLab }))
     )
       return;
-    setNewLab({ item: "", value: "", unit: "", date: "", source: "", note: "", referenceRange: "" });
+    setNewLab(emptyLab());
+  };
+  const addLabBatch = async () => {
+    setLabError(""); setLabNotice("");
+    const result = batchLabs(labBatch.rows, labBatch.date, labBatch.source.trim());
+    if (result.error) { setLabError(`${result.error}；输入已保留。`); return; }
+    if (!(await saveLabs([...draft.labs, ...result.labs], { labBatch }))) return;
+    setLabBatch({ date: labBatch.date, source: "", rows: labPanelRows([...draft.labs, ...result.labs]) });
+    setLabNotice(`已保存 ${result.labs.length} 条检验记录。`);
   };
   const addVisit = async () => {
+    setVisitError("");
     if (!newVisit.date || !newVisit.reason.trim()) return;
-    if (!(await saveVisits([...draft.visits, { ...newVisit }], { visit: newVisit }))) return;
-    setNewVisit({ date: "", reason: "", note: "", source: "" });
+    if (visitNote.length > VISIT_NOTE_LIMIT) { setVisitError(`就诊备注共 ${visitNote.length} 字，超过 ${VISIT_NOTE_LIMIT} 字上限，请精简；输入已保留。`); return; }
+    const vitals = vitalLabs(newVisit.vitals, newVisit.date, newVisit.source.trim());
+    if (vitals.error) { setVisitError(`${vitals.error}；输入已保留。`); return; }
+    const visit = { date: newVisit.date, reason: newVisit.reason.trim(), ...(visitNote.trim() ? { note: visitNote.trim() } : {}), ...(newVisit.source.trim() ? { source: newVisit.source.trim() } : {}) };
+    const fields = vitals.labs.length ? { visits: [...draft.visits, visit], labs: [...draft.labs, ...vitals.labs] } : { visits: [...draft.visits, visit] };
+    if (!(await patch(fields, { visit: newVisit }))) return;
+    setNewVisit(emptyVisit());
+    if (vitals.labs.length) feedback(`就诊记录已保存，生命体征 ${vitals.labs.length} 项已同步到检验记录`);
+  };
+  const setVital = (key, raw) => {
+    // 在收缩压栏直接输入「148/86」时自动拆分。
+    const bp = key === "sbp" ? parseBloodPressure(raw) : null;
+    setNewVisit({ ...newVisit, vitals: { ...newVisit.vitals, ...(bp || { [key]: raw }) } });
+  };
+  const setMedStatus = (index, status) => saveMedications(draft.medications.map((item, i) => {
+    if (i !== index) return item;
+    const { stoppedAt: _s, stopReason: _r, ...rest } = item;
+    if (status === "stopped") return { ...item, status, stoppedAt: item.stoppedAt || localCalendarDate() };
+    return { ...rest, status };
+  }));
+  const stopMedication = async (event) => {
+    event.preventDefault();
+    if (stopEdit.revision !== detail.revision) { onError?.("档案已变化，请取消后重新核对用药。"); return; }
+    const reason = stopEdit.reason.trim();
+    if (await saveMedications(draft.medications.map((item, i) => i === stopEdit.index ? { ...item, status: "stopped", stoppedAt: stopEdit.date, ...(reason ? { stopReason: reason } : {}) } : item))) setStopEdit(null);
   };
   // 收进案例库：医生主动策展动作，点击即入库（精选标记），不再套一层确认。
   const [casePanel, setCasePanel] = useState(false);
@@ -230,15 +312,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <button
-                className="icon-button"
-                title="移除"
-                onClick={() =>
-                  saveDiagnoses(draft.diagnoses.filter((_, i) => i !== index))
-                }
-              >
-                <X size={13} />
-              </button>
+              {removeControl("diagnosis", index, `诊断 ${d.name}`, () => saveDiagnoses(draft.diagnoses.filter((_, i) => i !== index)))}
             </li>
           ))}
           {!draft.diagnoses.length && <li className="muted">未记录诊断。</li>}
@@ -251,15 +325,23 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           />
           <input
             value={newDiagnosis}
-            placeholder="或直接填写诊断名称"
+            placeholder="诊断名称（可直接填写）"
+            aria-label="诊断名称"
             onChange={(e) => setNewDiagnosis(e.target.value)}
+          />
+          <input
+            value={icdCode}
+            placeholder="ICD-10 编码（可选）"
+            aria-label="ICD-10 编码"
+            maxLength={20}
+            onChange={(e) => setIcdCode(e.target.value)}
           />
           <label>诊断状态<select aria-label="新增诊断状态" value={diagnosisMeta.status} onChange={e=>setDiagnosisMeta({...diagnosisMeta,status:e.target.value})}>{Object.entries(DIAGNOSIS_STATUS_SHORT).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
           <label>原诊断日期（未知可留空）<input type="date" value={diagnosisMeta.date} onChange={e=>setDiagnosisMeta({...diagnosisMeta,date:e.target.value})}/></label>
           <label>诊断来源<input maxLength={200} value={diagnosisMeta.source} onChange={e=>setDiagnosisMeta({...diagnosisMeta,source:e.target.value})}/></label>
           <button
             className="secondary"
-            onClick={() => addDiagnosis("", newDiagnosis)}
+            onClick={() => addDiagnosis(icdCode.trim(), newDiagnosis.trim())}
             disabled={!newDiagnosis.trim()}
           >
             <Plus size={13} /> 添加诊断
@@ -269,7 +351,8 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
               {icdResults.map((item) => (
                 <button
                   key={item.code}
-                  onClick={() => addDiagnosis(item.code, item.name)}
+                  type="button"
+                  onClick={() => { searchVersion.current++; setIcdCode(item.code); setNewDiagnosis(item.name); setIcdQuery(""); setIcdResults([]); }}
                 >
                   <Search size={11} /> {item.code} {item.name}
                 </button>
@@ -286,10 +369,10 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
         </select></label>}
         <div className="allergy-chips">
           {draft.allergies.map((item) => (
-            <span className="hint-tag allergy" key={item}>
-              {item}
+            <span className="hint-tag allergy" key={allergyName(item)}>
+              {allergyLabel(item)}
               <button
-                aria-label={`移除过敏原 ${item}`}
+                aria-label={`移除过敏原 ${allergyName(item)}`}
                 onClick={() =>
                   saveAllergies(draft.allergies.filter((a) => a !== item))
                 }
@@ -304,6 +387,14 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
             value={newAllergy}
             placeholder="添加过敏原"
             onChange={(e) => setNewAllergy(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addAllergy()}
+          />
+          <input
+            value={newAllergyReaction}
+            placeholder="反应（可选，如 皮疹）"
+            aria-label="过敏反应（可选）"
+            maxLength={120}
+            onChange={(e) => setNewAllergyReaction(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addAllergy()}
           />
           <button
@@ -325,30 +416,31 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
                 <b>{m.name}</b>
                 {m.dose ? ` · ${m.dose}` : ""}
                 {m.frequency ? ` · ${m.frequency}` : ""}
+                {m.startDate ? ` · ${fmtDate(m.startDate)} 开始` : ""}
+                {m.status === "stopped" && (m.stoppedAt || m.stopReason) && <small> · {m.stoppedAt ? `${fmtDate(m.stoppedAt)} 停用` : "已停用"}{m.stopReason ? `（${m.stopReason}）` : ""}</small>}
               </span>
               <button className="text-button" onClick={()=>setMedEdit({index, value:{...m}, revision:detail.revision})}>更正用药</button>
-              <select aria-label={`${m.name}用药状态`} value={m.status || "unknown"} onChange={(e) => saveMedications(draft.medications.map((item, i) => i === index ? { ...item, status: e.target.value } : item))}>
+              {m.status !== "stopped" && <button type="button" className="text-button" onClick={() => setStopEdit({ index, name: m.name, date: localCalendarDate(), reason: "", revision: detail.revision })}>停用</button>}
+              <select aria-label={`${m.name}用药状态`} value={m.status || "unknown"} onChange={(e) => setMedStatus(index, e.target.value)}>
                 <option value="unknown">状态未记录</option><option value="active">目前在用</option><option value="stopped">已停用</option>
               </select>
-              <button
-                className="icon-button"
-                title="移除"
-                onClick={() =>
-                  saveMedications(
-                    draft.medications.filter((_, i) => i !== index),
-                  )
-                }
-              >
-                <X size={13} />
-              </button>
+              {removeControl("medication", index, `用药 ${m.name}`, () => saveMedications(draft.medications.filter((_, i) => i !== index)))}
             </li>
           ))}
           {!draft.medications.length && <li className="muted">未记录用药。</li>}
         </ul>
-        {medEdit && <form aria-label="更正用药" onSubmit={async e=>{e.preventDefault();if(medEdit.revision!==detail.revision){onError?.('档案已变化，请取消本次更正并重新核对原记录。');return;}if(await saveMedications(draft.medications.map((m,i)=>i===medEdit.index?medEdit.value:m)))setMedEdit(null);}}>
-          <p>更正 {medEdit.value.name} · 保留原用药状态与其他资料</p>
+        {stopEdit && <form aria-label="停用药物" onSubmit={stopMedication}>
+          <p>停用 {stopEdit.name} · 记录停药日期与原因</p>
+          <label>停药日期<input type="date" required value={stopEdit.date} onChange={e=>setStopEdit({...stopEdit,date:e.target.value})}/></label>
+          <label>停药原因（可选）<input maxLength={200} placeholder="例如：血压达标减药、胃肠道不适" value={stopEdit.reason} onChange={e=>setStopEdit({...stopEdit,reason:e.target.value})}/></label>
+          <button type="button" onClick={()=>setStopEdit(null)}>取消</button><button type="submit">确认停用</button>
+        </form>}
+        {medEdit && <form aria-label="更正用药" onSubmit={async e=>{e.preventDefault();if(medEdit.revision!==detail.revision){onError?.('档案已变化，请取消本次更正并重新核对原记录。');return;}const name=String(medEdit.value.name||'').trim();if(!name){onError?.('药名不能为空。');return;}const {startDate,...rest}=medEdit.value;if(await saveMedications(draft.medications.map((m,i)=>i===medEdit.index?{...rest,name,...(startDate?{startDate}:{})}:m)))setMedEdit(null);}}>
+          <p>更正 {draft.medications[medEdit.index]?.name || medEdit.value.name} · 保留原用药状态与其他资料</p>
+          <label>更正药名<input required maxLength={120} value={medEdit.value.name || ''} onChange={e=>setMedEdit({...medEdit,value:{...medEdit.value,name:e.target.value}})}/></label>
           <label>更正剂量<input maxLength={60} value={medEdit.value.dose || ''} onChange={e=>setMedEdit({...medEdit,value:{...medEdit.value,dose:e.target.value}})}/></label>
           <label>更正频次<input maxLength={60} value={medEdit.value.frequency || ''} onChange={e=>setMedEdit({...medEdit,value:{...medEdit.value,frequency:e.target.value}})}/></label>
+          <label>开始用药日期（可选）<input type="date" value={medEdit.value.startDate || ''} onChange={e=>setMedEdit({...medEdit,value:{...medEdit.value,startDate:e.target.value}})}/></label>
           <label>更正处方来源<input maxLength={200} value={medEdit.value.source || ''} onChange={e=>setMedEdit({...medEdit,value:{...medEdit.value,source:e.target.value}})}/></label>
           <button type="button" onClick={()=>{setMedEdit(null);setPendingMutation(null);}}>取消更正</button><button type="submit">保存用药更正</button>
         </form>}
@@ -370,8 +462,10 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
               setNewMed({ ...newMed, frequency: e.target.value })
             }
           />
+          <label>开始日期（可选）<input type="date" value={newMed.startDate || ""} onChange={e=>setNewMed({...newMed,startDate:e.target.value})}/></label>
           <label>处方来源<input maxLength={200} value={newMed.source} onChange={e=>setNewMed({...newMed,source:e.target.value})}/></label>
-          <select aria-label="新增用药状态" value={newMed.status} onChange={(e) => setNewMed({ ...newMed, status: e.target.value })}><option value="unknown">状态未记录</option><option value="active">目前在用</option><option value="stopped">已停用</option></select>
+          <select aria-label="新增用药状态" value={newMed.status} onChange={(e) => setNewMed({ ...newMed, status: e.target.value })}><option value="active">目前在用</option><option value="unknown">状态未记录</option><option value="stopped">已停用</option></select>
+          {medWarnings.length > 0 && <p role="alert" className="error clinical-allergy-warning">注意：{medWarnings.map(w => `「${w.medication}」与过敏史「${w.allergy}」匹配`).join("；")}。请核对后再添加。（仅按药名文字匹配，不能识别同类药物交叉过敏）</p>}
           <button
             className="secondary"
             onClick={addMedication}
@@ -385,7 +479,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
       {(!section || section === 'labs') && <section>
         <h3>检验记录 · 共 {draft.labs.length} 条</h3>
         {draft.labs.length > 12 && <p>
-          {expandedRecords.labs ? `已显示全部 ${draft.labs.length} 条，按录入顺序` : `显示最近录入 12 条 / 共 ${draft.labs.length} 条`}
+          {expandedRecords.labs ? `已显示全部 ${draft.labs.length} 条，按日期最新在前` : `显示日期最近的 12 条 / 共 ${draft.labs.length} 条`}
           <button type="button" className="text-button" disabled={Boolean(labEdit)} aria-expanded={!!expandedRecords.labs} onClick={() => setExpandedRecords({ ...expandedRecords, labs: !expandedRecords.labs })}>
             {expandedRecords.labs ? "收起较早检验记录" : `显示全部 ${draft.labs.length} 条检验记录`}
           </button>
@@ -394,8 +488,8 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
         {labError && <p role="alert" className="error">{labError}</p>}
         {labNotice && <p role="status">{labNotice}</p>}
         <ul className="clinical-rows">
-          {draft.labs.slice(labStart).map((l, index) => {
-            const realIndex = labStart + index;
+          {shownLabs.map((realIndex) => {
+            const l = draft.labs[realIndex];
             return (
               <li key={`${l.item}-${l.date}-${realIndex}`}>
                 <span>
@@ -404,15 +498,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
                   {l.source && <small> · 来源：{l.source}</small>}
                 </span>
                 <button type="button" className="text-button" disabled={Boolean(labEdit)} onClick={() => { setLabError(""); setLabNotice(""); setLabEdit({ index: realIndex, revision: detail.revision, value: { ...l, value: String(l.value) } }); }}>更正检验</button>
-                <button
-                  className="icon-button"
-                  title="移除"
-                  onClick={() =>
-                    saveLabs(draft.labs.filter((_, i) => i !== realIndex))
-                  }
-                >
-                  <X size={13} />
-                </button>
+                {removeControl("lab", realIndex, `检验 ${l.item}`, () => saveLabs(draft.labs.filter((_, i) => i !== realIndex)))}
               </li>
             );
           })}
@@ -422,7 +508,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           e.preventDefault(); setLabError(""); setLabNotice("");
           if (labEdit.revision !== detail.revision) { setLabError("档案已变化，本次更正尚未保存，输入已保留。请取消后重新核对原记录。"); return; }
           const value = Number(labEdit.value.value);
-          if (!String(labEdit.value.value).trim() || !Number.isFinite(value)) { setLabError("请输入精确数值；输入已保留。"); return; }
+          if (!String(labEdit.value.value).trim() || !Number.isFinite(value)) { setLabError("请输入数字；阴性、<0.01 等结果请上传原报告到资料库"); return; }
           if (await saveLabs(draft.labs.map((lab, index) => index === labEdit.index ? { ...labEdit.value, value } : lab))) { setLabEdit(null); setLabNotice("检验记录已更正，原来源与其他记录已保留。"); }
         }}>
           <p>{labEdit.value.item} · 来源：{labEdit.value.source || "未记录"}</p>
@@ -433,7 +519,35 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           <label>更正检验备注<input maxLength={500} value={labEdit.value.note || ""} onChange={e => setLabEdit({ ...labEdit, value: { ...labEdit.value, note: e.target.value } })}/></label>
           <button type="button" onClick={() => { setLabEdit(null); setPendingMutation(null); setLabError(""); }}>取消更正</button><button type="submit">保存检验更正</button>
         </form>}
-        <div className="clinical-add clinical-add-med">
+        <div className="clinical-lab-mode" role="radiogroup" aria-label="检验录入方式">
+          <label><input type="radio" name="lab-entry-mode" checked={!labBatchMode} onChange={() => { setLabError(""); setLabBatch({ ...labBatch, rows: null }); }}/>单项</label>
+          <label><input type="radio" name="lab-entry-mode" checked={labBatchMode} onChange={() => { setLabError(""); setLabBatch({ ...labBatch, rows: labPanelRows(draft.labs) }); }}/>多项（一次录多项）</label>
+        </div>
+        {labBatchMode ? <div className="clinical-add clinical-lab-batch">
+          <label>检验日期（采样日，必填）<input type="date" required value={labBatch.date} onChange={e => setLabBatch({ ...labBatch, date: e.target.value })}/></label>
+          <label>检验来源（可选）<input maxLength={200} value={labBatch.source} onChange={e => setLabBatch({ ...labBatch, source: e.target.value })}/></label>
+          <table className="clinical-lab-batch-rows">
+            <thead><tr><th>项目</th><th>数值</th><th>单位</th><th>参考范围（可选）</th><th><span className="sr-only">删除</span></th></tr></thead>
+            <tbody>
+              {labBatch.rows.map((row, index) => <tr key={index}>
+                <td><input aria-label={`第 ${index + 1} 行项目`} value={row.item} onChange={e => setLabRow(index, "item", e.target.value)}/></td>
+                <td><input aria-label={`${row.item || `第 ${index + 1} 行`}数值`} inputMode="decimal" placeholder={/^血压$/.test(row.item.trim()) ? "如 148/86" : ""} value={row.value} onChange={e => setLabRow(index, "value", e.target.value)}/></td>
+                <td><input aria-label={`${row.item || `第 ${index + 1} 行`}单位`} maxLength={40} value={row.unit} onChange={e => setLabRow(index, "unit", e.target.value)}/></td>
+                <td><input aria-label={`${row.item || `第 ${index + 1} 行`}参考范围`} maxLength={200} value={row.referenceRange} onChange={e => setLabRow(index, "referenceRange", e.target.value)}/></td>
+                <td><button type="button" className="icon-button" title="删除此行" aria-label={`删除第 ${index + 1} 行`} onClick={() => setLabBatch({ ...labBatch, rows: labBatch.rows.filter((_, i) => i !== index) })}><X size={13} /></button></td>
+              </tr>)}
+            </tbody>
+          </table>
+          <small className="muted">未填数值的行不保存。</small>
+          <button type="button" className="text-button" onClick={() => setLabBatch({ ...labBatch, rows: [...labBatch.rows, emptyLabRow()] })}><Plus size={13} /> 添加一行</button>
+          <button
+            className="secondary"
+            onClick={addLabBatch}
+            disabled={!labBatch.date || !labBatch.rows.some(row => String(row.value || "").trim())}
+          >
+            <Plus size={13} /> 保存全部检验
+          </button>
+        </div> : <div className="clinical-add clinical-add-med">
           <input
             autoFocus={section === "labs"}
             value={newLab.item}
@@ -442,7 +556,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           />
           <input
             value={newLab.value}
-            placeholder="数值"
+            placeholder={/^血压$/.test(newLab.item.trim()) ? "如 148/86" : "数值"}
             aria-describedby="lab-value-help"
             aria-invalid={!!labError}
             inputMode="decimal"
@@ -471,37 +585,29 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           >
             <Plus size={13} /> 添加检验
           </button>
-        </div>
+        </div>}
       </section>}
 
       {(!section || section === 'visits') && <section>
         <h3>就诊记录 · 共 {draft.visits.length} 条</h3>
         {draft.visits.length > 8 && <p>
-          {expandedRecords.visits ? `已显示全部 ${draft.visits.length} 条，按录入顺序` : `显示最近录入 8 条 / 共 ${draft.visits.length} 条`}
+          {expandedRecords.visits ? `已显示全部 ${draft.visits.length} 条，按日期最新在前` : `显示日期最近的 8 条 / 共 ${draft.visits.length} 条`}
           <button type="button" className="text-button" aria-expanded={!!expandedRecords.visits} onClick={() => setExpandedRecords({ ...expandedRecords, visits: !expandedRecords.visits })}>
             {expandedRecords.visits ? "收起较早就诊记录" : `显示全部 ${draft.visits.length} 条就诊记录`}
           </button>
         </p>}
         <ul className="clinical-rows">
-          {draft.visits.slice(visitStart).map((v, index) => {
-            const realIndex = visitStart + index;
+          {shownVisits.map((realIndex) => {
+            const v = draft.visits[realIndex];
             return (
               <li key={`${v.date}-${realIndex}`}>
-                <span>
+                <span className="clinical-visit-text">
                   {fmtDate(v.date)} · {v.reason}
-                  {v.note ? ` · ${v.note}` : ""}
+                  {v.note ? <><br />{v.note}</> : ""}
                   {v.source && <small> · 来源：{v.source}</small>}
                 </span>
                 <button type="button" className="text-button" onClick={() => setVisitEdit({ index: realIndex, value: { ...v }, revision: detail.revision })}>更正就诊记录</button>
-                <button
-                  className="icon-button"
-                  title="移除"
-                  onClick={() =>
-                    saveVisits(draft.visits.filter((_, i) => i !== realIndex))
-                  }
-                >
-                  <X size={13} />
-                </button>
+                {removeControl("visit", realIndex, `${fmtDate(v.date)} 就诊记录`, () => saveVisits(draft.visits.filter((_, i) => i !== realIndex)))}
               </li>
             );
           })}
@@ -514,7 +620,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
         }}>
           <label>更正就诊日期<input type="date" required value={visitEdit.value.date || ''} onChange={event => setVisitEdit({ ...visitEdit, value: { ...visitEdit.value, date: event.target.value } })}/></label>
           <label>更正就诊事由<input required maxLength={200} value={visitEdit.value.reason || ''} onChange={event => setVisitEdit({ ...visitEdit, value: { ...visitEdit.value, reason: event.target.value } })}/></label>
-          <label>更正就诊备注<textarea maxLength={500} rows={3} value={visitEdit.value.note || ''} onChange={event => setVisitEdit({ ...visitEdit, value: { ...visitEdit.value, note: event.target.value } })}/></label>
+          <label>更正就诊备注<textarea maxLength={VISIT_NOTE_LIMIT} rows={6} value={visitEdit.value.note || ''} onChange={event => setVisitEdit({ ...visitEdit, value: { ...visitEdit.value, note: event.target.value } })}/></label>
           <label>更正就诊来源<input maxLength={200} value={visitEdit.value.source || ''} onChange={event => setVisitEdit({ ...visitEdit, value: { ...visitEdit.value, source: event.target.value } })}/></label>
           <button type="button" onClick={() => setVisitEdit(null)}>取消就诊更正</button><button type="submit">保存就诊更正</button>
         </form>}
@@ -527,6 +633,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
             onChange={(e) => setNewVisit({ ...newVisit, date: e.target.value })}
           />
           <input
+            autoFocus={section === "visits"}
             value={newVisit.reason}
             placeholder="就诊事由"
             aria-label="就诊事由（必填）"
@@ -535,7 +642,21 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
               setNewVisit({ ...newVisit, reason: e.target.value })
             }
           />
-          <label>就诊备注（可选）<textarea rows={3} maxLength={500} placeholder="记录本次处理、观察与后续安排" value={newVisit.note || ''} onChange={event => setNewVisit({ ...newVisit, note: event.target.value })}/></label>
+          <div className="clinical-vitals" role="group" aria-label="生命体征（可选）">
+            <span className="clinical-vitals-title">生命体征</span>
+            {VITAL_FIELDS.map(field => <label key={field.key}>{field.label}<span className="clinical-vital-input"><input inputMode="decimal" value={newVisit.vitals?.[field.key] || ""} placeholder={field.key === "sbp" ? "可填 148/86" : ""} onChange={e => setVital(field.key, e.target.value)}/><small>{field.unit}</small></span></label>)}
+            <small className="muted">选填；保存就诊时同步写入检验记录，可在检验趋势中查看。</small>
+          </div>
+          <div className="clinical-visit-mode" role="radiogroup" aria-label="就诊备注写法">
+            <label><input type="radio" name="visit-note-mode" checked={newVisit.mode !== "structured"} onChange={() => setNewVisit({ ...newVisit, mode: "free" })}/>自由书写</label>
+            <label><input type="radio" name="visit-note-mode" checked={newVisit.mode === "structured"} onChange={() => setNewVisit({ ...newVisit, mode: "structured" })}/>分项填写（主诉 / 现病史 / 查体 / 评估 / 计划）</label>
+          </div>
+          {newVisit.mode === "structured"
+            ? VISIT_SECTIONS.map(item => <label key={item.key} className="clinical-visit-section">{item.label}（可选）<textarea rows={item.rows} maxLength={VISIT_NOTE_LIMIT} value={newVisit.sections?.[item.key] || ""} onChange={event => setNewVisit({ ...newVisit, sections: { ...newVisit.sections, [item.key]: event.target.value } })}/></label>)
+            : <label>就诊备注（可选）<textarea rows={4} maxLength={VISIT_NOTE_LIMIT} placeholder="记录本次处理、观察与后续安排" value={newVisit.note || ''} onChange={event => setNewVisit({ ...newVisit, note: event.target.value })}/></label>}
+          {newVisit.mode === "structured" && newVisit.note?.trim() && <small className="muted">自由书写的内容仍保留，但本次按分项保存；切回「自由书写」可查看。</small>}
+          {visitNote.length > VISIT_NOTE_LIMIT * 0.9 && <small className="muted">备注 {visitNote.length} / {VISIT_NOTE_LIMIT} 字</small>}
+          {visitError && <p role="alert" className="error">{visitError}</p>}
           <label>就诊来源（可选）<input maxLength={200} placeholder="例如：本次复诊记录或原始资料名称" value={newVisit.source || ''} onChange={event => setNewVisit({ ...newVisit, source: event.target.value })}/></label>
           <button
             className="secondary"
@@ -561,7 +682,7 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
           <Share2 size={14} /> 脱敏分享 / 导出
         </button>
         <span className="muted">
-          状态选择与移除立即保存；新增记录和更正表单需点击相应的添加或保存按钮。未提交输入仅暂存于当前窗口，关闭或刷新前请完成保存。
+          状态选择、停用与确认删除后立即保存；新增记录和更正表单需点击相应的添加或保存按钮。未提交输入仅暂存于当前窗口，关闭或刷新前请完成保存。
         </span>
       </div>
       {casePanel && <div className="clinical-case-save">

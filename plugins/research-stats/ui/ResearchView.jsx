@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../../src/agent-runtime";
 import "../../../src/tools-clarity.css";
 import "./research-stats.css";
-import { Download, Loader2, Sigma, Upload } from "lucide-react";
+import { Download, Loader2, MessageSquareText, Sigma, Upload } from "lucide-react";
 
-// Research analysis view: pick a session CSV, run deterministic descriptive
-// stats / two-group tests / sample-size / de-identification. Results are
-// draft material — methods and assumptions are always displayed.
+// 科研统计页。主入口是一句话研究问题：交给助手从本机患者库建队列、
+// 用本地确定性代码做统计（cohort_query / cohort_compare）。CSV 上传分析
+// 作为折叠的高级入口保留：描述统计、两组检验、样本量和脱敏导出。
+// 结果都是待复核草稿，方法与假设始终显示。
 const fmt = (value) =>
   typeof value === "number" ? String(Number(value.toFixed(4))) : value == null ? "—" : String(value);
 const METHOD_LABEL = { "welch-t": "Welch t 检验", "mann-whitney": "Mann-Whitney U 检验", "chi-square": "卡方检验", "fisher-exact": "Fisher 精确检验" };
@@ -42,7 +43,124 @@ function TestResult({ result }) {
   );
 }
 
-export function ResearchView() {
+const EXAMPLES = [
+  "比较用和不用二甲双胍的 2 型糖尿病患者最近一次 HbA1c 有没有差别",
+  "高血压患者中，男性和女性最近一次 LDL-C 控制情况有没有不同",
+  "2 型糖尿病患者里，HbA1c ≥ 8% 和 < 8% 的人合并糖尿病肾病的比例有没有差别",
+];
+
+// 本机患者库概况：只有计数和常见项目名，用来判断问题能不能在本地数据上研究。
+function DataSummary({ summary, error }) {
+  if (error) return <p className="om-meta">暂时读取不到本机患者库概况：{error}</p>;
+  if (!summary) return <p className="om-meta" role="status">正在读取本机患者库概况…</p>;
+  if (!summary.patients) return <p className="om-meta">本机患者库还没有患者档案（不含已归档）。可先在「患者」中导入档案，或在下方上传 CSV 自行分析。</p>;
+  const c = summary.coverage || {};
+  const names = (list) => list.map((item) => `${item.name}${item.units?.length ? `（${item.units.join("/")}）` : ""} ${item.patients} 人`).join("、");
+  return (
+    <div className="research-data-summary om-meta">
+      <p>
+        本机患者库：<b>{summary.patients}</b> 位患者（不含已归档）；有诊断记录 {c.diagnoses?.patients ?? 0} 位，用药记录 {c.medications?.patients ?? 0} 位，检验记录 {c.labs?.patients ?? 0} 位，记录出生年份 {summary.ageKnown} 位。
+      </p>
+      {(summary.topDiagnoses?.length > 0 || summary.topLabs?.length > 0) && (
+        <details>
+          <summary>常见诊断、检验与用药</summary>
+          {summary.topDiagnoses?.length > 0 && <p>诊断：{names(summary.topDiagnoses)}</p>}
+          {summary.topLabs?.length > 0 && <p>检验：{names(summary.topLabs)}</p>}
+          {summary.topMedications?.length > 0 && <p>用药：{names(summary.topMedications)}</p>}
+        </details>
+      )}
+    </div>
+  );
+}
+
+function QuestionEntry({ config, onOpenTask, onSettings }) {
+  const [question, setQuestion] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const modelReady = Boolean(config?.modelConfigured);
+  useEffect(() => {
+    let alive = true;
+    api("/api/research/dictionary-summary")
+      .then((value) => alive && setSummary(value))
+      .catch((err) => alive && setSummaryError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const submit = async (event) => {
+    event.preventDefault();
+    const text = question.trim();
+    if (!text || busy) return;
+    if (!modelReady) {
+      setError("需先连接模型：把研究问题翻译成分组条件需要模型；统计本身在本机计算。问题已保留，可在 设置 → 模型与运行 中连接模型。");
+      return;
+    }
+    if (!onOpenTask) {
+      setError("当前页面无法打开任务，请从工作台提问。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const task = await api("/api/sessions", "POST", { title: `科研统计 · ${text.slice(0, 40)}` });
+      // 医生的问题原样作为提问；数据来源说明作为附带上下文。
+      await onOpenTask(task.id, {
+        submit: true,
+        draft: text,
+        context: { kind: "research-stats-question", label: "科研统计 · 本机患者库", scope: {} },
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="tool-section research-question">
+      <div className="tool-section-head">
+        <div>
+          <h2><MessageSquareText size={16} /> 想研究什么问题？</h2>
+          <p>用一句话描述人群、比较的组和关心的指标。助手会先确认口径，从本机患者库建立各组队列，统计由本机确定性计算；缺资料的患者单独列出，不当作阴性。</p>
+        </div>
+      </div>
+      <DataSummary summary={summary} error={summaryError} />
+      <form onSubmit={submit} className="research-question-form">
+        <textarea
+          rows={3}
+          value={question}
+          aria-label="研究问题"
+          placeholder="例如：比较用和不用二甲双胍的 2 型糖尿病患者最近一次 HbA1c 有没有差别"
+          onChange={(e) => setQuestion(e.target.value)}
+          disabled={busy}
+        />
+        <div className="research-examples" role="group" aria-label="示例问题">
+          {EXAMPLES.map((text) => (
+            <button type="button" key={text} className="secondary" disabled={busy} onClick={() => setQuestion(text)}>
+              {text}
+            </button>
+          ))}
+        </div>
+        <div className="research-import">
+          <button className="primary" type="submit" disabled={busy || !question.trim()} title={modelReady ? undefined : "需先连接模型"}>
+            {busy ? <Loader2 className="spin" size={14} /> : null}
+            交给助手分析
+          </button>
+          {!modelReady && (
+            <span className="om-meta">
+              未连接模型。{onSettings && <button type="button" className="text-button" onClick={onSettings}>去连接模型</button>}
+            </span>
+          )}
+        </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </form>
+      <p className="om-source">结果是探索性、相关性的待复核草稿：会注明各组人数、缺失原因、检验方法、p 值与 95% 置信区间，以及混杂和多重比较的提示。</p>
+    </section>
+  );
+}
+
+export function ResearchView({ config, onOpenTask, onSettings }) {
   const selectionGeneration = useRef(0);
   const uploadRef = useRef(null);
   const uploadSession = useRef(null);
@@ -61,6 +179,7 @@ export function ResearchView() {
   const [size, setSize] = useState({ design: "means", delta: "", sd: "", p1: "", p2: "", alpha: 0.05, power: 0.8 });
   const [sizeResult, setSizeResult] = useState(null);
   const [deidColumns, setDeidColumns] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     api("/api/sessions")
@@ -196,10 +315,13 @@ export function ResearchView() {
       <section className="module-card research-view">
         <div className="module-head">
           <div>
-            <h1>科研统计 · 数据分析</h1>
-            <p className="module-phase">支持 CSV 数据：描述统计、组间比较、样本量估算与脱敏导出，均在本机计算。</p>
+            <h1>科研统计</h1>
+            <p className="module-phase">用一句话提出研究问题，助手从本机患者库建立队列并做统计；也可以上传 CSV 自行分析。统计均在本机计算。</p>
           </div>
         </div>
+        <QuestionEntry config={config} onOpenTask={onOpenTask} onSettings={onSettings} />
+        <details className="om-disclosure research-advanced" open={advancedOpen} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}>
+        <summary>上传 CSV 自行分析（高级）：描述统计、组间比较、样本量估算、脱敏导出</summary>
         {error && (
           <p className="form-error" role="alert">
             {error}
@@ -402,6 +524,7 @@ export function ResearchView() {
           统计在本地确定性完成（Welch t / Mann-Whitney / 卡方 / Fisher 精确检验，均给出 p
           值与方法学提示）。结果为待复核草稿，请在解读前核对数据质量与假设。
         </p>
+        </details>
       </section>
     </div>
   );

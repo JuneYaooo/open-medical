@@ -45,7 +45,7 @@ test("文献研究", async ({ page }) => {
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.getByLabel("文献检索主题")).toBeVisible();
+  await expect(page.getByLabel("想研究什么问题？")).toBeVisible();
 
   await capture(page, "10-literature.png", {
     scroll: ".module-view",
@@ -55,20 +55,9 @@ test("文献研究", async ({ page }) => {
 test("科研统计", async ({ page }) => {
   await open(page, "/?view=data-analysis");
   await expect(
-    page.getByRole("heading", { name: "科研统计 · 数据分析", exact: true }),
+    page.getByRole("heading", { name: "科研统计", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "使用示例数据", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel("选择数据所在任务")).toBeVisible();
-  await expect(
-    page
-      .getByLabel("选择数据所在任务")
-      .locator("option", { hasText: "示例·科研数据与文件练习" }),
-  ).toHaveCount(1);
-  await expect(
-    page.getByRole("heading", { name: /描述统计/ }),
-  ).toBeVisible();
+  await expect(page.getByLabel("研究问题")).toBeVisible();
 
   await capture(page, "11-research-stats.png", {
     scroll: ".module-view",
@@ -299,13 +288,13 @@ test("设置 工具与服务", async ({ page }) => {
   });
 });
 
-test("设置 消息渠道 飞书知识库机器人", async ({ page }) => {
+test("设置 消息渠道 飞书分身", async ({ page }) => {
   await open(page, "/?view=settings&settingsTab=knowledge-bot");
   await expect(
     page.getByRole("heading", { name: "设置", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "飞书知识库机器人", exact: true }),
+    page.getByRole("heading", { name: "飞书分身", exact: true }),
   ).toBeVisible();
   await expect(
     page

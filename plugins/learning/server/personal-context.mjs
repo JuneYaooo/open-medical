@@ -10,8 +10,9 @@ export const LEARNING_DEFAULTS = {
   similarCards: true,
   pilot: false,
   holdoutRate: 0.2,
-  // 新患者/新会话的 AI 外发默认：false=默认询问（逐次勾选），true=默认允许。
-  defaultExternalConsent: false,
+  // 全局「允许 AI 功能使用患者资料」：默认允许（连接模型时已授权一次），
+  // 医生显式关闭（存储为 false）后各 AI 功能恢复逐次询问。
+  defaultExternalConsent: true,
 };
 export function learningPrefs(db) {
   return {

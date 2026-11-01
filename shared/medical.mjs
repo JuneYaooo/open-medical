@@ -78,7 +78,7 @@ export function artifactTitle(artifact) {
 export function artifactLines(artifact) {
   if (!artifact) return [];
   if (artifact.type === "similar_cases") return [artifact.summary,
-    ...(artifact.cases || []).flatMap(c => [c.title, c.scope, `相同点／检索关联：${c.reason}`, `差异与未知：${c.differences}`, c.url || "本地记录", ...(c.curatedSources || []).flatMap(source => [
+    ...(artifact.cases || []).flatMap(c => [c.title, ...(c.sourceLabel ? [`来源：${c.sourceLabel}`] : []), c.scope, `相同点／检索关联：${c.reason}`, `差异与未知：${c.differences}`, c.url || "本地记录", ...(c.curatedSources || []).flatMap(source => [
       `精选经验历史快照：${source.caseId} · 版本 ${source.revision ?? 0} · 保存时间 ${source.capturedAt}`,
       source.lessons && `当时的经验：${source.lessons}`, source.summary && `快照摘要：${source.summary}`,
       source.outcome && `快照结局：${source.outcome}`, source.tags?.length && `标签：${source.tags.join("、")}`,

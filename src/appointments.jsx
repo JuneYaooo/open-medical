@@ -9,6 +9,14 @@ const STATUS = { scheduled: "已预约", attended: "已到诊", missed: "未到�
 const appointmentFields = { date: "日期", time: "时间", reason: "复诊事项", place: "地点", status: "预约状态" };
 const snapshot = value => Object.fromEntries(Object.keys(appointmentFields).map(key => [key, value[key] || ""]));
 const localToday = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+// 预约日期快捷选项：从今天起算（月末顺延到下月初由 Date 处理）。
+const DATE_CHIPS = [["+2周", 14, 0], ["+1月", 0, 1], ["+3月", 0, 3]];
+const shiftDate = (from, days, months) => {
+  const [y, m, d] = from.split("-").map(Number);
+  const next = new Date(y, m - 1 + months, d + days);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`;
+};
 
 // Return-visit appointments; the day before and the day itself show up in 今日待办.
 export function AppointmentsPanel({ patient }) {
@@ -53,7 +61,7 @@ export function AppointmentsPanel({ patient }) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(""); setNotice("");
-    try { await fn(); setNotice(message); if (closeForm) setForm(null); await load(); } catch (e) { setError(e.message); } finally { inFlight.current = false; setBusy(false); }
+    try { await fn(); setNotice(message); if (closeForm) setForm(null); await load(); return true; } catch (e) { setError(e.message); return false; } finally { inFlight.current = false; setBusy(false); }
   };
   const today = data?.today || localToday();
   const upcoming = (data?.appointments || []).filter((a) => a.status === "scheduled");
@@ -63,6 +71,9 @@ export function AppointmentsPanel({ patient }) {
       text: `您好，提醒您 ${a.date}${a.time ? ` ${a.time}` : ""} 复诊${a.place ? `（${a.place}）` : ""}${a.reason ? `，主要是${a.reason}` : ""}。如需改期请提前告诉我们。` });
     openDraft(reply);
   }, "已生成复诊提醒草稿，请在下方核对；尚未发送。");
+  // 新预约默认沿用这位患者最近一次预约的地点（从预约记录里取，不另存）。
+  const lastPlace = [...(data?.appointments || [])].reverse().find((a) => a.place)?.place || "";
+  const book = (from = {}) => setForm({ date: "", time: "", reason: from.reason || "", place: from.place || lastPlace, requestId: requestId() });
   const update = (a, changes, message) => act(() => {
     const key = JSON.stringify([a.id, a.revision || 0, changes]);
     if (!updateRequests.current.has(key)) updateRequests.current.set(key, crypto.randomUUID());
@@ -98,13 +109,14 @@ export function AppointmentsPanel({ patient }) {
 
   return <section className="detail-panel appointments" aria-label="复诊预约">
     <header className="care-tracking-header"><div><h3>复诊预约</h3><p className="muted">前一天和当天会进入今日待办，到期未登记结果会提醒；不会自动通知患者。</p></div>
-      <div className="care-tracking-actions"><button className="text-button" disabled={busy || loading} onClick={loadAppointments} aria-label="刷新预约" title="刷新"><RotateCw size={15} /></button><button className="primary" disabled={patient.archived || busy || Boolean(form)} onClick={() => setForm({ date: "", time: "", reason: "", place: "", requestId: requestId() })}><CalendarPlus size={14} /> 预约复诊</button></div></header>
+      <div className="care-tracking-actions"><button className="text-button" disabled={busy || loading} onClick={loadAppointments} aria-label="刷新预约" title="刷新"><RotateCw size={15} /></button><button className="primary" disabled={patient.archived || busy || Boolean(form)} onClick={() => book()}><CalendarPlus size={14} /> 预约复诊</button></div></header>
     {error && <p className="error-text" role="alert">{error}</p>}{notice && <p className="notice" role="status">{notice}</p>}
     {loadError && <p className="error-text" role="alert">{loadError}<button className="text-button" disabled={loading} onClick={loadAppointments}>重试读取预约</button></p>}
     {form && <form className="appointment-form" onSubmit={saveForm}>
       <p className="muted">请先保存或取消本次编辑，再处理其他预约。</p>
       <fieldset disabled={busy || patient.archived}>
       <label>日期<input type="date" required min={form.id ? undefined : today} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
+      <div className="appointment-date-chips" role="group" aria-label="快捷日期" style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>{DATE_CHIPS.map(([label, days, months]) => { const value = shiftDate(today, days, months); return <button key={label} type="button" className="text-button" aria-pressed={form.date === value} onClick={() => setForm({ ...form, date: value })}>{label}</button>; })}</div>
       <label>时间（可选）<input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
       <label>复诊事项<input value={form.reason} maxLength={200} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="如：术后一月复查、调整降压药" /></label>
       <label>地点（可选）<input value={form.place} maxLength={100} onChange={(e) => setForm({ ...form, place: e.target.value })} placeholder="如：周三上午专家门诊" /></label>
@@ -127,15 +139,15 @@ export function AppointmentsPanel({ patient }) {
         <div className="care-tracking-title"><span className="pill">{due === "past" ? "待登记结果" : due === "today" ? "今天" : STATUS[a.status]}</span><b>{a.date}{a.time ? ` ${a.time}` : ""}</b>{a.place && <small>{a.place}</small>}</div>
         {a.reason && <h4>{a.reason}</h4>}
         <div className="toolbar-actions">
-          {a.date <= today && <><button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={() => update(a, { status: "attended" }, "已登记到诊。")}>已到诊</button>
-            <button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={() => update(a, { status: "missed" }, "已登记未到诊，可以重新预约。")}>未到诊</button></>}
+          {a.date <= today && <><button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={async () => { if (await update(a, { status: "attended" }, "已登记到诊。请选好下次复诊日期后保存；不需要可点取消。")) book(a); }}>已到诊</button>
+            <button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={() => update(a, { status: "missed" }, "已登记未到诊，可在下方「历史预约」里点「重新预约」。")}>未到诊</button></>}
           {followupActive && a.date >= today && <button className="text-button" disabled={busy || patient.archived || Boolean(form)} onClick={() => draftReminder(a)}>起草提醒消息</button>}
           <button className="text-button" disabled={busy || patient.archived || Boolean(form)} onClick={() => edit(a)}>改期或更正</button>
           <button className="text-button" disabled={busy || patient.archived || Boolean(form)} onClick={() => { if (window.confirm(`取消 ${a.date} 的复诊预约？`)) update(a, { status: "cancelled" }, "已取消预约。"); }}>取消预约</button>
         </div>{history(a)}
       </article>;
     })}
-    {past.length > 0 && <details><summary>历史预约 · {past.length}</summary>{past.map((a) => <article key={a.id} className="care-tracking-card"><p>{a.date} {a.time} · {STATUS[a.status]} · {a.place || "地点未记录"} · {a.reason}{a.note ? ` · ${a.note}` : ""}</p><button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={() => edit(a)}>更正预约结果</button>{history(a)}</article>)}</details>}
+    {past.length > 0 && <details><summary>历史预约 · {past.length}</summary>{past.map((a) => <article key={a.id} className="care-tracking-card"><p>{a.date} {a.time} · {STATUS[a.status]} · {a.place || "地点未记录"} · {a.reason}{a.note ? ` · ${a.note}` : ""}</p>{a.status === "missed" && <button className="primary" disabled={busy || patient.archived || Boolean(form)} onClick={() => book(a)}>重新预约</button>}<button className="secondary" disabled={busy || patient.archived || Boolean(form)} onClick={() => edit(a)}>更正预约结果</button>{history(a)}</article>)}</details>}
     {followupActive && draftsError && <p className="error-text" role="alert">{draftsError}<button className="text-button" onClick={loadDrafts}>重试读取提醒草稿</button></p>}
     {followupActive && drafts.length > 0 && <details open={Boolean(draft)}><summary>待核对消息草稿 · {drafts.length}</summary>{drafts.map(reply => <p key={reply.id}>{reply.text}<button className="text-button" onClick={() => openDraft(reply)}>核对此草稿</button></p>)}</details>}
     {followupActive && draft && <form className="appointment-draft" aria-label="核对提醒草稿" onSubmit={e => { e.preventDefault(); act(async () => { const saved = await api(`/api/care/replies/${draft.id}`, "PUT", { text: draftText }); openDraft(saved); }, "草稿修改已保存，尚未发送。"); }}><h4>核对提醒草稿 · {patient.name}</h4><p className="muted">请核对预约日期、时间与地点；改期后需同步核对先前草稿。尚未发送</p><label>提醒草稿内容<textarea rows={4} required maxLength={2000} value={draftText} onChange={e => setDraftText(e.target.value)} /></label><div className="toolbar-actions"><button className="primary" disabled={busy || patient.archived}>保存草稿修改</button><button type="button" className="secondary" onClick={() => setDraft(null)}>返回预约</button></div></form>}
@@ -146,7 +158,7 @@ export function AppointmentsPanel({ patient }) {
 // Lab values added since the doctor last marked them read.
 export function NewLabsNotice({ patientId, onOpenLabs }) {
   const [labs, setLabs] = useState(null), [keys, setKeys] = useState([]), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true), [expanded, setExpanded] = useState(false);
   const generation = useRef(0), active = useRef(true);
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -163,15 +175,15 @@ export function NewLabsNotice({ patientId, onOpenLabs }) {
   useEffect(() => { active.current = true; load(); return () => { active.current = false; generation.current++; }; }, [load]);
   if (!loading && !error && !labs?.length) return null;
   return <div className="new-labs" role="status" aria-label="待阅检验结果" aria-busy={loading || busy}>
-    <div><b>{labs?.length ? `待阅检验结果 ${labs.length} 项` : loading ? "正在读取待阅检验…" : "待阅检验状态未读取"}</b>{labs?.length > 0 && <span>{labs.slice(0, 6).map((l) => `${l.item} ${l.value}${l.unit || ""}（${l.date}）`).join("、")}{labs.length > 6 ? " 等" : ""}</span>}</div>
+    <div><b>{labs?.length ? `待阅检验结果 ${labs.length} 项` : loading ? "正在读取待阅检验…" : "待阅检验状态未读取"}</b>{labs?.length > 0 && <span>{(expanded ? labs : labs.slice(0, 6)).map((l) => `${l.item} ${l.value}${l.unit || ""}（${l.date}）`).join("、")}{labs.length > 6 && <button className="text-button" onClick={() => setExpanded(!expanded)}>{expanded ? "收起" : `另 ${labs.length - 6} 项`}</button>}</span>}</div>
     {onOpenLabs && <button className="text-button" onClick={onOpenLabs}>看趋势</button>}
     {labs?.length > 0 && <button className="secondary" disabled={busy || loading || Boolean(error) || !keys.length} onClick={async () => {
       if (busy) return;
       setBusy(true); setError("");
-      try { await api(`/api/patients/${patientId}/labs/reviewed`, "POST", { keys: keys.slice(0, 6) }); if (active.current) await load(); }
+      try { await api(`/api/patients/${patientId}/labs/reviewed`, "POST", { keys }); if (active.current) await load(); }
       catch (err) { if (active.current) setError(`标记已阅未确认，请重新读取后核对：${err.message}`); }
       finally { if (active.current) setBusy(false); }
-    }}>{labs.length > 6 ? "标记以上 6 项已阅" : "标记已阅"}</button>}
+    }}>{labs.length > 1 ? `${labs.length} 项全部标记已阅` : "标记已阅"}</button>}
     {error && <p className="error-text" role="alert">{error}<button className="text-button" disabled={loading || busy} onClick={load}>重试读取待阅检验</button></p>}
   </div>;
 }

@@ -1,0 +1,104 @@
+/* 临床记录编辑：删除确认、停用、生命体征与分项就诊备注 */
+.clinical-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger, #b2453d);
+  white-space: nowrap;
+}
+.clinical-confirm button {
+  padding: 2px 8px;
+  font-size: inherit;
+}
+.clinical-confirm button.danger {
+  color: #fff;
+  background: var(--danger, #b2453d);
+  border-color: var(--danger, #b2453d);
+}
+.clinical-visit-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.clinical-add .clinical-vitals {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.clinical-vitals-title {
+  font-weight: 600;
+  align-self: center;
+}
+.clinical-vitals label {
+  display: grid;
+  gap: 2px;
+}
+.clinical-vital-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.clinical-add.clinical-add-med .clinical-vital-input input {
+  width: 84px;
+}
+.clinical-vitals > small {
+  flex: 1 1 100%;
+}
+.clinical-visit-mode {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.clinical-visit-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.clinical-add.clinical-add-med .clinical-visit-mode input {
+  width: auto;
+}
+.clinical-add .clinical-visit-section {
+  flex: 1 1 100%;
+  display: grid;
+  gap: 2px;
+}
+.clinical-allergy-warning {
+  flex: 1 1 100%;
+  margin: 0;
+}
+/* 检验录入：单项 / 多项切换与多项表格 */
+.clinical-lab-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 4px;
+}
+.clinical-lab-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.clinical-lab-batch-rows {
+  flex: 1 1 100%;
+  border-collapse: collapse;
+}
+.clinical-lab-batch-rows th {
+  text-align: left;
+  font-weight: 500;
+  padding: 2px 4px;
+}
+.clinical-lab-batch-rows td {
+  padding: 2px 4px;
+}
+.clinical-lab-batch-rows input {
+  width: 100%;
+  min-width: 0;
+}
+.clinical-lab-batch > small {
+  flex: 1 1 100%;
+}

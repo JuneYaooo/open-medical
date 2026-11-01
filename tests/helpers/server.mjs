@@ -66,6 +66,8 @@ export async function startTestServer({
     server = createServer({
       database: databasePath,
       provider,
+      // 测试不访问内置脱敏服务；需要时由用例注入自己的假 worker。
+      privacyBuiltinService: null,
       ...serverOptions,
     });
     await new Promise((resolve, reject) => {

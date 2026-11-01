@@ -41,6 +41,7 @@ const env = {
   MEDICAL_DATABASE: join(dataDir, "medical.sqlite"),
   TMPDIR: tempDir,
   MEDICAL_TEST_TMP: tempDir,
+  MEDICAL_PRIVACY_SERVICE_URL: "off",
   // Only the hello fixture is enabled by default; the bad fixtures stay
   // excluded. Opt-in connected runs add the fake channel adapter so followup
   // activates without a real WeChat/WeCom account.

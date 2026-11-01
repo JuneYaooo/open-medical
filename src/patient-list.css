@@ -37,8 +37,20 @@
   font-size: var(--meta-size, 14px);
   line-height: 1.55;
 }
-.medical-shell .patient-table .patient-table-head + .patient-card { border-top: 0; }
+/* 行 = 勾选框 + 原有患者行按钮 */
+.patient-table .patient-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); border-top: 1px solid var(--line); }
+.patient-table .patient-row-head { border-top: 0; background: var(--soft, #f0f4f2); border-bottom: 1px solid var(--border); }
+.patient-table .patient-row-head + .patient-row { border-top: 0; }
+.patient-table .patient-row.is-selected { background: var(--accent-soft); }
+.patient-table .patient-select { display: flex; align-items: flex-start; justify-content: center; padding: 16px 0 0 14px; cursor: pointer; }
+.patient-table .patient-row-head .patient-select { padding-top: 11px; }
+.patient-table .patient-select input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.medical-shell .patient-table .patient-row .patient-card { border-top: 0; padding-left: 10px; }
+.patient-table .patient-row-head .patient-table-head { padding-left: 10px; border-bottom: 0; }
 .medical-shell .patient-table .patient-card:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--line); }
+/* 批量操作栏：选中患者后出现，滚动时吸顶 */
+.medical-shell .patient-bulk-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 8px 12px; background: var(--card, #fff); border: 1px solid var(--accent); border-radius: var(--card-radius, 10px); font-size: var(--meta-size, 14px); }
+.medical-shell .patient-bulk-bar input { flex: 0 1 200px; min-height: 36px; font-size: var(--meta-size, 14px); }
 .medical-shell .patient-table .patient-line { display: grid; gap: 3px; justify-items: start; min-width: 0; }
 .medical-shell .patient-table .patient-line b { font-size: var(--body-size, 16px); font-weight: 650; line-height: 1.4; }
 .medical-shell .patient-table .patient-line small,
@@ -66,3 +78,9 @@
 .medical-shell .patients-filter .search input { min-height: 40px; font-size: var(--meta-size, 14px); }
 .medical-shell .patients-filter select { min-height: 42px; font-size: var(--meta-size, 14px); padding: 6px 10px; }
 .medical-shell .patients-filter .chip { min-height: 36px; padding: 4px 14px; font-size: var(--meta-size, 14px); }
+/* 摘要中的快捷筛选：今日复诊 / 有异常检验 */
+.patients-view .patient-list-summary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.medical-shell .patients-view .patient-list-summary .summary-chip { min-height: 28px; padding: 2px 10px; font-size: var(--small-size, 13px); }
+.medical-shell .patients-view .patient-list-summary .summary-chip.active { font-weight: 600; }
+.delete-patient .notice { margin: 0; }
+.patients-view input[type="checkbox"] { accent-color: var(--accent, #2f6b4f); }

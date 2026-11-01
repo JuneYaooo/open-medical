@@ -393,7 +393,7 @@ export function PatientOverview({
               )}
             </div>
             <footer className="om-card-foot">
-              <MoreLink onClick={() => onNavigate("medications")}>治疗与预后</MoreLink>
+              <MoreLink onClick={() => onNavigate("medications")}>用药与治疗</MoreLink>
             </footer>
           </section>
           <Slot name="patient.overviewCards" patient={patient} />

@@ -91,8 +91,13 @@ export class SessionBridge {
   privacyReady(file) {
     return file.privacy?.status === "ready" && file.privacy.textHash === materialTextHash(file.text);
   }
+  // 公开资料（如 PubMed 摘要）不是患者资料，不做脱敏。只有服务端内部调用
+  // addMaterial(..., { publicSource: true }) 才能打这个标记。
+  privacyExempt(file) {
+    return file?.publicSource === true;
+  }
   modelText(sessionId, file) {
-    if (!this.privacy?.enabled() || this.privacyReady(file)) return file.text;
+    if (!this.privacy?.enabled() || this.privacyExempt(file) || this.privacyReady(file)) return file.text;
     // 尚未识别的图片材料只有索引说明，没有病历内容。
     if (file.extraction?.type === "image" && file.extraction?.ocr?.status !== "ready") return this.privacy.rules(file.text, this.sessionIdentities(sessionId)).text;
     this.protectMaterial(sessionId, file.id);
@@ -101,7 +106,7 @@ export class SessionBridge {
     return this.privacy.rules(file.text, this.sessionIdentities(sessionId)).text;
   }
   modelName(sessionId, file) {
-    if (!this.privacy?.enabled() || this.privacyReady(file)) return file.name;
+    if (!this.privacy?.enabled() || this.privacyExempt(file) || this.privacyReady(file)) return file.name;
     return this.privacy.rules(file.name, this.sessionIdentities(sessionId)).text;
   }
   sessionIdentities(sessionId) {
@@ -154,7 +159,7 @@ export class SessionBridge {
     if (this.privacyJobs.has(key)) return this.privacyJobs.get(key);
     const job = (async () => {
       const file = (this.workspace(sessionId).materials || []).find((item) => item.id === fileId);
-      if (!file) return null;
+      if (!file || this.privacyExempt(file)) return file || null;
       if (!force && this.privacyReady(file) && file.privacy.method === "service") return file;
       if (file.extraction?.type === "image" && file.extraction?.ocr?.status !== "ready") return file; // 等识别时一起打码
       const sourceHash = materialTextHash(file.text);
@@ -200,6 +205,7 @@ export class SessionBridge {
     for (const w of this.service.store.list?.() || []) {
       if (!sessionKind(w)) continue;
       for (const file of w.materials || []) {
+        if (this.privacyExempt(file)) continue;
         const done = this.privacyReady(file) && file.privacy.method === "service";
         if (onlyMissing && done) continue;
         jobs.push({ id: w.id, fileId: file.id });
@@ -416,7 +422,7 @@ export class SessionBridge {
   }
 
   // ---------- 材料（session.files 的内核等价物） ----------
-  addMaterial(id, input) {
+  addMaterial(id, input, { publicSource = false } = {}) {
     this.requireSessionWorkspace(id);
     check(
       !this.service.active.has(id),
@@ -511,6 +517,7 @@ export class SessionBridge {
       createdAt: iso(),
       size: Buffer.byteLength(text),
       ...(extraction ? { extraction } : {}),
+      ...(publicSource ? { publicSource: true } : {}),
       ...materialSuggestions(name, text),
     };
     this.service.store.update(id, (current) => {
@@ -1555,7 +1562,7 @@ export class SessionBridge {
       const pageImages = file.extraction.pageImages.map((p) => ({ page: p.page, data: this.service.artifacts.read(sourceId, p.artifactId).data.toString("base64") }));
       const text = (file.extraction.originalText || file.text).replace(/\n\[PDF 第 \d+ 页扫描图\] artifactId:.*$/gm, "");
       copied = this.addMaterial(targetId, { ...file, text, pageImages });
-    } else return this.addMaterial(targetId, file);
+    } else return this.addMaterial(targetId, file, { publicSource: this.privacyExempt(file) });
     if (file.extraction.ocr?.status === "ready") {
       this.service.store.update(targetId, workspace => {
         const target = workspace.materials.find(item => item.id === copied.id);

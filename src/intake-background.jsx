@@ -7,7 +7,9 @@ export const intakeUploads = new Map();
 export function IntakeBackground({ onOpen }) {
   const [summary, setSummary] = useState(null);
   useEffect(() => {
-    let alive=true, fetching=false;
+    // 有建档任务在跑时 1.5 秒刷新一次，其余时间 8 秒，避免空闲时频繁请求。
+    let alive=true, fetching=false, timer=null, busy=intakeUploads.size>0;
+    const schedule=()=>{ if(alive) timer=setTimeout(refresh, busy || intakeUploads.size ? 1500 : 8000); };
     const refresh=async()=>{
       if(fetching) return;
       fetching=true;
@@ -20,12 +22,13 @@ export function IntakeBackground({ onOpen }) {
         const drafts=tasks.filter(s=>draftIds.has(s.id) && s.intake.job?.status!=='running').length;
         const failed=tasks.filter(s=>!draftIds.has(s.id) && !intakeUploads.has(s.id) && (['failed','interrupted'].includes(s.intake.job?.status) || (!s.intake.job && (s.intake.issueCount || ['failed','cancelled','interrupted'].includes(s.lastRunStatus))))).length;
         const needsInput=tasks.filter(s=>s.intake.job?.status==='needs_input').length;
+        busy=running>0;
         if(alive) setSummary(running || drafts || failed || needsInput ? {running,drafts,failed,needsInput} : null);
       } catch { /* Preserve the last known task indicator during a transient disconnect. */ }
-      finally {fetching=false;}
+      finally {fetching=false;schedule();}
     };
-    refresh();const timer=setInterval(refresh,1500);
-    return ()=>{alive=false;clearInterval(timer);};
+    refresh();
+    return ()=>{alive=false;clearTimeout(timer);};
   },[]);
   if(!summary) return null;
   return <aside aria-label="后台建档状态" className="intake-background-status">

@@ -197,3 +197,12 @@
 .patient-overview .ov-visit-list time {
   white-space: nowrap;
 }
+.patient-overview .ov-visit-list p {
+  white-space: pre-line;
+}
+.patient-overview .ov-visit-list li p {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

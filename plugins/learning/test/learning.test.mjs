@@ -65,3 +65,18 @@ test("learning 插件拥有学习设置、习惯与自动化；停用后一起�
   assert.equal(enabled.status, 200);
   assert.equal((await app.request("/api/learning/settings")).status, 200);
 });
+
+test("全局 AI 授权默认允许；医生显式关闭后保持关闭", async (t) => {
+  const app = await startTestServer({
+    provider: createScriptedProvider([]),
+    serverOptions: { pluginDirs: [PRODUCTION_PLUGINS] },
+  });
+  t.after(() => app.close());
+
+  const initial = await app.request("/api/learning/settings");
+  assert.equal(initial.body.defaultExternalConsent, true);
+  const off = await app.request("/api/learning/settings", { method: "PUT", body: { defaultExternalConsent: false } });
+  assert.equal(off.status, 200);
+  assert.equal(off.body.defaultExternalConsent, false);
+  assert.equal((await app.request("/api/learning/settings")).body.defaultExternalConsent, false);
+});

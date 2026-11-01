@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePluginConnected } from "./plugin-slots";
 import { Activity, ArrowRight, CalendarClock, FolderOpen, Inbox, Search, Stethoscope, UserPlus } from "lucide-react";
+import { patientIdentityLabel, patientQuickMatch, recentPatientIds, rememberRecentPatient } from "./patient-labels";
 
-// 命令面板（Cmd/Ctrl+K）：患者快速检索（姓名 / 编号 / 姓氏拼音首字母）
+// 命令面板（Cmd/Ctrl+K）：患者快速检索（姓名 / 编号 / 拼音首字母 / 电话后四位）
 // 与常用导航。门诊场景下医生不该为找一位患者多点三次。
-// 拼音首字母只覆盖常见姓氏：完整拼音转换需要引入分词库，先解决
-// 「张医生输入 z 就能找到张三」这类最高频路径。
-const SURNAME_INITIAL = "白b蔡c曹c岑c崔c戴d邓d丁d董d窦d杜d段d樊f范f方f冯f符f傅f高g葛g龚g顾g郭g韩h何h贺h洪h侯h胡h华h黄h姬j吉j贾j江j姜j蒋j金j康k孔k雷l黎l李l廉l林l凌l刘l柳l龙l卢l鲁l陆l罗l骆l马m毛m孟m莫m倪n聂n欧o潘p彭p皮p蒲p齐q钱q秦q邱q裘q屈q邵b沈s施s石s史s舒s宋s苏s孙s谭t唐t陶t田t童t万w汪w王w韦w魏w温w吴w伍w武w席x夏x肖x谢x邢x徐x许x薛x严y颜y杨y姚y叶y易y殷y于y余y俞y虞y袁y岳y曾z詹z张z赵z郑z钟z周z朱z祝z邹z";
-const surnameMap = new Map();
-for (let i = 0; i < SURNAME_INITIAL.length - 1; i += 2)
-  if (!surnameMap.has(SURNAME_INITIAL[i])) surnameMap.set(SURNAME_INITIAL[i], SURNAME_INITIAL[i + 1]);
-const surnameInitials = name => surnameMap.get(String(name || "").trim().charAt(0)) || "";
+// 拼音首字母见 pinyin-initials.js：输入「zs」可找到张三；手机号可输后四位。
+// 空查询时列出最近打开的患者（最多 5 位）。
+const patientResult = (p) => ({ kind: "patient", id: p.id, label: p.name, hint: [patientIdentityLabel(p), p.groups?.length ? p.groups.join("、") : ""].filter(Boolean).join(" · "), patient: p });
 
 const COMMANDS = (medical, followupActive) => [
   { id: "home", label: "新建任务", hint: "回到任务入口", icon: UserPlus, run: "home" },
@@ -39,16 +36,13 @@ export function CommandPalette({ open, onClose, patients, medical, onOpenPatient
     const commands = COMMANDS(medical, followupActive)
       .filter(c => !q || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q))
       .map(c => ({ kind: "command", ...c }));
-    if (!q) return commands;
-    const matches = patients
-      .filter(p => {
-        const name = String(p.name || ""), number = String(p.patientNumber || "").toLowerCase();
-        return name.toLowerCase().includes(q) || number.includes(q) || surnameInitials(name) === q.charAt(0) && q.length <= 2 && name.includes(q.slice(1));
-      })
-      .slice(0, 7)
-      .map(p => ({ kind: "patient", id: p.id, label: p.name, hint: `${p.patientNumber || p.id.slice(0, 8)}${p.birthYear ? ` · ${new Date().getFullYear() - p.birthYear} 岁` : ""}${p.groups?.length ? ` · ${p.groups.join("、")}` : ""}`, patient: p }));
+    if (!q) {
+      const recent = recentPatientIds().map((id) => patients.find((p) => p.id === id)).filter(Boolean).map(patientResult);
+      return [...recent, ...commands];
+    }
+    const matches = patients.filter((p) => patientQuickMatch(p, q)).slice(0, 7).map(patientResult);
     return [...matches, ...commands];
-  }, [query, patients, medical, followupActive]);
+  }, [query, patients, medical, followupActive, open]);
 
   useEffect(() => { setCursor(0); }, [query]);
   useEffect(() => {
@@ -59,7 +53,7 @@ export function CommandPalette({ open, onClose, patients, medical, onOpenPatient
   if (!open) return null;
   const pick = item => {
     onClose();
-    if (item.kind === "patient") onOpenPatient(item.patient);
+    if (item.kind === "patient") { rememberRecentPatient(item.patient.id); onOpenPatient(item.patient); }
     else if (item.run === "patients") onNavigate("patients");
     else onNavigate(item.run);
   };
@@ -70,7 +64,7 @@ export function CommandPalette({ open, onClose, patients, medical, onOpenPatient
         <input
           ref={inputRef}
           aria-label="搜索患者或功能"
-          placeholder="患者姓名 / 编号 / 姓氏拼音，或功能名…"
+          placeholder="患者姓名 / 编号 / 拼音首字母 / 电话后四位，或功能名…"
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => {

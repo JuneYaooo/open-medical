@@ -127,6 +127,8 @@ export function createFollowupApi(ctx) {
         risks?.evaluatePatient(reminder.patientId);
         return REPLY(send, 200, reminder);
       }
+      if (parts.length === 4 && parts[3] === "snooze" && req.method === "POST")
+        return REPLY(send, 200, followups.snoozeReminder(identifier(parts[2]), await body()));
       if (parts.length === 4 && parts[3] === "ack" && req.method === "POST")
         return REPLY(send, 200, followups.ackReminder(identifier(parts[2])));
     }
@@ -233,6 +235,7 @@ export const FOLLOWUP_LEGACY_API_PATHS = [
   { method: "POST", path: "/api/reminders/:id/addendum" },
   { method: "POST", path: "/api/reminders/:id/complete" },
   { method: "POST", path: "/api/reminders/:id/ack" },
+  { method: "POST", path: "/api/reminders/:id/snooze" },
   { method: "POST", path: "/api/patients/:id/followup-records" },
   { method: "GET", path: "/api/patients/:id/followup-surveys" },
   { method: "POST", path: "/api/patients/:id/followup-surveys/:surveyId/*" },

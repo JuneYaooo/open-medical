@@ -4,6 +4,7 @@ import { Modal } from "../../../src/components";
 import { useClinicalDraft } from "../../../src/clinical-drafts";
 import { api } from "../../../src/agent-runtime";
 import { usePluginConnected } from "../../../src/plugin-slots.jsx";
+import { AiConsentNote, useAiConsent } from "../../../src/ai-consent.jsx";
 import { QuestionnaireEditor, buildQuestionnaire, emptyQuestionnaire } from "./QuestionnaireEditor.jsx";
 
 export function FollowupModal({ patientId, job, source, existingSourceJob, onViewExisting, onClose, onCreated }) {
@@ -11,6 +12,8 @@ export function FollowupModal({ patientId, job, source, existingSourceJob, onVie
   // Message summaries and questionnaires involve patient messages; without a
   // connected channel a plan is a reminder for the doctor only.
   const messaging = usePluginConnected("followup");
+  // 全局已授权 AI 使用患者资料时，新计划默认到期自动生成摘要，不再单独勾选。
+  const { granted: aiGranted } = useAiConsent();
   const toLocal = (iso) => {
     const d = new Date(iso);
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
@@ -95,7 +98,7 @@ export function FollowupModal({ patientId, job, source, existingSourceJob, onVie
           ...(source ? { source: { kind: "treatment-review", reviewDate: source.reviewDate } } : {}),
           ...payload,
           requestId: currentDraft.requestId,
-          externalConsent: messaging && form.externalConsent,
+          externalConsent: messaging && (form.externalConsent || (!editing && aiGranted)),
           ...(messaging && withSurvey
             ? { questionnaire: buildQuestionnaire(questionnaire) }
             : {}),
@@ -159,7 +162,10 @@ export function FollowupModal({ patientId, job, source, existingSourceJob, onVie
             onChange={set("checklist")}
           />
         </label>
-        {!editing && messaging && (
+        {!editing && messaging && aiGranted && (
+          <p className="muted">到期时自动用 AI 整理该患者待整理的消息并生成摘要。<AiConsentNote /></p>
+        )}
+        {!editing && messaging && !aiGranted && (
           <label className="consent">
             <input
               type="checkbox"

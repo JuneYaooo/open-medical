@@ -1,0 +1,23 @@
+/* 按条件找患者：结果卡片。颜色只用全局令牌。 */
+.cohort-card { display: grid; gap: 12px; }
+.cohort-card header h3 { margin: 2px 0 0; }
+.cohort-eyebrow { color: var(--muted); font-size: 14px; }
+.cohort-counts { margin: 0; }
+.cohort-note { color: var(--muted); font-size: 14px; margin: 0; }
+.cohort-conditions, .cohort-spec ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.cohort-spec li { display: grid; gap: 2px; }
+.cohort-spec small { color: var(--muted); font-size: 14px; }
+.cohort-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cohort-filter label { display: inline-flex; gap: 6px; align-items: center; }
+.cohort-table { width: 100%; border-collapse: collapse; }
+.cohort-table th, .cohort-table td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); }
+.cohort-table td small { display: block; color: var(--muted); font-size: 14px; }
+.cohort-table ul { margin: 0; padding-left: 18px; }
+.cohort-status { white-space: nowrap; font-weight: 600; }
+.cohort-status.match { color: var(--accent); }
+.cohort-status.unclear { color: var(--warning); }
+.cohort-status.mismatch { color: var(--danger); }
+@media (max-width: 640px) {
+  .cohort-table thead { display: none; }
+  .cohort-table tr, .cohort-table td { display: block; }
+}

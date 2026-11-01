@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { check, string } from "../../../server/errors.mjs";
 import { sqliteTransaction } from "../../../server/sqlite-transaction.mjs";
+import { normalizeCohortSpec } from "../../../server/medical/cohort-query.mjs";
 export class TrialScreening {
   constructor(store, patients) {
     this.store = store;
@@ -20,67 +21,124 @@ export class TrialScreening {
     check(r, "NOT_FOUND", "试验方案不存在", 404);
     return JSON.parse(r.data);
   }
+  // 方案字段校验：界面新建和助手导入提案（trial-protocol）走同一套规则。
+  // criteria 可直接给 [{kind,text}]，也可给 inclusion/exclusion 多行文本。
+  normalizeProtocol(input) {
+    check(
+      input && typeof input === "object",
+      "INVALID_INPUT",
+      "请填写试验方案",
+    );
+    const lines = Array.isArray(input.criteria)
+      ? {
+          include: input.criteria.filter((c) => c?.kind === "include").map((c) => c.text),
+          exclude: input.criteria.filter((c) => c?.kind === "exclude").map((c) => c.text),
+        }
+      : null;
+    if (lines) {
+      check(
+        input.criteria.every((c) => c && ["include", "exclude"].includes(c.kind) && typeof c.text === "string"),
+        "INVALID_INPUT",
+        "每条标准需要 kind（include/exclude）和 text",
+      );
+    }
+    const criteria = [];
+    for (const [kind, field] of [
+      ["include", "inclusion"],
+      ["exclude", "exclusion"],
+    ]) {
+      const label = kind === "include" ? "入选标准" : "排除标准";
+      const values = (lines
+        ? (check(lines[kind].length, "INVALID_INPUT", `请填写${label}`), lines[kind].map((t) => string(t, label, 2000)))
+        : string(input[field], label, 20000).split("\n"))
+        .map((t) => t.trim())
+        .filter(Boolean);
+      check(values.length <= 100, "INVALID_INPUT", "每类标准最多100条");
+      values.forEach((text) => criteria.push({ kind, text }));
+    }
+    const sourceUrl = input.sourceUrl
+      ? string(input.sourceUrl, "来源链接", 2000)
+      : "";
+    if (sourceUrl) {
+      let valid = false;
+      try {
+        const url = new URL(sourceUrl);
+        valid =
+          ["http:", "https:"].includes(url.protocol) &&
+          !url.username &&
+          !url.password;
+      } catch {}
+      check(valid, "INVALID_INPUT", "来源链接需使用 http 或 https");
+    }
+    return {
+      title: string(input.title, "试验名称", 500),
+      registration: input.registration
+        ? string(input.registration, "注册号", 100)
+        : "",
+      version: string(input.version, "方案版本与日期", 200),
+      sourceUrl,
+      site: input.site ? string(input.site, "研究中心", 300) : "",
+      recruitment: input.recruitment
+        ? string(input.recruitment, "招募状态", 100)
+        : "待研究中心确认",
+      protocolText: input.protocolText
+        ? string(input.protocolText, "方案原文", 500000)
+        : "",
+      criteria,
+    };
+  }
   create(input) {
     return sqliteTransaction(this.store.db, () => {
-      check(
-        input && typeof input === "object",
-        "INVALID_INPUT",
-        "请填写试验方案",
-      );
-      const criteria = [];
-      for (const [kind, field] of [
-        ["include", "inclusion"],
-        ["exclude", "exclusion"],
-      ]) {
-        const values = string(
-          input[field],
-          kind === "include" ? "入选标准" : "排除标准",
-          20000,
-        )
-          .split("\n")
-          .map((t) => t.trim())
-          .filter(Boolean);
-        check(values.length <= 100, "INVALID_INPUT", "每类标准最多100条");
-        values.forEach((text) =>
-          criteria.push({ id: randomUUID(), kind, text }),
-        );
-      }
-      const sourceUrl = input.sourceUrl
-        ? string(input.sourceUrl, "来源链接", 2000)
-        : "";
-      if (sourceUrl) {
-        let valid = false;
-        try {
-          const url = new URL(sourceUrl);
-          valid =
-            ["http:", "https:"].includes(url.protocol) &&
-            !url.username &&
-            !url.password;
-        } catch {}
-        check(valid, "INVALID_INPUT", "来源链接需使用 http 或 https");
-      }
+      const value = this.normalizeProtocol(input);
       const item = {
         id: randomUUID(),
-        title: string(input.title, "试验名称", 500),
-        registration: input.registration
-          ? string(input.registration, "注册号", 100)
-          : "",
-        version: string(input.version, "方案版本与日期", 200),
-        sourceUrl,
-        site: input.site ? string(input.site, "研究中心", 300) : "",
-        recruitment: input.recruitment
-          ? string(input.recruitment, "招募状态", 100)
-          : "待研究中心确认",
-        protocolText: input.protocolText
-          ? string(input.protocolText, "方案原文", 500000)
-          : "",
-        criteria,
+        ...value,
+        criteria: value.criteria.map((c) => ({ id: randomUUID(), ...c })),
         createdAt: new Date().toISOString(),
       };
       this.store.db
         .prepare("INSERT INTO trial_protocols(id,data) VALUES(?,?)")
         .run(item.id, JSON.stringify(item));
       this.store.audit(null, "trial.protocol.created", { trialId: item.id });
+      return item;
+    });
+  }
+  // 方案的结构化筛选条件（cohort-query 条件）：助手起草经医生确认，或医生在
+  // 界面直接保存/删改。spec 为 null 表示清除。旧方案没有这些字段，读取时
+  // 视为未设置。manualCriteria 是无法结构化、需人工或 AI 逐人核对的条目。
+  normalizeScreeningSpec(input = {}) {
+    check(input && typeof input === "object", "INVALID_INPUT", "请提供筛选条件");
+    if (input.spec === null) return { spec: null, manualCriteria: [] };
+    const spec = normalizeCohortSpec({ ...input.spec, includeArchived: false });
+    const manual = input.manualCriteria ?? [];
+    check(Array.isArray(manual) && manual.length <= 40, "INVALID_INPUT", "需人工核对的条目最多 40 条");
+    const manualCriteria = [...new Set(manual.map((t) => string(t, "需人工核对的条目", 500).trim()))];
+    return { spec, manualCriteria };
+  }
+  setScreeningSpec(trialId, input = {}, source = "doctor") {
+    return sqliteTransaction(this.store.db, () => {
+      const trial = this.get(trialId);
+      check(["doctor", "model_draft"].includes(source), "INVALID_INPUT", "筛选条件来源无效");
+      const current = trial.screeningSpecRevision || 0;
+      if (input.expectedRevision !== undefined)
+        check(input.expectedRevision === current, "REVISION_CONFLICT", "筛选条件已被修改，请刷新后重试", 409);
+      const { spec, manualCriteria } = this.normalizeScreeningSpec(input);
+      const item = { ...trial };
+      for (const key of ["screeningSpec", "screeningManualCriteria", "screeningSpecSource", "screeningSpecUpdatedAt"]) delete item[key];
+      item.screeningSpecRevision = current + 1;
+      if (spec)
+        Object.assign(item, {
+          screeningSpec: spec,
+          screeningManualCriteria: manualCriteria,
+          screeningSpecSource: source,
+          screeningSpecUpdatedAt: new Date().toISOString(),
+        });
+      this.store.db
+        .prepare("UPDATE trial_protocols SET data=? WHERE id=?")
+        .run(JSON.stringify(item), trial.id);
+      this.store.audit(null, spec ? "trial.screening_spec.saved" : "trial.screening_spec.cleared", {
+        trialId: trial.id, source, conditions: spec?.conditions.length || 0, revision: item.screeningSpecRevision,
+      });
       return item;
     });
   }

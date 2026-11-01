@@ -490,12 +490,20 @@ export class PendingActions {
         if (action.payload.sourceSessionId) this.learning?.supersedeIntakeSessions(patient.id, action.payload.sourceSessionId);
         if (this.doctor && this.learning?.prefs()?.habits && this.habitLearner) habitSuggestions = this.habitLearner.aggregate();
       } else if (action.type === "patient-update") {
+        // 医生可在审核时取消部分分区：payload 只能是原提案分区的子集且内容不变。
+        let updates = action.payload;
+        if (payload !== undefined) {
+          check(payload && typeof payload === "object" && !Array.isArray(payload) && Object.keys(payload).length > 0
+            && Object.entries(payload).every(([key, value]) => Object.hasOwn(action.payload, key) && JSON.stringify(value) === JSON.stringify(action.payload[key])),
+          "INVALID_INPUT", "只能取消提案中的部分内容，不能修改或新增内容", 400);
+          updates = Object.fromEntries(Object.keys(payload).map(key => [key, action.payload[key]]));
+        }
         applied = this.patients.update(action.patientId, {
-          ...action.payload,
+          ...updates,
           expectedRevision: action.baseRevision,
         });
         if (this.services.flagSuspectMaterials)
-          this.services.flagSuspectMaterials(this.patients.row(action.patientId).sessionId, action.payload);
+          this.services.flagSuspectMaterials(this.patients.row(action.patientId).sessionId, updates);
       } else if (action.type === "patient-group-suggest") {
         // Per-patient optimistic apply: a profile edited after the proposal
         // is skipped with its reason, never overwritten.

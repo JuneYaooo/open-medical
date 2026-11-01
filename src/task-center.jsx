@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./agent-runtime";
+import { useDevInfo } from "./dev-info";
+import { AiConsentNote, useAiConsent } from "./ai-consent";
 
 const labels = {
   active: "等待执行",
@@ -16,8 +18,9 @@ const initialTime = () => {
     .toISOString()
     .slice(0, 16);
 };
-export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
-  const [tab, setTab] = useState("schedules"),
+export function TaskCenter({ session, fileIds, config, onSandbox, onChanged, onModelSettings }) {
+  const [devInfo] = useDevInfo();
+  const [tabValue, setTab] = useState("schedules"),
     [jobs, setJobs] = useState([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -27,10 +30,14 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
     ),
     [runAt, setRunAt] = useState(initialTime),
     [interval, setIntervalValue] = useState("0"),
-    [consent, setConsent] = useState(false);
+    [localConsent, setConsent] = useState(false);
+  const { granted: aiGranted } = useAiConsent();
+  const consent = aiGranted || localConsent;
   const [code, setCode] = useState(
     'result = {"资料数": len(sources), "原文行数": sum(len(s["text"].splitlines()) for s in sources)}',
   );
+  // 隔离计算（沙箱 Python）属于开发者工具，未开启开发者信息时只显示计划任务。
+  const tab = devInfo ? tabValue : "schedules";
   const base = `/api/sessions/${session.id}/schedules`;
   const scopeKey = fileIds.join(",");
   useEffect(() => {
@@ -76,12 +83,12 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
         >
           计划任务
         </button>
-        <button
+        {devInfo && <button
           className={tab === "sandbox" ? "active" : ""}
           onClick={() => setTab("sandbox")}
         >
           隔离计算
-        </button>
+        </button>}
       </div>
       {error && (
         <p role="alert" className="task-error">
@@ -160,7 +167,7 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
                   }}
                 >
                   <option value="0">只执行一次</option>
-                  <option value="1">每分钟（验证用）</option>
+                  {(devInfo || interval === "1") && <option value="1">每分钟（验证用）</option>}
                   <option value="60">每小时</option>
                   <option value="1440">每 24 小时</option>
                   <option value="10080">每 7 天</option>
@@ -168,21 +175,22 @@ export function TaskCenter({ session, fileIds, config, onSandbox, onChanged }) {
               </label>
             </div>
             {!config?.modelConfigured && (
-              <p className="task-error">尚未配置模型：计划任务由 AI Agent 执行，请先在「切换模型」中配置。</p>
+              <p className="task-error">需先连接模型：计划任务由模型按时执行。{onModelSettings && <> <button type="button" className="text-button" onClick={onModelSettings}>连接模型</button></>}</p>
             )}
             <p className="muted">
               固定使用当前选中的 {fileIds.length}{" "}
               份材料；新增材料不会自动加入。修改材料或模型服务后需重新创建模型计划。
             </p>
-            <label className="task-check">
+            {aiGranted && <p><AiConsentNote /></p>}
+            {!aiGranted && <label className="task-check">
               <input
                 type="checkbox"
-                checked={consent}
+                checked={localConsent}
                 disabled={!config?.modelConfigured}
                 onChange={(e) => setConsent(e.target.checked)}
               />
               我已核对任务及选中材料，授权该计划按上述频率重复发送给当前模型服务，直至暂停或删除。
-            </label>
+            </label>}
             <button
               className="primary"
               disabled={busy || !config?.modelConfigured || !consent}

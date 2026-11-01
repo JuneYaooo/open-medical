@@ -3,6 +3,7 @@ import { api } from "./agent-runtime";
 import { useHabitMutation } from "./habit-mutation";
 import { useHabitDraft } from "./habit-drafts";
 import { CuratedCaseSources } from "./curated-case-sources";
+import { AiConsentNote, notifyAiConsentChanged, useAiConsent } from "./ai-consent";
 import "./learning-loop.css";
 const sectionNames = {
   diagnoses: "诊断",
@@ -115,6 +116,7 @@ export function LearningSettings() {
     try {
       setPrefs(await api("/api/learning/settings", "PUT", value));
       setError("");
+      if ("defaultExternalConsent" in value) notifyAiConsentChanged(value.defaultExternalConsent);
     } catch (e) {
       setPrefs(previous);
       setError(e.message);
@@ -148,8 +150,8 @@ export function LearningSettings() {
               ],
               [
                 "defaultExternalConsent",
-                "新会话默认允许把患者材料发给模型服务",
-                "默认关闭=每次询问。打开后患者页的授权开关默认为勾选，你仍可逐患者关闭。",
+                "允许 AI 功能使用患者资料",
+                "关闭后，每次使用 AI 功能前会单独询问。",
               ],
             ].map(([key, label, help]) => (
               <label className="learning-switch-row" key={key}>
@@ -1223,9 +1225,11 @@ export function LearningChanges({ emptyText = "" } = {}) {
 export function PersonalRegressionSettings() {
   const [state, setState] = useState(null),
     [error, setError] = useState(""),
-    [consent, setConsent] = useState(false),
+    [localConsent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [open, setOpen] = useState(false);
+  const { granted: aiGranted } = useAiConsent();
+  const consent = aiGranted || localConsent;
   const running = state?.run?.status === "running";
   // Read once on open; keep polling only while the section is open or a run
   // is still in progress.
@@ -1267,11 +1271,12 @@ export function PersonalRegressionSettings() {
         用最近最多 10
         份已确认档案的去标识化资料重新整理，比较改动率。使用已保存的模型配置，可能产生模型调用费用；结果不会写回患者档案或参与学习。
       </p>
-      {state && !state.local && (
+      {state && !state.local && aiGranted && <p><AiConsentNote /></p>}
+      {state && !state.local && !aiGranted && (
         <label>
           <input
             type="checkbox"
-            checked={consent}
+            checked={localConsent}
             onChange={(e) => setConsent(e.target.checked)}
           />
           同意把去标识化资料发送给当前云端模型进行本次评测

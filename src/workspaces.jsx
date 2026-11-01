@@ -21,6 +21,7 @@ import {
 import { WorkspaceExtensionsPanel } from "./workspace-extensions";
 import { WorkspaceDevelopment } from "./workspace-development";
 import { api, medicalEnabled } from "./agent-runtime";
+import { AiConsentNote, useAiConsent } from "./ai-consent";
 import { sseFrames } from "../shared/sse.mjs";
 import "./workspaces.css";
 import { MediaPanel } from "./workbench/media";
@@ -392,7 +393,10 @@ export function WorkspacesView({
     ),
     [scheduleMessage, setScheduleMessage] = useState(""),
     [intervalMinutes, setIntervalMinutes] = useState(0),
-    [scheduleConsent, setScheduleConsent] = useState(false);
+    [localScheduleConsent, setScheduleConsent] = useState(false);
+  // 全局已授权 AI 使用资料时，计划任务不再单独勾选外发授权。
+  const { granted: aiGranted } = useAiConsent();
+  const scheduleConsent = aiGranted || localScheduleConsent;
   const [scheduleRecovery, setScheduleRecovery] = useState(false);
   const abort = useRef(null),
     generation = useRef(0);
@@ -1849,14 +1853,14 @@ export function WorkspacesView({
                       />
                     </label>
                   </div>
-                  <label className="workspace-checkbox">
+                  {aiGranted ? <AiConsentNote /> : <label className="workspace-checkbox">
                     <input
                       type="checkbox"
-                      checked={scheduleConsent}
+                      checked={localScheduleConsent}
                       onChange={(e) => setScheduleConsent(e.target.checked)}
                     />
                     授权按此计划将任务和读取文件发送给当前模型
-                  </label>
+                  </label>}
                   <label className="workspace-checkbox">
                     <input
                       type="checkbox"

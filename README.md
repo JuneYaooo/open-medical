@@ -245,9 +245,9 @@ npm run package:win    # Windows：在 Windows 上构建
 </details>
 
 <details>
-<summary><strong>私聊助手、知识库机器人与医生提醒</strong></summary>
+<summary><strong>私聊助手、飞书分身与医生提醒</strong></summary>
 
-在设置中分别连接私聊助手、飞书知识库机器人和医生提醒。知识库机器人只引用允许对外使用的资料，提醒可设置发送时间与内容；各渠道需要对应账号和配置。
+在设置中分别连接私聊助手、飞书分身和医生提醒。飞书分身按你的习惯和勾选的知识库在群聊或单聊中回答，往来会话自动记录、可做 AI 总结与风险复核；提醒可设置发送时间与内容；各渠道需要对应账号和配置。
 
 ![私聊助手、知识库机器人与医生提醒](docs/assets/features/settings-knowledge-bot.png)
 
@@ -496,7 +496,7 @@ Docker 为可选依赖，用于容器化终端与部分办公工具。具体支�
 | :--- | :--- |
 | 医生首次使用与完整流程 | [医生使用指南](docs/DOCTOR_WORKBENCH_GUIDE.md) |
 | 桌面安装、构建与数据目录 | [桌面版说明](docs/DESKTOP.md) |
-| 医生提醒与飞书知识库机器人 | [连接指南](docs/doctor-assistant-channels.md) |
+| 医生提醒与飞书分身 | [连接指南](docs/doctor-assistant-channels.md) |
 | 微信、企业微信与消息归档 | [聊天连接插件](docs/chat-connectors.md) |
 | 患者、消息和随访的数据关系 | [患者管理](docs/PATIENTS.md) |
 | 医生界面、交互规则与任务验收 | [开发指南](docs/DEVELOPMENT_GUIDE.md) |

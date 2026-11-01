@@ -1,0 +1,18 @@
+/* 队列比较结果卡片。基础样式沿用 src/cohort-card.css，颜色只用全局令牌。 */
+.cmp-card h4 { margin: 4px 0 0; font-size: 16px; }
+.cmp-card header p { margin: 4px 0 0; }
+.cmp-headline { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.cmp-headline strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.cmp-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cmp-table th[scope="row"] { font-weight: 600; }
+.cmp-effect { display: grid; gap: 6px; margin: 0; }
+.cmp-effect div { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.cmp-effect dt { font-weight: 600; }
+.cmp-effect dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cmp-effect small { color: var(--muted); font-size: 14px; }
+.cmp-warnings { border-left: 3px solid var(--warning); padding: 4px 12px; }
+.cmp-warnings ul { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.cmp-group { display: grid; gap: 6px; margin-top: 10px; }
+.cmp-group > button { justify-self: start; }
+.cmp-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.cmp-actions small { color: var(--muted); font-size: 14px; }

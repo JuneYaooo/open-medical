@@ -6,7 +6,9 @@ import { RememberedNotice } from "./learning-loop";
 import { PatientProposalComparison } from "./patient-proposal";
 import { SlotItem, useSlot } from "./plugin-slots";
 
-const TYPES = { "patient-create": "建档提案", "patient-update": "档案更新", "followup-create": "随访提醒", "case-save": "病例入库", "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "ext-change": "工作台扩展", "ext-install": "技能安装" };
+const TYPES = { "patient-create": "建档提案", "patient-update": "档案更新", "followup-create": "随访提醒", "case-save": "病例入库", "care-message": "发送消息", "care-campaign": "随访计划", "care-settings": "自动化设置", "care-bind": "关联微信客户", "care-group-message": "客户群群发", "care-education-broadcast": "患教群发", "patient-group-suggest": "分组建议", "patient-grouping": "患者分组", "trial-batch": "批量 AI 初筛", "trial-enrollment": "试验入组状态", "trial-screening-conditions": "试验筛选条件", "trial-protocol": "导入试验方案", "ext-change": "工作台扩展", "ext-install": "技能安装" };
+// 「全部确认」只覆盖不写临床事实的提案：随访提醒与患者分组。
+const BULK_TYPES = new Set(["followup-create", "patient-group-suggest", "patient-grouping"]);
 export { PENDING_REFRESH_EVENT } from "./agent-runtime";
 const PENDING_OPEN_EVENT = "care-pending-open";
 export function requestPendingReview(actionId) {
@@ -85,6 +87,14 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
   const [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0);
   const updating = action.type === "patient-update";
+  const [excluded, setExcluded] = useState({ id: action.id, keys: new Set() });
+  const skipped = excluded.id === action.id ? excluded.keys : new Set();
+  const toggleSection = (key) => {
+    const keys = new Set(skipped);
+    if (keys.has(key)) keys.delete(key); else keys.add(key);
+    setExcluded({ id: action.id, keys });
+  };
+  const reviewed = updating ? Object.fromEntries(Object.entries(p).filter(([key]) => !skipped.has(key))) : undefined;
   useEffect(() => {
     let active = true;
     setRecord(null); setLoadError("");
@@ -111,6 +121,16 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
     p.phone !== undefined && `电话改为「${p.phone || "（清空）"}」`,
   ].filter(Boolean) : [];
   const clinical = action.type === "patient-create" || action.type === "patient-update";
+  const confirmDisabled = busy || (updating && (!patient || stale || Boolean(loadError) || !Object.keys(reviewed).length));
+  const confirm = () => onConfirm(updating && skipped.size ? reviewed : undefined);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") { if (!busy) onClose(); }
+      else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !confirmDisabled) { event.preventDefault(); confirm(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
   return <div className="pending-review-overlay" role="dialog" aria-label={`全屏审核：${TYPES[action.type] || action.type}`}>
     <header>
       <div>
@@ -124,7 +144,7 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
       {updating && <>
         {loadError ? <p role="alert">读取当前档案失败：{loadError} <button disabled={busy} onClick={() => setReload(value => value + 1)}>重试读取档案</button></p>
           : !patient && <p role="status">正在读取当前档案，准备核对变更…</p>}
-        {patient && <PatientProposalComparison patient={patient} proposal={action} />}
+        {patient && <PatientProposalComparison patient={patient} proposal={action} excluded={skipped} onToggle={toggleSection} />}
         {stale && <p role="alert" className="error-text">档案在提案后已变化，请关闭并重新生成提案，避免覆盖新记录。</p>}
       </>}
       {clinical && !updating && <>
@@ -161,7 +181,7 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
     </div>
     <footer>
       <button className="secondary" disabled={busy} onClick={onReject}>拒绝</button>
-      <button disabled={busy || (updating && (!patient || stale || Boolean(loadError)))} onClick={onConfirm}>{busy ? "处理中…" : "确认执行"}</button>
+      <button disabled={confirmDisabled} onClick={confirm}>{busy ? "处理中…" : "确认执行"}</button>
     </footer>
   </div>;
 }
@@ -184,6 +204,8 @@ export function PendingTray() {
   const [reviewing, setReviewing] = useState(null);
   const [remembered, setRemembered] = useState(null);
   const [note, setNote] = useState("");
+  const [bulkResult, setBulkResult] = useState("");
+  const [bulking, setBulking] = useState(false);
   const load = useCallback(async ({ actionId } = {}) => {
     const request = ++requestGeneration.current;
     setLoading(true);
@@ -235,12 +257,12 @@ export function PendingTray() {
       document.removeEventListener("keydown", dismiss);
     };
   }, [open, reviewing]);
-  async function resolve(action, decision, withNote) {
+  async function resolve(action, decision, withNote, payload) {
     if (resolving.current) return false;
     resolving.current = true;
     setBusy(action.id); setError("");
     try {
-      const result = await api(`/api/pending-actions/${action.id}/${decision}`, "POST", withNote ? { note } : {});
+      const result = await api(`/api/pending-actions/${action.id}/${decision}`, "POST", { ...(withNote ? { note } : {}), ...(payload ? { payload } : {}) });
       if (result.remembered?.length) setRemembered({ key: `${action.id}:${decision}`, memories: result.remembered });
       setRejecting(null); setNote("");
       // api() emits PENDING_REFRESH_EVENT after successful decisions, updating
@@ -251,6 +273,14 @@ export function PendingTray() {
     catch (e) { setError(e.message); }
     finally { resolving.current = false; setBusy(""); }
   }
+  const bulk = actions.filter((a) => BULK_TYPES.has(a.type));
+  async function confirmAll() {
+    setBulking(true); setBulkResult("");
+    let ok = 0, failed = 0;
+    for (const a of bulk) { if (await resolve(a, "confirm")) ok++; else failed++; }
+    setBulking(false);
+    setBulkResult(`已确认 ${ok} 项，${failed} 项失败`);
+  }
   if (!actions.length && !remembered && !open && !reviewing) return null;
   return <div className="pending-tray" ref={tray}>
     {remembered && <RememberedNotice key={remembered.key} memories={remembered.memories} />}
@@ -260,6 +290,8 @@ export function PendingTray() {
       {loading && <p role="status">正在读取提案…</p>}
       {!loading && !loadError && total === 0 && <p role="status">没有待确认提案。新的提案会在这里等待核对，查看队列不会修改档案。</p>}
       {total > 0 && <p className="care-hint">已展示 {actions.length} / 共 {total} 条</p>}
+      {bulk.length > 0 && <button type="button" className="secondary" disabled={Boolean(busy) || bulking} onClick={confirmAll}>{bulking ? "处理中…" : `全部确认（${bulk.length}）`}</button>}
+      {bulkResult && <p role="status" className="care-hint">{bulkResult}</p>}
       {error && <p role="alert" className="care-error">{error}</p>}
       <ul>{actions.map((a) => <li key={a.id} className="care-card">
         <header><span className="care-tag">{TYPES[a.type] || a.type}</span><time>{new Date(a.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></header>
@@ -281,7 +313,9 @@ export function PendingTray() {
         </div> : <footer>
           <button className="text-button" disabled={Boolean(busy)} onClick={() => { setError(""); setReviewing(a); }}>全屏审核</button>
           <button className="secondary" disabled={Boolean(busy)} onClick={() => { setRejecting(a.id); setNote(""); }}>拒绝</button>
-          <button disabled={Boolean(busy)} onClick={() => resolve(a, "confirm")}>{busy === a.id ? "处理中…" : "确认执行"}</button>
+          {a.type === "patient-update"
+            ? <button disabled={Boolean(busy)} onClick={() => { setError(""); setReviewing(a); }}>核对变更</button>
+            : <button disabled={Boolean(busy)} onClick={() => resolve(a, "confirm")}>{busy === a.id ? "处理中…" : "确认执行"}</button>}
         </footer>}
       </li>)}</ul>
       {hasMore && <button type="button" className="secondary" disabled={loading} onClick={() => { pages.current++; load(); }}>加载更多提案</button>}
@@ -290,7 +324,7 @@ export function PendingTray() {
       action={actions.find((a) => a.id === reviewing.id) || reviewing}
       busy={Boolean(busy)}
       error={error}
-      onConfirm={() => resolve(reviewing, "confirm").then(ok => { if (ok) setReviewing(null); })}
+      onConfirm={(payload) => resolve(reviewing, "confirm", false, payload).then(ok => { if (ok) setReviewing(null); })}
       onReject={() => { resolve(reviewing, "reject").then(ok => { if (ok) setReviewing(null); }); }}
       onClose={() => { reviewGeneration.current++; setReviewing(null); }}
     />}

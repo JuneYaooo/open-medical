@@ -2,23 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../../src/agent-runtime";
 import { Modal } from "../../../src/plugin-kit/index.js";
 import { localCalendarDate as today } from "../../../shared/calendar-date.mjs";
+import { SCREEN, ScreenCell, TrialConditions } from "./TrialAssist";
 
 export const STAGES = { none: "未处理", shortlisted: "拟邀请", contacted: "已联系", consented: "已签知情同意", enrolled: "已入组", declined: "患者拒绝", ineligible: "不符合", withdrawn: "已退出" };
 const FLOW = ["shortlisted", "contacted", "consented", "enrolled"];
 const CLOSED = ["declined", "ineligible", "withdrawn"];
-const PREFILTER = { likely: ["可能符合", "ok"], possible: ["部分相关", ""], unclear: ["资料不足", "muted"], mismatch: ["预筛不符", "bad"] };
 const AI = { running: "初筛中", completed: "已完成", failed: "未完成", cancelled: "已停止", interrupted: "已中断" };
 const FILTERS = [["todo", "待处理"], ["flow", "入组流程"], ["all", "全部"], ["closed", "已结束"]];
 const date = (value) => value ? new Date(value).toLocaleDateString("zh-CN") : "";
 
-function limitsText(l) {
-  const parts = [];
-  if (l.minAge !== null && l.maxAge !== null) parts.push(`${l.minAge}–${l.maxAge} 岁`);
-  else if (l.minAge !== null) parts.push(`≥${l.minAge} 岁`);
-  else if (l.maxAge !== null) parts.push(`≤${l.maxAge} 岁`);
-  if (l.sex) parts.push(l.sex === "female" ? "女性" : "男性");
-  return parts.join("、");
-}
+const screenPill = (c) => c.screen.source === "conditions" ? SCREEN[c.screen.status] : ["未设置筛选条件", "muted"];
 
 // Stage picker; 已签知情同意 asks for the signing date first.
 export function EnrollmentSelect({ trialId, patientId, enrollment, onChanged, onError }) {
@@ -50,7 +43,7 @@ export function EnrollmentSelect({ trialId, patientId, enrollment, onChanged, on
   </>;
 }
 
-export function TrialCandidatesPanel({ trial, onScreen, onOpenPatient }) {
+export function TrialCandidatesPanel({ trial, onScreen, onOpenPatient, agent }) {
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState("todo");
   const [error, setError] = useState("");
@@ -65,24 +58,29 @@ export function TrialCandidatesPanel({ trial, onScreen, onOpenPatient }) {
   }, [load, running]);
   if (!data) return error ? <p role="alert" className="form-error">{error}</p> : <p role="status">正在整理候选患者…</p>;
 
-  const { counts, batch } = data, limits = limitsText(data.trial.limits);
+  const { counts, batch } = data, screening = data.trial.screening;
   const list = data.candidates.filter((c) => {
     const s = c.enrollment.stage;
     if (filter === "flow") return FLOW.includes(s);
     if (filter === "closed") return CLOSED.includes(s);
-    if (filter === "todo") return s === "none" && c.prefilter.status !== "mismatch" || ["shortlisted", "contacted", "consented"].includes(s);
+    // 只按已确认的筛选条件隐藏不符合者；未设置条件时全部保留。
+    if (filter === "todo") return s === "none" && c.screen.status !== "mismatch" || ["shortlisted", "contacted", "consented"].includes(s);
     return true;
   });
   const b = batch && { ...batch, done: Object.values(batch.results || {}).filter((r) => r.status !== "running").length };
   const current = b?.current && data.candidates.find((c) => c.patientId === b.current);
 
   return <section className="trial-candidates" aria-label="候选患者">
+    {agent && <TrialConditions trial={trial} screening={screening} agent={agent} onChanged={(message) => { setError(""); setNotice(message); load(); }} onError={(message) => { setNotice(""); setError(message); }} />}
     <div className="trial-funnel" aria-label="招募进度">
-      <div><strong>{counts.prefilter.likely + counts.prefilter.possible}</strong><span>规则预筛可能相关</span></div>
+      {screening ? <div><strong>{counts.screen.match}</strong><span>符合筛选条件{counts.screen.unclear ? `（另 ${counts.screen.unclear} 位待核对）` : ""}</span></div>
+        : <div><strong>—</strong><span>未设置筛选条件</span></div>}
       <div><strong>{counts.aiDone}</strong><span>AI 已初筛{counts.awaitingReview ? `（${counts.awaitingReview} 位待核对）` : ""}</span></div>
       {FLOW.map((s) => <div key={s}><strong>{counts.stages[s]}</strong><span>{STAGES[s]}</span></div>)}
     </div>
-    <p className="muted">规则预筛只比对档案里的年龄、性别和诊断{limits ? `（方案要求：${limits}）` : "（方案中未识别到年龄或性别限制）"}，不能代替逐项核对；共 {counts.total} 位患者，预筛不符 {counts.prefilter.mismatch} 位、资料不足 {counts.prefilter.unclear} 位。</p>
+    <p className="muted">{screening
+      ? `按筛选条件逐条预筛：共 ${counts.total} 位患者，符合 ${counts.screen.match}、待核对 ${counts.screen.unclear}、不符合 ${counts.screen.mismatch}。缺资料记为待核对，不是不符合；预筛不能代替逐项核对。`
+      : `共 ${counts.total} 位患者。未设置筛选条件时预筛均为待核对，表中“粗略提示”只比对字面年龄、性别和诊断，仅供参考。`}</p>
     {b?.status === "running" ? <div className="trial-batch" role="status">
       <b>正在批量 AI 初筛 {b.done}/{b.patientIds.length}</b>{current && <span>当前：{current.name}</span>}
       <progress aria-label="批量初筛进度" value={b.done} max={b.patientIds.length} />
@@ -98,14 +96,12 @@ export function TrialCandidatesPanel({ trial, onScreen, onOpenPatient }) {
     </div>
     {!list.length ? <p className="muted">{filter === "todo" ? "当前没有需要处理的候选患者。" : "没有符合条件的患者。"}</p> :
       <table className="trial-table">
-        <thead><tr><th>患者</th><th>规则预筛</th><th>AI 初筛</th><th>医生核对</th><th>入组状态</th><th>下一步</th></tr></thead>
+        <thead><tr><th>患者</th><th>{screening ? "条件预筛" : "预筛"}</th><th>AI 初筛</th><th>医生核对</th><th>入组状态</th><th>下一步</th></tr></thead>
         <tbody>{list.map((c) => <tr key={c.patientId}>
           <td><button className="text-button" onClick={() => onOpenPatient?.(c.patientId)}>{c.name}</button>
             <small>{[c.patientNumber, c.gender === "female" ? "女" : c.gender === "male" ? "男" : "", c.birthYear ? `${c.birthYear} 年生` : ""].filter(Boolean).join(" · ")}</small>
             {c.diagnoses.length > 0 && <small>{c.diagnoses.join("、")}</small>}</td>
-          <td><span className={`trial-pill ${PREFILTER[c.prefilter.status][1]}`}>{PREFILTER[c.prefilter.status][0]}</span>
-            {c.prefilter.reasons.slice(0, 2).map((r) => <small key={r}>{r}</small>)}
-            {c.prefilter.warnings.map((w) => <small key={w} className="warn">{w}</small>)}</td>
+          <td><ScreenCell candidate={c} /></td>
           <td>{c.ai ? <>{AI[c.ai.status] || c.ai.status}{c.ai.status === "running" ? ` ${c.ai.checked}/${c.ai.total}` : ""}
             {c.ai.status === "completed" && <small>冲突 {c.ai.conflicts} · 待补 {c.ai.missing}</small>}
             {c.ai.stale && <small className="warn">资料已更新，需重新初筛</small>}</> : <span className="muted">未初筛</span>}</td>
@@ -130,14 +126,14 @@ function BatchDialog({ trial, data, onClose, onStarted }) {
     <div className="trial-batch-dialog">
       <p>AI 会逐位读取所选患者的档案和病历资料，按方案逐条判断入选和排除条件，并标出冲突和待补资料。结果是草稿，仍需你逐项核对。已有有效 AI 结果的患者会自动跳过。</p>
       <div className="module-actions">
-        <button className="secondary" onClick={() => setPicked(new Set(data.suggested))}>只选建议的 {data.suggested.length} 位</button>
-        <button className="secondary" onClick={() => setPicked(new Set(pool.filter((c) => c.prefilter.status !== "mismatch").map((c) => c.patientId)))}>选择全部非预筛不符</button>
+        <button className="secondary" onClick={() => setPicked(new Set(data.suggested))}>只选建议的 {data.suggested.length} 位{data.suggestedBy === "rough" ? "（按粗略提示）" : ""}</button>
+        {data.suggestedBy === "conditions" && <button className="secondary" onClick={() => setPicked(new Set(pool.filter((c) => c.screen.status !== "mismatch").map((c) => c.patientId).slice(0, 50)))}>选择全部非不符合</button>}
         <button className="secondary" onClick={() => setPicked(new Set())}>清空</button>
       </div>
       <ul className="trial-batch-list">{pool.map((c) => <li key={c.patientId}><label>
         <input type="checkbox" checked={picked.has(c.patientId)} onChange={() => toggle(c.patientId)} />
-        <span><b>{c.name}</b> <span className={`trial-pill ${PREFILTER[c.prefilter.status][1]}`}>{PREFILTER[c.prefilter.status][0]}</span>
-          {c.ai?.status === "completed" && !c.ai.stale ? <small>已有 AI 结果</small> : null}<small>{c.prefilter.reasons[0] || c.diagnoses.join("、")}</small></span>
+        <span><b>{c.name}</b> <span className={`trial-pill ${screenPill(c)[1]}`}>{screenPill(c)[0]}</span>
+          {c.ai?.status === "completed" && !c.ai.stale ? <small>已有 AI 结果</small> : null}<small>{c.screen.open?.[0] ? `${c.screen.open[0].label}：${c.screen.open[0].verdictLabel}` : c.diagnoses.join("、")}</small></span>
       </label></li>)}</ul>
       <label className="trial-consent-check"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
         <span>同意把所选 {picked.size} 位患者的病历资料交给当前配置的模型分析。档案快照不含姓名和电话，上传的病历文件按原样发送。</span></label>

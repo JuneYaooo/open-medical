@@ -1,5 +1,6 @@
 import { WechatImportForm } from '../../channel-wechat/ui/WechatImportForm.jsx';
 import { WechatConnection } from '../../channel-wechat/ui/WechatConnection.jsx';
+import { EXPERIMENTAL_CHANNELS, ExperimentalChip, ExperimentalNote } from '../../channel-wechat/ui/ExperimentalNote.jsx';
 import { AibotConnectionForm } from '../../channel-wecom/ui/ConnectionForm.jsx';
 import { SavedConnection, ServiceConnectionForm } from '../../channel/ui/ConnectionForm.jsx';
 import { useEffect, useRef, useState } from 'react';
@@ -45,8 +46,9 @@ export function ChatConnectionSettings() {
    return <div className="chat-channel-group" key={group.label}>
     <h3>{group.label}</h3>
 
-    <nav className="chat-tabs" aria-label={group.label}>{items.map(({channel:id,plugin})=><button key={id} aria-pressed={channel===id} onClick={()=>setChannel(id)}>{connections.find(c=>c.channel===id)?.enabled&&<span className="chat-tab-dot" aria-hidden="true"/>}{plugin?.name||names[id]||id}</button>)}</nav>
+    <nav className="chat-tabs" aria-label={group.label}>{items.map(({channel:id,plugin})=><button key={id} aria-pressed={channel===id} onClick={()=>setChannel(id)}>{connections.find(c=>c.channel===id)?.enabled&&<span className="chat-tab-dot" aria-hidden="true"/>}{plugin?.name||names[id]||id}{EXPERIMENTAL_CHANNELS.has(id)&&<> <ExperimentalChip/></>}</button>)}</nav>
    </div>;})}
+  {selected&&EXPERIMENTAL_CHANNELS.has(channel)&&channel!=='wechat'&&channel!=='wecom-aibot'&&<ExperimentalNote/>}
 
   {selected&&(['wechat','wecom'].includes(channel)?<ConnectionForm key={channel} initial={selected} onSaved={accept}/>:channel==='wecom-aibot'?<AibotConnectionForm key={channel} initial={selected} onSaved={accept}/>:<ServiceConnectionForm key={channel} initial={selected} onSaved={accept}/>)}
  </section>;

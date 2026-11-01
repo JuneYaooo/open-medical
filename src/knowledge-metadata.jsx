@@ -5,7 +5,7 @@ import { Modal } from "./components";
 
 
 export function KnowledgeMetadataModal({ doc, onClose, onSaved }) {
-  const [form, setForm] = useState({ title: doc.title, org: doc.org || "", year: doc.year || "", kind: doc.kind || "指南", collection: doc.collection || "默认知识库", sourceUrl: doc.sourceUrl || "", edition: doc.edition || "", enabled: doc.reviewStatus !== "retired", allowExternalUse: doc.allowExternalUse === true });
+  const [form, setForm] = useState({ title: doc.title, org: doc.org || "", year: doc.year || "", kind: doc.kind || "指南", collection: doc.collection || "默认知识库", sourceUrl: doc.sourceUrl || "", edition: doc.edition || "", enabled: doc.reviewStatus !== "retired", allowExternalUse: doc.allowExternalUse === true, avatarExcluded: doc.avatarExcluded === true });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
@@ -15,8 +15,8 @@ export function KnowledgeMetadataModal({ doc, onClose, onSaved }) {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
     try {
-      const { enabled, allowExternalUse, ...metadata } = form;
-      const updated = await api(`/api/knowledge/${doc.id}`, "PATCH", { ...metadata, year: form.year ? Number(form.year) : null, ...(enabled !== (doc.reviewStatus !== "retired") ? { reviewStatus: enabled ? "unreviewed" : "retired" } : {}), allowExternalUse: enabled && allowExternalUse, expectedRevision: doc.revision || 0 });
+      const { enabled, allowExternalUse, avatarExcluded, ...metadata } = form;
+      const updated = await api(`/api/knowledge/${doc.id}`, "PATCH", { ...metadata, year: form.year ? Number(form.year) : null, ...(enabled !== (doc.reviewStatus !== "retired") ? { reviewStatus: enabled ? "unreviewed" : "retired" } : {}), allowExternalUse: enabled && allowExternalUse, ...(avatarExcluded !== (doc.avatarExcluded === true) ? { avatarExcluded } : {}), expectedRevision: doc.revision || 0 });
       await onSaved(updated);
     } catch (err) { setError(err.message); }
     finally { inFlight.current = false; setBusy(false); }
@@ -29,7 +29,7 @@ export function KnowledgeMetadataModal({ doc, onClose, onSaved }) {
       <label>来源链接<input type="url" maxLength={2000} value={form.sourceUrl} onChange={set("sourceUrl", true)} placeholder="https:// 官方发布页" /></label>
       <label>版本说明<input maxLength={100} value={form.edition} onChange={set("edition", true)} placeholder="如：2026 修订版、第二版" /></label>
       <label>资料状态<select aria-label="资料状态" value={form.enabled ? "active" : "retired"} onChange={e=>setForm({...form, enabled:e.target.value === "active", allowExternalUse:false})}><option value="active">使用中</option><option value="retired">已停用</option></select></label>
-      <details><summary>对外引用设置</summary><label className="checkbox"><input type="checkbox" checked={form.allowExternalUse} disabled={!form.enabled} onChange={e=>setForm({...form,allowExternalUse:e.target.checked})}/>允许机器人对外回复引用此资料</label><p className="muted">仅在已授权的机器人与会话中使用。修改来源或正文后需重新开启。</p></details>
+      <details><summary>对外引用设置</summary><label className="checkbox"><input type="checkbox" checked={form.allowExternalUse} disabled={!form.enabled} onChange={e=>setForm({...form,allowExternalUse:e.target.checked})}/>允许机器人对外回复引用此资料</label><p className="muted">仅在已授权的机器人与会话中使用。修改来源或正文后需重新开启。</p><label className="checkbox"><input type="checkbox" checked={form.avatarExcluded} onChange={e=>setForm({...form,avatarExcluded:e.target.checked})}/>不让飞书分身使用这份资料</label><p className="muted">飞书分身默认可使用所勾选知识库中的全部在用资料；编辑来源或正文不会改变这一设置。</p></details>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="toolbar-actions"><button className="secondary" type="button" onClick={onClose}>取消</button><button className="primary">{busy ? "正在保存…" : "保存来源信息"}</button></div>
     </fieldset></form>

@@ -2,11 +2,19 @@ import { randomUUID } from "node:crypto";
 import { check, identifier, string } from "../../../server/errors.mjs";
 import { sqliteTransaction } from "../../../server/sqlite-transaction.mjs";
 import { isCalendarDate, localCalendarDate } from "../../../shared/calendar-date.mjs";
+import { COHORT_STATUS, describeCondition, evaluatePatient } from "../../../server/medical/cohort-query.mjs";
 
 // Trial-wide work on top of per-patient screening: a deterministic
-// pre-filter, queued AI screening for many patients, the candidate list and
+// pre-screen, queued AI screening for many patients, the candidate list and
 // the enrollment pipeline. The model only drafts per-criterion judgements;
 // eligibility and enrollment are always recorded by the doctor.
+//
+// 预筛有两种来源：
+// - 方案已有医生确认的「筛选条件」（screeningSpec，与 cohort_query 同一套条件）：
+//   用 evaluatePatient 逐条判断 符合/待核对/不符合，缺资料只算待核对。
+// - 没有筛选条件：旧的正则/字面重合 prefilter 只作为「粗略提示」保留在
+//   candidate.prefilter 里（接口兼容），candidate.screen 一律为待核对，
+//   界面提示先让助手把入排标准整理成筛选条件。
 export const STAGES = Object.freeze({
   none: "未处理", shortlisted: "拟邀请", contacted: "已联系", consented: "已签知情同意",
   enrolled: "已入组", declined: "患者拒绝", ineligible: "不符合", withdrawn: "已退出",
@@ -39,7 +47,7 @@ export function parseLimits(criteria) {
   return limits;
 }
 
-// Explainable pre-filter from the chart only: hard limits exclude, diagnosis overlap ranks.
+// 粗略提示（未设置筛选条件时）：只认年龄/性别字面限制和诊断字面重合，不可靠。
 export function prefilter(trial, patient, now = Date.now()) {
   const limits = parseLimits(trial.criteria), reasons = [], warnings = [];
   let mismatch = false;
@@ -70,6 +78,49 @@ export function prefilter(trial, patient, now = Date.now()) {
   const status = mismatch ? "mismatch" : score >= 2 ? "likely" : score ? "possible" : "unclear";
   return { status, score, reasons, warnings: warnings.slice(0, 4) };
 }
+
+export const ROUGH_LABEL = Object.freeze({ likely: "字面相关", possible: "部分字面相关", unclear: "未见字面相关", mismatch: "年龄/性别可能不符" });
+const MAX_OPEN = 6;
+
+// 方案的筛选条件摘要（界面与工具共用）；没有时为 null。
+export function screeningSummary(trial) {
+  if (!trial.screeningSpec) return null;
+  return {
+    title: trial.screeningSpec.title,
+    source: trial.screeningSpecSource || "doctor",
+    sourceLabel: trial.screeningSpecSource === "model_draft" ? "助手起草、医生确认" : "医生设置",
+    updatedAt: trial.screeningSpecUpdatedAt || null,
+    revision: trial.screeningSpecRevision || 0,
+    conditions: trial.screeningSpec.conditions.map((c, index) => ({ index, label: c.label, kind: c.kind, field: c.field, description: describeCondition(c) })),
+    manualCriteria: trial.screeningManualCriteria || [],
+    // 原始条件：界面删改后回存、助手修订时参照。
+    spec: trial.screeningSpec,
+  };
+}
+
+// 单个患者的预筛结论。open 只列不符合/待核对的条件，便于说明“还差什么”。
+export function screenPatient(trial, patient, now = Date.now(), evaluated = null) {
+  if (!trial.screeningSpec)
+    return { source: "none", status: "unclear", label: "未设置筛选条件", open: [] };
+  const spec = trial.screeningSpec;
+  const r = evaluated || evaluatePatient(spec, patient, now);
+  const open = r.results.filter((x) => x.verdict !== "met").map((x) => ({
+    index: x.index, verdict: x.verdict, verdictLabel: x.verdictLabel, label: spec.conditions[x.index].label, evidence: x.evidence,
+  }));
+  return {
+    source: "conditions", status: r.status, label: COHORT_STATUS[r.status],
+    met: r.results.length - open.length, total: r.results.length,
+    // 不符合优先展示。
+    open: open.sort((a, b) => (a.verdict === "not_met" ? 0 : 1) - (b.verdict === "not_met" ? 0 : 1)).slice(0, MAX_OPEN),
+    openCount: open.length,
+  };
+}
+
+const openText = (o) => `第${o.index + 1}条「${o.label}」${o.verdictLabel}：${o.evidence}`;
+
+// 明确写明不在招募的状态；“尚未开始招募”“邀请入组”等仍视为可能入组。
+const CLOSED_RECRUITMENT = /已完成|已结束|结束招募|停止招募|招募结束|已终止|终止|已暂停|暂停|已撤回|撤回|不再招募|不招募|已关闭|completed|terminated|suspended|withdrawn|closed|active,?\s*not recruiting|^not recruiting/i;
+export const recruitmentClosed = (text) => CLOSED_RECRUITMENT.test(String(text || "").trim());
 
 export class TrialCandidates {
   constructor({ store, patients, trials, jobs, now = Date.now }) {
@@ -153,29 +204,42 @@ export class TrialCandidates {
     }
     if (c.ai?.status === "running") return "AI 初筛中";
     if (c.ai?.status === "completed" && !c.ai.stale) return c.ai.conflicts ? "AI 发现冲突，请医生核对" : "AI 初筛完成，请医生核对";
-    if (c.prefilter.status === "mismatch") return "预筛不符，一般无需初筛";
-    return c.prefilter.status === "unclear" ? "资料不足，可 AI 初筛" : "建议 AI 初筛";
+    if (c.screen.source === "conditions") {
+      if (c.screen.status === "mismatch") return "不符合筛选条件，一般无需初筛";
+      if (c.screen.status === "unclear") return `${c.screen.openCount} 条待核对，可 AI 逐条初筛`;
+      return "符合筛选条件，建议 AI 逐条初筛";
+    }
+    return c.prefilter.status === "mismatch" ? "粗略提示年龄/性别可能不符，请核对" : "未设置筛选条件，可 AI 逐条初筛";
   }
   candidates(trialId, { stage, status } = {}) {
     const trial = this.trials.get(identifier(trialId));
     const jobs = this.latestJobs(trial.id);
     const reviews = new Map(this.db.prepare("SELECT patient_id, data FROM trial_screenings WHERE trial_id=?").all(trial.id).map((r) => [r.patient_id, JSON.parse(r.data)]));
     const enrollments = new Map(this.db.prepare("SELECT patient_id, data FROM trial_enrollments WHERE trial_id=?").all(trial.id).map((r) => [r.patient_id, JSON.parse(r.data)]));
-    const list = [];
+    const list = [], tallies = trial.screeningSpec?.conditions.map(() => ({ met: 0, not_met: 0, unknown: 0 }));
     for (const p of this.patients.all()) {
       const enrollment = enrollments.get(p.id) || this.enrollment(trial.id, p.id);
       if (p.archived && enrollment.stage === "none") continue;
+      const evaluated = trial.screeningSpec ? evaluatePatient(trial.screeningSpec, p, this.now()) : null;
+      // 每条条件的人数只统计未归档患者，与 cohort_query 口径一致。
+      if (evaluated && !p.archived) evaluated.results.forEach((x) => tallies[x.index][x.verdict]++);
       const r = reviews.get(p.id);
       const c = {
         patientId: p.id, name: p.name, patientNumber: p.patientNumber || "", gender: p.gender || null, birthYear: p.birthYear || null,
         diagnoses: (p.diagnoses || []).slice(0, 3).map((d) => d.name), archived: Boolean(p.archived),
-        prefilter: prefilter(trial, p, this.now()), ai: this.aiSummary(jobs.get(p.id)),
+        prefilter: { ...prefilter(trial, p, this.now()), rough: true }, screen: screenPatient(trial, p, this.now(), evaluated), ai: this.aiSummary(jobs.get(p.id)),
         review: r?.revision ? { revision: r.revision, summary: r.summary, conflicts: r.conflicts, missing: r.missing, updatedAt: r.updatedAt, stale: r.patientRevision !== p.revision } : null,
         enrollment: { stage: enrollment.stage, label: STAGES[enrollment.stage], revision: enrollment.revision, note: enrollment.note, consentDate: enrollment.consentDate, updatedAt: enrollment.updatedAt || null },
       };
       c.next = this.next(c);
       list.push(c);
     }
+    const withSpec = Boolean(trial.screeningSpec);
+    // 有筛选条件时按 符合 → 待核对（待核对条数少者优先）→ 不符合 排；
+    // 没有时沿用粗略提示排序，界面会标明这只是粗略提示。
+    const preRank = (c) => withSpec
+      ? { match: 5, unclear: 6, mismatch: 8 }[c.screen.status]
+      : { likely: 5, possible: 6, unclear: 7, mismatch: 8 }[c.prefilter.status];
     const rank = (c) => {
       const s = c.enrollment.stage;
       if (["consented", "contacted", "shortlisted"].includes(s)) return 0;
@@ -183,18 +247,59 @@ export class TrialCandidates {
       if (c.review && !c.review.conflicts && s === "none") return 2;
       if (c.ai?.status === "running") return 3;
       if (s === "enrolled") return 4;
-      if (s === "none" && c.prefilter.status === "likely") return 5;
-      if (s === "none" && c.prefilter.status === "possible") return 6;
-      if (s === "none" && c.prefilter.status === "unclear") return 7;
+      if (s === "none") return preRank(c);
       return 8;
     };
-    list.sort((a, b) => rank(a) - rank(b) || b.prefilter.score - a.prefilter.score || a.name.localeCompare(b.name));
+    const tie = (a, b) => withSpec ? (a.screen.openCount || 0) - (b.screen.openCount || 0) : b.prefilter.score - a.prefilter.score;
+    list.sort((a, b) => rank(a) - rank(b) || tie(a, b) || a.name.localeCompare(b.name));
     const counts = { total: list.length, stages: Object.fromEntries(Object.keys(STAGES).map((k) => [k, list.filter((c) => c.enrollment.stage === k).length])),
       prefilter: Object.fromEntries(["likely", "possible", "unclear", "mismatch"].map((k) => [k, list.filter((c) => c.prefilter.status === k).length])),
+      screen: { source: withSpec ? "conditions" : "none", ...Object.fromEntries(["match", "unclear", "mismatch"].map((k) => [k, withSpec ? list.filter((c) => c.screen.status === k).length : 0])) },
       aiDone: list.filter((c) => c.ai?.status === "completed").length, awaitingReview: list.filter((c) => c.ai?.status === "completed" && !c.review).length };
-    const filtered = list.filter((c) => (!stage || String(stage).split(",").includes(c.enrollment.stage)) && (!status || String(status).split(",").includes(c.prefilter.status)));
-    const suggested = list.filter((c) => ["likely", "possible"].includes(c.prefilter.status) && !c.archived && c.enrollment.stage === "none" && !c.review && (!c.ai || c.ai.stale || !["completed", "running"].includes(c.ai.status))).map((c) => c.patientId);
-    return { suggested, trial: { id: trial.id, title: trial.title, registration: trial.registration, recruitment: trial.recruitment, criteria: trial.criteria.length, limits: parseLimits(trial.criteria) }, candidates: filtered, counts, batch: this.batch(trial.id) };
+    // status 过滤：有筛选条件时按 match/unclear/mismatch（旧值 likely/possible 视为 match）；
+    // 没有时按旧的粗略提示状态，保持旧调用方行为。
+    const wanted = status ? String(status).split(",").flatMap((x) => withSpec && ["likely", "possible"].includes(x) ? ["match"] : [x]) : null;
+    const statusOf = (c) => withSpec ? c.screen.status : c.prefilter.status;
+    const filtered = list.filter((c) => (!stage || String(stage).split(",").includes(c.enrollment.stage)) && (!wanted || wanted.includes(statusOf(c))));
+    const open = (c) => !c.archived && c.enrollment.stage === "none" && !c.review && (!c.ai || c.ai.stale || !["completed", "running"].includes(c.ai.status));
+    const suggestable = (c) => withSpec ? c.screen.status !== "mismatch" : ["likely", "possible"].includes(c.prefilter.status);
+    // 一次批量最多 50 位，按上面的排序取前 50。
+    const suggested = list.filter((c) => suggestable(c) && open(c)).slice(0, 50).map((c) => c.patientId);
+    const screening = screeningSummary(trial);
+    if (screening) screening.conditions.forEach((condition) => Object.assign(condition, tallies[condition.index]));
+    return { suggested, suggestedBy: withSpec ? "conditions" : "rough", trial: { id: trial.id, title: trial.title, registration: trial.registration, recruitment: trial.recruitment, criteria: trial.criteria.length, limits: parseLimits(trial.criteria), screening }, candidates: filtered, counts, batch: this.batch(trial.id) };
+  }
+
+  // ---------- patient-side matching ----------
+  // 招募状态是自由文本（注册库导入或医生填写）。只有明确写了已结束/暂停等
+  // 才算不在招募；“待研究中心确认”等不确定的状态仍参与匹配。
+  // 一位患者对照所有已设置筛选条件的方案；结果只含编号与依据，不含姓名。
+  matchPatient(patientId, { includeClosed = false } = {}) {
+    const patient = this.patients.row(identifier(patientId));
+    const evaluated = [], withoutConditions = [], closed = [];
+    for (const trial of this.trials.list()) {
+      const enrollment = this.enrollment(trial.id, patient.id);
+      const base = { trialId: trial.id, title: trial.title, registration: trial.registration || "", recruitment: trial.recruitment || "", enrollment: STAGES[enrollment.stage] };
+      // 已在入组流程中的患者仍显示该试验，方便随访。
+      if (!includeClosed && recruitmentClosed(trial.recruitment) && enrollment.stage === "none") { closed.push(base); continue; }
+      if (!trial.screeningSpec) { withoutConditions.push(base); continue; }
+      const screen = screenPatient(trial, patient, this.now());
+      evaluated.push({
+        ...base, status: screen.status, label: screen.label, met: screen.met, total: screen.total,
+        open: screen.open.map(openText), openCount: screen.openCount,
+        manualCriteria: (trial.screeningManualCriteria || []).length,
+        conditionsSource: trial.screeningSpecSource === "model_draft" ? "助手起草、医生确认" : "医生设置",
+      });
+    }
+    const order = { match: 0, unclear: 1, mismatch: 2 };
+    evaluated.sort((a, b) => order[a.status] - order[b.status] || a.openCount - b.openCount);
+    return {
+      patientId: patient.id, archived: Boolean(patient.archived), trials: evaluated,
+      counts: { match: evaluated.filter((t) => t.status === "match").length, unclear: evaluated.filter((t) => t.status === "unclear").length, mismatch: evaluated.filter((t) => t.status === "mismatch").length },
+      withoutConditions,
+      closed,
+      note: "已结束、暂停或不再招募的试验不参与匹配（已在入组流程中的除外）。按各方案已确认的筛选条件做本地确定性判断：缺资料记为待核对，不是不符合；“需人工核对”的条目未参与判断。结果是预筛，正式资格需逐项核对并由研究团队确认。",
+    };
   }
 
   // ---------- batch AI screening ----------
@@ -273,7 +378,36 @@ export class TrialCandidates {
   }
 
   // ---------- proposals (chat) ----------
+  // 把一组条件放到当前患者库上试算，给提案和工具一个预览（只有计数）。
+  previewSpec(spec) {
+    const counts = { total: 0, match: 0, unclear: 0, mismatch: 0 };
+    const perCondition = spec.conditions.map((c, index) => ({ index, label: c.label, description: describeCondition(c), met: 0, not_met: 0, unknown: 0 }));
+    for (const p of this.patients.all()) {
+      if (p.archived) continue;
+      const r = evaluatePatient(spec, p, this.now());
+      counts.total++; counts[r.status]++;
+      r.results.forEach((x) => perCondition[x.index][x.verdict]++);
+    }
+    return { counts, perCondition };
+  }
   normalizeProposal(type, payload = {}) {
+    if (type === "trial-screening-conditions") {
+      const trial = this.trials.get(identifier(payload.trialId));
+      const value = this.trials.normalizeScreeningSpec({ spec: payload.spec, manualCriteria: payload.manualCriteria });
+      check(value.spec, "INVALID_INPUT", "请提供筛选条件");
+      return {
+        trialId: trial.id, trialTitle: trial.title, spec: value.spec, manualCriteria: value.manualCriteria,
+        conditions: value.spec.conditions.map((c) => ({ kind: c.kind, description: describeCondition(c), label: c.label })),
+        preview: this.previewSpec(value.spec).counts,
+        // 提案生成时的版本；确认时如方案的筛选条件已被改过则拒绝覆盖。
+        baseRevision: Number.isInteger(payload.baseRevision) ? payload.baseRevision : trial.screeningSpecRevision || 0,
+      };
+    }
+    if (type === "trial-protocol") {
+      const value = this.trials.normalizeProtocol(payload);
+      const duplicate = value.registration && this.trials.list().find((t) => t.registration && t.registration.toUpperCase() === value.registration.toUpperCase());
+      return { ...value, ...(duplicate ? { duplicateOf: { id: duplicate.id, title: duplicate.title, version: duplicate.version } } : {}) };
+    }
     if (type === "trial-batch") return this.normalizeBatch(payload.trialId, { ...payload, externalConsent: true });
     if (type === "trial-enrollment") {
       const value = this.normalizeEnrollment(payload.trialId, payload.patientId, payload);
@@ -284,6 +418,17 @@ export class TrialCandidates {
   // Runs inside the confirm transaction; the batch itself continues afterwards.
   applyProposal(action) {
     const p = action.payload;
+    if (action.type === "trial-screening-conditions") {
+      const current = this.trials.get(p.trialId).screeningSpecRevision || 0;
+      check(current === p.baseRevision, "REVISION_CONFLICT", "该试验的筛选条件在提案后已被修改，请让助手按最新条件重新起草", 409);
+      const saved = this.trials.setScreeningSpec(p.trialId, { spec: p.spec, manualCriteria: p.manualCriteria }, "model_draft");
+      return { trialId: saved.id, conditions: saved.screeningSpec.conditions.length };
+    }
+    if (action.type === "trial-protocol") {
+      const { duplicateOf: _duplicate, ...input } = p;
+      const created = this.trials.create(input);
+      return { trialId: created.id, title: created.title, criteria: created.criteria.length };
+    }
     if (action.type === "trial-enrollment") return this.setEnrollment(p.trialId, p.patientId, { ...p, expectedRevision: this.enrollment(p.trialId, p.patientId).revision });
     if (action.type === "trial-batch") {
       const running = this.batch(p.trialId);

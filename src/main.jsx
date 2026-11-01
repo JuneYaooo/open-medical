@@ -56,6 +56,7 @@ import {
   downloadSession,
   medicalEnabled,
   PLUGIN_CONFIG_EVENT,
+  OPEN_MODEL_SETTINGS_EVENT,
 } from "./agent-runtime";
 import { artifactLines, artifactTitle, INTENTS } from "../shared/medical.mjs";
 import { eventDateWarnings } from "../shared/timeline-display.mjs";
@@ -89,6 +90,8 @@ import { ResultCard, SlotItem, registerUiPlugins, usePluginActive, usePluginEnab
 import { loadUiPluginModules } from "./plugin-registry";
 import { modelBoundary } from "../shared/model-boundary.mjs";
 import { ModelSettings } from "./model-settings";
+import { useDevInfo } from "./dev-info";
+import { ErrorBoundary } from "./error-boundary";
 import {
   AcceptanceView,
   MemoryNote,
@@ -106,8 +109,10 @@ const LazyToolDirectory = lazyView(() => import("./work-directory"), "ToolDirect
 const LazyTaskDirectory = lazyView(() => import("./work-directory"), "TaskDirectory");
 const LazyWorkspacesView = lazyView(() => import("./workspaces"), "WorkspacesView");
 const LazyDoctorAgenda = lazyView(() => import("./doctor-agenda"), "DoctorAgenda");
+const LazyClinicSchedule = lazyView(() => import("./clinic-schedule"), "ClinicSchedule");
 const LazyKnowledgeLibraries = lazyView(() => import("./knowledge-libraries"), "KnowledgeLibraries");
 const LazyCasesView = lazyView(() => import("./cases"), "CasesView");
+const SHORTCUT_MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || "") ? "⌥" : "Alt+";
 const RouteFallback = () => (
   <main id="main" className="workbench-hub">
     <div className="loading-state" role="status">
@@ -516,6 +521,7 @@ function App() {
   const legacyViews = useSlot("legacyViews");
   const similarCasesEnabled = usePluginEnabled("similar-cases");
   const followupActive = usePluginActive("followup");
+  const [devInfo] = useDevInfo();
   const cardForArtifact = (artifact) => resultCards.find((item) => item.type === artifact?.type) || null;
   const [config, setConfig] = useState(null),
     [sessions, setSessions] = useState([]),
@@ -1259,13 +1265,13 @@ function App() {
     const files = [...(e.target.files || [])];
     e.target.value = "";
     if (!files.length) return;
-    if (loading) { setError("患者会话仍在加载，请加载完成后再添加资料。"); return; }
+    if (loading) { setError("患者任务记录仍在加载，请加载完成后再添加资料。"); return; }
     setUploading(true);
     setError("");
     try {
       let current = readLocation().view === "home" ? homePending.current : session;
       const targetId = readLocation().view === "workbench" ? activeRef.current : null;
-      if (targetId && current?.id !== targetId) throw new Error("患者会话尚未就绪，请重新打开后添加资料。");
+      if (targetId && current?.id !== targetId) throw new Error("患者任务记录尚未就绪，请重新打开后添加资料。");
       if (!current) current = await create();
       if (!current) return;
       for (const [index, file] of files.entries()) {
@@ -1367,12 +1373,18 @@ function App() {
     setNotice("");
     refreshList().catch((err) => setError(err.message));
   };
+  useEffect(() => {
+    const open = () => setModal("model");
+    window.addEventListener(OPEN_MODEL_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_MODEL_SETTINGS_EVENT, open);
+  }, []);
   // 高频导航快捷键：Alt+1 患者 / Alt+2 今日待办 / Alt+3 知识库 / Alt+N 新任务。
   useEffect(() => {
     const onHotkey = (event) => {
       if (!event.altKey || event.ctrlKey || event.metaKey) return;
-      const key = event.key.toLowerCase();
-      if (!["1", "2", "3", "n"].includes(key)) return;
+      // macOS 上 Option+键 会改写 event.key（如 ¡、˜），按物理键位 event.code 判断。
+      const key = { Digit1: "1", Digit2: "2", Digit3: "3", KeyN: "n" }[event.code];
+      if (!key) return;
       event.preventDefault();
       if (key === "1") openPatient({ navigationKey: Date.now() });
       else if (key === "2") navigate("agenda");
@@ -1489,7 +1501,7 @@ function App() {
     if (!config) return;
     const patient = patientsList.find((p) => p.id === visiblePatientRoute.id);
     const patientTitle = [patient?.name || "患者", patient?.patientNumber || visiblePatientRoute.id,
-      ({ overview: "概览", diagnoses: "诊断与病史", clinical: "治疗与预后", medications: "治疗与预后", labs: "检验结果", visits: "就诊经过", library: "资料库", messages: "沟通", appointments: "预约", followups: "随访" })[visiblePatientRoute.tab] || "患者"].filter(Boolean).join(" · ");
+      ({ overview: "概览", diagnoses: "诊断与病史", clinical: "用药与治疗", medications: "用药与治疗", labs: "检验结果", visits: "就诊经过", library: "资料库", messages: "沟通", appointments: "预约", followups: "随访" })[visiblePatientRoute.tab] || "患者"].filter(Boolean).join(" · ");
     document.title = medical
       ? `${view === "patients" && visiblePatientRoute.id ? patientTitle : VIEW_LABELS[view] || "医疗工作台"} · Open Medical`
       : `${VIEW_LABELS[view] || "通用工作台"} · Open Agent`;
@@ -1567,7 +1579,7 @@ function App() {
           {medical && <PendingTray />}
           {view === "workspaces" ? (() => {
             // 项目的文件、终端等工作面板独立于医疗会话。
-            const modes = [["work", "工作区"], ["split", "AI 半屏"], ["chat", "AI 全屏"]];
+            const modes = [["work", "资料视图"], ["split", "AI 半屏"], ["chat", "AI 全屏"]];
             const current = workspaceDisplay;
             const next = modes[(modes.findIndex(([id]) => id === current) + 1) % modes.length];
             return <button
@@ -1579,15 +1591,15 @@ function App() {
             </button>;
           })() : null}
           <button className="text-size-control" aria-label="Aa · 切换字号（标准/大/特大）" onClick={()=>{const next=textScale==="off"?"large":textScale==="large"?"xlarge":"off";setTextScale(next);localStorage.setItem("om.largeText",next);}}>Aa <span>{{off:"大字模式",large:"大字号",xlarge:"特大字号"}[textScale]}</span></button>
-          {session && (
-            <div className="top-meters" role="status" aria-label="会话用量指标">
+          {session && devInfo && (
+            <div className="top-meters" role="status" aria-label="任务用量指标">
               <span
                 className={`meter ${
                   meters.chars / (config?.contextBudget || 80000) >= 0.6
                     ? "warn"
                     : ""
                 }`}
-                title={`当前会话约 ${meters.chars} 字符 / 上下文预算 ${
+                title={`当前任务约 ${meters.chars} 字符 / 上下文预算 ${
                   config?.contextBudget || 80000
                 } 字符${meters.compacted ? "；接近预算时历史已自动压缩，原文可按归档读回" : ""}`}
               >
@@ -1600,7 +1612,7 @@ function App() {
               </span>
               <span
                 className="meter"
-                title={`本会话累计消耗 ${meters.tokens} tokens · ${meters.rounds} 轮模型调用`}
+                title={`本任务累计消耗 ${meters.tokens} tokens · ${meters.rounds} 轮模型调用`}
               >
                 {meters.tokens >= 1000
                   ? `${(meters.tokens / 1000).toFixed(1)}k tok`
@@ -1608,7 +1620,7 @@ function App() {
               </span>
               <span
                 className="meter"
-                title="本次打开会话以来的知识库/文献/病例检索次数"
+                title="本次打开任务以来的知识库/文献/病例检索次数"
               >
                 检索 {meters.retrievals}
               </span>
@@ -1650,12 +1662,12 @@ function App() {
           />
         )}
         <aside className={`app-navigation ${sidebar ? "open" : ""}`}>
-          <button className="new-session agent-new-task" aria-label="新建任务" aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
+          <button className="new-session agent-new-task" aria-label="新建任务" title={`新建任务（${SHORTCUT_MOD}N）`} aria-current={view === "home" ? "page" : undefined} onClick={startNewTask}>
             <Plus size={20}/><span>新建任务</span>
           </button>
           {medical && <div className="medical-quick-wrap">
             <nav className="medical-quick" aria-label="主要业务">
-              {[["patients", "患者", Stethoscope], ["agenda", "今日待办", CalendarClock], ["knowledge", "知识库", BookOpen]].map(([id,label,Icon]) => { const current = view === id || (id === "agenda" && AGENDA_VIEWS.includes(view)); return <button key={id} aria-current={current ? "page" : undefined} className={current ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>; })}
+              {[["patients", "患者", Stethoscope, "1"], ["agenda", "今日待办", CalendarClock, "2"], ["knowledge", "知识库", BookOpen, "3"]].map(([id,label,Icon,hotkey]) => { const current = view === id || (id === "agenda" && AGENDA_VIEWS.includes(view)); return <button key={id} title={`${label}（${SHORTCUT_MOD}${hotkey}）`} aria-current={current ? "page" : undefined} className={current ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>; })}
             </nav>
             <nav className="medical-quick" aria-label="资料与工具">
               <button aria-current={TOOL_VIEWS.includes(view) && !AGENDA_VIEWS.includes(view) ? "page" : undefined} className={TOOL_VIEWS.includes(view) && !AGENDA_VIEWS.includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={17}/><span>资料与工具</span></button>
@@ -1692,7 +1704,7 @@ function App() {
           <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
         <div className="product-content" id="main-content" tabIndex={-1}>
-          {view !== "tools" && TOOL_VIEWS.includes(view) && (() => { const parent = medical && AGENDA_VIEWS.includes(view) ? "agenda" : "tools"; return <nav className="page-trail" aria-label="当前位置"><button onClick={() => navigate(parent)}>{VIEW_LABELS[parent]}</button><ChevronRight size={14}/><span>{VIEW_LABELS[view]}</span></nav>; })()}
+          {view !== "tools" && (TOOL_VIEWS.includes(view) || view === "schedule") && (() => { const parent = medical && AGENDA_VIEWS.includes(view) ? "agenda" : "tools"; return <nav className="page-trail" aria-label="当前位置"><button onClick={() => navigate(parent)}>{VIEW_LABELS[parent]}</button><ChevronRight size={14}/><span>{VIEW_LABELS[view]}</span></nav>; })()}
           {listError && <div className="navigation-notice" role="alert"><span>{listError}</span><button className="secondary" onClick={() => refreshList()}>重新加载列表</button></div>}
           {!config ? (<main id="main" className="workbench-hub">
                 {error ? <div className="connection-recovery" role="alert">
@@ -1704,7 +1716,7 @@ function App() {
                 </div> : <div className="loading-state" role="status">
                   <Loader2 className="spin" />正在连接本地运行时…
                 </div>}
-              </main>) : <Suspense fallback={<RouteFallback />}> {legacyView ? <SlotItem contribution={legacyView} view={view} config={config} onNavigate={navigate} onOpenTask={openTask} onOpenPatient={openPatient} onSettings={() => navigate("settings")} /> : view === "examples" && medical ? <LazyDemoExperience entryHidden={Boolean(config?.demoEntryHidden)} preferenceBusy={demoPreferenceBusy} onEntryHiddenChange={setDemoEntryHidden} flows={MEDICAL_WORKFLOWS} onView={navigate} onPatient={openPatient} onOpenTask={openTask} onChanged={refreshList}/> : view === "settings" && config ? <LazyAppSettingsView demoPreferenceBusy={demoPreferenceBusy} onDemoEntryHiddenChange={setDemoEntryHidden} config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} onAsk={(prompt, context)=>{setHomeDraft({prompt, context});setHomeKey((k)=>k+1);navigate("home");}} onPluginsChanged={plugins => setConfig(current => ({ ...current, plugins }))} /> : view === "projects" && config ? <LazyProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <LazyToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <LazyTaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
+              </main>) : <ErrorBoundary resetKey={`${view}:${activeId}`}><Suspense fallback={<RouteFallback />}> {legacyView ? <SlotItem contribution={legacyView} view={view} config={config} onNavigate={navigate} onOpenTask={openTask} onOpenPatient={openPatient} onSettings={() => navigate("settings")} /> : view === "examples" && medical ? <LazyDemoExperience entryHidden={Boolean(config?.demoEntryHidden)} preferenceBusy={demoPreferenceBusy} onEntryHiddenChange={setDemoEntryHidden} flows={MEDICAL_WORKFLOWS} onView={navigate} onPatient={openPatient} onOpenTask={openTask} onChanged={refreshList}/> : view === "settings" && config ? <LazyAppSettingsView demoPreferenceBusy={demoPreferenceBusy} onDemoEntryHiddenChange={setDemoEntryHidden} config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} onAsk={(prompt, context)=>{setHomeDraft({prompt, context});setHomeKey((k)=>k+1);navigate("home");}} onPluginsChanged={plugins => setConfig(current => ({ ...current, plugins }))} /> : view === "projects" && config ? <LazyProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <LazyToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <LazyTaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
             <LazyWorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}
@@ -1725,7 +1737,7 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "agenda" && medical ? (<main id="main" className="work-directory agenda-page"><LazyDoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "patients" && medical ? (
+          ) : view === "agenda" && medical ? (<main id="main" className="work-directory agenda-page"><LazyDoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "schedule" && medical ? (<main id="main" className="work-directory schedule-page"><LazyClinicSchedule onPatient={openPatient}/></main>) : view === "patients" && medical ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}
@@ -1788,7 +1800,7 @@ function App() {
               <main id="main" className={`conversation ${session?.patientId ? "patient-conversation" : ""}`}>
                 <div className="conversation-head">
                   <IconButton
-                    title="显示会话列表"
+                    title="显示任务列表"
                     onClick={() => setSidebar(!sidebar)}
                   >
                     <Menu size={18} />
@@ -1826,13 +1838,13 @@ function App() {
                       <div className="head-actions" onClick={event => { if (event.target.closest('button')) event.currentTarget.closest('details').open = false; }}>
                       {session.patientId && !loading && <PatientQuestionHistory session={session} runId={questionRunId} busy={busy} onSelect={chooseQuestion} />}
                       <button type="button" className="text-button"
-                        title="重命名会话"
+                        title="重命名任务记录"
                         onClick={() => setModal("rename")}
                       >
                         <PencilLine size={16} />重命名
                       </button>
                       <button type="button" className="text-button"
-                        title="复制选中材料到新会话"
+                        title="复制选中材料到新任务"
                         disabled={busy || loading || !selectedFileIds.length}
                         onClick={async () => {
                           try {
@@ -1849,27 +1861,27 @@ function App() {
                             await refreshList();
                             select(copy.id);
                             setNotice(
-                              "已复制所选材料，新会话从空白任务开始，未继承模型历史或复核结果。",
+                              "已复制所选材料，新任务从空白开始，未继承模型历史或复核结果。",
                             );
                           } catch (err) {
                             setError(err.message);
                           }
                         }}
                       >
-                        <Copy size={16} />复制材料到新会话
+                        <Copy size={16} />复制材料到新任务
                       </button>
                       <button type="button" className="text-button"
-                        title="导出会话"
+                        title="导出任务记录"
                         onClick={() => setModal("export")}
                       >
-                        <Download size={16} />导出会话
+                        <Download size={16} />导出任务记录
                       </button>
                       {!session.patientId && <button type="button" className="text-button"
-                        title="删除会话"
+                        title="删除任务记录"
                         disabled={busy || loading || Boolean(session.patientId)}
                         onClick={() => setModal("delete")}
                       >
-                        <Trash2 size={16} />删除会话
+                        <Trash2 size={16} />删除任务记录
                       </button>}
                       </div>
                     </details>
@@ -1930,7 +1942,7 @@ function App() {
                 {loading ? (
                   <div className="loading-state">
                     <Loader2 className="spin" />
-                    正在载入工作会话…
+                    正在载入任务记录…
                   </div>
                 ) : (
                   <div className="message-list" tabIndex={0} role="region" aria-label="对话内容"
@@ -2537,10 +2549,10 @@ function App() {
                         <>
                           <div className="panel-section-head">
                             <h3>
-                              {session?.kind === "session" ? `资料 · ${session.files.length} 份` : `本会话材料 · 本轮选中 ${selectedFileIds.length} 份`}
+                              {session?.kind === "session" ? `资料 · ${session.files.length} 份` : `本任务材料 · 本轮选中 ${selectedFileIds.length} 份`}
                             </h3>
                             <IconButton
-                              title="添加会话材料"
+                              title="添加任务材料"
                               disabled={busy || !config}
                               onClick={() => fileRef.current?.click()}
                             >
@@ -2563,8 +2575,8 @@ function App() {
                               }}
                             >
                               <input
-                                aria-label="检索本会话材料"
-                                placeholder="在本会话材料中检索"
+                                aria-label="检索本任务材料"
+                                placeholder="在本任务材料中检索"
                                 value={materialQuery}
                                 onChange={(e) => {
                                   setMaterialQuery(e.target.value);
@@ -2584,7 +2596,7 @@ function App() {
                             <div className="material-matches">
                               <p>
                                 找到 {materialMatches.length}{" "}
-                                条原文匹配（仅本会话）
+                                条原文匹配（仅本任务）
                               </p>
                               {materialMatches.map((match, i) => (
                                 <button
@@ -2871,7 +2883,7 @@ function App() {
               </aside>
             </div>
           )}
-          </Suspense>
+          </Suspense></ErrorBoundary>
           }
         </div>
         <KnowledgeSourcePanel contextKey={`${view}:${activeId}`} />
@@ -2913,6 +2925,7 @@ function App() {
             fileIds={selectedFileIds}
             config={config}
             onChanged={updateSession}
+            onModelSettings={() => setModal("model")}
             onSandbox={(code) => {
               setModal(null);
               send(null, {
@@ -2926,13 +2939,13 @@ function App() {
         </Modal>
       )}
       {modal === "delete" && (
-        <Modal title="删除这个工作会话？" onClose={() => setModal(null)}>
+        <Modal title="删除这条任务记录？" onClose={() => setModal(null)}>
           <p>
-            会话、导入材料、产物与本会话审计记录将一并删除。此操作无法撤销。
+            任务记录、导入材料、产物与相关审计记录将一并删除。此操作无法撤销。
           </p>
           <div className="modal-actions">
             <button className="secondary" onClick={() => setModal(null)}>
-              保留会话
+              保留
             </button>
             <button className="danger" onClick={deleteSession}>
               确认删除
@@ -2941,7 +2954,7 @@ function App() {
         </Modal>
       )}
       {modal === "rename" && (
-        <Modal title="重命名会话" onClose={() => setModal(null)}>
+        <Modal title="重命名任务记录" onClose={() => setModal(null)}>
           <form
             className="inline-form"
             onSubmit={async (e) => {
@@ -2961,7 +2974,7 @@ function App() {
             }}
           >
             <label>
-              会话名称
+              任务名称
               <input
                 name="title"
                 defaultValue={session.title}

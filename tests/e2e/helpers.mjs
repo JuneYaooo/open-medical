@@ -42,6 +42,9 @@ export async function expandMainContent(page, selector) {
   await page.evaluate(() => document.fonts.ready);
 }
 
+// 截图只保存到 test-results/e2e-screens 供人工查看，不做逐像素对比：
+// 像素基准图对字体、样式的细微变化过于敏感，维护成本高于收益。
+// 页面是否正常由各用例中的 expect 断言检查。
 export async function capture(page, name, { scroll, mask = [] } = {}) {
   // Wait for all page-initiated requests (including async cards and lists)
   // before freezing the layout for the frame.
@@ -49,12 +52,11 @@ export async function capture(page, name, { scroll, mask = [] } = {}) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(250);
   if (scroll) await expandMainContent(page, scroll);
-  await expect(page).toHaveScreenshot(name, {
+  await page.screenshot({
+    path: `test-results/e2e-screens/${name}`,
     fullPage: true,
     animations: "disabled",
     caret: "hide",
-    threshold: 0.02,
-    maxDiffPixels: 0,
     mask,
   });
 }

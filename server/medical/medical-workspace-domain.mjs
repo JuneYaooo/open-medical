@@ -5,6 +5,7 @@ import { configureIntakeTools } from "./intake-tools.mjs";
 import { configureGlobalAssistantTools, GLOBAL_ASSISTANT_DISCIPLINE, rosterDigest } from "./global-assistant.mjs";
 import { configureResearchTools, RESEARCH_GUIDANCE } from "./research-tools.mjs";
 import { maskIdentities, reidentifyProposal, sourceIdentities } from "./privacy.mjs";
+import { guardOutboundTools, patientIdentityTerms } from "./outbound-query.mjs";
 
 const PRIVACY_NOTE = `本会话已开启患者资料脱敏：资料中的姓名、电话、证件号、住址等已替换为 [患者姓名]、[电话] 等占位符。不要猜测或还原真实身份；建档时姓名可直接写 [患者姓名]，系统会在本机用资料的身份信息回填，医生在提案中核对。资料图片已按识别结果把身份信息涂黑；尚未打码的图片不会发给你，inspect_image 只返回识别并脱敏后的文字。`;
 import { GENERIC_CORE_SYSTEM, GenericDomain, defineDomain } from "../core/domain-adapter.mjs";
@@ -87,18 +88,28 @@ export const SESSION_TOOL_GROUPS = Object.freeze([
     when: /extension_|扩展|技能|模板|格式|习惯|提醒|规则|自动化|自动|定时|每天|每周|每月|固化|定制|个性化|质控|以后都|下次都|插件/i,
   },
   {
+    id: "cohort",
+    title: "按条件找患者",
+    summary: "把自然语言条件（年龄、性别、诊断、用药、检验数值、分组）转成结构化条件，在本地患者库逐人判断符合/待核对/不符合",
+    names: ["cohort_query"],
+    when: /找出|筛选|筛出|筛一下|哪些患者|哪些病人|多少(个|位|名)?(患者|病人)|符合.{0,12}(患者|病人)|患者.{0,6}(名单|列表)|队列|入组|试验|纳排|统计|组间|比较|研究/i,
+  },
+  {
     id: "trials",
     title: "临床试验",
     summary: "试验方案、候选患者、纳排初筛与入组状态",
-    names: ["trial_list", "trial_candidates", "trial_patient_screening", "trial_batch_screen_propose", "trial_enrollment_propose"],
-    when: /试验|入组|纳排|纳入标准|排除标准|招募|受试者|trial/i,
+    names: [
+      "trial_list", "trial_protocol_criteria", "trial_candidates", "trial_screening_conditions_propose", "trial_match_patient",
+      "trial_patient_screening", "trial_batch_screen_propose", "trial_enrollment_propose", "trial_registry_search", "trial_protocol_propose",
+    ],
+    when: /试验|入组|纳排|入排|纳入标准|排除标准|入选标准|招募|受试者|研究项目|注册号|\bNCT\d|ChiCTR|clinicaltrials|trial/i,
   },
   {
     id: "research-stats",
     title: "科研统计与分析",
     summary: "本地患者库科研数据字典与沙箱分析（共性、危险因素、回归、生存分析），会话 CSV 组间比较、样本量计算、脱敏导出",
-    names: ["research_data_dictionary", "research_analyze", "stats_test", "sample_size", "deidentify_csv"],
-    when: /统计|样本|显著|p\s*值|卡方|t\s*检验|方差|回归|相关性|脱敏|csv|科研|组间|研究|共性|因素|队列|生存分析|预后|research_/i,
+    names: ["research_data_dictionary", "research_analyze", "cohort_compare", "stats_test", "sample_size", "deidentify_csv"],
+    when: /统计|样本|比较|差别|差异|有没有区别|显著|p\s*值|卡方|t\s*检验|方差|回归|相关性|脱敏|csv|科研|组间|研究|共性|因素|队列|生存分析|预后|research_/i,
   },
   {
     id: "drg",
@@ -346,6 +357,12 @@ export function createMedicalWorkspaceDomain({
             execute: (args, context) =>
               execute(plugin.definition.function.name, args, context),
           });
+        // 患者会话的外发检索词不得带出当前患者身份、编号或精确日期。
+        if (workspace.patientId) {
+          let patient = null;
+          try { patient = patients?.()?.row(workspace.patientId); } catch {}
+          guardOutboundTools(registry, patientIdentityTerms(patient));
+        }
         const intakeRun = workspace.runs?.find(run => run.id === runId);
         const workflow = pluginHost?.workflow(intakeRun?.policy?.workflow);
         if (intakeRun?.policy?.workflow === "patient-assessment") configureAssessmentTools(registry, workspace, intakeRun, { readPatient: patients ? () => patients().row(workspace.patientId) : null });

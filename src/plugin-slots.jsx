@@ -68,10 +68,27 @@ let slotsByName = new Map();
 let activeSlotsByName = new Map();
 let version = 0;
 
+// 固定区自带的结果卡片（不属于任何插件，始终可用），如按条件找患者的名单。
+let coreDefinition = null;
+function coreUi() {
+  coreDefinition ||= defineUiPlugin({
+    id: "core",
+    slots: {
+      "chat.resultCards": {
+        patient_cohort: {
+          label: "查看患者名单",
+          component: () => import("./cohort-card.jsx").then((module) => ({ default: module.CohortCard })),
+        },
+      },
+    },
+  });
+  return coreDefinition;
+}
+
 function rebuild() {
   const next = new Map();
-  for (const definition of registrations.values()) {
-    if (!enabledIds.has(definition.id)) continue;
+  for (const definition of [coreUi(), ...registrations.values()]) {
+    if (definition.id !== "core" && !enabledIds.has(definition.id)) continue;
     for (const [name, contributions] of Object.entries(definition.slots)) {
       const list = next.get(name) || [];
       if (Array.isArray(contributions)) list.push(...contributions);
@@ -119,6 +136,7 @@ function rebuild() {
       Object.freeze(
         list.filter(
           (item) =>
+            item.pluginId === "core" ||
             (activeIds.has(item.pluginId) &&
               (item.requiresConnection !== true ||
                 connectedIds.has(item.pluginId))) ||

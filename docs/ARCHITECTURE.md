@@ -226,7 +226,7 @@ HTTP 面统一经 `guard()`：localhost Host 校验 + 同源 + 启动时生成�
 | `clinical-ref` | 临床速查：量表、检验参考、ICD-9/10、不良反应，工具目录卡片与 `legacyViews` 页面。 |
 | `doctor-notifications` | 医生提醒：微信医生号/飞书 Webhook 每日摘要、设置面板；摘要不含患者姓名与病历内容。 |
 | `drg` | DRG 示例测算：分组规则、示例费率、`legacyViews` 页面与测算 API。 |
-| `feishu-knowledge-bot` | 飞书知识库机器人：知识库问答、消息回执、`knowledge_bot_*` 表与设置面板；依赖知识库能力。 |
+| `feishu-knowledge-bot` | 飞书分身：按医生习惯与勾选的知识库在飞书群/单聊答复，自动记录会话、危险信号与回复复核、AI 会话洞察、待办来源 `avatar`；`knowledge_bot_*` 表与设置面板；依赖知识库能力。 |
 | `followup` | 随访与患者消息：计划/问卷、聊天随访、自动随访、企微机器人业务层、care 引擎、`follow_*`/`followup_*`/`chat_*`/`care_*` 表、`followup`/`messages` 待办、患者页沟通 tab、7 个历史提案 type、旧随访/care 路由；需至少一个已连接渠道才激活。 |
 | `learning` | 学习与规则：医生习惯/记忆候选、自动化规则、专科模板包、`review_*`/`habit_*`/`learning_*`/`workbench_*`/`automation_*`/`evolution_*` 表、设置面板与 `custom` 待办来源。 |
 | `legacy-agenda`（已撤销） | 过渡期的待办来源集合；各 kind 已迁入 `followup`、`risk-rules`、`trials`、`care-tasks`、`learning`，目录在 T11c 删除。 |

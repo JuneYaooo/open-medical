@@ -40,8 +40,13 @@ export class DoctorOverview {
     for (const a of this.schedule?.dueAppointments() || []) {
       const at = [a.date, a.time].filter(Boolean).join(" "), what = [a.reason, a.place].filter(Boolean).join(" · ");
       const view = { tomorrow: ["明天复诊", "提醒患者按时来", 4], today: ["今天复诊", "提前查看档案和近期结果", 2], past: ["复诊未登记到诊情况", "确认患者是否来过，未来需重新预约", 3] }[a.when];
+      // Untimed visits sort after the timed ones of the same day (end of day),
+      // instead of pretending they are at 08:00. `time` lets the UI show HH:mm.
       items.push({ id: `visit:${a.id}`, kind: "visit", patientId: a.patientId, title: view[0], detail: [at, what, view[1]].filter(Boolean).join("，"),
-        at: Date.parse(`${a.date}T${a.time || "08:00"}:00`), weight: view[2], action: { type: "patient", tab: "appointments", label: a.when === "past" ? "登记结果" : "查看预约" } });
+        at: Date.parse(`${a.date}T${a.time || "23:59"}:00`), time: a.time || "", weight: view[2],
+        // Inline 已到诊/未到诊 in the agenda needs the appointment id and revision.
+        appointmentId: a.id, revision: a.revision || 0,
+        action: { type: "patient", tab: "appointments", label: a.when === "past" ? "登记结果" : "查看预约" } });
     }
     return items;
   }
@@ -135,7 +140,8 @@ export class DoctorOverview {
     // ---------- fixed region: return visits and new lab results ----------
     for (const item of this._visitItems()) add(item);
     for (const item of this._labItems()) add(item);
-    for (const item of this._planReviewItems(plans, current)) add(item);
+    const planReviews = new Set();
+    for (const item of this._planReviewItems(plans, current)) { planReviews.add(item.id); add(item); }
 
     // ---------- plugin sources: everything else ----------
     const pluginItems = this.agendaItems?.({
@@ -145,7 +151,10 @@ export class DoctorOverview {
     }) || [];
     for (const raw of pluginItems) {
       // pluginId/lane are host bookkeeping; keep the public row shape unchanged.
-      const { pluginId: _pluginId, lane, ...item } = raw;
+      // `covers` names a shell row describing the same work (a follow-up made
+      // from a treatment-plan review date); show only the plan-review row.
+      const { pluginId: _pluginId, lane, covers, ...item } = raw;
+      if (covers && planReviews.has(covers)) continue;
       if (lane === "work") addWork(item); else add(item);
     }
 

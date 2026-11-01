@@ -227,7 +227,7 @@ export class MessageGateway {
     check(
       !c?.enabled || c.appId !== appId,
       "CONNECTION_CONFLICT",
-      "该应用正在用于知识库机器人。请为医生助手创建独立的飞书应用，或先停用原连接。",
+      "该应用正在用于飞书分身。请为医生助手创建独立的飞书应用，或先停用原连接。",
       409,
     );
   }

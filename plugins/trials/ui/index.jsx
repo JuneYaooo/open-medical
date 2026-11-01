@@ -9,6 +9,19 @@ export default defineUiPlugin({
           default: module.TrialScreeningView,
         })),
     },
+    "patient.tabs": [
+      {
+        id: "trials",
+        label: "可能适合的试验",
+        order: 90,
+        area: "record",
+        component: () => import("./PatientTrialsTab.jsx"),
+      },
+    ],
+    "proposal.renderers": {
+      "trial-screening-conditions": () => import("./TrialProposal.jsx"),
+      "trial-protocol": () => import("./TrialProposal.jsx"),
+    },
     "tools.directory": [
       {
         id: "research",

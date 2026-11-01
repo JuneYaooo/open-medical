@@ -54,14 +54,14 @@ export function parseReferenceRange(text, gender = "") {
   return match ? parseSegment(match.segment) : null;
 }
 
-function normalizeName(text) {
+export function normalizeName(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/[（(][^）)]*[）)]/g, "")
     .replace(/[\s·・_-]/g, "");
 }
 
-function normalizeUnit(text) {
+export function normalizeUnit(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/\s/g, "")

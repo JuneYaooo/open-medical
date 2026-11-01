@@ -6,13 +6,20 @@ import {CASE_DIMENSIONS, RELATION_LABELS, comparisonScore} from '../../../shared
 import './similar-cases.css';
 import {CuratedCaseSources} from '../../../src/plugin-kit/index.js';
 
-const sourceOf=item=>item.sourceKind || (item.evidence?.type==='local-record'?'local':'online');
+const sourceOf=item=>item.sourceType==='webpage'?'web':item.sourceKind || (item.evidence?.type==='local-record'?'local':'online');
+const EVIDENCE_LABELS={metadata:'仅题录',abstract:'摘要已取得',webpage:'已读网页原文','search-snippet':'仅搜索摘要','local-record':'本地记录'};
+const webUrl=item=>sourceOf(item)==='web' && /^https?:\/\//.test(item.url||'')?item.url:'';
+// 网页来源：站点名 + 来源性质；公众号/论坛等低等级来源用文字明确标出。
+function WebSource({item,link=true}) {
+  if(sourceOf(item)!=='web')return null;
+  return <p className={`case-web-source${item.lowerGrade?' lower':''}`}><span>{item.sourceLabel||item.sourceSite||'网页'}</span>{webUrl(item)&&(link?<a href={webUrl(item)} target="_blank" rel="noreferrer">{item.sourceHost||'打开网页'} <ArrowUpRight size={13}/></a>:<span>{item.sourceHost}</span>)}</p>;
+}
 function caseTitle(item,index) {
   const disease=item.comparison?.find(d=>d.dimension==='disease');
   return disease?.candidateQuote?disease.candidate:/[\u4e00-\u9fff]/.test(item.title)?item.title:`${sourceOf(item)==='local'?'本地':'网上'}病例${index===undefined?'':` ${index+1}`}`;
 }
 function caseEyebrow(item,result) {
-  const base=`${sourceOf(item)==='local'?(item.clinicalSource?.type==='case-snapshot'?'本地案例快照':'本地患者'):'网上病例'} · ${result.clueOnly?'疾病不同 · 文献线索':item.evidence?.type==='metadata'?'仅题录':item.evidence?.type==='abstract'?'摘要已取得':'本地记录'}`;
+  const base=`${sourceOf(item)==='local'?(item.clinicalSource?.type==='case-snapshot'?'本地案例快照':'本地患者'):sourceOf(item)==='web'?`网页 · ${item.sourceSite||'网页'}`:'网上病例'} · ${result.clueOnly?'疾病不同 · 文献线索':EVIDENCE_LABELS[item.evidence?.type]||'本地记录'}`;
   return item.starred?`⭐ 你的精选案例 · ${base}`:base;
 }
 function Score({result}) {
@@ -33,7 +40,7 @@ export function SimilarCases({artifact,onRefresh,onOpen,variant}) {
     return <section className="similar-cases case-teaser" aria-label="相似患者对照">
       <header className="case-list-head"><div><span className="case-eyebrow">患者对照 · 检索结果</span><h3>相似病例 <small>{cases.length}</small></h3></div><span className="case-draft-label">供医生参考</span></header>
       {artifact.summary&&<p className="case-summary case-teaser-summary">{artifact.summary}</p>}
-      {cases.length>0?<div className="case-list">{ranked.map(({item,result},index)=><div className="case-row" key={item.reference}><div className="case-rank">{String(index+1).padStart(2,'0')}</div><div className="case-row-body"><span className="case-eyebrow">{caseEyebrow(item,result)}</span><h4>{caseTitle(item,index)}</h4><p><b>相同的地方：</b>{item.reason}</p></div><Score result={result}/></div>)}</div>
+      {cases.length>0?<div className="case-list">{ranked.map(({item,result},index)=><div className="case-row" key={item.reference}><div className="case-rank">{String(index+1).padStart(2,'0')}</div><div className="case-row-body"><span className="case-eyebrow">{caseEyebrow(item,result)}</span><h4>{caseTitle(item,index)}</h4><WebSource item={item}/><p><b>相同的地方：</b>{item.reason}</p></div><Score result={result}/></div>)}</div>
       :<div className="case-empty"><h4>本次未选出候选病例</h4><p>{artifact.localFailed?'本地检索失败，不能据此判断没有相似患者。':'可展开查看哪些资料还不全。'}</p></div>}
       {onOpen&&<button className="case-open-cta" onClick={onOpen}>展开阅读 · 逐项对照与原文依据<ChevronRight size={16}/></button>}
       {onRefresh&&<button className="case-refresh" onClick={onRefresh}>重新检索并对照</button>}
@@ -45,7 +52,7 @@ export function SimilarCases({artifact,onRefresh,onOpen,variant}) {
   return <section ref={panelRef} className="similar-cases" aria-label="相似患者对照">
     {item ? <>
       <button className="case-back" onClick={()=>setSelected(null)}><ArrowLeft size={15}/>返回相似病例列表</button>
-      <header className="case-detail-head"><div><span className="case-eyebrow">{sourceOf(item)==='local'?'本地患者记录':'网上病例报告'} · 供医生参考</span><h3>{caseTitle(item)}</h3><p>{item.scope}</p></div><Score result={result}/></header>
+      <header className="case-detail-head"><div><span className="case-eyebrow">{sourceOf(item)==='local'?'本地患者记录':sourceOf(item)==='web'?'网页病例资料':'网上病例报告'} · 供医生参考</span><h3>{caseTitle(item)}</h3>{sourceOf(item)==='web'&&item.title&&caseTitle(item)!==item.title&&<p>{item.title}</p>}<WebSource item={item}/><p>{item.scope}</p></div><Score result={result}/></header>
       <section className="case-profile" aria-label="病例概况">{CASE_DIMENSIONS.filter(d=>item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>{const row=item.comparison?.find(c=>c.dimension===d.key);return <div key={d.key}><span>{d.label}</span><strong>{row?.candidateQuote?row.candidate:'尚未整理'}</strong></div>;})}{item.outcome?.quote && <div><span>治疗结果与随访</span><strong>{item.outcome.text}</strong></div>}</section>
       <p className="case-pending-fields">{[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].length>0 && `尚待整理：${[...CASE_DIMENSIONS.filter(d=>!item.comparison?.find(c=>c.dimension===d.key)?.candidateQuote).map(d=>d.label),...(!item.outcome?.quote?["治疗结果"]:[])].join("、")}。`}</p>
       {item.comparisonWarnings?.length>0 && <p className="case-pending-fields">部分对照未能核实原文，已保留可读取资料；未核实的项目不计入分数。</p>}
@@ -58,13 +65,13 @@ export function SimilarCases({artifact,onRefresh,onOpen,variant}) {
       </div>
       </details> : <p className="case-pending-fields">双方资料尚未完成逐项对照，暂不显示比较表。</p>}
       <details className="case-method"><summary>相似度怎么算？</summary><p>疾病 35%、阶段 25%、治疗 20%、用药 15%、年龄与性别 5%。双方原文齐全的维度，按相似 1、部分相似 0.5、不同 0 加权，再除以可对照维度的权重。至少包含疾病及另一项才显示分值；未知项不当作不相似，单独展示覆盖率。</p><p>维度关系由模型根据原文整理，尚需人工核对。此分值用于资料比较，不是临床相似概率，也不代表治疗适用性。疾病不同的结果仅作为文献线索。</p></details>
-      <details className="case-evidence"><summary>查看原文</summary><h4>{item.title}</h4><p>{medicalExcerpt(item.evidence?.text)||'仅取得题录，未保存摘要。'}</p>{/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(item.url||'')&&<a href={item.url} target="_blank" rel="noreferrer">打开原文网页（PubMed） <ArrowUpRight size={14}/></a>}</details>
+      <details className="case-evidence"><summary>查看原文</summary><h4>{item.title}</h4>{item.evidence?.type==='search-snippet'&&<p className="case-pending-fields">以下仅为搜索结果摘要，未读取网页原文。</p>}<p>{medicalExcerpt(item.evidence?.text)||(sourceOf(item)==='web'?'未保存网页内容。':'仅取得题录，未保存摘要。')}</p>{/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(item.url||'')&&<a href={item.url} target="_blank" rel="noreferrer">打开原文网页（PubMed） <ArrowUpRight size={14}/></a>}{webUrl(item)&&<a href={webUrl(item)} target="_blank" rel="noreferrer">打开原网页（{item.sourceSite||item.sourceHost||'网页'}） <ArrowUpRight size={14}/></a>}</details>
     </> : <>
       <header className="case-list-head"><div><span className="case-eyebrow">患者对照 · 检索结果</span><h3>相似病例 <small>{cases.length}</small></h3></div><span className="case-draft-label">供医生参考</span></header>
       <p className="case-summary">{artifact.summary}</p>
       {cases.length>0 && cases.some(c=>c.profilePending) && <div className="case-upgrade-note">部分信息尚未整理成表格，不代表原文没有说明；能从已保存原文确认的信息已补入。{onRefresh&&<button onClick={onRefresh}>重新检索并对照</button>}</div>}
-      <div className="case-toolbar"><div className="case-filters" aria-label="病例来源">{[['all','全部'],['local','本地'],['online','网上']].map(([value,label])=><button key={value} aria-pressed={source===value} onClick={()=>setSource(value)}>{label} {cases.filter(c=>value==='all'||sourceOf(c)===value).length}</button>)}</div><label className="case-search"><Search size={14}/><input aria-label="筛选相似病例" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索疾病、用药或病例"/></label><select aria-label="病例排序" value={sort} onChange={e=>setSort(e.target.value)}><option value="similarity">相似度优先</option><option value="coverage">资料完整度优先</option></select></div>
-      <div className="case-list">{filtered.map(({item,result},index)=><button className="case-row" key={item.reference} onClick={()=>setSelected(item.reference)} aria-label={`查看病例：${item.title}`}><div className="case-rank">{String(index+1).padStart(2,'0')}</div><div className="case-row-body"><span className="case-eyebrow">{caseEyebrow(item,result)}</span><h4>{caseTitle(item,index)}</h4><div className="case-tags">{['demographics','disease','stage','treatment','medications'].map(key=>{const d=item.comparison?.find(c=>c.dimension===key);return <span key={key}>{CASE_DIMENSIONS.find(c=>c.key===key).label}：{d?.candidateQuote?d.candidate:'尚未整理'}</span>;})}</div><p><b>相同的地方：</b>{item.reason}</p><p className="case-outcome"><b>治疗结果：</b>{item.outcome?.quote?item.outcome.text:"尚未核对"}</p></div><Score result={result}/><ChevronRight size={16}/></button>)}</div>
+      <div className="case-toolbar"><div className="case-filters" aria-label="病例来源">{[['all','全部'],['local','本地'],['online','文献'],['web','网页']].filter(([value])=>value!=='web'||cases.some(c=>sourceOf(c)==='web')).map(([value,label])=><button key={value} aria-pressed={source===value} onClick={()=>setSource(value)}>{label} {cases.filter(c=>value==='all'||sourceOf(c)===value).length}</button>)}</div><label className="case-search"><Search size={14}/><input aria-label="筛选相似病例" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索疾病、用药或病例"/></label><select aria-label="病例排序" value={sort} onChange={e=>setSort(e.target.value)}><option value="similarity">相似度优先</option><option value="coverage">资料完整度优先</option></select></div>
+      <div className="case-list">{filtered.map(({item,result},index)=><button className="case-row" key={item.reference} onClick={()=>setSelected(item.reference)} aria-label={`查看病例：${item.title}`}><div className="case-rank">{String(index+1).padStart(2,'0')}</div><div className="case-row-body"><span className="case-eyebrow">{caseEyebrow(item,result)}</span><h4>{caseTitle(item,index)}</h4><WebSource item={item} link={false}/><div className="case-tags">{['demographics','disease','stage','treatment','medications'].map(key=>{const d=item.comparison?.find(c=>c.dimension===key);return <span key={key}>{CASE_DIMENSIONS.find(c=>c.key===key).label}：{d?.candidateQuote?d.candidate:'尚未整理'}</span>;})}</div><p><b>相同的地方：</b>{item.reason}</p><p className="case-outcome"><b>治疗结果：</b>{item.outcome?.quote?item.outcome.text:"尚未核对"}</p></div><Score result={result}/><ChevronRight size={16}/></button>)}</div>
       {!filtered.length&&<div className="case-empty"><h4>{cases.length?'没有符合筛选条件的病例':'本次未选出候选病例'}</h4><p>{cases.length?'调整关键词或切换来源查看。':artifact.localFailed?'本地检索失败，不能据此判断没有相似患者。':'请查看下方哪些资料还不全？。'}</p></div>}
       <p className="case-footnote">请先看病情和治疗经过，再比较相同与不同。分数仅供参考，不能据此照搬治疗方案。</p>
       <Limitations artifact={artifact}/>

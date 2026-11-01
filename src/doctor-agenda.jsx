@@ -19,6 +19,7 @@ const defaultKinds = [
   { kind: "trial", label: "试验入组" },
   { kind: "custom", label: "我的规则" },
 ];
+const localDay = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const workKinds = { evolve: "进化", proposal: "待确认", review: "待复核", failure: "未完成" };
 // 非当年的日期带上年份，避免「9/13」分不清是今年还是往年。
 const date = (value) => {
@@ -111,9 +112,38 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
     } catch (err) { setError(err.message); }
     finally { setOpening(null); }
   };
-  const resolve = async (item, status) => {
-    try { await api(`/api/extensions/items/${item.itemId}`, "POST", { status }); setRefreshKey((value) => value + 1); }
+  const [notice, setNotice] = useState("");
+  const [acting, setActing] = useState(null);
+  const quick = async (item, request, message) => {
+    if (acting) return;
+    setActing(item.id); setError(""); setNotice("");
+    try { await request(); setNotice(message); setRefreshKey((value) => value + 1); }
     catch (err) { setError(err.message); }
+    finally { setActing(null); }
+  };
+  const resolve = (item, status) => quick(item, () => api(`/api/extensions/items/${item.itemId}`, "POST", { status }), "");
+  // 随访提醒推迟 N 天后再进今日待办；随访计划本身不变。
+  const snooze = (item, days) => quick(item, () => api(`/api/reminders/${item.reminderId}/snooze`, "POST", { days, requestId: crypto.randomUUID() }),
+    `已推迟 ${days} 天，${item.patientName}的随访到时会重新出现在今日待办。`);
+  // 今天或已过期的复诊可直接登记到诊结果；带上版本号，别处改过会提示刷新。
+  const visitOutcome = (item, status) => quick(item, () => api(`/api/appointments/${item.appointmentId}`, "PATCH", { expectedRevision: item.revision, status, requestId: crypto.randomUUID() }),
+    status === "attended" ? `已登记${item.patientName}到诊。可在患者档案「复诊预约」里约下次复诊。` : `已登记${item.patientName}未到诊，可在患者档案里重新预约。`);
+  const inlineActions = (item) => {
+    const busy = loading || Boolean(acting);
+    // Items from the doctor's own rules are closed here; the outcome tells the rule whether it helps.
+    if (item.resolvable) return <>
+      <button className="text-button" disabled={busy} onClick={() => resolve(item, "done")}>完成</button>
+      <button className="text-button" disabled={busy} onClick={() => resolve(item, "dismissed")}>忽略</button></>;
+    if (item.kind === "followup" && item.reminderId) return <select className="agenda-snooze" aria-label={`推迟${item.patientName}的随访`} disabled={busy} value=""
+      onChange={(e) => { if (e.target.value) snooze(item, Number(e.target.value)); }}>
+      <option value="">推迟…</option>
+      {[1, 3, 7].map((days) => <option key={days} value={days}>推迟 {days} 天</option>)}
+    </select>;
+    // 明天的复诊还不能登记结果；今天和已过期的可以。
+    if (item.kind === "visit" && item.appointmentId && localDay(item.at) <= localDay(Date.now())) return <>
+      <button className="text-button" disabled={busy} onClick={() => visitOutcome(item, "attended")}>已到诊</button>
+      <button className="text-button" disabled={busy} onClick={() => visitOutcome(item, "missed")}>未到诊</button></>;
+    return null;
   };
   return (
     <section className="doctor-agenda" aria-label="今日待办" aria-busy={loading}>
@@ -121,6 +151,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
         <div><h1>今日待办 <span>{data?.counts.all ?? "—"}</span></h1>
           <span className="om-page-meta agenda-context">{data?.criticalCount > 0 ? <><em className="om-chip is-danger">{data.criticalCount} 项高优先级</em> 已排在最前，</> : "按优先级排列，"}点击事项即可继续处理。</span></div>
         <div className="agenda-heading-actions">
+          <button className="text-button" onClick={() => onView("schedule")}>门诊日程 <ArrowUpRight size={14} /></button>
           {followupActive && <button className="text-button" onClick={() => onView("followups")}>全部随访计划 <ArrowUpRight size={14} /></button>}
           {messaging && <button className="text-button" onClick={() => onView("care")}>患者消息 <ArrowUpRight size={14} /></button>}
         <button className="icon-button" title="刷新今日待办" aria-label="刷新今日待办" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RotateCw size={16} /></button>
@@ -134,6 +165,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
           {groups.map((name) => <option key={name} value={name}>{name}</option>)}
         </select></label>}
       </div>
+      {notice && <p className="notice" role="status">{notice}</p>}
       {error && <p className="form-error" role="alert">{error}<button className="text-button" onClick={() => setRefreshKey((value) => value + 1)}>重试</button></p>}
       {hasUpdates && <p className="notice" role="status">今日待办有更新。<button className="text-button" disabled={loading} onClick={() => setRefreshKey(value => value + 1)}>刷新查看更新</button></p>}
       {data?.errors?.length > 0 && <p className="muted agenda-source-errors" role="status">部分待办暂时无法读取（{data.errors.map((item) => kindLabels[item.kind] || item.kind).join("、")}），其余事项照常显示。</p>}
@@ -147,15 +179,13 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
       </div>}
       <div className="agenda-items">{data?.items.map((item) => {
         const row = <button className={`agenda-item ${item.severity === "critical" ? "urgent" : ""}`} key={item.id} disabled={Boolean(opening) || loading} onClick={() => open(item)}>
-          <span className={`agenda-kind kind-${item.kind}`}><em>{kindLabels[item.kind] || item.kind}</em><small>{item.at ? date(item.at) : ""}</small></span>
+          <span className={`agenda-kind kind-${item.kind}`}><em>{kindLabels[item.kind] || item.kind}</em><small>{item.at ? date(item.at) : ""}{item.kind === "visit" && item.time ? ` ${item.time}` : ""}</small></span>
           <span className="agenda-person"><b>{item.patientName}</b><small>{[item.patientNumber, item.birthYear ? `约${new Date().getFullYear() - item.birthYear}岁` : ""].filter(Boolean).join(" · ")}</small></span>
           <span className="agenda-content"><b>{item.title}</b><small>{item.detail}</small></span>
           <span className="agenda-action">{opening === item.id ? "打开中…" : item.action.label}<ArrowUpRight size={14} /></span>
         </button>;
-        // Items from the doctor's own rules are closed here; the outcome tells the rule whether it helps.
-        return item.resolvable ? <div className="agenda-row" key={item.id}>{row}<span className="agenda-resolve">
-          <button className="text-button" disabled={loading} onClick={() => resolve(item, "done")}>完成</button>
-          <button className="text-button" disabled={loading} onClick={() => resolve(item, "dismissed")}>忽略</button></span></div> : row;
+        const actions = inlineActions(item);
+        return actions ? <div className="agenda-row" key={item.id}>{row}<span className="agenda-resolve">{actions}</span></div> : row;
       })}</div>
       {(() => {
         // 待确认提案统一收敛到顶栏「待确认」，这里只留待复核/未完成等工作事项。

@@ -1,0 +1,41 @@
+/* 内置脱敏服务：地址、开关和状态放在一起，一眼能看到。 */
+.privacy-builtin {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  background: var(--card, #fff);
+}
+.privacy-builtin p { margin: 0; }
+.privacy-builtin code { word-break: break-all; }
+.privacy-builtin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.privacy-builtin-head label { font-weight: 600; }
+.privacy-builtin-key { display: flex; flex-wrap: wrap; gap: 8px; }
+.privacy-builtin-key input { flex: 1 1 220px; min-width: 0; }
+.privacy-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--meta-size, 14px);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.privacy-badge.on { color: var(--ok, inherit); background: var(--ok-soft, transparent); border-color: transparent; }
+.privacy-badge.warn { color: var(--warning, inherit); }
+.privacy-hint { color: var(--muted); font-size: var(--meta-size, 14px); }
+.settings-privacy-card { padding: 16px 20px; }
+.privacy-settings > fieldset { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.privacy-settings > fieldset > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.privacy-settings > fieldset > label select { flex: 1 1 260px; min-width: 0; }
+.privacy-settings > fieldset > button { justify-self: start; }
+.privacy-settings details button { margin: 4px 8px 0 0; }
+.privacy-settings input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+.privacy-settings details > label { display: grid; gap: 4px; margin: 8px 0; }
+.privacy-builtin-head label { display: flex; align-items: center; gap: 8px; }

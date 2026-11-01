@@ -13,6 +13,19 @@ test("feishu-knowledge-bot：设置接口来自插件，停用后接口与面板
   assert.deepEqual(settings.body.collections, []);
   assert.ok(Array.isArray(settings.body.availableCollections));
   assert.equal(typeof settings.body.feishuBinding, "object");
+  assert.equal(settings.body.persona.useHabits, true);
+  assert.equal(settings.body.collectionScope, "all-except-excluded");
+
+  // 分身会话记录 and insights routes come from the same plugin API.
+  const conversations = await app.request("/api/knowledge-bot/conversations?filter=attention");
+  assert.equal(conversations.status, 200);
+  assert.deepEqual(conversations.body.conversations, []);
+  assert.equal((await app.request("/api/knowledge-bot/insights")).status, 200);
+  assert.equal(
+    (await app.request("/api/knowledge-bot/conversations/oc_missing")).status,
+    409,
+    "未连接时查看单个会话返回未配置",
+  );
 
   const bootstrap = await app.request("/api/bootstrap");
   const plugin = bootstrap.body.plugins.find(
@@ -28,6 +41,7 @@ test("feishu-knowledge-bot：设置接口来自插件，停用后接口与面板
   assert.equal(disabled.body.plugin.status, "disabled");
 
   assert.equal((await app.request("/api/knowledge-bot")).status, 404);
+  assert.equal((await app.request("/api/knowledge-bot/conversations")).status, 404);
   assert.equal(
     (await app.request("/api/knowledge-bot/feishu-binding", { method: "POST" }))
       .status,
