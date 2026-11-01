@@ -99,9 +99,18 @@ export default definePlugin({
       now: host.now || Date.now,
     });
   },
+  // Review sessions hold full before/after chart snapshots; they go with the
+  // patient. Runs inside the patient-delete transaction.
+  hooks: {
+    "patient.deleted": (payload, ctx) => {
+      const db = ctx.db;
+      db.prepare("DELETE FROM review_sessions WHERE patient_id=?").run(payload.patientId);
+      db.prepare("DELETE FROM automation_items WHERE patient_id=?").run(payload.patientId);
+    },
+  },
   lifecycle: {
     start(ctx) { serviceOf(ctx)?.start(); },
-    stop(ctx) { serviceOf(ctx)?.stop(); },
+    stop(ctx) { return serviceOf(ctx)?.stop(); },
   },
   api: (ctx, req, url, io) => createLearningApi(ctx)(req, url, io),
 });

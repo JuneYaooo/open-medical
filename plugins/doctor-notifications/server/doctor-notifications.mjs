@@ -107,7 +107,11 @@ export class DoctorNotifications {
       // digest already lists follow-ups and tasks that fall due later today.
       const { clock } = local(this.now(), timezone), [h, m] = clock.split(":").map(Number);
       const endOfDay = this.now() + ((24 * 60 - (h * 60 + m)) * 60000) - 1;
-      try { result = this.agenda({ kind: "all", limit: 100, now: endOfDay }); } catch { /* agenda unavailable leaves the digest empty */ }
+      try { result = this.agenda({ kind: "all", limit: 100, now: endOfDay }); }
+      catch (error) {
+        // Never report "nothing to do" when the agenda could not be read.
+        return { day: today, patients: 0, items: 0, detail, error: error instanceof AppError ? error.message : "读取今日待办失败", text: "" };
+      }
       if (result) return this.agendaDigest(result, today, detail);
     }
     const due = at => Number.isFinite(at) && local(at, timezone).day <= today;
@@ -145,11 +149,13 @@ export class DoctorNotifications {
     const patients = new Set(items.filter((item) => item.patientId).map((item) => item.patientId));
     const byKind = order.map((k) => ({ ...k, rows: items.filter((item) => item.kind === k.kind) })).filter((k) => k.rows.length);
     for (const item of items) if (!labels[item.kind] && !byKind.some((k) => k.kind === item.kind)) byKind.push({ kind: item.kind, label: item.kind, rows: items.filter((row) => row.kind === item.kind) });
-    const count = (kind) => items.filter((item) => item.kind === kind).length;
+    // Per-kind totals come from the agenda counts, not the first page of rows.
+    const kindTotal = Object.fromEntries((result.kinds || []).filter((k) => Number.isSafeInteger(k.count)).map((k) => [k.kind, k.count]));
+    const count = (kind) => kindTotal[kind] ?? items.filter((item) => item.kind === kind).length;
     const lines = [`Open Medical · 今日待办提醒（${today}）`];
     if (!total) lines.push("今天没有需要处理的患者待办。");
     else {
-      lines.push(`共 ${total} 项待办，涉及 ${patients.size} 位患者。`, byKind.map((k) => `${k.label} ${k.rows.length}`).join(" · "));
+      lines.push(`共 ${total} 项待办，涉及 ${patients.size} 位患者。`, byKind.map((k) => `${k.label} ${kindTotal[k.kind] ?? k.rows.length}`).join(" · "));
       if (detail !== "count") {
         let listed = 0;
         for (const group of byKind) {
@@ -276,6 +282,11 @@ export class DoctorNotifications {
       const summary = this.preview(config.timezone, config.detail), previous = this.receipt(config, summary.day);
       if (previous && !retryId) return { delivery: previous, message: previous.status === "sent" ? "今日提醒已发送，不重复发送。" : "今日发送未完成，请核对收件箱后重试。" };
       if (retryId) check(previous?.id === retryId && ["failed", "unknown"].includes(previous.status), "CONFLICT", "发送状态已变化，请刷新后重试", 409);
+      if (summary.error) {
+        const failed = { id: randomUUID(), channel, connectionId: config.connectionId, day: summary.day, at: this.now(), status: "failed", patients: 0, items: 0, detail: summary.detail, attempt: (previous?.attempt || 0) + 1, message: `未能生成今日提醒：${summary.error}` };
+        this.writeDelivery(failed);
+        return { delivery: failed, message: failed.message };
+      }
       if (!summary.items) return { message: "今天没有需要处理的患者待办，无需发送。" };
       const delivery = { id: randomUUID(), channel, connectionId: config.connectionId, day: summary.day, at: this.now(), status: "sending", patients: summary.patients, items: summary.items, detail: summary.detail, attempt: (previous?.attempt || 0) + 1 };
       this.writeDelivery(delivery);

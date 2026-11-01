@@ -46,6 +46,30 @@ export const trialAgendaSources = Object.freeze([
           });
         }
       }
+      // Background screening that stopped (failure or restart) needs the
+      // doctor to restart it; show it in the work lane, newest batch per trial.
+      if (hasTable(db, "trial_batches") && hasTable(db, "trial_protocols")) {
+        const latest = new Map();
+        for (const row of db.prepare("SELECT trial_id,data FROM trial_batches").all()) {
+          const batch = JSON.parse(row.data);
+          const previous = latest.get(row.trial_id);
+          if (!previous || String(batch.createdAt) > String(previous.createdAt)) latest.set(row.trial_id, batch);
+        }
+        const titles = new Map(db.prepare("SELECT id,data FROM trial_protocols").all().map((row) => [row.id, JSON.parse(row.data).title]));
+        for (const [trialId, batch] of latest) {
+          if (!["failed", "interrupted"].includes(batch.status) || !titles.has(trialId)) continue;
+          items.push({
+            id: `trial-batch:${batch.id}`,
+            kind: "failure",
+            lane: "work",
+            title: `「${titles.get(trialId).slice(0, 30)}」批量初筛${batch.status === "interrupted" ? "已中断" : "未完成"}`,
+            detail: batch.detail || "再次开始会跳过已完成的患者",
+            at: Date.parse(batch.createdAt) || 0,
+            fallbackName: "临床试验",
+            action: { type: "view", view: "research", trialId, label: "继续初筛" },
+          });
+        }
+      }
       return items;
     },
   },

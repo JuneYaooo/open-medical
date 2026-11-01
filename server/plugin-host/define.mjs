@@ -259,12 +259,19 @@ export function definePlugin(spec = {}) {
       "PLUGIN_SPEC",
       `插件 ${id} 的 agendaSource available 必须是函数`,
     );
+    check(
+      source.workOnly === undefined || typeof source.workOnly === "boolean",
+      "PLUGIN_SPEC",
+      `插件 ${id} 的 agendaSource workOnly 必须是布尔值`,
+    );
     return Object.freeze({
       kind: source.kind,
       label: source.label ?? source.kind,
       order: source.order ?? 100,
       read: source.read,
       ...(source.available ? { available: source.available } : {}),
+      // Only contributes work-lane items (background failures); adds no tab.
+      ...(source.workOnly ? { workOnly: true } : {}),
     });
   });
 

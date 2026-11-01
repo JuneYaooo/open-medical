@@ -103,6 +103,8 @@ export function createWecomApi(service) {
         return reply(send, 200, await connector.submit(parts[3], await body()));
       if (parts[4] === "refresh")
         return reply(send, 200, await connector.refresh(parts[3]));
+      if (parts[4] === "resolve")
+        return reply(send, 200, connector.resolveUnknown(parts[3], await body()));
     }
     return false;
   };
@@ -127,4 +129,5 @@ export const WECOM_LEGACY_API_PATHS = [
   { method: "POST", path: "/api/wecom/tasks" },
   { method: "POST", path: "/api/wecom/tasks/:id/submit" },
   { method: "POST", path: "/api/wecom/tasks/:id/refresh" },
+  { method: "POST", path: "/api/wecom/tasks/:id/resolve" },
 ];

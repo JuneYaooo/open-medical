@@ -2,9 +2,28 @@
   "alertsBefore": {
     "status": 200,
     "body": {
-      "alerts": [],
+      "alerts": [
+        {
+          "id": "<uuid>",
+          "patientId": "<uuid>",
+          "ruleKey": "med_population_elderly",
+          "severity": "info",
+          "status": "active",
+          "updatedAt": "<time>",
+          "patientName": "示例·张沪生",
+          "sessionId": "<uuid>",
+          "title": "老年用药提醒",
+          "message": "患者约 74 岁。阿司匹林肠溶片：不建议老年人新启用阿司匹林作心血管一级预防。",
+          "evidence": [
+            {
+              "medication": "阿司匹林肠溶片",
+              "population": "老年"
+            }
+          ]
+        }
+      ],
       "counts": {
-        "active": 0,
+        "active": 1,
         "critical": 0
       }
     }
@@ -84,7 +103,7 @@
         }
       ],
       "counts": {
-        "active": 1,
+        "active": 2,
         "critical": 0
       }
     }

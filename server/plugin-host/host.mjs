@@ -896,7 +896,10 @@ export class PluginHost {
   emit(name, payload) {
     for (const listener of this.listeners.get(name) || []) {
       try {
-        listener(payload);
+        const result = listener(payload);
+        // Async listeners must not produce unhandled rejections.
+        if (result && typeof result.then === "function")
+          result.then(undefined, (error) => console.error(`插件事件 ${name} 处理失败:`, error));
       } catch (error) {
         console.error(`插件事件 ${name} 处理失败:`, error);
       }
@@ -1105,6 +1108,8 @@ export class PluginHost {
           kind: source.kind,
           label: source.label,
           order: source.order,
+          // Work-lane-only sources (background failures) add no agenda tab.
+          workOnly: source.workOnly === true,
         });
       }
     }
@@ -1144,6 +1149,12 @@ export class PluginHost {
             now,
             patientId,
           });
+          // Agenda sources are synchronous; an async one cannot contribute
+          // rows here, so report it instead of leaking a rejection.
+          if (result && typeof result.then === "function") {
+            result.then(undefined, () => {});
+            throw new Error("待办来源必须同步返回数组");
+          }
           if (Array.isArray(result))
             for (const item of result)
               if (item && typeof item === "object")
@@ -1247,6 +1258,29 @@ export class PluginHost {
     return true;
   }
 
+  // Start/stop of one plugin are serialized: a stop requested while start is
+  // still running waits for it, so timers and sockets never come alive after
+  // the plugin was stopped. Stop is time-boxed so a hung plugin cannot block
+  // a toggle or app quit.
+  _lifecycleCall(record, phase) {
+    this.lifecycleChains ||= new Map();
+    const previous = this.lifecycleChains.get(record.id) || Promise.resolve();
+    const run = previous.then(() => {
+      const work = Promise.resolve().then(() => record.spec.lifecycle[phase](this.contextFor(record)));
+      if (phase !== "stop") return work;
+      let timer;
+      return Promise.race([
+        work,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("停止超时（10 秒）")), 10000);
+          timer.unref?.();
+        }),
+      ]).finally(() => clearTimeout(timer));
+    });
+    this.lifecycleChains.set(record.id, run.catch(() => {}));
+    return run;
+  }
+
   async startAll() {
     // Activation can depend on a status hook (for example a connected
     // messaging channel), so resolve it before deciding which loops to start.
@@ -1262,7 +1296,7 @@ export class PluginHost {
       this.drainedPlugins.delete(record.id);
       try {
         if (record.spec.lifecycle.start)
-          await record.spec.lifecycle.start(this.contextFor(record));
+          await this._lifecycleCall(record, "start");
         this.lifecycleStates.set(record.id, "started");
         this.lifecycleErrors.delete(record.id);
         results.push({ id: record.id, ok: true });
@@ -1293,7 +1327,7 @@ export class PluginHost {
         continue;
       try {
         if (record.spec.lifecycle.stop)
-          await record.spec.lifecycle.stop(this.contextFor(record));
+          await this._lifecycleCall(record, "stop");
         this.lifecycleStates.set(record.id, "stopped");
         results.push({ id: record.id, ok: true });
       } catch (error) {
@@ -1367,7 +1401,7 @@ export class PluginHost {
     ) {
       try {
         if (record.spec.lifecycle.stop)
-          await record.spec.lifecycle.stop(this.contextFor(record));
+          await this._lifecycleCall(record, "stop");
         this.lifecycleStates.set(id, "stopped");
         this.lifecycleErrors.delete(id);
       } catch (error) {
@@ -1388,7 +1422,7 @@ export class PluginHost {
       this.drainedPlugins.delete(id);
       try {
         if (record.spec.lifecycle.start)
-          await record.spec.lifecycle.start(this.contextFor(record));
+          await this._lifecycleCall(record, "start");
         this.lifecycleStates.set(id, "started");
         this.lifecycleErrors.delete(id);
       } catch (error) {
@@ -1472,7 +1506,7 @@ export class PluginHost {
         this.drainedPlugins.delete(record.id);
         try {
           if (record.spec.lifecycle.start)
-            await record.spec.lifecycle.start(this.contextFor(record));
+            await this._lifecycleCall(record, "start");
           this.lifecycleStates.set(record.id, "started");
           this.lifecycleErrors.delete(record.id);
           results.push({ id: record.id, ok: true, active: true });
@@ -1490,7 +1524,7 @@ export class PluginHost {
       } else if (!active && started && state !== "stopped") {
         try {
           if (record.spec.lifecycle.stop)
-            await record.spec.lifecycle.stop(this.contextFor(record));
+            await this._lifecycleCall(record, "stop");
           this.lifecycleStates.set(record.id, "stopped");
           this.lifecycleErrors.delete(record.id);
           results.push({ id: record.id, ok: true, active: false });

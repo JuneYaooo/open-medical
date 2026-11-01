@@ -161,12 +161,22 @@ export class WorkspaceScheduler {
     await Promise.allSettled([...this.pending]);
   }
   tick() {
-    for (const w of this.service.store.scheduled()) {
+    let workspaces;
+    try { workspaces = this.service.store.scheduled(); }
+    catch (error) { console.warn("[scheduler] 读取计划失败", error?.message); return; }
+    for (const w of workspaces) {
+      // One bad workspace must not throw out of the timer or starve the rest.
+      try { this.tickWorkspace(w); }
+      catch (error) { console.warn(`[scheduler] 处理计划失败 ${w.id}`, error?.message); }
+    }
+  }
+  tickWorkspace(w) {
+    {
       if (
         this.service.active.has(w.id) ||
         this.service.active.size >= this.service.maxActive
       )
-        continue;
+        return;
       for (const job of (w.schedules || []).filter((j) => j.status === "recovering")) {
         const run = w.runs.find((r) => r.id === job.runId);
         if (!run || run.recoveryBlocked || ["failed", "cancelled"].includes(run.status)) {
@@ -176,7 +186,7 @@ export class WorkspaceScheduler {
       const job = (w.schedules || []).find(
         (j) => j.status === "active" && j.nextRunAt <= this.now(),
       );
-      if (!job) continue;
+      if (!job) return;
       if (job.authority !== this.identity(w)) {
         this.service.store.update(w.id, (current) =>
           Object.assign(
@@ -187,7 +197,7 @@ export class WorkspaceScheduler {
             },
           ),
         );
-        continue;
+        return;
       }
       this.service.store.update(w.id, (current) => {
         current.schedules.find((j) => j.id === job.id).status = "running";
@@ -201,9 +211,9 @@ export class WorkspaceScheduler {
     }
   }
   async execute(id, job) {
-    let result;
+    let result, handle;
     try {
-      const handle = this.service.prepare(id, {
+      handle = this.service.prepare(id, {
         revision: this.service.store.get(id).revision,
         message: job.message,
         requestId: `schedule_${job.id}_${job.nextRunAt}`,
@@ -217,16 +227,22 @@ export class WorkspaceScheduler {
       });
       result = await this.service.execute(handle);
     } catch (error) {
+      if (handle && !handle.execution) this.service.abandon(handle, error);
       result = {
         status: "failed",
         error: error.code ? error.message : "计划启动失败",
       };
     }
-    this.finish(id, job, result);
+    try {
+      this.finish(id, job, result);
+    } catch (error) {
+      console.warn(`[scheduler] 保存计划结果失败 ${id}/${job.id}`, error?.message);
+    }
   }
   finish(id, job, result) {
     this.service.store.update(id, (current) => {
       const saved = current.schedules.find((j) => j.id === job.id);
+      if (!saved) return; // schedule deleted while it ran
       saved.history.push({ ...result, at: this.now() });
       saved.history = saved.history.slice(-30);
       saved.error = result.error || null;

@@ -82,6 +82,8 @@ export class DoctorOverview {
     const items = [];
     for (const { patientId, plan } of plans) {
       if (plan?.status !== "active" || !isCalendarDate(plan.reviewDate) || plan.reviewDate > today) continue;
+      // Recording an assessment on or after the review date closes the item.
+      if (isCalendarDate(plan.assessmentDate) && plan.assessmentDate >= plan.reviewDate) continue;
       const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${plan.reviewDate}T00:00:00Z`)) / 86400000);
       items.push({
         id: `plan-review:${patientId}:${plan.reviewDate}`,
@@ -105,7 +107,7 @@ export class DoctorOverview {
       [LABS_KIND.kind, LABS_KIND],
     ]);
     for (const source of this.agendaSources?.() || [])
-      if (!sourceKinds.has(source.kind))
+      if (!source.workOnly && !sourceKinds.has(source.kind))
         sourceKinds.set(source.kind, { kind: source.kind, label: source.label, order: source.order });
     const kindMeta = [ALL_KIND, ...sourceKinds.values()].sort((a, b) => a.order - b.order || a.kind.localeCompare(b.kind));
     check(kindMeta.some((item) => item.kind === kind), "INVALID_INPUT", "待办分类无效");

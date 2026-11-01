@@ -242,7 +242,7 @@ export class MedicalScheduler {
   }
   start() {
     if (!this.autoStart || this.timer || this.stopped) return;
-    this.timer = setInterval(() => this.tick().catch(() => {}), this.pollMs);
+    this.timer = setInterval(() => this.tick().catch((error) => console.warn("[scheduler] 计划检查失败", error?.message)), this.pollMs);
     this.timer.unref();
   }
   stop() {
@@ -277,7 +277,7 @@ export class MedicalScheduler {
     await Promise.allSettled(started);
   }
   async execute(job) {
-    let result;
+    let result, handle;
     try {
       this.validateSnapshot(job);
       const requestId = `schedule_${job.id}_${job.nextRunAt}`;
@@ -287,7 +287,7 @@ export class MedicalScheduler {
           "该计划时点已有执行记录，请核对后重新创建计划",
           409,
         );
-      const handle = this.runtime.prepare(job.sessionId, {
+      handle = this.runtime.prepare(job.sessionId, {
         message: job.message,
         mode: "model",
         fileIds: job.fileIds,
@@ -299,6 +299,7 @@ export class MedicalScheduler {
       this.save(job);
       result = await this.runtime.execute(handle);
     } catch (error) {
+      if (handle && !handle.execution) this.runtime.abandon?.(handle, error);
       result = {
         status: "failed",
         error: error instanceof AppError ? error.message : "计划执行失败",

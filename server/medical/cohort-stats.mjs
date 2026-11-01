@@ -126,7 +126,7 @@ export function normalizeComparison(input) {
     check(typeof raw.unit === "string", "COHORT_COMPARE", "检验结局需要写明单位 unit（不同单位不换算）；无单位填空字符串");
     const use = raw.use === undefined ? "latest" : raw.use;
     check(["latest", "first", "change"].includes(use), "COHORT_COMPARE", "use 须为 latest / first / change");
-    outcome = { type: "lab", label, items, unit: string(raw.unit, "单位", 30).trim(), use };
+    outcome = { type: "lab", label, items, unit: raw.unit === "" ? "" : string(raw.unit, "单位", 30).trim(), use };
     if (raw.withinDays !== undefined) {
       check(Number.isInteger(raw.withinDays) && raw.withinDays >= 1 && raw.withinDays <= 3650, "COHORT_COMPARE", "withinDays 须为 1–3650 的整数");
       outcome.withinDays = raw.withinDays;

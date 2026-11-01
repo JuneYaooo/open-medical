@@ -693,10 +693,13 @@ export class RiskEngine {
   counts() {
     const one = (sql, ...args) =>
       this.store.db.prepare(sql).get(...args)?.n || 0;
+    // Archived patients are out of active care: their alerts stay on record
+    // (and come back if the chart is restored) but are not counted.
+    const live = "AND patient_id IN (SELECT id FROM patients WHERE COALESCE(json_extract(data,'$.archived'),0)=0)";
     return {
-      active: one("SELECT COUNT(*) n FROM risk_alerts WHERE status='active'"),
+      active: one(`SELECT COUNT(*) n FROM risk_alerts WHERE status='active' ${live}`),
       critical: one(
-        "SELECT COUNT(*) n FROM risk_alerts WHERE status='active' AND severity='critical'",
+        `SELECT COUNT(*) n FROM risk_alerts WHERE status='active' AND severity='critical' ${live}`,
       ),
     };
   }

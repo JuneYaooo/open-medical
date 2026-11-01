@@ -157,6 +157,8 @@ export function welchTTest(groups) {
   const v1 = variance(a),
     v2 = variance(b);
   const se = Math.sqrt(v1 / n1 + v2 / n2);
+  // Both groups constant: the t statistic is undefined, not a p-value of NaN.
+  check(se > 0, "INVALID_INPUT", "两组数值均无变异（所有值相同），无法进行 t 检验");
   const t = (m1 - m2) / se;
   const df = (v1 / n1 + v2 / n2) ** 2 / ((v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1));
   return {

@@ -237,14 +237,19 @@ export class DrgService {
     const text = string(csvText, "批量 CSV", 500000);
     const rows = this.parseBatchCsv(text);
     const results = [];
-    for (const row of rows) {
-      const grouped = await this.group({
-        principalDx: row.principal_dx,
-        secondaryDx: row.secondary_dx,
-        procedures: row.procedures,
-        totalCost: row.total_cost,
-      });
-      results.push(grouped);
+    for (const [index, row] of rows.entries()) {
+      // One bad row (blank diagnosis, bad code) is reported on its own line
+      // instead of failing the whole batch.
+      try {
+        results.push(await this.group({
+          principalDx: row.principal_dx,
+          secondaryDx: row.secondary_dx,
+          procedures: row.procedures,
+          totalCost: row.total_cost,
+        }));
+      } catch (error) {
+        results.push({ row: index + 2, drgCode: null, rw: null, error: error?.message || "该行无法分组" });
+      }
     }
     const grouped = results.filter((result) => result.drgCode && result.rw !== null);
     const rwValues = grouped.map((result) => result.rw);

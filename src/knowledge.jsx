@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { KnowledgeIndexStatus } from "./knowledge-index-status";
 import { knowledgeSearchContext, knowledgeSourceContext, knowledgeTopicContext } from "./task-context";
 import { api } from "./agent-runtime";
 import { Modal } from "./components";
@@ -196,6 +197,7 @@ export function KnowledgeView({
           ))}
         </nav>
         <div className="kw-content">
+          <KnowledgeIndexStatus onChanged={refresh} />
           {pendingImports.map((job) => (
             <div className="kw-processing-notice" role="status" key={job.id}>
               <span>
@@ -219,6 +221,18 @@ export function KnowledgeView({
                   }
                 >
                   重试导入
+                </button>
+              )}
+              {!["queued", "running"].includes(job.status) && (
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!window.confirm(`移除「${job.fileName}」这条未完成的导入？已上传的原文件会一并删除。`)) return;
+                    perform(() => api(`/api/knowledge/organization/${job.id}`, "DELETE"));
+                  }}
+                >
+                  移除
                 </button>
               )}
               {!["queued", "running"].includes(job.status) && /\.(mp3|m4a|wav|mp4|mov)$/i.test(job.fileName) && <>

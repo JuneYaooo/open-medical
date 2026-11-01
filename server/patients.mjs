@@ -11,7 +11,7 @@ import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../shared/diagnoses.mjs";
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
 export class PatientRegistry {
-  constructor(store, runtime, { createSession, removeSession, onIdentityChanged, onCreated, learning = null, hooks = null, summaries = null } = {}) {
+  constructor(store, runtime, { createSession, removeSession, onIdentityChanged, onCreated, onChanged = null, learning = null, hooks = null, summaries = null } = {}) {
     this.store = store;
     this.runtime = runtime;
     // The fixed region owns the patients table but not plugin data. These two
@@ -24,6 +24,11 @@ export class PatientRegistry {
     this.removeSession = removeSession;
     this.onIdentityChanged = onIdentityChanged;
     this.onCreated = onCreated;
+    // Called once per changed patient after the current task (and so after
+    // the enclosing transaction) finishes. Every write path reaches it: the
+    // chart page, proposal confirm, spreadsheet import, demo seeding.
+    this.onChanged = onChanged;
+    this.changed = new Set();
     this.learning = learning;
     this.store.db.exec("CREATE TABLE IF NOT EXISTS patient_mutation_requests(patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE, request_id TEXT NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(patient_id, request_id))");
   }
@@ -195,6 +200,7 @@ export class PatientRegistry {
       this.store.db
         .prepare("INSERT INTO patients VALUES (?,?)")
         .run(patient.id, JSON.stringify(patient));
+      this.markChanged(patient.id);
       this.store.audit(session.id, "patient.created", {
         patientId: patient.id,
       });
@@ -339,6 +345,25 @@ export class PatientRegistry {
     this.store.db
       .prepare("UPDATE patients SET data=? WHERE id=?")
       .run(JSON.stringify(patient), patient.id);
+    this.markChanged(patient.id);
+  }
+  markChanged(id) {
+    if (typeof this.onChanged !== "function") return;
+    const first = this.changed.size === 0;
+    this.changed.add(id);
+    if (!first) return;
+    setImmediate(() => {
+      const ids = [...this.changed];
+      this.changed.clear();
+      for (const patientId of ids) {
+        try {
+          // A rolled-back or deleted patient no longer exists; skip it.
+          if (this.store.db.prepare("SELECT 1 FROM patients WHERE id=?").get(patientId)) this.onChanged(patientId);
+        } catch (error) {
+          console.warn(`[patients] 档案变更后处理失败 ${patientId}`, error?.message);
+        }
+      }
+    });
   }
   // Research export: identity fields are removed or bucketed; clinical
   // content stays so cohort summaries remain usable.
@@ -399,9 +424,21 @@ export class PatientRegistry {
       this.store.db
         .prepare("DELETE FROM patient_messages WHERE patient_id=?")
         .run(id);
+      // Proposals carry chart content; a deleted patient's proposals would
+      // otherwise linger in the tray and badge but 404 on confirm.
+      this.store.db.prepare("DELETE FROM pending_actions WHERE patient_id=?").run(id);
+      // Saved cases keep their clinical content (the doctor chose to keep it)
+      // but lose the link to the deleted patient and its name.
+      this.store.db.prepare("UPDATE case_library SET data=json_set(data,'$.patientId',NULL,'$.patientName','（已删除患者）') WHERE json_extract(data,'$.patientId')=?").run(id);
       this.store.db.prepare("DELETE FROM patients WHERE id=?").run(id);
     });
-    this.removeSession?.(sessionId);
+    try {
+      this.removeSession?.(sessionId);
+    } catch (error) {
+      // The chart is already gone. A run that started in the gap keeps the
+      // session alive; log rather than report a failed delete.
+      console.warn(`[patients] 删除患者会话失败 ${sessionId}`, error?.message);
+    }
   }
   matchPatient(hint) {
     if (!hint) return null;

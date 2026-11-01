@@ -749,9 +749,15 @@ export class FollowUpManager {
       .prepare("SELECT id, data FROM reminders WHERE id=?")
       .get(id);
     check(row, "NOT_FOUND", "提醒不存在", 404);
+    // Legacy close without an outcome. Kept for API compatibility, but it is
+    // marked on the record and audited, and archived charts stay read-only.
+    const reminder = JSON.parse(row.data);
+    if (reminder.patientId) check(!this.patientRow(reminder.patientId).archived, "PATIENT_ARCHIVED", "请先恢复患者档案", 409);
+    if (!reminder.outcome) reminder.closedWithoutOutcome = { at: new Date(this.now()).toISOString() };
     this.store.db
-      .prepare("UPDATE reminders SET status='done' WHERE id=?")
-      .run(id);
+      .prepare("UPDATE reminders SET status='done', data=? WHERE id=?")
+      .run(JSON.stringify(reminder), id);
+    this.store.audit(reminder.sessionId || null, "followup.reminder.acknowledged", { reminderId: id, withoutOutcome: !reminder.outcome });
     return { ok: true };
   }
   // 推迟：把未登记的随访提醒挪到 N 天后再进今日待办，不改随访计划本身。

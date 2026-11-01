@@ -357,11 +357,15 @@ export function createMedicalWorkspaceDomain({
             execute: (args, context) =>
               execute(plugin.definition.function.name, args, context),
           });
-        // 患者会话的外发检索词不得带出当前患者身份、编号或精确日期。
+        // 患者会话的外发检索词不得带出当前患者身份、编号或精确日期。没有
+        // 关联患者但带有材料的会话（如建档会话）同样含原始病历，至少拦截
+        // 证件号、电话、长编号与精确日期。
         if (workspace.patientId) {
           let patient = null;
           try { patient = patients?.()?.row(workspace.patientId); } catch {}
           guardOutboundTools(registry, patientIdentityTerms(patient));
+        } else if ((workspace.materials || []).length || workspace.runs?.find(run => run.id === runId)?.policy?.workflow === "patient-intake") {
+          guardOutboundTools(registry, []);
         }
         const intakeRun = workspace.runs?.find(run => run.id === runId);
         const workflow = pluginHost?.workflow(intakeRun?.policy?.workflow);

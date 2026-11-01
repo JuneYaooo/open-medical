@@ -103,4 +103,28 @@ export default definePlugin({
     return new RiskEngine(ctx.store, ctx.services.followups);
   },
   api: (ctx, req, url, io) => createRiskApi(ctx)(req, url, io),
+  // Date-based rules (lab recheck due, follow-up overdue) change with the
+  // calendar, not with chart edits. Re-run all patients shortly after start
+  // and once each new local day.
+  lifecycle: {
+    start(ctx) {
+      const service = serviceOf(ctx);
+      if (!service) return;
+      const day = () => new Date().toDateString();
+      let last = null;
+      const run = () => {
+        if (last === day()) return;
+        last = day();
+        try { service.evaluateAll(); }
+        catch (error) { last = null; console.warn("[risk-rules] 每日重算失败", error?.message); }
+      };
+      service.dailyTimers = [setTimeout(run, 5000), setInterval(run, 60 * 60 * 1000)];
+      for (const timer of service.dailyTimers) timer.unref?.();
+    },
+    stop(ctx) {
+      const service = serviceOf(ctx);
+      for (const timer of service?.dailyTimers || []) { clearTimeout(timer); clearInterval(timer); }
+      if (service) service.dailyTimers = [];
+    },
+  },
 });

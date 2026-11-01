@@ -118,10 +118,10 @@ function Insights({ chatId, onOpenTurn, modelReady }) {
   </section>;
 }
 
-export function AvatarConversations({ connected = true, modelReady = false, onStats }) {
+export function AvatarConversations({ connected = true, modelReady = false, onStats, initialChatId = null }) {
   const [filter, setFilter] = useState('all'), [q, setQ] = useState(''), [query, setQuery] = useState('');
   const [page, setPage] = useState({ conversations: [], total: 0, stats: null }), [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState(null), [thread, setThread] = useState(null), [targetTurn, setTargetTurn] = useState(null);
+  const [selected, setSelected] = useState(initialChatId), [thread, setThread] = useState(null), [targetTurn, setTargetTurn] = useState(null);
   const [mode, setMode] = useState(''), [draft, setDraft] = useState(''), [later, setLater] = useState({ days: 1, note: '' });
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const autoOpened = useRef(false);
@@ -162,18 +162,24 @@ export function AvatarConversations({ connected = true, modelReady = false, onSt
     if (!chatId) { setNotice('这条原话所在的会话已删除或过期。'); return; }
     setTargetTurn(turnId); setSelected(chatId);
   }
+  // One reminder per "contact later": a linked patient gets a follow-up
+  // reminder (recorded with an outcome like any follow-up); otherwise, or if
+  // follow-up is unavailable, the conversation itself carries the reminder.
   async function followUpLater() {
     const c = thread.conversation;
-    await api(`${BASE}/conversations/${c.chatId}/follow-up`, 'POST', { days: Number(later.days), note: later.note });
-    if (!c.patientId) return '已设为稍后联系，到期后会出现在今日待办。';
-    try {
-      const due = new Date(Date.now() + Math.max(1, Number(later.days)) * 86400000);
-      due.setHours(9, 0, 0, 0);
-      await api(`/api/patients/${encodeURIComponent(c.patientId)}/followups`, 'POST', { name: `联系：飞书会话 ${c.name || ''}`.slice(0, 100), once: true, firstDueAt: due.toISOString(), requestId: crypto.randomUUID() });
-      return `已设为稍后联系，并为 ${c.patientName || '关联患者'} 新建一次随访提醒。`;
-    } catch (e) {
-      return `已设为稍后联系（到期出现在今日待办）；随访提醒未创建：${e.message}`;
+    if (c.patientId) {
+      try {
+        const due = new Date(Date.now() + Math.max(1, Number(later.days)) * 86400000);
+        due.setHours(9, 0, 0, 0);
+        await api(`/api/patients/${encodeURIComponent(c.patientId)}/followups`, 'POST', { name: `联系：飞书会话 ${c.name || ''}`.slice(0, 100), once: true, firstDueAt: due.toISOString(), requestId: crypto.randomUUID() });
+        return `已为 ${c.patientName || '关联患者'} 新建一次随访提醒，到期后出现在今日待办。`;
+      } catch (e) {
+        await api(`${BASE}/conversations/${c.chatId}/follow-up`, 'POST', { days: Number(later.days), note: later.note });
+        return `随访提醒未创建（${e.message}），已改为在分身会话中稍后联系，到期出现在今日待办。`;
+      }
     }
+    await api(`${BASE}/conversations/${c.chatId}/follow-up`, 'POST', { days: Number(later.days), note: later.note });
+    return '已设为稍后联系，到期后会出现在今日待办。';
   }
 
   const c = thread?.conversation;

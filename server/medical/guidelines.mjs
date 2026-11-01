@@ -43,9 +43,11 @@ export class GuidelineLibrary {
     if (!store.db.prepare("PRAGMA table_info(guideline_chunks)").all().some(c => c.name === "metadata"))
       store.db.exec("ALTER TABLE guideline_chunks ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'");
     store.db.exec("CREATE TABLE IF NOT EXISTS knowledge_embedding_batches(doc_id TEXT NOT NULL,fingerprint TEXT NOT NULL,ord INTEGER NOT NULL,vector TEXT NOT NULL,PRIMARY KEY(doc_id,fingerprint,ord))");
+    this.interruptedOnStart = [];
     for (const row of store.db.prepare("SELECT id,data FROM guideline_docs").all()) {
       const doc = JSON.parse(row.data);
       if (["running", "queued"].includes(doc.indexing?.status)) {
+        this.interruptedOnStart.push(row.id);
         doc.indexing = { ...doc.indexing, status: "interrupted", error: indexError({code:"INDEX_INTERRUPTED"}) };
         store.db.prepare("UPDATE guideline_docs SET data=? WHERE id=?").run(JSON.stringify(doc), row.id);
       }
@@ -383,12 +385,30 @@ export class GuidelineLibrary {
     const { text: _text, ...rest } = doc;
     return { ...rest, ...knowledgeMetadata(doc), indexing, chunkCount: chunks.length, embedded: indexing.embedded };
   }
+  // Indexing left unfinished by a restart is resumed one document at a time.
+  // It only sends public knowledge text to the embedding service, so it needs
+  // no new consent; documents edited or deleted meanwhile are skipped.
+  async resumeInterrupted({ stopped = () => false } = {}) {
+    const ids = this.interruptedOnStart.splice(0);
+    let resumed = 0;
+    for (const id of ids) {
+      if (stopped()) break;
+      try {
+        if (this.docRow(id).indexing?.status !== "interrupted" || this.indexTasks.has(id)) continue;
+        await indexKnowledgeDoc(this, id);
+        resumed++;
+      } catch {
+        // the document is gone or still failing; it keeps its status
+      }
+    }
+    return resumed;
+  }
   queueIndex(id) {
     this.docRow(id);
     void indexKnowledgeDoc(this, id).catch(() => {});
     return { docId: id, indexing: this.docRow(id).indexing };
   }
-  removeDocument(id, input = {}) {
+  async removeDocument(id, input = {}) {
     sqliteTransaction(this.store.db, () => {
       const doc = this.docRow(id);
       check(input.expectedRevision === (doc.revision || 0), "REVISION_CONFLICT", "资料已被修改，请查看最新资料后重新确认删除", 409);
@@ -399,8 +419,14 @@ export class GuidelineLibrary {
       this.store.db.prepare("DELETE FROM guideline_docs WHERE id=?").run(id);
       this.store.audit(null, "knowledge.document.deleted", { docId: id, revision: doc.revision || 0 });
     });
-    // Retained files are removed only after the revision-checked DB commit.
-    if (this.afterRemoveDocuments) return this.afterRemoveDocuments([id]).then(() => ({ ok: true }));
+    // Retained files and vectors are removed only after the revision-checked
+    // DB commit. Vectors hold document text, so they must not outlive it.
+    if (this.afterRemoveDocuments) await this.afterRemoveDocuments([id]);
+    try {
+      if (this.vectorStore) await this.vectorStore.removeDocs([id]);
+    } catch {
+      return { ok: true, warning: "资料已删除，残留向量索引清理失败；该资料已不参与检索。" };
+    }
     return { ok: true };
   }
   get(id) {

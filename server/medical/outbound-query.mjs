@@ -30,7 +30,12 @@ export function outboundQueryIssue(text, identities = [], { numbers = true } = {
   const lower = value.toLowerCase(), digits = value.replace(/\D/g, "");
   for (const term of identities) {
     const t = String(term).toLowerCase();
-    if (lower.includes(t) || (/^\d{5,}$/.test(t) && digits.includes(t))) return "当前患者的姓名、电话或病历号";
+    // Latin-script name pieces match whole words only: "Li Na" must not block
+    // "clinical" or "analysis". CJK names have no word breaks, so substring.
+    const hit = /^[a-z][a-z\s'-]*$/.test(t)
+      ? new RegExp(`(^|[^a-z])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`).test(lower)
+      : lower.includes(t);
+    if (hit || (/^\d{5,}$/.test(t) && digits.includes(t))) return "当前患者的姓名、电话或病历号";
   }
   if (!numbers) return null;
   if (ID_CARD.test(value)) return "证件号样式的编号";
@@ -50,6 +55,8 @@ export function checkOutboundQuery(text, identities = [], options = {}) {
 export function outboundTexts(name, args = {}) {
   if (name === "web_search" || name === "online_case_search") return [[args.query, {}]];
   if (name === "literature_search") return [args.query, ...(Array.isArray(args.queries) ? args.queries : [])].filter((q) => typeof q === "string").map((q) => [q, {}]);
+  // A DOI/PMID is public, but the field must not carry identity text either.
+  if (name === "literature_fetch") return [args.doi, args.pmid].filter((v) => typeof v === "string" && v).map((v) => [v, { numbers: false }]);
   if (name === "web_fetch") {
     let url = String(args.url || "");
     try { url = decodeURIComponent(url); } catch {}
@@ -57,7 +64,7 @@ export function outboundTexts(name, args = {}) {
   }
   return [];
 }
-export const OUTBOUND_TOOLS = ["web_search", "web_fetch", "online_case_search", "literature_search"];
+export const OUTBOUND_TOOLS = ["web_search", "web_fetch", "online_case_search", "literature_search", "literature_fetch"];
 
 export function checkOutboundTool(name, args, identities = []) {
   for (const [text, options] of outboundTexts(name, args)) checkOutboundQuery(text, identities, options);

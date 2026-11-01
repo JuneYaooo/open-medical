@@ -11,8 +11,17 @@ export function sqliteTransaction(db, operation) {
     db.exec(outer ? "COMMIT" : `RELEASE SAVEPOINT ${name}`);
     return result;
   } catch (error) {
-    if (outer) db.exec("ROLLBACK");
-    else db.exec(`ROLLBACK TO SAVEPOINT ${name}; RELEASE SAVEPOINT ${name}`);
+    // SQLite may already have rolled back on its own (SQLITE_FULL, IOERR, a
+    // busy COMMIT). Never let the rollback hide the original error.
+    try {
+      if (outer) {
+        if (db.isTransaction) db.exec("ROLLBACK");
+      } else if (db.isTransaction) {
+        db.exec(`ROLLBACK TO SAVEPOINT ${name}; RELEASE SAVEPOINT ${name}`);
+      }
+    } catch {
+      // keep the original error
+    }
     throw error;
   }
 }

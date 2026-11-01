@@ -28,7 +28,7 @@ import {
   Stethoscope,
   X,
 } from "lucide-react";
-import { careSetupProgress, requestPluginIntent } from "./plugin-navigation";
+import { careSetupProgress, publishAgendaViewIntent, requestPluginIntent } from "./plugin-navigation";
 import { usePluginActive, usePluginConnected } from "./plugin-slots";
 import { api, medicalEnabled, PENDING_REFRESH_EVENT } from "./agent-runtime";
 import { uploadProgressText } from "./import-material";
@@ -75,6 +75,7 @@ function HomeCockpit({ onView, onPatient, onOpenTask, reloadKey }) {
     try {
       if (item.action?.type === "patient" && item.patientId) await onPatient?.({ id: item.patientId, tab: item.action.tab });
       else if (item.action?.type === "task" && item.action.sessionId) await onOpenTask?.(item.action.sessionId, { tab: item.action.tab || "materials" });
+      else if (item.action?.type === "view" && item.action.view) onView?.(publishAgendaViewIntent(item, requestSettingsTab));
       else onView?.("agenda");
     } catch { onView?.("agenda"); }
   };

@@ -25,6 +25,20 @@ export function takePluginIntent(pluginId, name) {
   }
 }
 
+// Publishes the intents an agenda item of action.type "view" needs, so the
+// agenda page and the home "today" list open the same target.
+export function publishAgendaViewIntent(item, requestSettingsTab) {
+  const action = item?.action || {};
+  if (action.view === "care" && action.tab)
+    requestPluginIntent("followup", "care-tab", { tab: action.tab, patientId: item.patientId, patientName: item.patientName });
+  if (action.view === "research" && action.trialId)
+    requestPluginIntent("trials", "open-trial", { trialId: action.trialId });
+  if (action.view === "settings" && action.settingsTab === "knowledge-bot" && action.chatId)
+    requestPluginIntent("feishu-knowledge-bot", "open-chat", { chatId: action.chatId });
+  if (action.view === "settings" && action.settingsTab) requestSettingsTab?.(action.settingsTab);
+  return action.view;
+}
+
 // Kept in the fixed shell because the home checklist probes /api/care/settings
 // before any plugin view mounts. It returns data only; all rendering stays in
 // the followup plugin.

@@ -14,7 +14,7 @@ function linkedPatient(ctx, id) {
   }
 }
 
-const action = { type: "view", view: "settings", settingsTab: "knowledge-bot", label: "查看会话" };
+const action = (chatId) => ({ type: "view", view: "settings", settingsTab: "knowledge-bot", chatId, label: "查看会话" });
 
 export const avatarAgendaSources = Object.freeze([
   {
@@ -42,7 +42,7 @@ export const avatarAgendaSources = Object.freeze([
             at: c.attentionAt || c.lastAt,
             weight: c.attentionKind === "red-flag" ? 1 : 3,
             fallbackName: "医生分身",
-            action,
+            action: action(c.chatId),
           });
         if (c.followUpAt && c.followUpAt <= current)
           items.push({
@@ -54,7 +54,7 @@ export const avatarAgendaSources = Object.freeze([
             at: c.followUpAt,
             weight: 4,
             fallbackName: "医生分身",
-            action,
+            action: action(c.chatId),
           });
       }
       return items;

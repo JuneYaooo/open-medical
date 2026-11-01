@@ -19,7 +19,7 @@ export function KnowledgeDocuments({
   onImport,
 }) {
   const [query, setQuery] = useState("");
-  const keywordOnly = docs.filter((doc) => doc.indexing?.status === "failed").length;
+  const keywordOnly = docs.filter((doc) => ["failed", "interrupted", "keyword_only"].includes(doc.indexing?.status)).length;
   const filtered = docs.filter((doc) =>
     `${doc.title} ${doc.org || ""} ${doc.edition || doc.year || ""}`
       .toLowerCase()
@@ -88,8 +88,8 @@ export function KnowledgeDocuments({
                     <span className="kl-status">
                       {doc.reviewStatus === "retired" && <span className="om-chip kw-badge">已停用</span>}
                       {partial && <span className="om-chip is-caution">{coverageLabel(doc.coverage)}</span>}
-                      {doc.indexing?.status === "failed" && <span className="om-chip is-caution" title="语义检索暂不可用，仍可按关键词检索">仅关键词检索</span>}
-                      {doc.indexing?.status === "running" && <span className="om-chip">索引处理中</span>}
+                      {["failed", "interrupted", "keyword_only"].includes(doc.indexing?.status) && <span className="om-chip is-caution" title="语义检索暂不可用，仍可按关键词检索；可在上方「检索索引」重建">仅关键词检索</span>}
+                      {["running", "queued"].includes(doc.indexing?.status) && <span className="om-chip">索引处理中</span>}
                       {graph === "生成中" && <span className="om-chip is-info">图谱生成中…</span>}
                       {graph === "已生成" && <span className="om-chip is-ok">已生成图谱</span>}
                       {doc.reviewStatus !== "retired" && !partial && doc.indexing?.status === "ready" && graph !== "生成中" && graph !== "已生成" && <span className="om-meta">可检索</span>}

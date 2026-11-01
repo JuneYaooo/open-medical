@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, CheckCheck, Search, RotateCw, UserPlus } from "lucide-react";
 import { api } from "./agent-runtime";
-import { requestPluginIntent } from "./plugin-navigation";
+import { publishAgendaViewIntent } from "./plugin-navigation";
 import { requestSettingsTab } from "./extension-center";
 import { usePluginActive, usePluginConnected } from "./plugin-slots";
 import "./doctor-agenda.css";
@@ -103,12 +103,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
       if (item.action.type === "task") await onOpenTask(item.action.sessionId, { tab: item.action.tab || "materials" });
       else if (item.action.type === "patient") await onPatient({ id: item.patientId, tab: item.action.tab });
       else if (item.action.type === "patients") await onPatient({});
-      else {
-        if (item.action.view === "care" && item.action.tab) requestPluginIntent("followup", "care-tab", item.action.tab);
-        if (item.action.view === "research" && item.action.trialId) requestPluginIntent("trials", "open-trial", { trialId: item.action.trialId });
-        if (item.action.view === "settings" && item.action.settingsTab) requestSettingsTab(item.action.settingsTab);
-        await onView(item.action.view);
-      }
+      else await onView(publishAgendaViewIntent(item, requestSettingsTab));
     } catch (err) { setError(err.message); }
     finally { setOpening(null); }
   };

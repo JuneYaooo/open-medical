@@ -374,16 +374,18 @@ export class CareEngine {
   }
   updateReply(id, input = {}) {
     const reply = this.reply(id);
-    check(reply.status === "draft", "CARE_REPLY_STATE", "只有草稿可以修改", 409);
+    check(["draft", "failed"].includes(reply.status), "CARE_REPLY_STATE", "只有草稿或发送失败的回复可以修改", 409);
     const text = string(input.text, "回复内容", 2000);
     const channel = input.channel === undefined ? reply.channel : input.channel;
     check(["wecom-kf", "wecom-contact", "manual"].includes(channel), "INVALID_INPUT", "渠道无效");
-    this.db.prepare("UPDATE care_replies SET text=?, channel=?, updated_at=? WHERE id=? AND status='draft'").run(text, channel, iso(this.now()), reply.id);
+    this.db.prepare("UPDATE care_replies SET text=?, channel=?, updated_at=? WHERE id=? AND status IN ('draft','failed')").run(text, channel, iso(this.now()), reply.id);
     return this.reply(id);
   }
+  // An "unknown" send can only be closed by the doctor after checking WeCom;
+  // it is never resent automatically.
   discardReply(id) {
     const reply = this.reply(id);
-    check(["draft", "failed"].includes(reply.status), "CARE_REPLY_STATE", "该回复已发送或正在发送", 409);
+    check(["draft", "failed", "unknown"].includes(reply.status), "CARE_REPLY_STATE", "该回复已发送或正在发送", 409);
     this.db.prepare("UPDATE care_replies SET status='discarded', updated_at=? WHERE id=?").run(iso(this.now()), reply.id);
     if (reply.campaignId) this.updateStep(reply.campaignId, reply.stepId, { status: "skipped" });
     return this.reply(id);
@@ -892,7 +894,7 @@ export class CareEngine {
         openAlerts: one("SELECT COUNT(*) n FROM care_alerts WHERE status='open'"),
         urgentAlerts: one("SELECT COUNT(*) n FROM care_alerts WHERE status='open' AND level='urgent'"),
         autoRepliedToday: one("SELECT COUNT(*) n FROM care_replies WHERE mode='auto' AND status='sent' AND updated_at>=?", today),
-        drafts: one("SELECT COUNT(*) n FROM care_replies WHERE status='draft'"),
+        drafts: one("SELECT COUNT(*) n FROM care_replies WHERE status IN ('draft','failed','unknown')"),
         activeCampaigns: one("SELECT COUNT(*) n FROM care_campaigns WHERE status='active'"),
         pendingActions: one(`SELECT COUNT(*) n FROM pending_actions WHERE status='pending' AND type IN (${CARE_PROPOSALS.map(() => "?").join(",")})`, ...CARE_PROPOSALS),
         contactMatches: this.channels.wecom?.client ? this.channels.wecom.directory.contacts({ status: "suggested", limit: 1 }).counts.suggested : 0,

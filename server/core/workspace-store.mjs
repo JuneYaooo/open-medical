@@ -2,6 +2,33 @@ import { sqliteTransaction } from "../sqlite-transaction.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { check } from "../errors.mjs";
 
+// Tables keyed by workspace_id that must be removed with their workspace.
+const WORKSPACE_CHILD_TABLES = ["agent_events", "agent_trace", "agent_context_archives", "agent_run_history"];
+
+// Each run's checkpoint (contextMessages) is the whole model context so far,
+// so keeping it on every run makes the workspace blob grow with the square of
+// the conversation length, and it is rewritten on every update. Only one is
+// ever read again: chained context uses the latest completed run with a
+// checkpoint for the same authority + context identity, plus later runs'
+// providerMessages; resume and recovery only touch the latest run. Earlier
+// checkpoints of the same group are dead weight and are dropped here.
+const CHECKPOINT_FIELDS = ["contextMessages", "providerMessages", "runtimeState"];
+export function pruneStaleContexts(workspace) {
+  const runs = workspace?.runs;
+  if (!Array.isArray(runs) || runs.length < 2) return;
+  const latestByGroup = new Map();
+  runs.forEach((run, index) => {
+    if (run?.status === "completed" && run.contextMessages?.length)
+      latestByGroup.set(`${run.authority}\u0000${run.contextIdentity}`, index);
+  });
+  runs.forEach((run, index) => {
+    if (!run || index === runs.length - 1) return;
+    const keep = latestByGroup.get(`${run.authority}\u0000${run.contextIdentity}`);
+    if (keep === undefined || index >= keep) return;
+    for (const field of CHECKPOINT_FIELDS) if (field in run) delete run[field];
+  });
+}
+
 export class WorkspaceStore {
   constructor(db) {
     this.db = db;
@@ -21,6 +48,9 @@ export class WorkspaceStore {
       data TEXT NOT NULL, messages TEXT NOT NULL, UNIQUE(workspace_id,run_id));
       CREATE INDEX IF NOT EXISTS agent_history_workspace ON agent_run_history(workspace_id,id);
       CREATE INDEX IF NOT EXISTS agent_history_request ON agent_run_history(workspace_id,request_id);`);
+    // Older builds left archives/history behind when a workspace was deleted.
+    for (const table of ["agent_context_archives", "agent_run_history"])
+      db.prepare(`DELETE FROM ${table} WHERE workspace_id NOT IN (SELECT id FROM agent_workspaces)`).run();
     for (const workspace of this.list()) {
       if (
         workspace.extensions?.actions?.some((a) =>
@@ -94,9 +124,13 @@ export class WorkspaceStore {
   }
   list() {
     return this.db
-      .prepare("SELECT data FROM agent_workspaces")
+      .prepare("SELECT id, data FROM agent_workspaces")
       .all()
-      .map((r) => JSON.parse(r.data))
+      .flatMap((r) => {
+        // One corrupt row must not stop startup or every scheduler tick.
+        try { return [JSON.parse(r.data)]; }
+        catch { console.warn(`[workspace-store] 跳过无法解析的工作区 ${r.id}`); return []; }
+      })
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
   recoveryCandidates() {
@@ -166,6 +200,7 @@ export class WorkspaceStore {
           409,
         );
       callback(workspace);
+      pruneStaleContexts(workspace);
       workspace.revision++;
       if (touch) workspace.updatedAt = Date.now();
       this.db
@@ -289,9 +324,17 @@ export class WorkspaceStore {
   }
   remove(id) {
     this.get(id);
-    this.db.prepare("DELETE FROM agent_workspaces WHERE id=?").run(id);
-    this.db.prepare("DELETE FROM agent_events WHERE workspace_id=?").run(id);
-    this.db.prepare("DELETE FROM agent_trace WHERE workspace_id=?").run(id);
+    // Archives and run history hold full conversation text; they must go with
+    // the workspace, atomically.
+    sqliteTransaction(this.db, () => {
+      for (const table of WORKSPACE_CHILD_TABLES) {
+        if (this.hasTable(table)) this.db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(id);
+      }
+      this.db.prepare("DELETE FROM agent_workspaces WHERE id=?").run(id);
+    });
+  }
+  hasTable(name) {
+    return Boolean(this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
   }
   fork(id, { runId, revision } = {}) {
     const source = this.get(id);

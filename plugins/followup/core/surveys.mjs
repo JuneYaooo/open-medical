@@ -489,26 +489,37 @@ export class FollowUpSurveys {
         })
         .filter(Boolean)
         .join(" ");
-    this.followups.recordContact(patientId, {
+    const outcome = {
       requestId: `survey_${survey.id}`,
-      title: clip(`随访问卷：${survey.questionnaire.title}`, 80),
       status: "completed",
       contactMethod: input.contactMethod || channelMethod,
       note: clip(summary, 4000),
       contactedAt,
-      source: { kind: "survey" },
-    });
+    };
+    // A survey sent for a due reminder closes that reminder with the survey as
+    // its outcome, so history shows one record instead of an empty reminder
+    // plus a separate contact.
+    let closedReminder = false;
+    if (survey.reminderId) {
+      try {
+        this.followups.completeReminder(survey.reminderId, outcome);
+        closedReminder = true;
+      } catch {
+        // Already recorded by hand or removed: keep the survey as its own record.
+      }
+    }
+    if (!closedReminder)
+      this.followups.recordContact(patientId, {
+        ...outcome,
+        title: clip(`随访问卷：${survey.questionnaire.title}`, 80),
+        source: { kind: "survey" },
+      });
     survey.answers = answers;
     survey.score = score;
     survey.alert = alert;
     survey.status = "collected";
     survey.collectedAt = new Date(this.now()).toISOString();
     this.save(survey);
-    try {
-      if (survey.reminderId) this.followups.ackReminder(survey.reminderId);
-    } catch {
-      // The reminder may already be done; the survey outcome is the record.
-    }
     this.store.audit(null, "survey.collected", {
       surveyId: survey.id,
       score,

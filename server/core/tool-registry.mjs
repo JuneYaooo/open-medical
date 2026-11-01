@@ -127,6 +127,25 @@ export class ToolRegistry {
         additionalProperties: false,
       },
     );
-    return tool.execute(args, context);
+    return untilAborted(tool.execute(args, context), context?.signal);
   }
+}
+
+// A tool that ignores its abort signal must not keep a cancelled or timed-out
+// run alive (and its workspace locked). The tool's own promise is left to
+// settle in the background; its result is discarded.
+function untilAborted(work, signal) {
+  if (!signal || typeof signal.addEventListener !== "function") return work;
+  if (signal.aborted) {
+    Promise.resolve(work).catch(() => {});
+    return Promise.reject(signal.reason ?? new Error("aborted"));
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error("aborted"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(work).then(
+      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
+      (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
+    );
+  });
 }

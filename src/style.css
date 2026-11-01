@@ -5077,3 +5077,11 @@ nav.toolbox .session b{font-weight:500;}
   margin-top: 6px;
 }
 .hub-composer .task-context-chips { padding: 0 0 8px; }
+
+.visit-prep { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; margin: 16px 0; }
+.visit-prep > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.visit-prep small { color: var(--muted); }
+
+.kw-index-status { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+.kw-index-status summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; cursor: pointer; }
+.kw-index-status p { margin: 8px 0; overflow-wrap: anywhere; }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { check, identifier } from "../../../server/errors.mjs";
@@ -114,7 +115,11 @@ export function createCarePackService({ packs, followups, riskRules, guidelines 
     apply(patientId, id, startDate) {
       const value = pack(id);
       if (!installedPlan(value.id)) installPlanSync(value);
-      const jobs = followups().applyTemplate(patientId, { planId: planIdFor(value.id), startDate });
+      // Enrolling the same patient in the same pack version from the same
+      // start date twice returns the first enrollment instead of duplicating
+      // every follow-up node.
+      const requestId = `pack_${createHash("sha256").update(JSON.stringify([value.id, value.version, patientId, startDate])).digest("hex").slice(0, 40)}`;
+      const jobs = followups().applyTemplate(patientId, { planId: planIdFor(value.id), startDate, requestId });
       return { pack: value.id, followups: Array.isArray(jobs) ? jobs.length : 0, ...this.addMonitors(patientId, value.id) };
     },
     // Lab thresholds only: used when the doctor applied the pack's follow-up

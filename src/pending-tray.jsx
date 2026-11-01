@@ -264,6 +264,10 @@ export function PendingTray() {
     try {
       const result = await api(`/api/pending-actions/${action.id}/${decision}`, "POST", { ...(withNote ? { note } : {}), ...(payload ? { payload } : {}) });
       if (result.remembered?.length) setRemembered({ key: `${action.id}:${decision}`, memories: result.remembered });
+      // Multi-patient proposals report patients they could not change.
+      const skipped = result.applied?.skipped;
+      if (Array.isArray(skipped) && skipped.length)
+        setBulkResult(`${skipped.length} 位患者未处理：${skipped.slice(0, 5).map((s) => `${s.name || "患者"}（${s.reason}）`).join("、")}${skipped.length > 5 ? " 等" : ""}`);
       setRejecting(null); setNote("");
       // api() emits PENDING_REFRESH_EVENT after successful decisions, updating
       // this tray and the home preview from the same source of truth.
@@ -279,7 +283,7 @@ export function PendingTray() {
     let ok = 0, failed = 0;
     for (const a of bulk) { if (await resolve(a, "confirm")) ok++; else failed++; }
     setBulking(false);
-    setBulkResult(`已确认 ${ok} 项，${failed} 项失败`);
+    setBulkResult((previous) => `已确认 ${ok} 项，${failed} 项失败${previous ? `；${previous}` : ""}`);
   }
   if (!actions.length && !remembered && !open && !reviewing) return null;
   return <div className="pending-tray" ref={tray}>

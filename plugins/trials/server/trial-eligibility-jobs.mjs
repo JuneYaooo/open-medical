@@ -26,6 +26,10 @@ export class TrialEligibilityJobs {
           (!patientId || j.patientId === patientId),
       );
   }
+  find(id) {
+    const row = this.store.db.prepare("SELECT data FROM trial_ai_jobs WHERE id=?").get(id);
+    return row ? JSON.parse(row.data) : null;
+  }
   get(id) {
     const row = this.store.db
       .prepare("SELECT data FROM trial_ai_jobs WHERE id=?")
@@ -198,8 +202,9 @@ export class TrialEligibilityJobs {
     const task = this.workspaces
       .execute(handle)
       .then((result) => {
-        const current = this.get(job.id);
-        if (current.status !== "running") return;
+        // The job row disappears when its patient is deleted mid-check.
+        const current = this.find(job.id);
+        if (current?.status !== "running") return;
         const complete =
           result.status === "completed" &&
           current.checks.length === protocol.criteria.length;
@@ -213,8 +218,8 @@ export class TrialEligibilityJobs {
         });
       })
       .catch((e) => {
-        const current = this.get(job.id);
-        if (current.status === "running")
+        const current = this.find(job.id);
+        if (current?.status === "running")
           this.write({ ...current, status: "failed", error: e.message });
       })
       .finally(() => this.active.delete(job.id));

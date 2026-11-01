@@ -352,6 +352,7 @@ export class WecomDirectory {
       try { await this.groupRefresh(t.id); } catch { /* next round */ }
       const fresh = this.task(t.id); fresh.checkedAt = iso(this.now()); this.saveTask(fresh);
     }
+    await this.c.refreshAwaitingSingles?.();
   }
 }
 

@@ -742,6 +742,12 @@ export class MessageGateway {
       "该回复无需重试",
       409,
     );
+    check(
+      this.transports.has(row.channelId),
+      "CHANNEL_DISCONNECTED",
+      "该渠道当前未连接，请先在设置中重新连接后再重试",
+      409,
+    );
     await this.deliver(id, true);
     return this.settings();
   }

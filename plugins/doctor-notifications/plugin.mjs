@@ -64,6 +64,35 @@ export default definePlugin({
     { method: "*", path: "/api/doctor-notifications" },
     { method: "*", path: "/api/doctor-notifications/*" },
   ],
+  // A digest that failed to send shows in the agenda work lane, not only on
+  // the settings page the doctor rarely opens.
+  agendaSources: [
+    {
+      kind: "notification-failure",
+      label: "提醒发送",
+      order: 900,
+      workOnly: true,
+      read(ctx) {
+        const items = [];
+        const since = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+        for (const row of ctx.db.prepare("SELECT channel,day,data FROM doctor_notification_deliveries WHERE day>=?").all(since)) {
+          const delivery = JSON.parse(row.data);
+          if (!["failed", "unknown"].includes(delivery.status)) continue;
+          items.push({
+            id: `notification:${row.channel}:${row.day}`,
+            kind: "failure",
+            lane: "work",
+            title: `${row.channel === "wechat" ? "微信" : "飞书"}每日提醒${delivery.status === "unknown" ? "结果未知" : "发送失败"}（${row.day}）`,
+            detail: delivery.message || "检查连接后可在设置中重试",
+            at: delivery.at || 0,
+            fallbackName: "医生提醒",
+            action: { type: "view", view: "settings", settingsTab: "notifications", label: "查看并重试" },
+          });
+        }
+        return items;
+      },
+    },
+  ],
   setup(ctx) {
     const host = ctx.services.notificationHost || {};
     return new DoctorNotifications(ctx.services.store, host.vault, {

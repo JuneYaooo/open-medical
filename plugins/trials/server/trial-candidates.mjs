@@ -411,7 +411,10 @@ export class TrialCandidates {
     if (type === "trial-batch") return this.normalizeBatch(payload.trialId, { ...payload, externalConsent: true });
     if (type === "trial-enrollment") {
       const value = this.normalizeEnrollment(payload.trialId, payload.patientId, payload);
-      return { ...value, trialTitle: this.trials.get(value.trialId).title, label: STAGES[value.stage] };
+      // Pin the enrollment revision the proposal was made against, so a stale
+      // proposal cannot silently undo a newer enrollment change on confirm.
+      const baseRevision = Number.isSafeInteger(payload.baseRevision) ? payload.baseRevision : this.enrollment(value.trialId, value.patientId).revision;
+      return { ...value, baseRevision, trialTitle: this.trials.get(value.trialId).title, label: STAGES[value.stage] };
     }
     check(false, "INVALID_INPUT", "未知的临床试验提案");
   }
@@ -429,11 +432,16 @@ export class TrialCandidates {
       const created = this.trials.create(input);
       return { trialId: created.id, title: created.title, criteria: created.criteria.length };
     }
-    if (action.type === "trial-enrollment") return this.setEnrollment(p.trialId, p.patientId, { ...p, expectedRevision: this.enrollment(p.trialId, p.patientId).revision });
+    if (action.type === "trial-enrollment") {
+      const { baseRevision, ...input } = p;
+      return this.setEnrollment(p.trialId, p.patientId, { ...input, expectedRevision: Number.isSafeInteger(baseRevision) ? baseRevision : this.enrollment(p.trialId, p.patientId).revision });
+    }
     if (action.type === "trial-batch") {
       const running = this.batch(p.trialId);
       check(running?.status !== "running", "CONFLICT", "该试验已有批量初筛在进行", 409);
-      queueMicrotask(() => { try { this.startBatch(p.trialId, { patientIds: p.patientIds, externalConsent: true }); } catch { /* reported by the batch record */ } });
+      // Validate now so a bad batch fails the confirm instead of vanishing.
+      this.normalizeBatch(p.trialId, { patientIds: p.patientIds, externalConsent: true });
+      queueMicrotask(() => { try { this.startBatch(p.trialId, { patientIds: p.patientIds, externalConsent: true }); } catch (error) { console.warn("[trials] 批量初筛启动失败", error?.message); } });
       return { queued: p.patientIds.length };
     }
   }

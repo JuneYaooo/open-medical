@@ -215,8 +215,15 @@ export default definePlugin({
   },
   agendaSources: trialAgendaSources,
   hooks: {
-    "patient.deleted": (payload, ctx) =>
-      removePatientTrials(ctx.db, payload.patientId),
+    "patient.deleted": (payload, ctx) => {
+      // Stop any AI check still reading this patient before its rows go.
+      const jobs = ctx.plugins.trials?.service?.jobs;
+      if (jobs) for (const id of [...jobs.active.keys()]) {
+        try { if (jobs.get(id).patientId === payload.patientId) jobs.cancel(id); }
+        catch { /* job row already gone */ }
+      }
+      removePatientTrials(ctx.db, payload.patientId);
+    },
   },
   demo: {
     async install(ctx, demo) {

@@ -171,6 +171,11 @@ export class PendingActions {
       );
       if (normalized.patientId)
         resolvedPatientId = this.patients.row(normalized.patientId).id;
+    } else if (pluginHandler && payload && typeof payload === "object" && "input" in payload) {
+      // Validate new-style plugin proposals up front so the doctor is never
+      // shown a proposal that can only fail on confirm. Confirm re-validates.
+      const validated = pluginHandler.validate(payload.input);
+      if (validated !== undefined) normalized = { ...payload, input: validated };
     }
     if (isExt(type)) {
       check(this.extensions, "EXTENSIONS_UNAVAILABLE", "扩展中心未启用", 503);
@@ -532,7 +537,9 @@ export class PendingActions {
         let already = 0;
         const skipped = [];
         for (const entry of action.payload.patients) {
-          const patient = this.patients.row(entry.patientId);
+          let patient;
+          try { patient = this.patients.row(entry.patientId); }
+          catch { skipped.push({ patientId: entry.patientId, name: entry.name, reason: "已删除" }); continue; }
           if (patient.archived) { skipped.push({ patientId: entry.patientId, name: entry.name, reason: "已归档" }); continue; }
           if ((patient.groups || []).includes(action.payload.groupName)) { already++; continue; }
           if ((patient.groups || []).length >= 10) { skipped.push({ patientId: entry.patientId, name: entry.name, reason: "已有 10 个分组" }); continue; }

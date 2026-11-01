@@ -1,80 +1,29 @@
 import { initializeReviewColumns } from "./medical/review-schema.mjs";
 import { DatabaseSync } from "node:sqlite";
-import {
-  mkdirSync,
-  chmodSync,
-  openSync,
-  writeFileSync,
-  readFileSync,
-  unlinkSync,
-} from "node:fs";
+import { mkdirSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
 import { AppError, check } from "./errors.mjs";
+import { acquireProcessLock } from "./process-lock.mjs";
+
+const STORE_SCHEMA_VERSION = "8";
 
 // Single local user; parameterized queries + SQLite transactions prevent lost updates.
 export class Store {
   constructor(filename) {
     if (filename !== ":memory:")
       mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
-    if (filename !== ":memory:") {
-      this.lockPath = filename + ".lock";
-      this.lockId = randomUUID();
-      // 句柄持有到进程退出、由 OS 释放：硬杀（任务管理器/打包脚本 taskkill）
-      // 后锁自动消失，不留靠 pid 校验的残锁——Windows 的 pid 会被回收复用，
-      // 只查 pid 存活会把残锁当活进程（实测：旧进程早已被杀，重启仍报
-      // 「该数据库已有运行时使用」）。EEXIST 分支只为兼容旧版本留下的
-      // 残锁文件（旧实现写完即关句柄）：pid 已死则接管，存活才是真冲突。
-      const acquire = () => {
-        this.lockFd = openSync(this.lockPath, "wx", 0o600);
-        writeFileSync(
-          this.lockFd,
-          JSON.stringify({ pid: process.pid, id: this.lockId }),
-        );
-      };
-      try {
-        acquire();
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-        let owner;
-        try {
-          owner = JSON.parse(readFileSync(this.lockPath, "utf8"));
-        } catch {
-          throw new AppError(
-            "DATABASE_LOCK",
-            "数据库锁状态不明，请删除锁文件后重试",
-            503,
-          );
-        }
-        if (
-          !Number.isInteger(owner.pid) ||
-          owner.pid <= 0 ||
-          typeof owner.id !== "string"
-        )
-          throw new AppError(
-            "DATABASE_LOCK",
-            "数据库锁记录无效，请删除锁文件后重试",
-            503,
-          );
-        let alive = true;
-        try {
-          process.kill(owner.pid, 0);
-        } catch (e) {
-          if (e.code === "ESRCH") alive = false;
-        }
-        if (alive)
-          throw new AppError(
-            "DATABASE_LOCK",
-            "该数据库已有运行时使用，请关闭旧进程",
-            503,
-          );
-        unlinkSync(this.lockPath);
-        acquire();
-      }
-    }
+    // OS-level lock: released by the OS on any process exit, including a
+    // hard kill, so a crashed runtime never blocks the next start.
+    if (filename !== ":memory:") this.lock = acquireProcessLock(filename);
     try {
       this.db = new DatabaseSync(filename);
       if (filename !== ":memory:") chmodSync(filename, 0o600);
+      // Refuse a database written by a newer runtime before touching it: the
+      // ALTER/DROP steps below must never run against a newer schema.
+      const hasMeta = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").get();
+      const storedSchema = hasMeta && this.db.prepare("SELECT value FROM meta WHERE key='schema_version'").get()?.value;
+      if (storedSchema && Number(storedSchema) > Number(STORE_SCHEMA_VERSION))
+        throw new AppError("DATABASE_SCHEMA", "数据库版本不兼容；未修改既有会话，请使用匹配的运行时", 503);
       this.db
         .exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -118,7 +67,7 @@ export class Store {
       // schema 2 → 3 adds patient-domain tables; 3 → 4 adds the doctor
       // profile/memory tables; later versions add knowledge-domain tables.
       // All migrations are additive; session rows are unchanged.
-      const SCHEMA_VERSION = "8";
+      const SCHEMA_VERSION = STORE_SCHEMA_VERSION;
       const schemaRow = this.db
         .prepare("SELECT value FROM meta WHERE key=?")
         .get("schema_version");
@@ -148,12 +97,7 @@ export class Store {
     }
   }
   releaseLock() {
-    if (this.lockPath) {
-      try {
-        if (JSON.parse(readFileSync(this.lockPath, "utf8")).id === this.lockId)
-          unlinkSync(this.lockPath);
-      } catch {}
-    }
+    this.lock?.release();
   }
   close() {
     try {

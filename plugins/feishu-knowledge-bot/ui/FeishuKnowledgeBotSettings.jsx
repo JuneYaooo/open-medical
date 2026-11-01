@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../src/agent-runtime';
 import { FeishuBinding } from '../../../src/feishu-binding';
 import { AvatarConversations } from './AvatarConversations.jsx';
+import { takePluginIntent } from '../../../src/plugin-navigation';
 import './avatar.css';
 
 const DEFAULT_NAME = '医生的 AI 助手';
@@ -13,8 +14,10 @@ export function FeishuKnowledgeBotSettings() {
   const [config, setConfig] = useState(null), [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [tab, setTab] = useState(null), [stats, setStats] = useState(null);
+  // An agenda row can ask to open one conversation directly.
+  const [openChat] = useState(() => takePluginIntent('feishu-knowledge-bot', 'open-chat')?.chatId || null);
   const accept = value => { setConfig(value); setForm({ ...value, persona: { ...value.persona } }); setStats(value.conversationStats); };
-  useEffect(() => { let alive = true; api('/api/knowledge-bot').then(v => { if (alive) { accept(v); setTab(t => t || (v.conversationStats?.attention > 0 ? 'records' : 'settings')); } }).catch(e => { if (alive) setError(e.message); }); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; api('/api/knowledge-bot').then(v => { if (alive) { accept(v); setTab(t => t || (openChat || v.conversationStats?.attention > 0 ? 'records' : 'settings')); } }).catch(e => { if (alive) setError(e.message); }); return () => { alive = false; }; }, []);
   useEffect(() => {
     if (!config?.enabled && config?.feishuBinding?.status !== 'pending') return;
     let alive = true;
@@ -37,7 +40,7 @@ export function FeishuKnowledgeBotSettings() {
         <button type="button" className="secondary" aria-pressed={tab !== 'records'} onClick={() => setTab('settings')}>分身设置</button>
         <button type="button" className="secondary" aria-pressed={tab === 'records'} onClick={() => setTab('records')}>分身会话记录{attention > 0 && <span className="om-chip is-danger">需关注 {attention}</span>}</button>
       </div>}
-      {config.hasSecret && tab === 'records' ? <AvatarConversations connected={config.enabled && config.state === 'connected'} modelReady={Boolean(config.model)} onStats={onStats} /> : <>
+      {config.hasSecret && tab === 'records' ? <AvatarConversations connected={config.enabled && config.state === 'connected'} modelReady={Boolean(config.model)} onStats={onStats} initialChatId={openChat} /> : <>
       <div className="notification-channel">
       <h3>1. 连接 <span role="status" className={`om-chip ${config.state === 'connected' ? 'is-ok' : config.state === 'failed' ? 'is-danger' : config.state === 'disabled' ? '' : 'is-caution'}`}>{states[config.state] || config.state}</span></h3>
       {config.message && <p className="muted">{config.message}</p>}

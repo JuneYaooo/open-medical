@@ -23,11 +23,25 @@ export class WorkspaceRecovery {
   }
   tick() {
     const service = this.service;
-    for (const workspace of service.store.recoveryCandidates()) {
+    let candidates;
+    try { candidates = service.store.recoveryCandidates(); }
+    catch (error) { console.warn("[recovery] 读取待恢复任务失败", error?.message); return; }
+    for (const workspace of candidates) {
       if (service.active.size >= service.maxActive) break;
-      if (service.active.has(workspace.id) || service.mutating.has(workspace.id)) continue;
+      // One bad workspace must not throw out of the timer or block the rest.
+      try { this.recover(workspace); }
+      catch (error) {
+        if (service.active.get(workspace.id)?.recovering) service.active.delete(workspace.id);
+        console.warn(`[recovery] 恢复工作区 ${workspace.id} 失败`, error?.message);
+      }
+    }
+  }
+  recover(workspace) {
+    const service = this.service;
+    {
+      if (service.active.has(workspace.id) || service.mutating.has(workspace.id)) return;
       const run = workspace.runs.at(-1);
-      if (!run?.resumeOnRestart || run.status !== "interrupted" || run.recoveryBlocked) continue;
+      if (!run?.resumeOnRestart || run.status !== "interrupted" || run.recoveryBlocked) return;
       let reason;
       if (run.authority !== hashText(JSON.stringify(workspace.permissions)) ||
           run.contextIdentity !== service.contextIdentity(workspace.id)) reason = "模型、领域或授权已变化";
@@ -43,7 +57,7 @@ export class WorkspaceRecovery {
         });
         service.store.event(workspace.id, run.id, "recovery.blocked", { reason });
         service.notify(workspace.id, run.id, "interrupted");
-        continue;
+        return;
       }
       const handle = {
         id: workspace.id, run, recovering: true,

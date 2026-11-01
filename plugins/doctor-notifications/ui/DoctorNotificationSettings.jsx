@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../src/agent-runtime";
 import { FeishuBinding } from "../../../src/feishu-binding";
 const names = { wechat: "微信", feishu: "飞书" };
@@ -11,10 +11,17 @@ function Channel({ initial, refresh }) {
   const [form, setForm] = useState({ ...initial });
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState(""), [error, setError] = useState(""), [qr, setQr] = useState(null);
   const channel = initial.channel;
-  const update = (key, value) => { setForm(v => ({ ...v, [key]: value })); setNotice(""); };
-  const accept = value => { setForm({ ...value }); refresh(value); };
+  // Fields the doctor edits stay as typed while background polling refreshes
+  // connection status; they are replaced only after a save.
+  const edited = useRef(new Set());
+  const update = (key, value) => { edited.current.add(key); setForm(v => ({ ...v, [key]: value })); setNotice(""); };
+  const accept = value => { edited.current.clear(); setForm({ ...value }); refresh(value); };
+  const acceptStatus = value => {
+    setForm(v => ({ ...value, ...Object.fromEntries([...edited.current].map(key => [key, v[key]])) }));
+    refresh(value);
+  };
   async function action(fn) { setBusy(true); setError(""); setNotice(""); try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(false); } }
-  const reload = async () => accept((await api("/api/doctor-notifications")).channels.find(c => c.channel === channel));
+  const reload = async () => acceptStatus((await api("/api/doctor-notifications")).channels.find(c => c.channel === channel));
   useEffect(() => {
     if (!qr) return;
     let stopped = false, timer;

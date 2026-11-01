@@ -1,5 +1,12 @@
 import { AppError, check } from "../../../server/errors.mjs";
 
+// Sex changes renal formulas; a missing or unknown value must not silently
+// default to male.
+function sexOf(answers) {
+  check(answers?.sex === "男" || answers?.sex === "女", "INVALID_INPUT", "「性别」请选择：男 或 女");
+  return answers.sex;
+}
+
 // Deterministic medical scales and calculators. Every result is a tool
 // output for clinician review — the scales support decisions, they never
 // make them. Formulas follow the published versions noted per scale.
@@ -314,7 +321,7 @@ export const SCALES = [
     evaluate(answers) {
       const scr = num(answers, this.items[0], 10, 3000) / 88.4; // → mg/dL
       const age = num(answers, this.items[1], 1, 120);
-      const female = answers.sex === "女";
+      const female = sexOf(answers) === "女";
       const kappa = female ? 0.7 : 0.9;
       const alpha = female ? -0.241 : -0.302;
       const ratio = scr / kappa;
@@ -347,7 +354,7 @@ export const SCALES = [
       const age = num(answers, this.items[0], 1, 120);
       const weight = num(answers, this.items[1], 2, 300);
       const scr = num(answers, this.items[2], 10, 3000) / 88.4;
-      const female = answers.sex === "女";
+      const female = sexOf(answers) === "女";
       const value = ((140 - age) * weight) / (72 * scr) * (female ? 0.85 : 1);
       const crcl = Math.round(value);
       const level =

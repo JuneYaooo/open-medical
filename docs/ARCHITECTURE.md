@@ -2,6 +2,8 @@
 
 面向开发者与代码审阅者的系统架构。使用入门见 [README](../README.md)，医生使用流程见 [医生使用指南](DOCTOR_WORKBENCH_GUIDE.md)。
 
+各功能的闭环状态、健壮性约定与已知缺口见 [功能闭环清单](FEATURE_LOOPS.md)。
+
 医生界面、AI 复核、患者上下文及任务验收遵循 [开发指南](DEVELOPMENT_GUIDE.md)；该指南区分研究依据、项目要求和待验证的设计假设。
 
 ---

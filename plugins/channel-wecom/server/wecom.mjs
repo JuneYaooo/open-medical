@@ -208,6 +208,29 @@ export class WeComConnector {
       return task;
     } catch (error) { throw error instanceof AppError ? error : new AppError('WECOM_API', this.apiFailure(error), 502); }
   }
+  // One-to-one tasks waiting for the member to press send are re-checked
+  // with group tasks (every ~10 minutes, for a week), so the doctor sees
+  // "sent" without opening the patient and clicking refresh.
+  async refreshAwaitingSingles() {
+    if (!this.client) return;
+    const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+    const rows = this.db.prepare("SELECT data FROM wecom_tasks WHERE corp=? AND json_extract(data,'$.status')='awaiting_member'").all(this.corpId).map(r => JSON.parse(r.data));
+    for (const t of rows.filter(t => t.msgid && String(t.createdAt || '') >= cutoff && (!t.checkedAt || Date.now() - Date.parse(t.checkedAt) >= 600000)).slice(0, 10)) {
+      try { await this.refresh(t.id); } catch { /* next round */ }
+      try { const fresh = this.task(t.id); fresh.checkedAt = new Date().toISOString(); this.saveTask(fresh); } catch { /* patient removed */ }
+    }
+  }
+  // A task whose outcome is unknown is never resent automatically. After the
+  // doctor checks WeCom, they close it with what actually happened.
+  resolveUnknown(id, input = {}) {
+    const task = this.task(id);
+    check(task.status === 'unknown', 'WECOM_TASK_STATE', '只有结果未知的任务需要人工核实', 409);
+    check(['sent', 'not_sent'].includes(input.outcome), 'INVALID_INPUT', '请选择核实结果：已发送 或 未发送');
+    task.status = input.outcome === 'sent' ? 'sent' : 'cancelled';
+    task.detail = input.outcome === 'sent' ? '医生已在企业微信核实：已发送。' : '医生已在企业微信核实：未发送，任务已关闭。';
+    task.resolvedAt = now();
+    return this.saveTask(task);
+  }
   decode(query, cipher) {
     check(this.status().callbackConfigured, 'WECOM_UNCONFIGURED', '企业微信回调未配置', 503);
     const timestamp = query.get('timestamp'), nonce = query.get('nonce'), signature = query.get('msg_signature') || '';

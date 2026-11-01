@@ -147,16 +147,16 @@ export class ResearchService {
     let n1;
     if (design === "means") {
       check(
-        Number.isFinite(delta) && Number.isFinite(sd) && sd > 0,
+        Number.isFinite(delta) && delta !== 0 && Number.isFinite(sd) && sd > 0,
         "INVALID_INPUT",
-        "means 设计需要 delta 与 sd>0",
+        "means 设计需要非零的 delta 与 sd>0",
       );
       n1 = ((zAlpha + zBeta) ** 2 * sd ** 2 * (1 + 1 / ratio)) / delta ** 2;
     } else {
       check(
-        Number.isFinite(p1) && Number.isFinite(p2) && p1 > 0 && p1 < 1 && p2 > 0 && p2 < 1,
+        Number.isFinite(p1) && Number.isFinite(p2) && p1 > 0 && p1 < 1 && p2 > 0 && p2 < 1 && p1 !== p2,
         "INVALID_INPUT",
-        "proportions 设计需要 0–1 之间的 p1 与 p2",
+        "proportions 设计需要 0–1 之间且不相等的 p1 与 p2",
       );
       const pBar = (p1 + ratio * p2) / (1 + ratio);
       n1 =

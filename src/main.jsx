@@ -86,11 +86,12 @@ import "./knowledge-workspace.css";
 import "./clarity.css";
 import { KnowledgeSourcePanel } from "./knowledge-source-panel";
 import { IconButton, Badge, Modal, STATUS } from "./components";
-import { ResultCard, SlotItem, registerUiPlugins, usePluginActive, usePluginEnabled, useSlot } from "./plugin-slots";
+import { ResultCard, SlotItem, registerUiPlugins, useActiveSlot, usePluginActive, usePluginEnabled, useSlot } from "./plugin-slots";
 import { loadUiPluginModules } from "./plugin-registry";
 import { modelBoundary } from "../shared/model-boundary.mjs";
 import { ModelSettings } from "./model-settings";
 import { useDevInfo } from "./dev-info";
+import { requestSettingsTab } from "./extension-center";
 import { ErrorBoundary } from "./error-boundary";
 import {
   AcceptanceView,
@@ -588,7 +589,11 @@ function App() {
     writeLocation(next, location);
     setViewState(next);
   };
-  const legacyView = legacyViews.find((item) => item.type === view) || null;
+  const activeLegacyViews = useActiveSlot("legacyViews");
+  const registeredLegacyView = legacyViews.find((item) => item.type === view) || null;
+  // A page from a disabled plugin would render but every call would 404.
+  const legacyView = registeredLegacyView && activeLegacyViews.includes(registeredLegacyView) ? registeredLegacyView : null;
+  const inactiveLegacyView = registeredLegacyView && !legacyView;
   const [demoPreferenceBusy, setDemoPreferenceBusy] = useState(false);
   const [demoPreferenceError, setDemoPreferenceError] = useState("");
   const setDemoEntryHidden = async (hidden) => {
@@ -1716,7 +1721,7 @@ function App() {
                 </div> : <div className="loading-state" role="status">
                   <Loader2 className="spin" />正在连接本地运行时…
                 </div>}
-              </main>) : <ErrorBoundary resetKey={`${view}:${activeId}`}><Suspense fallback={<RouteFallback />}> {legacyView ? <SlotItem contribution={legacyView} view={view} config={config} onNavigate={navigate} onOpenTask={openTask} onOpenPatient={openPatient} onSettings={() => navigate("settings")} /> : view === "examples" && medical ? <LazyDemoExperience entryHidden={Boolean(config?.demoEntryHidden)} preferenceBusy={demoPreferenceBusy} onEntryHiddenChange={setDemoEntryHidden} flows={MEDICAL_WORKFLOWS} onView={navigate} onPatient={openPatient} onOpenTask={openTask} onChanged={refreshList}/> : view === "settings" && config ? <LazyAppSettingsView demoPreferenceBusy={demoPreferenceBusy} onDemoEntryHiddenChange={setDemoEntryHidden} config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} onAsk={(prompt, context)=>{setHomeDraft({prompt, context});setHomeKey((k)=>k+1);navigate("home");}} onPluginsChanged={plugins => setConfig(current => ({ ...current, plugins }))} /> : view === "projects" && config ? <LazyProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <LazyToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <LazyTaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
+              </main>) : <ErrorBoundary resetKey={`${view}:${activeId}`}><Suspense fallback={<RouteFallback />}> {inactiveLegacyView ? <div className="empty-state" role="status"><p>该功能所属的插件未启用。</p><button className="secondary" onClick={() => { requestSettingsTab("plugins"); navigate("settings"); }}>前往设置启用</button></div> : legacyView ? <SlotItem contribution={legacyView} view={view} config={config} onNavigate={navigate} onOpenTask={openTask} onOpenPatient={openPatient} onSettings={() => navigate("settings")} /> : view === "examples" && medical ? <LazyDemoExperience entryHidden={Boolean(config?.demoEntryHidden)} preferenceBusy={demoPreferenceBusy} onEntryHiddenChange={setDemoEntryHidden} flows={MEDICAL_WORKFLOWS} onView={navigate} onPatient={openPatient} onOpenTask={openTask} onChanged={refreshList}/> : view === "settings" && config ? <LazyAppSettingsView demoPreferenceBusy={demoPreferenceBusy} onDemoEntryHiddenChange={setDemoEntryHidden} config={config} onModel={()=>setModal("model")} onDoctor={()=>setModal("doctor")} onProjects={()=>navigate("projects")} onAsk={(prompt, context)=>{setHomeDraft({prompt, context});setHomeKey((k)=>k+1);navigate("home");}} onPluginsChanged={plugins => setConfig(current => ({ ...current, plugins }))} /> : view === "projects" && config ? <LazyProjectDirectory purpose={projectTool} items={wsList} onOpen={openWorkspaces} onChanged={refreshList}/> : view === "tools" && config ? <LazyToolDirectory config={config} onModelSettings={()=>setModal("model")} onNavigate={navigate} onProjects={tool=>{setProjectTool(tool);navigate("projects");}} onNewTask={startNewTask}/> : view === "tasks" ? <LazyTaskDirectory sessions={sessions} workspaces={wsList} patients={patientsList} onTask={openTask} onProject={openWorkspaces}/> : view === "workspaces" ? (
             <LazyWorkspacesView
               key={`ws-${homeKey}-${workspaceTarget?.id || ""}-${workspaceTarget?.create || ""}`}
               config={config}

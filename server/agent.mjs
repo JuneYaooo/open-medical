@@ -88,9 +88,15 @@ const sameSecret = (a, b) =>
   typeof a === "string" &&
   Buffer.byteLength(a) === Buffer.byteLength(b) &&
   timingSafeEqual(Buffer.from(a), Buffer.from(b));
-async function body(req) {
+// For routes whose body is optional: no body (or an empty body) is {}, but an
+// oversized or malformed body is still an error, never silently {}.
+function optionalBody(req) {
+  return body(req, { optional: true });
+}
+async function body(req, { optional = false } = {}) {
   check(
-    req.headers["content-type"]?.startsWith("application/json"),
+    req.headers["content-type"]?.startsWith("application/json") ||
+      (optional && !req.headers["content-type"]),
     "CONTENT_TYPE",
     "请使用 application/json",
     415,
@@ -102,6 +108,7 @@ async function body(req) {
     check(bytes <= 8 * 1024 * 1024, "BODY_LIMIT", "请求超过 8MB", 413);
     chunks.push(part);
   }
+  if (optional && bytes === 0) return {};
   try {
     const value = JSON.parse(Buffer.concat(chunks).toString());
     check(
@@ -645,6 +652,8 @@ export function createServer(options = {}) {
     },
     // schedule 在下方才创建；建档发生在服务就绪后，闭包引用是安全的。
     onCreated: (patient) => schedule.baselinePatient(patient),
+    // Risk alerts must follow every chart write, not only the chart page.
+    onChanged: (patientId) => { if (!shuttingDown) riskEngine()?.evaluatePatient(patientId); },
     learning: () => pluginActive("learning") ? pluginService("learning") : null,
     // Plugin-owned patient data is reached through the host only. Deletion uses
     // a synchronous transactional hook; list counts use active contributions.
@@ -703,6 +712,17 @@ export function createServer(options = {}) {
   const riskEngine = () =>
     pluginActive("risk-rules") ? pluginService("risk-rules") : null;
   const schedule = new PatientSchedule(store, patients);
+  // Marks only labs added since `before` as reviewed; unread labs that came in
+  // from elsewhere stay unread.
+  const markOwnLabsReviewed = (patientId, before) => {
+    try {
+      const seen = new Set(before.map((lab) => JSON.stringify(lab)));
+      const added = (patients.get(patientId).labs || []).filter((lab) => !seen.has(JSON.stringify(lab)));
+      if (added.length) schedule.baselinePatient({ id: patientId, labs: added });
+    } catch (error) {
+      console.warn("[labs] 标记已阅失败", error?.message);
+    }
+  };
   const doctorOverview = new DoctorOverview(store, sessionBridge, {
     schedule,
     // Plugin agenda sources are resolved lazily: setup runs once the fixed
@@ -1437,7 +1457,7 @@ export function createServer(options = {}) {
           }
           if (parts[3] === "files") {
             if (parts.length === 6 && parts[5] === "prepare" && req.method === "POST") {
-              const input = await body(req).catch(() => ({}));
+              const input = await optionalBody(req);
               const controller = new AbortController();
               const abort = () => controller.abort();
               res.once("close", abort);
@@ -1616,8 +1636,17 @@ export function createServer(options = {}) {
         req.method === "POST"
       ) {
         // 请求体可空：托盘普通确认发 {}，带反馈说明时发 { note }。
-        const feedback = await body(req).catch(() => ({}));
+        const feedback = await optionalBody(req);
+        // Labs the doctor just reviewed in a proposal are not "new" results.
+        let labsBefore = null;
+        if (parts[3] === 'confirm') {
+          try {
+            const action = pending.row(parts[2]);
+            if (action?.type === 'patient-update' && action.patientId) labsBefore = { id: action.patientId, labs: patients.get(action.patientId).labs || [] };
+          } catch { /* confirm reports the error */ }
+        }
         const result = parts[3] === 'confirm' ? pending.confirm(parts[2], feedback) : pending.reject(parts[2], feedback);
+        if (labsBefore) markOwnLabsReviewed(labsBefore.id, labsBefore.labs);
         if (parts[3] === 'confirm' && result.action.type === 'patient-create') {
           const learning = pluginActive("learning") ? pluginService("learning") : null;
           if (learning?.prefs()?.habits) {
@@ -1691,7 +1720,7 @@ export function createServer(options = {}) {
         }
       }
       if (path === "/api/ocr-settings/test" && req.method === "POST") {
-        const input = await body(req).catch(() => ({}));
+        const input = await optionalBody(req);
         // 带参数时只验证不保存（模型复用主配置校验，服务走独立校验）；
         // 不带参数则实测已保存的配置。
         const result =
@@ -1718,7 +1747,7 @@ export function createServer(options = {}) {
         return send(res, 200, { ...result, reprocess });
       }
       if (path === "/api/privacy-settings/test" && req.method === "POST") {
-        const input = await body(req).catch(() => ({}));
+        const input = await optionalBody(req);
         const service = input.service ? privacySettings.candidateService(input.service) : privacySettings.service();
         check(service, "PRIVACY_SERVICE_MISSING", "还没有配置脱敏服务；可以填写 gpu-worker 地址，或在文字识别设置里配置后沿用", 400);
         const sample = "姓名：测试患者甲  电话：13900000000  住址：某市某区测试路1号\n主诉：头痛2天。主治医师：李医生";
@@ -1922,7 +1951,10 @@ export function createServer(options = {}) {
         if (parts.length === 3) {
           if (req.method === "GET") return send(res, 200, patients.get(pid));
           if (req.method === "PATCH") {
+            const labsBefore = patients.get(pid).labs || [];
             const updated = patients.update(pid, await body(req));
+            // Labs the doctor typed in themselves are not unread results.
+            markOwnLabsReviewed(pid, labsBefore);
             riskEngine()?.evaluatePatient(pid);
             return send(res, 200, updated);
           }
@@ -2027,6 +2059,8 @@ export function createServer(options = {}) {
         }
         if (sub[0] === "embedding-health" && req.method === "POST")
           return send(res, 200, await embedder.probe());
+        if (sub.length === 1 && sub[0] === "index-status" && req.method === "GET")
+          return send(res, 200, await guidelines.ragStatus());
         if (sub.length === 2 && sub[1] === "text" && req.method === "PUT")
           return send(res, 200, await guidelines.updateDocumentText(sub[0], await body(req)));
         if (sub.length === 2 && sub[1] === "reindex" && req.method === "POST")
@@ -2221,6 +2255,9 @@ export function createServer(options = {}) {
           payload: { engine: "unified-runtime", version: "0.4.0" },
         },
       });
+      // Oversized frames and protocol errors are emitted as "error"; without a
+      // listener they become an uncaught exception and take the process down.
+      ws.on("error", () => ws.terminate());
       ws.on("close", () => {
         for (const id of owned) sessionBridge.cancel(id);
       });
@@ -2360,6 +2397,9 @@ export function createServer(options = {}) {
     scheduler.start();
     workspaces.scheduler.start();
     workspaces.recovery.start();
+    if (guidelines.interruptedOnStart?.length)
+      guidelines.resumeInterrupted({ stopped: () => shuttingDown })
+        .catch((error) => console.warn("[knowledge] 恢复中断的索引失败", error?.message));
     // 与迁移前 messageGateway.start() 的位置一致：监听开始后、聊天随访前。
     // 插件生命周期统一由 host 按依赖拓扑启动，单个插件失败已隔离。
     pluginHost.startAll().catch((error) => {
@@ -2371,44 +2411,67 @@ export function createServer(options = {}) {
     shuttingDown = true;
     guidelines.stopStatusQueries?.();
     shutdownPromise = (async () => {
-    workspaces.stopping = true;
-    scheduler.stop();
-    backups.stopAuto();
-    paddleLocal.stop();
-    workspaces.scheduler.stop();
-    workspaces.recovery.stop();
-    // 对应迁移前 messageGateway.stop() 的位置；先停插件再等待其收尾。
-    await pluginHost.stopAll();
-    await pluginHost.drainAll();
-    if (databasePath === ":memory:" && !options.userSkillsDir) rmSync(userSkillsDir, { recursive: true, force: true });
-    for (const id of workspaces.active.keys()) workspaces.interrupt(id);
-    for (const id of workspaces.active.keys())
-      if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
-    await intakeJobs.stop();
-    await knowledgeOrganizer.stop();
-    await Promise.allSettled([...guidelines.indexTasks.values()]);
-    for (const ws of sockets.clients) ws.terminate();
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    await Promise.allSettled([...tasks]);
-    await scheduler.drain();
-    await workspaces.scheduler.drain();
-    await workspaces.recovery.drain();
-    await workspaces.extensions.close();
-    try {
-      const vectorClosures = await Promise.allSettled([vectorStore.close(), materialVectors.close()]);
-      const failed = vectorClosures.find(result => result.status === "rejected");
-      if (databasePath === ":memory:") {
-        // A timed-out native initializer can still own this path. Leave it in
-        // place rather than race cleanup against an unconfirmed shutdown.
-        if (!failed) rmSync(vectorDir, { recursive: true, force: true });
-        rmSync(knowledgeRoot, { recursive: true, force: true });
+    // Every step is isolated and time-boxed: one failing or hung subsystem must
+    // never keep the app from quitting or skip closing the database.
+    const step = async (label, work, ms = 10000) => {
+      let timer;
+      try {
+        await Promise.race([
+          Promise.resolve().then(work),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("超时")), ms); timer.unref?.(); }),
+        ]);
+      } catch (error) {
+        console.warn(`[shutdown] ${label} 失败：${error?.message || error}`);
+      } finally {
+        clearTimeout(timer);
       }
-      if (failed) throw failed.reason;
+    };
+    let vectorFailure = null;
+    try {
+      workspaces.stopping = true;
+      await step("停止定时任务", () => {
+        scheduler.stop();
+        backups.stopAuto();
+        paddleLocal.stop();
+        workspaces.scheduler.stop();
+        workspaces.recovery.stop();
+      });
+      // Interrupt runs before stopping plugins, so in-flight runs never call
+      // into a plugin service that has already shut down.
+      await step("中断运行中的任务", () => {
+        for (const id of workspaces.active.keys()) workspaces.interrupt(id);
+        for (const id of workspaces.active.keys())
+          if (sessionBridge.isSessionWorkspace(id)) workspaces.cancel(id);
+      });
+      await step("停止插件", () => pluginHost.stopAll());
+      await step("等待插件收尾", () => pluginHost.drainAll());
+      if (databasePath === ":memory:" && !options.userSkillsDir) await step("清理临时技能目录", () => rmSync(userSkillsDir, { recursive: true, force: true }));
+      await step("停止资料整理任务", () => intakeJobs.stop());
+      await step("停止知识整理任务", () => knowledgeOrganizer.stop());
+      await step("等待索引任务", () => Promise.allSettled([...guidelines.indexTasks.values()]));
+      await step("关闭连接", async () => {
+        for (const ws of sockets.clients) ws.terminate();
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      });
+      await step("等待在途请求", () => Promise.allSettled([...tasks]));
+      await step("等待计划任务", () => Promise.allSettled([scheduler.drain(), workspaces.scheduler.drain(), workspaces.recovery.drain()]));
+      await step("关闭扩展进程", () => workspaces.extensions.close());
+      await step("关闭向量库", async () => {
+        const vectorClosures = await Promise.allSettled([vectorStore.close(), materialVectors.close()]);
+        vectorFailure = vectorClosures.find(result => result.status === "rejected")?.reason || null;
+        if (databasePath === ":memory:") {
+          // A timed-out native initializer can still own this path. Leave it in
+          // place rather than race cleanup against an unconfirmed shutdown.
+          if (!vectorFailure) rmSync(vectorDir, { recursive: true, force: true });
+          rmSync(knowledgeRoot, { recursive: true, force: true });
+        }
+      });
     } finally {
-      sockets.close();
+      try { sockets.close(); } catch { /* already closed */ }
       store.close();
     }
+    if (vectorFailure) throw vectorFailure;
     })();
     return shutdownPromise;
   };

@@ -53,7 +53,7 @@ export function CareInbox({ onOpenPatient }) {
 
   const load = useCallback(async () => {
     const request = ++loadGeneration.current;
-    const paths = { alerts: "/api/care/alerts?status=open", drafts: "/api/care/replies?status=draft", messages: "/api/care/inbox?limit=100", settings: "/api/care/settings" };
+    const paths = { alerts: "/api/care/alerts?status=open", drafts: "/api/care/replies?status=draft,failed,unknown", messages: "/api/care/inbox?limit=100", settings: "/api/care/settings" };
     const path = paths[tab] && `${paths[tab]}${patientFilter && ["alerts", "drafts", "messages"].includes(tab) ? `&patientId=${encodeURIComponent(patientFilter.id)}` : ""}`;
     try {
       const [ov, value] = await Promise.all([api("/api/care/overview"), path ? api(path) : null]);
@@ -161,23 +161,26 @@ function AlertList({ alerts, busy, onAction, onOpenPatient }) {
 }
 
 function DraftList({ replies, busy, onSave, onSend, onDiscard, onOpenPatient }) {
-  if (!replies.length) return <Empty>没有待发送的回复草稿。</Empty>;
+  if (!replies.length) return <Empty>没有待发送或发送失败的回复。</Empty>;
   return <ul className="care-list">{replies.map((r) => <DraftCard key={r.id + r.text} reply={r} busy={busy} onSave={onSave} onSend={onSend} onDiscard={onDiscard} onOpenPatient={onOpenPatient} />)}</ul>;
 }
 
 function DraftCard({ reply, busy, onSave, onSend, onDiscard, onOpenPatient }) {
   const [text, setText] = useState(reply.text || "");
   const dirty = text !== reply.text;
+  const unknown = reply.status === "unknown";
   return <li className="care-card">
+    {reply.status === "failed" && <p className="care-hint" role="status">发送失败，可修改后重新发送。</p>}
+    {unknown && <p className="care-hint" role="status">发送结果未知，请先在企业微信核实是否已送达，避免重复发送。</p>}
     <header><PatientLink id={reply.patientId} name={reply.patientName} onOpenPatient={onOpenPatient} /><span className="care-tag">{reply.mode === "campaign" ? "随访" : "回复"} · {reply.channel === "manual" ? "人工发送" : messageChannelLabel(reply.channel)}</span><time>{fmt(reply.createdAt)}</time></header>
     {reply.reason && <p className="care-reason">{reply.reason}</p>}
     <textarea aria-label="回复内容" rows={Math.min(10, Math.max(3, text.split("\n").length + 1))} value={text} onChange={(e) => setText(e.target.value)} />
     {reply.sources?.length > 0 && <p className="care-sources">依据：{reply.sources.map((s) => <span key={s.id}>{s.title || s.id}</span>)}</p>}
     {reply.detail && <p className="care-hint">{reply.detail}</p>}
     <footer>
-      <button className="text-button care-discard" disabled={Boolean(busy)} onClick={() => onDiscard(reply)}>丢弃</button>
-      {dirty && <button className="secondary" disabled={Boolean(busy) || !text.trim()} onClick={() => onSave(reply, text)}>保存修改</button>}
-      <button className="primary" disabled={Boolean(busy) || dirty || !text.trim()} title={dirty ? "请先保存修改" : undefined} onClick={() => onSend(reply)}><Send size={15} />发送</button>
+      <button className="text-button care-discard" disabled={Boolean(busy)} onClick={() => onDiscard(reply)}>{unknown ? "已核实，关闭" : "丢弃"}</button>
+      {dirty && !unknown && <button className="secondary" disabled={Boolean(busy) || !text.trim()} onClick={() => onSave(reply, text)}>保存修改</button>}
+      {!unknown && <button className="primary" disabled={Boolean(busy) || dirty || !text.trim()} title={dirty ? "请先保存修改" : undefined} onClick={() => onSend(reply)}><Send size={15} />{reply.status === "failed" ? "重新发送" : "发送"}</button>}
     </footer>
   </li>;
 }

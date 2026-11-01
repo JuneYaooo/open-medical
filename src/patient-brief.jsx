@@ -47,3 +47,29 @@ export function PatientBriefPanel({ patient, onOpenTask, onNavigate, onEditIdent
     </>}
   </section>;
 }
+
+// Compact entry on the patient overview: reads a fresh brief right before
+// drafting, then opens the patient's conversation with the request filled in
+// and the brief attached. Nothing is sent until the doctor sends it.
+export function VisitPrepActions({ patient, onOpenTask }) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const prepare = async (purpose) => {
+    if (busy) return;
+    setBusy(purpose); setError("");
+    try {
+      const brief = await api(`/api/patients/${patient.id}/brief`);
+      await onOpenTask(brief.sessionId, { draft: briefRequest(purpose), context: briefContext(brief, purpose) });
+    } catch (err) { setError(err.message); }
+    finally { setBusy(""); }
+  };
+  if (patient.archived) return null;
+  return <section className="visit-prep" aria-label="接诊准备">
+    <div><b>接诊准备</b><small>按当前档案生成请求与附带快照，核对后由你发送</small></div>
+    <div className="toolbar-actions">
+      <button className="secondary" disabled={Boolean(busy)} onClick={() => prepare("previsit")}>{busy === "previsit" ? "正在读取…" : "准备本次接诊"} <ArrowUpRight size={14} /></button>
+      <button className="secondary" disabled={Boolean(busy)} onClick={() => prepare("postvisit")}>{busy === "postvisit" ? "正在读取…" : "准备诊后文书"}</button>
+    </div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+  </section>;
+}

@@ -19,6 +19,7 @@ import { api } from "./agent-runtime";
 import "./patient-overview.css";
 import { Slot } from "./plugin-slots";
 import { PatientAttention } from "./patient-attention";
+import { VisitPrepActions } from "./patient-brief";
 
 const LAB_ROWS = 6;
 
@@ -247,6 +248,7 @@ export function PatientOverview({
 
       {riskPanel}
       <PatientAttention patient={patient} onNavigate={onNavigate} onOpenWorkspace={onOpenWorkspace} onView={onView} />
+      <VisitPrepActions patient={patient} onOpenTask={onOpenWorkspace} />
 
       <div className="ov-grid">
         <div className="ov-column">

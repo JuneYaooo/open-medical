@@ -100,7 +100,10 @@ export class LearningAutomation {
       else this.db.prepare("INSERT INTO extensions VALUES (?,?,?,?)").run(extId, kind, "active", JSON.stringify(data));
       this.db.prepare("INSERT INTO extension_versions VALUES (?,?,?,?,?)").run(extId, version, JSON.stringify(value), JSON.stringify(source), at);
       const ext = this.row(extId);
-      if (!existing) this.baseline(ext);
+      // A new or changed trigger/condition only applies to results from now on;
+      // otherwise editing or rolling back a rule fires on every historical lab.
+      const scopeChanged = existing && (JSON.stringify(existing.trigger) !== JSON.stringify(ext.trigger) || JSON.stringify(existing.condition) !== JSON.stringify(ext.condition));
+      if (!existing || scopeChanged) this.baseline(ext);
       this.store.audit(null, existing ? "extension.updated" : "extension.created", { id: extId, kind, version, via: source.via });
       return ext;
     });

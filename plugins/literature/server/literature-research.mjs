@@ -52,7 +52,8 @@ export function verifyLiteratureResearch({ messages = [], text = '', evidence = 
   const final = messages.at(-1);
   if (final?.role === 'assistant' && !final.tool_calls?.length) text = final.content || '';
   const unknownPmid = [...text.matchAll(/https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/g)].some(match => !evidence.pmids.includes(match[1]));
-  const unknownDoi = [...text.matchAll(/https?:\/\/doi\.org\/([^\s)\]]+)/g)].some(match => !evidence.dois.includes(match[1].toLowerCase()));
+  // Stop at CJK punctuation and strip trailing sentence punctuation, as for URLs below.
+  const unknownDoi = [...text.matchAll(/https?:\/\/doi\.org\/([^\s)\]>"'<，。；、）】]+)/g)].some(match => !evidence.dois.includes(match[1].replace(/[.,;:!?]+$/, '').toLowerCase()));
   // 其他网页链接须在本次 web_fetch 成功读取过；文献库链接由上面的 PMID/DOI 核验。
   const fetchedUrls = new Set((evidence.urls || []).map(normalizeWebUrl));
   const unknownUrl = [...text.matchAll(/https?:\/\/[^\s)\]>"'<，。；、）】]+/g)].map(match => match[0].replace(/[.,;:!?]+$/, ''))

@@ -62,6 +62,8 @@ import { WorkspaceStore } from "./workspace-store.mjs";
 import { WorkspaceFiles, hashText } from "./workspace-files.mjs";
 import { DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, readDocument } from "./document-text.mjs";
 
+const PARTIAL_PERSIST_MS = 1000;
+
 const schema = (
   name,
   description,
@@ -2159,6 +2161,23 @@ export class WorkspaceService {
     this.active.set(id, handle);
     return handle;
   }
+  // Release a prepared handle that will never reach execute() (the caller
+  // failed between prepare and execute). Without this the workspace stays
+  // locked with RUN_ACTIVE until restart.
+  abandon(handle, error) {
+    if (!handle || this.active.get(handle.id) !== handle) return;
+    this.active.delete(handle.id);
+    try {
+      this.store.update(handle.id, (w) => {
+        const run = w.runs.find((r) => r.id === handle.run.id);
+        if (run && run.status === "running")
+          Object.assign(run, { status: "failed", error: error?.code ? error.message : "任务启动失败", finishedAt: Date.now() });
+      });
+      this.notify(handle.id, handle.run.id, "failed");
+    } catch {
+      // The workspace may be gone; the lock is already released.
+    }
+  }
   cancel(id) {
     const handle = this.active.get(id);
     handle?.controller.abort(new AppError("CANCELLED", "任务已停止", 409));
@@ -2328,10 +2347,12 @@ export class WorkspaceService {
           else delete saved.toolFailures[payload.tool];
         });
       const event = this.store.event(id, run.id, type, payload);
-      if (type !== "message.delta" || Date.now() - last >= 200) {
+      // Every delta is already stored as an event; the partial copy on the run
+      // only serves page reloads, so it is written at most once a second.
+      if (type !== "message.delta" || Date.now() - last >= PARTIAL_PERSIST_MS) {
         persistPartial();
       } else if (!checkpointTimer) {
-        checkpointTimer = setTimeout(persistPartial, Math.max(1, 200 - (Date.now() - last)));
+        checkpointTimer = setTimeout(persistPartial, Math.max(1, PARTIAL_PERSIST_MS - (Date.now() - last)));
       }
       try {
         notify(event);
@@ -2888,25 +2909,39 @@ export class WorkspaceService {
     } finally {
       clearTimeout(deadline);
       clearTimeout(checkpointTimer);
-      await this.teams
-        .get(id)
-        ?.close({
-          interrupted: controller.signal.reason?.code === "RUN_INTERRUPTED",
-        });
+      // Each cleanup step is isolated: a failure in one must never skip the
+      // lock release, or the workspace stays RUN_ACTIVE until restart.
+      try {
+        await this.teams
+          .get(id)
+          ?.close({
+            interrupted: controller.signal.reason?.code === "RUN_INTERRUPTED",
+          });
+      } catch (error) {
+        console.warn(`[workspace] 关闭协作任务失败 ${id}`, error?.message);
+      }
       this.teams.delete(id);
-      for (const session of this.extensions.runner.sessions.values())
-        if (
-          session.owner === id &&
-          session.runId === run.id &&
-          session.status === "running"
-        )
-          this.extensions.runner.stop(id, session.id);
-      this.active.delete(id);
-      this.store.update(id, (w) => {
-        w.runs.find((r) => r.id === run.id).activeMs =
-          priorActiveMs + Date.now() - segmentStart;
-      });
-      this.store.archiveHistory(id);
+      try {
+        for (const session of this.extensions.runner.sessions.values())
+          if (
+            session.owner === id &&
+            session.runId === run.id &&
+            session.status === "running"
+          )
+            this.extensions.runner.stop(id, session.id);
+      } catch (error) {
+        console.warn(`[workspace] 停止扩展进程失败 ${id}`, error?.message);
+      }
+      if (this.active.get(id) === handle) this.active.delete(id);
+      try {
+        this.store.update(id, (w) => {
+          const saved = w.runs.find((r) => r.id === run.id);
+          if (saved) saved.activeMs = priorActiveMs + Date.now() - segmentStart;
+        });
+        this.store.archiveHistory(id);
+      } catch (error) {
+        console.warn(`[workspace] 保存运行统计失败 ${id}`, error?.message);
+      }
     }
   }
 }

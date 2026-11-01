@@ -3,7 +3,7 @@ import { api } from "../../../src/agent-runtime";
 import { ContactFacts, linkContact } from "./CareContacts.jsx";
 import './wecom-panel.css';
 
-const labels = { draft: '草稿 · 未外发', submitting: '正在提交', unknown: '结果待核实 · 勿重复提交', awaiting_member: '待成员发送', sent: '已发送 · 不代表已读', rejected: '企业微信未接受', delivery_failed: '发送未完成' };
+const labels = { draft: '草稿 · 未外发', submitting: '正在提交', unknown: '结果待核实 · 勿重复提交', awaiting_member: '待成员发送', sent: '已发送 · 不代表已读', rejected: '企业微信未接受', delivery_failed: '发送未完成', cancelled: '已关闭 · 未发送' };
 const RELATION = { self: '本人', family: '家属' };
 const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -70,6 +70,10 @@ export function WeComPanel({ patientId }) {
       </fieldset>}
       {state.tasks.length > 0 && <div className="wecom-tasks">{state.tasks.map(task => <article key={task.id} aria-label="企业微信随访任务"><div className="wecom-heading"><b>{task.recipient} · {RELATION[task.relationship]}</b><span>{labels[task.status] || task.status}</span></div><small>负责成员 {task.member} · {fmt(task.createdAt)}</small><p className="wecom-message">{task.text}</p>{task.detail && <p className="muted">{task.detail}</p>}
         {task.status === 'draft' && <button disabled={Boolean(busy)} onClick={() => { if (window.confirm(`确认将以下内容提交到企业微信？\n客户：${task.recipient}\n负责成员：${task.member}\n\n${task.text}\n\n提交后仍需成员确认发送。`)) act(task.id, async () => { await api(`/api/wecom/tasks/${task.id}/submit`, 'POST', { confirmed: true }); }); }}>核对并提交企业微信任务</button>}
+        {task.status === 'unknown' && <span className="wecom-actions">
+          <button disabled={Boolean(busy)} onClick={() => { if (window.confirm('已在企业微信中确认这条消息已经发出？')) act(task.id, async () => { await api(`/api/wecom/tasks/${task.id}/resolve`, 'POST', { outcome: 'sent' }); }); }}>核实：已发送</button>
+          <button disabled={Boolean(busy)} onClick={() => { if (window.confirm('已在企业微信中确认这条消息没有发出？任务将关闭，需要时请另建草稿。')) act(task.id, async () => { await api(`/api/wecom/tasks/${task.id}/resolve`, 'POST', { outcome: 'not_sent' }); }); }}>核实：未发送</button>
+        </span>}
         {task.msgid && task.status !== 'sent' && <button disabled={Boolean(busy)} onClick={() => act(task.id, async () => { await api(`/api/wecom/tasks/${task.id}/refresh`, 'POST', {}); })}>查询发送结果</button>}
       </article>)}</div>}
     </>}

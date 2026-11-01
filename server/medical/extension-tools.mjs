@@ -110,8 +110,13 @@ export function extensionTools(getExtensions, pending) {
       },
     },
     {
-      definition: definition("extension_remove", "彻底删除一个技能：连同全部历史版本和技能文件一起清掉，不可恢复。只在医生明确说「删除/删掉」这个技能时调用；医生只是说「先别用了、停一下」时改用 extension_toggle（停用可随时恢复）。自动化规则不能删除，只能停用。", { id: text }, ["id"]),
-      execute: ({ id }) => ext().remove(id),
+      // AI never deletes directly: this tool only disables (reversible). The
+      // permanent delete stays a doctor action in the extension center.
+      definition: definition("extension_remove", "医生要求删除某个技能时调用：先停用该技能（可随时恢复），并提示医生到「技能与规则」里手动彻底删除。AI 不能直接彻底删除技能。", { id: text }, ["id"]),
+      execute: ({ id }) => ({
+        ...ext().setStatus(id, "disabled"),
+        note: "已停用该技能，不再生效。彻底删除（含历史版本）需要医生在「技能与规则」中手动确认；请如实转告医生。",
+      }),
     },
     {
       definition: definition("extension_toggle", "停用或重新启用一个扩展（可随时恢复）。医生说「先别提醒了」「这个规则不要了」时调用。", { id: text, enabled: { type: "boolean" } }, ["id", "enabled"]),

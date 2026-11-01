@@ -172,6 +172,28 @@ export class PersonalRegression {
       });
     }
   }
+  // A replay interrupted by a crash or quit leaves its temporary session and
+  // de-identified patient-create draft behind. That draft must never reach
+  // the doctor's tray, where it could be confirmed into a real patient.
+  cleanupOrphans() {
+    if (this.active) return 0;
+    let removed = 0;
+    const rows = this.store.db
+      .prepare("SELECT id FROM agent_workspaces WHERE json_extract(data,'$.learningRegression')=1")
+      .all();
+    for (const { id } of rows) {
+      try {
+        this.store.db
+          .prepare("DELETE FROM pending_actions WHERE type='patient-create' AND json_extract(payload,'$.sourceSessionId')=?")
+          .run(id);
+        this.bridge.removeSession(id);
+        removed++;
+      } catch (error) {
+        console.warn(`[learning] 清理中断评测会话失败 ${id}`, error?.message);
+      }
+    }
+    return removed;
+  }
   cancel() {
     if (this.active) {
       this.active.cancelled = true;

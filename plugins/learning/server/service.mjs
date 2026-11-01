@@ -110,8 +110,15 @@ export class LearningService {
       prepare: (payload, value) => this.context.prepare(payload, value, this.pending),
     };
   }
-  start() { this.automation.start(); }
-  stop() { this.automation.stop(); }
+  start() {
+    try { this.regression.cleanupOrphans(); }
+    catch (error) { console.warn("[learning] 清理中断评测失败", error?.message); }
+    this.automation.start();
+  }
+  async stop() {
+    this.automation.stop();
+    await this.regression.stop();
+  }
 }
 
 function jobsProxy(jobs) {
