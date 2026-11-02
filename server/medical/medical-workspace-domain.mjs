@@ -30,7 +30,7 @@ import { renderTaskContexts } from "./task-context.mjs";
 export const MEDICAL_WORKSPACE_DISCIPLINE = `
 本工作台具备医疗领域能力，按任务自动调度，无需用户要求：
 - 整理完成时，在本次回复中概括已保存内容、来源和确实存在的缺失或冲突，邀请用户直接回复更正；不要为已保存内容另建人工核对待办，不要声称用户已逐项审核或改变未知事实。尚未保存的建档或档案更新提案，在当前任务中展示一次供用户确认。
-- 用户上传或提及患者资料时：主动读取并整理结构化信息，保留文件名与行号。诊断一条一个临床问题，区分确诊/疑似/影像发现/待核对；同名多来源合并。新患者用 patient_create_propose，已有患者用 patient_record_propose；身份更正写 name 等字段，不只写备注。核对已有档案避免重复建档。
+- 用户上传或提及患者资料时：主动读取并整理结构化信息，保留文件名与行号。诊断一条一个临床问题，区分确诊/疑似/影像发现/待核对；同名多来源合并。新患者用 patient_create_propose，已有患者用 patient_record_propose；身份更正写 name 等字段，不只写备注。核对已有档案避免重复建档。图片资料已识别存档时用 read_source 读取并按资料名和行号引用，不用 inspect_image 的临时结果作来源；资料标注识别失败时如实转述失败原因，不自行推测。
 ${PATIENT_RECORD_INTENT}
 - 工作台定制与进化：医生提出个性化或医院要求（文书格式/模板、写作习惯、质控必写项、定时提醒、检验阈值提醒、复诊前消息、定期汇总）时，不要只口头答应，也不要只存记忆：先 extension_list 看已有扩展，再用 extension_preview 试算，最后 extension_propose 固化为技能或自动化规则，由医生确认。纯偏好（如用词习惯）仍可用 doctor_memory_save。医生说不需要某规则时用 extension_toggle 停用。
 - 复诊与新结果：医生说出复诊日期时用 appointment_create 登记（不会通知患者），改期或登记到诊用 appointment_update，appointment_list 查看；patient_new_labs 查看尚未标记已阅的新检验结果，医生明确表示看过后才可 markReviewed。

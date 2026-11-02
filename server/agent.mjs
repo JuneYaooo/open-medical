@@ -191,6 +191,10 @@ export function exportMarkdown(session) {
     );
   return lines.join("\n");
 }
+// 图片或扫描页还没识别成文字：资料里只有一行索引说明，建档核对无法回查。
+const imageNotRecognized = (extraction) =>
+  Boolean((extraction?.type === "image" || extraction?.pageImages?.length) && extraction?.ocr?.status !== "ready");
+
 export function createServer(options = {}) {
   const databasePath =
     options.database ||
@@ -296,7 +300,7 @@ export function createServer(options = {}) {
     learning: () => pluginActive("learning") ? pluginService("learning") : null,
     doctor: () => doctor,
     pluginHost: () => pluginHost,
-    intakeSources: (id, fileIds) => id ? sessionBridge.get(id).files.filter(file => !fileIds.length || fileIds.includes(file.id)).map(({ id, name, text }) => ({ id, name, text: text || '' })) : [],
+    intakeSources: (id, fileIds) => id ? sessionBridge.get(id).files.filter(file => !fileIds.length || fileIds.includes(file.id)).map(({ id, name, text, extraction }) => ({ id, name, text: text || '', ...(imageNotRecognized(extraction) ? { unrecognized: extraction.ocrFailure?.error || '尚未识别' } : {}) })) : [],
     intakeText: id => id ? sessionBridge.get(id).files.map(f => f.text || "").join("\n") : "",
     copySourceMaterials: (sourceId, targetId, fileIds, sourceInput) => {
       const source = sessionBridge.get(sourceId);
@@ -2153,7 +2157,12 @@ export function createServer(options = {}) {
         sessionBridge.requireSessionWorkspace(id);
         if (match[2])
           return send(res, 200, { cancelled: sessionBridge.cancel(id) });
-        const prepared = sessionBridge.prepareSend(id, await body(req));
+        const input = await body(req);
+        // 有待识别的图片时先识别存档（可能要几十秒），过程通过事件流告诉
+        // 医生；没有时与原流程一致，校验失败直接返回 HTTP 错误。
+        const pendingImages = sessionBridge.imagesToRecognize(id, input).length;
+        if (pendingImages) sessionBridge.precheckSend(id, input);
+        let prepared = pendingImages ? null : sessionBridge.prepareSend(id, input);
         res.writeHead(200, {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
@@ -2161,16 +2170,36 @@ export function createServer(options = {}) {
         });
         res.flushHeaders();
         let disconnected = false;
+        const recognition = new AbortController();
         const close = () => {
           if (!res.writableEnded) {
             disconnected = true;
+            recognition.abort();
           }
         };
         res.on("close", close);
         const heartbeat = setInterval(() => {
           if (!disconnected && !res.writableEnded) res.write(": heartbeat\n\n");
         }, 15000);
+        let seq = 0;
+        const write = (type, payload) => {
+          if (!disconnected) res.write(`event: message\ndata: ${JSON.stringify({ seq: `pre-${++seq}`, type, session_id: id, payload, time: new Date().toISOString() })}\n\n`);
+        };
         try {
+          if (!prepared) {
+            try {
+              const { recognized, failed } = await sessionBridge.recognizeBeforeSend(id, input, {
+                signal: recognition.signal,
+                onProgress: (text) => write("material.progress", { text }),
+              });
+              write("material.progress", { text: failed.length ? `已识别 ${recognized} 份图片资料，${failed.length} 份识别失败：${failed.map((f) => `${f.name}（${f.error}）`).join("；").slice(0, 600)}` : `已识别 ${recognized} 份图片资料`, failed });
+              prepared = sessionBridge.prepareSend(id, input);
+            } catch (error) {
+              if (recognition.signal.aborted) return;
+              write("error", { code: error.code || "INTERNAL", error: error.message || "发送失败" });
+              return;
+            }
+          }
           await track(
             sessionBridge.executeSend(prepared, (event) => {
               if (!disconnected) {
@@ -2193,6 +2222,7 @@ export function createServer(options = {}) {
       if (path === "/api/agent/run" && req.method === "POST") {
         const b = await body(req);
         const sessionId = identifier(b.sessionId);
+        if (sessionBridge.imagesToRecognize(sessionId, b).length) await sessionBridge.recognizeBeforeSend(sessionId, b);
         const prepared = sessionBridge.prepareSend(sessionId, b);
         const result = await track(sessionBridge.executeSend(prepared));
         return send(res, result.status === "completed" ? 200 : 422, result);

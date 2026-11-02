@@ -478,7 +478,8 @@ export class PendingActions {
         const final = payload === undefined ? action.payload : this.normalizeReview(action, payload);
         const reviews = evidenceReviews || action.reviewDraft?.evidenceReviews || {};
         const audit = this.audit(action, final, reviews);
-        check(!audit?.unresolved.length, 'INTAKE_EVIDENCE_REVIEW_REQUIRED', `仍有 ${audit?.unresolved.length || 0} 项来源缺口或矛盾未核对，请更正草稿或逐项记录核对结论后再确认`, 409);
+        const unrecognized = (audit?.issues || []).filter(item => item.kind === 'source-unrecognized' && audit.unresolved.includes(item.id)).map(item => item.sourceName);
+        check(!audit?.unresolved.length, 'INTAKE_EVIDENCE_REVIEW_REQUIRED', `仍有 ${audit?.unresolved.length || 0} 项来源缺口或矛盾未核对，请更正草稿或逐项记录核对结论后再确认${unrecognized.length ? `。其中 ${unrecognized.length} 份图片资料没有识别成文字（${unrecognized.slice(0, 5).join('、')}${unrecognized.length > 5 ? ' 等' : ''}），请先重新识别` : ''}`, 409);
         // Persist the exact human attestations with the draft, never as patient facts or learned preferences.
         if (audit) this.store.db.prepare('UPDATE pending_actions SET review_draft=? WHERE id=?').run(JSON.stringify({ payload: final, reasons: reasons || action.reviewDraft?.reasons || {}, evidenceReviews: reviews }), id);
         const patient = this.patients.create(final);

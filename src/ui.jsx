@@ -59,6 +59,8 @@ export function StepsFlow({ events, running, fallbackText }) {
     return [...seen.values()];
   }, [events]);
   const failed = tools.some((t) => t.status === "failed");
+  // 发送前的图片识别进度（模型开始前，服务端逐张识别并存档）。
+  const progress = (events || []).filter((e) => e.type === "material.progress").at(-1)?.payload?.text;
   const visible = open ? tools : tools.slice(-4);
   const memories = (events || []).filter(e => e.type === 'tool.complete' && e.payload?.notification?.type === 'remembered').map(e => e.payload.notification);
   if (!tools.length && !running) return null;
@@ -96,7 +98,7 @@ export function StepsFlow({ events, running, fallbackText }) {
               </span>
             </li>
           ))}
-          {!tools.length && <li className="st-empty">{fallbackText || "正在思考…"}</li>}
+          {!tools.length && <li className="st-empty">{progress || fallbackText || "正在思考…"}</li>}
         </ul>
       )}
     </div>

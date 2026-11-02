@@ -1495,6 +1495,18 @@ export class WorkspaceService {
           const shrinkInfo = shrunkFrom ? { compressedFromBytes: shrunkFrom } : {};
           // 完整打码过的图片（privacy: "masked"）可以照常交给视觉模型。
           if (this.privacy?.rawImagesBlocked?.() && source?.item?.privacy !== "masked") {
+            // 已识别存档的资料图片：识别文字（已脱敏、带行号）在资料里，
+            // 不再重复 OCR 和调用脱敏服务；建档引用也要用资料里的行号。
+            const stored = a.artifactId && (this.store.get(id).materials || []).find((m) =>
+              m.extraction?.ocr?.status === "ready" &&
+              (m.extraction.artifactId === a.artifactId || (m.extraction.pageImages || []).some((p) => p.artifactId === a.artifactId)));
+            if (stored)
+              return {
+                artifactId: a.artifactId, hash: file.hash, method: "stored-ocr", sourceId: stored.id,
+                analysis: "",
+                note: `这张图片已识别并保存为资料「${stored.name}」的文字（已脱敏、带行号）。请用 read_source 读取该资料，引用时写资料名和行号；不要以本工具结果作为来源。`,
+                ...shrinkInfo,
+              };
             const read = await imageTextWithFallback(b, context.signal, null, { strategy: "local" });
             const cleaned = await this.privacy.protectText(read.text, { signal: context.signal });
             return {

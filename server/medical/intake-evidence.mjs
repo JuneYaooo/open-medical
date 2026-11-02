@@ -12,6 +12,12 @@ function issue(section, kind, row, claim, message) {
 // are not converted into invented records. Original text stays authoritative.
 export function auditIntakeEvidence({ payload, sources = [], notes = [] }) {
   const issues = auditIntakeLabs({ payload, sources, notes });
+  // 没识别出文字的图片：逐条检验必然对不上行号，先给出根因和处理办法。
+  for (const source of sources) {
+    if (!source.unrecognized) continue;
+    issues.unshift(issue('sources', 'source-unrecognized', { sourceId: source.id, sourceName: source.name, startLine: 0, endLine: 0, quote: '' }, source.unrecognized,
+      `图片资料「${source.name}」没有识别成可回查的文字（${source.unrecognized}），其中的检验、用药等无法按原文行核对。请在资料详情点「重新识别」后重新整理；仍无法识别的，由医生对照原图逐项核对。`));
+  }
   for (const source of sources) {
     let section = '';
     String(source.text || '').split('\n').forEach((quote, index) => {

@@ -357,3 +357,53 @@ test("设置页填写的内置服务 API Key 在本机加密保存，数据库�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("对话里直接建档：发送前先识别图片并存档，模型读到的是带行号的脱敏文字", async (t) => {
+  const worker = await fakeWorker();
+  t.after(worker.close);
+  const provider = createScriptedProvider([textTurn("已读取资料。")]);
+  const app = await startTestServer({ provider, seedDemoPack: false });
+  t.after(() => app.close());
+  await app.request("/api/ocr-settings", { method: "PUT", body: { service: { baseUrl: worker.url } } });
+  await app.request("/api/privacy-settings", { method: "PUT", body: { enabled: true } });
+  const id = (await app.request("/api/assistant/session", { method: "POST", body: {} })).body.id;
+  const png = await sharp({ create: { width: 600, height: 200, channels: 3, background: "#ffffff" } }).png().toBuffer();
+  const file = await app.request(`/api/sessions/${id}/files`, { method: "POST", body: { name: "门诊.png", image: png.toString("base64") } });
+  const revision = (await app.request(`/api/sessions/${id}`)).body.revision;
+  const chat = await app.request(`/api/chat/${id}`, {
+    method: "POST",
+    body: { message: "帮我添加这个患者", mode: "model", externalConsent: true, fileIds: [file.body.id], sessionRevision: revision },
+  });
+  assert.equal(chat.status, 200);
+  assert.match(chat.text, /material\.progress/, "识别进度通过事件流返回");
+  assert.match(chat.text, /message\.complete/, "识别后照常执行，旧的 sessionRevision 不算冲突");
+  const material = (await app.request(`/api/sessions/${id}`)).body.files.find((f) => f.id === file.body.id);
+  assert.equal(material.extraction.ocr.status, "ready");
+  assert.equal(material.privacy.images[0].complete, true);
+  assert.match(material.text, /2型糖尿病/);
+  const sent = JSON.stringify(provider.calls.map((call) => call.messages));
+  assert.ok(!sent.includes("赵测试") && !sent.includes("13912345678"), "模型看不到身份信息");
+});
+
+test("发送前识别失败：记录原因告诉模型，不阻断发送，同一版本不重复识别", async (t) => {
+  const worker = await fakeWorker({ fail: true });
+  t.after(worker.close);
+  const provider = createScriptedProvider([textTurn("好的。"), textTurn("好的。")]);
+  const app = await startTestServer({ provider, seedDemoPack: false });
+  t.after(() => app.close());
+  await app.request("/api/ocr-settings", { method: "PUT", body: { service: { baseUrl: worker.url } } });
+  await app.request("/api/privacy-settings", { method: "PUT", body: { enabled: true } });
+  const id = (await app.request("/api/assistant/session", { method: "POST", body: {} })).body.id;
+  // 空白图：OCR 服务失败后落回系统识别，也读不出文字。
+  const png = await sharp({ create: { width: 60, height: 20, channels: 3, background: "#ffffff" } }).png().toBuffer();
+  const file = await app.request(`/api/sessions/${id}/files`, { method: "POST", body: { name: "空白.png", image: png.toString("base64") } });
+  const body = { message: "帮我添加这个患者", mode: "model", externalConsent: true, fileIds: [file.body.id] };
+  const first = await app.request(`/api/chat/${id}`, { method: "POST", body });
+  assert.match(first.text, /识别失败/);
+  assert.match(first.text, /message\.complete/);
+  const material = (await app.request(`/api/sessions/${id}`)).body.files.find((f) => f.id === file.body.id);
+  assert.ok(material.extraction.ocrFailure?.error, "失败原因存进资料");
+  assert.match(JSON.stringify(provider.calls[0].messages), /自动文字识别失败/, "模型看到失败原因");
+  const second = await app.request(`/api/chat/${id}`, { method: "POST", body });
+  assert.doesNotMatch(second.text, /material\.progress/, "同一版本不重复识别");
+});

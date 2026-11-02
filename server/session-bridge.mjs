@@ -44,6 +44,8 @@ const iso = () => new Date().toISOString();
 const UNREADABLE_MARKER = /不可读|无法辨认|难以辨认|无法识别|缺字|乱码|字迹不清|模糊不清/i;
 const FILE_REF = /([^\s,，、;；:：()（）[\]【】「」《》"'']+\.(?:jpe?g|png|webp|pdf|txt|md|docx|xlsx))/gi;
 const sessionKind = (w) => w?.kind === "session";
+// 对话里的建档请求（如「帮我添加这个患者」）：发送前先把图片识别存档。
+const INTAKE_REQUEST = /建档|(?:添加|新增|新建|创建|录入|建立|加)(?:一?个|一位|这(?:个|位)|该)?(?:新)?(?:患者|病人|档案)/u;
 // 对话与任务一律由模型执行（"model"，未配置模型时返回 MODEL_NOT_CONFIGURED）。
 // "code" 只表示医生手动提交的受控沙箱代码，不产生助手回答。
 const MODEL_NOT_CONFIGURED_MESSAGE = "尚未连接模型：请先在 设置 → 模型与运行 中连接模型，再发送任务。";
@@ -97,6 +99,12 @@ export class SessionBridge {
     return file?.publicSource === true;
   }
   modelText(sessionId, file) {
+    const text = this.protectedText(sessionId, file);
+    // 自动识别失败的图片：把原因告诉模型，避免它猜成「原图打不开」。
+    const failure = file.extraction?.ocr?.status !== "ready" && file.extraction?.ocrFailure;
+    return failure ? `${text}\n[自动文字识别失败：${failure.error}。这份资料的内容没有保存成可回查的文字，建档核对无法引用；请如实告诉医生失败原因，可在资料详情点「重新识别」。]` : text;
+  }
+  protectedText(sessionId, file) {
     if (!this.privacy?.enabled() || this.privacyExempt(file) || this.privacyReady(file)) return file.text;
     // 尚未识别的图片材料只有索引说明，没有病历内容。
     if (file.extraction?.type === "image" && file.extraction?.ocr?.status !== "ready") return this.privacy.rules(file.text, this.sessionIdentities(sessionId)).text;
@@ -708,6 +716,7 @@ export class SessionBridge {
         quality,
         ...(upgraded ? { upgradedFrom: "local-ocr" } : {}),
       };
+      delete target.extraction.ocrFailure;
       target.extraction.originalText = file.extraction.originalText || file.text;
       target.text = (file.extraction.type === "image" ? "" : target.extraction.originalText + "\n\n") + text;
       if (privacyResult && !privacyResult.failed) {
@@ -748,6 +757,58 @@ export class SessionBridge {
     this.reingestMaterial(prepared, id);
     this.store.audit(id, "file.ocr.completed", { fileId, pages: pages.length, method: kind, quality: quality.level, upgraded, strategy });
     return prepared;
+  }
+  // 发送前要先识别的图片材料。识别结果（带行号、已脱敏、已打码）要存回
+  // 资料，建档核对才能逐行回查；对话里 inspect_image 的临时识别不会保存。
+  // 开启脱敏时所有待识别图片都先识别（原图不能交给视觉模型）；未开启时
+  // 只在建档请求里识别。同一版本已经识别失败过的不再重复尝试。
+  imagesToRecognize(id, body = {}) {
+    if (resolveMode(body.mode) === "code") return [];
+    const w = this.requireSessionWorkspace(id);
+    const wanted = this.privacy?.enabled() || (!w.patientId && (body.workflow === "patient-intake" || INTAKE_REQUEST.test(String(body.message || ""))));
+    if (!wanted) return [];
+    const fileIds = new Set(this.selectMaterials(w, body.fileIds, body.contextMode));
+    return (w.materials || []).filter((file) => {
+      if (!fileIds.has(file.id) || this.privacyExempt(file)) return false;
+      const hasImages = file.extraction?.type === "image" || file.extraction?.pageImages?.length;
+      if (!hasImages || file.extraction?.ocr?.status === "ready") return false;
+      return file.extraction?.ocrFailure?.revision !== (file.revision || 0);
+    });
+  }
+  // 逐张识别，失败的记下原因（模型和医生都能看到），不阻断本轮发送。
+  // 返回后调用方用新的 sessionRevision 继续 prepareSend。
+  // 识别前先做与 prepareSend 相同的轻量校验，别白跑几十秒识别再报错。
+  precheckSend(id, body = {}) {
+    const w = this.requireSessionWorkspace(id);
+    check(!this.service.active.has(id), "RUN_ACTIVE", "当前会话正在执行，请先停止", 409);
+    check(body.sessionRevision === undefined || body.sessionRevision === w.revision, "REVISION_CONFLICT", "会话资料已更新，请刷新核对后再发送", 409);
+    if (resolveMode(body.mode) !== "code") {
+      requireModel(this.service.provider);
+      check(body.externalConsent === true, "CONSENT_REQUIRED", "请先确认本次输入可以发送给所配置的模型服务", 412);
+    }
+  }
+  async recognizeBeforeSend(id, body = {}, { signal, onProgress = () => {} } = {}) {
+    this.precheckSend(id, body);
+    const files = this.imagesToRecognize(id, body);
+    const failed = [];
+    for (const [index, file] of files.entries()) {
+      signal?.throwIfAborted();
+      onProgress(`正在识别图片资料 ${index + 1}/${files.length}：${this.modelName(id, file)}`);
+      try {
+        await this.prepareMaterial(id, file.id, { signal });
+      } catch (error) {
+        signal?.throwIfAborted();
+        const reason = String(error.message || error).slice(0, 300);
+        failed.push({ name: this.modelName(id, file), error: reason });
+        this.service.store.update(id, (current) => {
+          const target = (current.materials || []).find((item) => item.id === file.id);
+          if (target?.extraction) target.extraction.ocrFailure = { error: reason, code: error.code || null, revision: target.revision || 0, at: iso() };
+        });
+        this.store.audit(id, "file.ocr.failed", { fileId: file.id, code: error.code || null });
+      }
+    }
+    if (files.length && body.sessionRevision !== undefined) body.sessionRevision = this.workspace(id).revision;
+    return { recognized: files.length - failed.length, failed };
   }
   // 材料文本变化后同步检索索引，否则助手检索到的仍是旧识别文本。
   reingestMaterial(file, sessionId) {
