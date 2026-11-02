@@ -312,6 +312,23 @@ export function ClinicalPanel({ detail, onChanged, onError, section }) {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
+              <label className="clinical-primary">
+                <input
+                  type="checkbox"
+                  aria-label={`${d.name}设为主要诊断`}
+                  checked={Boolean(d.primary)}
+                  onChange={(e) =>
+                    saveDiagnoses(
+                      draft.diagnoses.map((item, i) => {
+                        if (i !== index) return item;
+                        const { primary: _drop, ...rest } = item;
+                        return e.target.checked ? { ...rest, primary: true } : rest;
+                      }),
+                    )
+                  }
+                />
+                主要诊断
+              </label>
               {removeControl("diagnosis", index, `诊断 ${d.name}`, () => saveDiagnoses(draft.diagnoses.filter((_, i) => i !== index)))}
             </li>
           ))}

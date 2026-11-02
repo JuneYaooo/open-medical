@@ -663,6 +663,7 @@ export function pendingActionTools(pending, doctor = null) {
     },
   });
 const textDef = { type: "string" };
+const visitReasonDef = { type: "string", description: "就诊科室与目的的一句短标题，如「血液科门诊 PET/CT 疗效评估」；床号、住院号等不写入标题，主诉原文放 note" };
 const diagnosisStatusDef = {
   type: "string",
   enum: DIAGNOSIS_STATUS,
@@ -674,8 +675,9 @@ const diagnosisItemsDef = {
   properties: {
     code: textDef,
     name: { type: "string", description: "规范诊断名称，一条一个临床问题；不把依据、限定词或 OCR 疑点写进名称" },
-    date: textDef,
+    date: { type: "string", description: "YYYY-MM-DD；资料只写到年月时取该月 1 日，并在 note 注明「仅知年月」，不要推到下个月" },
     status: diagnosisStatusDef,
+    primary: { type: "boolean", description: "当前最主要、正在处理的 1–2 个诊断标 true；原发病已转化或进展时（如滤泡性淋巴瘤转化为弥漫大B细胞淋巴瘤）标转化后的诊断。陈旧性、既往或偶然发现不标；医生在档案里改过的主要诊断以医生为准" },
     note: diagnosisNoteDef,
     source: textDef,
     sources: { type: "array", items: textDef, description: "同一诊断的多份来源（文件名+页码或行号）" },
@@ -701,7 +703,7 @@ const diagnosisItemsDef = {
           note: {type:"string",description:"尚未解决的资料核对信息，不是病史摘要。用户说不要备注时必须传空字符串，不得再添加缺失字段或其他核对说明；已澄清的命名/OCR差异不自动补备注。"},
           personalization: { type: 'object', properties: { habitIds: { type: 'array', items: { type: 'integer' } }, exampleIds: { type: 'array', items: textDef }, kbRefs: { type: 'array', items: textDef }, skillIds: { type: 'array', items: textDef } }, additionalProperties: false },
           clinicalSummary: clinicalSummaryDef,
-          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；同名诊断合并为一条并用 sources 列全来源" },
+          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；同名诊断合并为一条并用 sources 列全来源；按临床重要性排序，当前正在处理的问题在前，陈旧性、既往或术后状态在后" },
           medications: {
             type: "array",
             items: {
@@ -741,7 +743,7 @@ const diagnosisItemsDef = {
               type: "object",
               properties: {
                 date: textDef,
-                reason: textDef,
+                reason: visitReasonDef,
                 note: textDef,
               },
               required: ["date", "reason"],
@@ -786,7 +788,7 @@ const diagnosisItemsDef = {
           phone: { ...textDef, description: "联系电话" },
           clinicalSummary: clinicalSummaryDef,
           updateMode: { type: "string", enum: ["append", "replace"], description: "append 保留旧记录；replace 须提供所更改字段完整列表，遗漏的字段不变" },
-          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；append 时同名诊断自动与原档案合并来源" },
+          diagnoses: { type: "array", items: diagnosisItemsDef, description: "一条一个临床问题；append 时同名诊断自动与原档案合并来源；按临床重要性排序，当前正在处理的问题在前，陈旧性、既往或术后状态在后" },
           medications: {
             type: "array",
             items: {
@@ -826,7 +828,7 @@ const diagnosisItemsDef = {
               type: "object",
               properties: {
                 date: textDef,
-                reason: textDef,
+                reason: visitReasonDef,
                 note: textDef,
               },
               required: ["date", "reason"],

@@ -6,7 +6,7 @@ import { localCalendarDate } from "../shared/calendar-date.mjs";
 import { sqliteTransaction } from "./sqlite-transaction.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "./errors.mjs";
-import { DIAGNOSIS_STATUS, mergeDiagnoses } from "../shared/diagnoses.mjs";
+import { DIAGNOSIS_STATUS, mainDiagnoses, mergeDiagnoses } from "../shared/diagnoses.mjs";
 
 // Patient registry: each patient links to one session that acts as the
 // clinical workspace (materials, runs, artifacts, review, schedules).
@@ -138,7 +138,9 @@ export class PatientRegistry {
         ...p,
         counts: counts.get(p.id) || { unprocessedMessages: 0, activeFollowups: 0, dueFollowups: 0, pendingReminders: 0 },
         lastVisitAt: (p.visits || []).map((v) => v?.date).filter(Boolean).sort().at(-1) || "",
-        diagnosisSummary: diagnosisText(p).split(" ").filter(Boolean).slice(0, 3).join(" · "),
+        diagnosisSummary: typeof p.diagnoses === "string"
+          ? p.diagnoses.split(" ").filter(Boolean).slice(0, 3).join(" · ")
+          : mainDiagnoses(p.diagnoses).slice(0, 3).map((d) => (typeof d === "string" ? d : d.name)).join(" · "),
       };
       if (!brief) return row;
       row.brief = patientListBrief(p, appointments.get(p.id));
@@ -835,6 +837,7 @@ function optionalDiagnoses(value) {
     name: string(item.name, "诊断名称", 120),
     ...(item.date ? { date: clinicalDate(item.date, "诊断日期") } : {}),
     ...(item.status ? { status: optionalChoice(item.status, DIAGNOSIS_STATUS) } : {}),
+    ...(item.primary === true ? { primary: true } : {}),
     ...(item.note ? { note: string(item.note, "诊断备注", 300) } : {}),
     ...(item.source ? { source: string(item.source, "来源", 200) } : {}),
     ...(item.sources !== undefined ? { sources: diagnosisSourceList(item.sources) } : {}),

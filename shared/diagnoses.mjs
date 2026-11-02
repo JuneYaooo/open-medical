@@ -93,14 +93,20 @@ export function mergeDiagnoses(...groups) {
 const STATUS_ORDER = ["confirmed", "suspected", "finding", "needs_review"];
 
 // Confirmed problems first, then hedges and incidental findings — the order
-// used wherever only the first few diagnoses fit (overview, model brief,
-// case-library primary diagnosis).
+// used wherever only the first few diagnoses fit (overview, patient list,
+// model brief, case-library primary diagnosis). Which problem matters most is
+// a clinical judgment, so the UI never guesses it: within a status, entries
+// the agent or doctor marked primary lead, and the rest keep the order they
+// were saved in (the agent is asked to list the most important first).
 export function sortDiagnoses(list) {
   const rank = (item) => STATUS_ORDER.indexOf(diagnosisStatus(item));
-  return [...(list || [])].sort((a, b) =>
-    rank(a) - rank(b) ||
-    String(typeof a === "string" ? "" : a?.date || "9999").localeCompare(String(typeof b === "string" ? "" : b?.date || "9999")) ||
-    (typeof a === "string" ? a : a?.name || "").localeCompare(typeof b === "string" ? b : b?.name || ""));
+  const primary = (item) => (typeof item === "object" && item?.primary ? 0 : 1);
+  return [...(list || [])].sort((a, b) => rank(a) - rank(b) || primary(a) - primary(b));
+}
+
+// Confirmed and suspected problems in sortDiagnoses order — the "主要诊断" line.
+export function mainDiagnoses(list) {
+  return sortDiagnoses(list).filter((item) => ["confirmed", "suspected"].includes(diagnosisStatus(item)));
 }
 
 // Chart summaries and assistance use the same clinical scope as the history page.

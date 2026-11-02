@@ -9,8 +9,12 @@ import {
 import {
   DIAGNOSIS_STATUS_LABELS,
   diagnosisSources,
+  diagnosisStatus,
   groupDiagnoses,
+  mainDiagnoses,
+  sortDiagnoses,
 } from "../shared/diagnoses.mjs";
+import { parseClinicalSummary, SUMMARY_FIELDS } from "../shared/clinical-summary.mjs";
 import { dashboardLabComparison } from "../shared/patient-dashboard.mjs";
 import { FLAG_ARROW, FLAG_LABEL, labFlag } from "../shared/lab-flags.mjs";
 import { allergyState } from "../shared/patient-list-brief.mjs";
@@ -40,6 +44,27 @@ export function medicationLine(m) {
 function dayOffset(from, to) {
   const a = Date.parse(`${from}T00:00:00Z`), b = Date.parse(`${to}T00:00:00Z`);
   return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
+}
+
+// "1 年 8 个月" style distance for records that are months or years old.
+export function elapsedLabel(date, today = localCalendarDate()) {
+  const days = dayOffset(date, today);
+  if (days === null || days <= 0) return "";
+  if (days < 31) return `${days} 天`;
+  const months = Math.floor(days / 30.44);
+  if (months < 12) return `${months} 个月`;
+  const years = Math.floor(months / 12), rest = months % 12;
+  return rest ? `${years} 年 ${rest} 个月` : `${years} 年`;
+}
+
+// Most recent dated record in the chart — visits, diagnoses or labs.
+export function latestRecordDate(patient, labRows = []) {
+  const dates = [
+    ...(patient.visits || []).map((v) => v?.date),
+    ...(patient.diagnoses || []).map((d) => (typeof d === "string" ? "" : d?.date)),
+    ...labRows.map((row) => row.date),
+  ].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")));
+  return dates.sort().at(-1) || "";
 }
 
 export function relativeDay(date, today = localCalendarDate()) {
@@ -121,6 +146,8 @@ export function patientGaps(patient) {
   const unknownMeds = meds.filter((m) => !m.status || m.status === "unknown").length;
   if (unknownMeds) gaps.push({ label: `${unknownMeds} 条用药状态未记录`, tab: "medications", edit: true });
   if (!(patient.diagnoses || []).length) gaps.push({ label: "尚未登记诊断", tab: "diagnoses", edit: true });
+  else if (mainDiagnoses(patient.diagnoses).length > 1 && !patient.diagnoses.some((d) => d?.primary))
+    gaps.push({ label: "未标记主要诊断", tab: "diagnoses", edit: true });
   if (!patient.birthYear) gaps.push({ label: "出生年份未记录", identity: true });
   return gaps;
 }
@@ -137,7 +164,10 @@ export function PatientOverview({
   const next = useNextAppointment(patient.id, patient.revision);
   const diagnosisGroups = groupDiagnoses(patient.diagnoses);
   const diagnosisCount = diagnosisGroups.reduce((total, group) => total + group.items.length, 0);
-  const clinical = diagnosisGroups.filter((group) => ["confirmed", "suspected"].includes(group.status)).flatMap((group) => group.items.map((item) => ({ ...item, suspected: group.status === "suspected" })));
+  const clinical = mainDiagnoses(patient.diagnoses).map((item) => ({
+    ...(typeof item === "string" ? { name: item } : item),
+    suspected: diagnosisStatus(item) === "suspected",
+  }));
   const visits = [...(patient.visits || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const medications = patient.medications || [];
   const activeMeds = medications.filter((m) => m.status === "active");
@@ -148,6 +178,9 @@ export function PatientOverview({
   const undatedLabs = labRows.reduce((total, row) => total + row.undatedCount, 0);
   const gaps = patientGaps(patient);
   const summary = patient.clinicalSummary?.text;
+  const summaryFields = summary ? parseClinicalSummary(summary) : null;
+  const summarySource = patient.clinicalSummary?.source;
+  const latest = latestRecordDate(patient, labRows);
 
   const nextLabel = next
     ? { value: `${next.date}${next.time ? ` ${next.time}` : ""}`, rel: relativeDay(next.date, next.today), note: [next.reason, next.place].filter(Boolean).join(" · ") }
@@ -220,11 +253,35 @@ export function PatientOverview({
       {(summary || gaps.length > 0) && (
         <section className="ov-summary" aria-label="病史摘要">
           {summary && (
-            <p>
-              <b>病史摘要</b>
-              {summary}
-              {patient.clinicalSummary?.source && <span className="om-source"> · {patient.clinicalSummary.source}</span>}
-            </p>
+            <div className="ov-summary-body">
+              <div className="ov-summary-head">
+                <b>病史摘要</b>
+                {latest && (
+                  <span className="ov-asof">
+                    资料截至 {latest}
+                    {elapsedLabel(latest) && ` · 距今 ${elapsedLabel(latest)}`}
+                  </span>
+                )}
+              </div>
+              {summaryFields ? (
+                <dl className="ov-summary-rows">
+                  {SUMMARY_FIELDS.map(([key, label]) => (
+                    <div key={key}>
+                      <dt>{label}</dt>
+                      <dd>{summaryFields[key]}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p>{summary}</p>
+              )}
+              {summarySource && (
+                <details className="ov-summary-source">
+                  <summary>依据资料</summary>
+                  <p>{summarySource}</p>
+                </details>
+              )}
+            </div>
           )}
           {gaps.length > 0 && (
             <div className="ov-gaps">
@@ -347,9 +404,9 @@ export function PatientOverview({
                 <div className="ov-dx-group" key={group.status}>
                   {(diagnosisGroups.length > 1 || group.status !== "confirmed") && <h4>{group.label || DIAGNOSIS_STATUS_LABELS[group.status]}</h4>}
                   <ul className="ov-dx-list">
-                    {group.items.slice(0, 4).map((d, i) => (
+                    {sortDiagnoses(group.items).slice(0, 4).map((d, i) => (
                       <li key={i} title={diagnosisSources(d).join("；") || undefined}>
-                        <span className="ov-dx-name">{d.name}{d.code && <span className="om-meta"> {d.code}</span>}</span>
+                        <span className="ov-dx-name">{d.name}{d.code && <span className="om-meta"> {d.code}</span>}{d.primary && <span className="ov-primary">主要</span>}</span>
                         <span className="om-meta">{d.date || "日期未记录"}</span>
                       </li>
                     ))}

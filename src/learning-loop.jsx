@@ -1125,7 +1125,7 @@ export function SimilarCaseCard({ patientId }) {
           const reasons = Array.isArray(m.reasons) ? m.reasons : [];
           return <article key={m.caseId} className="local-case-clue">
             {text.length > 120 ? <details><summary>{text.slice(0, 120)}…（展开诊断全文）</summary><p>{text}</p></details> : <h4>{text || "诊断未记录"}</h4>}
-            <p className="muted">{snapshot ? `历史案例快照 · 保存于 ${date(source.capturedAt)}` : `患者当前档案 · 更新于 ${date(source?.updatedAt)}`}
+            <p className="muted">{snapshot ? `历史案例快照 · 保存于 ${date(source.capturedAt)}` : `另一位患者的档案 · 更新于 ${date(source?.updatedAt)}`}
               {Number.isInteger(m.age) ? ` · 约 ${m.age} 岁` : ""}{m.gender === "male" ? " · 男" : m.gender === "female" ? " · 女" : ""}</p>
             {reasons.length ? <><ul>{reasons.slice(0, 2).map((reason, index) => <li key={index}>{reason}</li>)}</ul>
               {reasons.length > 2 && <details><summary>其余匹配依据（{reasons.length - 2}）</summary><ul>{reasons.slice(2).map((reason, index) => <li key={index}>{reason}</li>)}</ul></details>}</>

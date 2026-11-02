@@ -206,3 +206,79 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Summary: three labeled rows, a freshness note, sources folded away. */
+.patient-overview .ov-summary-body {
+  display: grid;
+  gap: 8px;
+}
+.patient-overview .ov-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.patient-overview .ov-summary-head > b {
+  margin-right: 0;
+}
+.patient-overview .ov-asof {
+  color: var(--muted);
+  font-size: var(--small-size, 13px);
+  font-variant-numeric: tabular-nums;
+}
+.patient-overview .ov-summary-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.patient-overview .ov-summary-rows > div {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  gap: 12px;
+}
+.patient-overview .ov-summary-rows dt {
+  color: var(--faint);
+  font-size: var(--small-size, 13px);
+  font-weight: 600;
+  padding-top: 3px;
+}
+.patient-overview .ov-summary-rows dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--body-size, 16px);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .patient-overview .ov-summary-rows > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+.patient-overview .ov-summary-source {
+  color: var(--muted);
+  font-size: var(--small-size, 13px);
+}
+.patient-overview .ov-summary-source summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.patient-overview .ov-summary-source p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.patient-overview .ov-primary {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: var(--small-size, 13px);
+  font-weight: 600;
+}
+.patient-overview .ov-dx-list li > .om-meta {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
