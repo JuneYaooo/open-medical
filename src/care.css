@@ -180,7 +180,7 @@
 .care-channel-details[open] > summary { margin-bottom: 8px; }
 @media (max-width: 520px) { .care-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .care-stat { padding: 12px 8px; } }
 
-/* 全屏审核页 */
+/* 全屏核对页 */
 .pending-review-overlay { position:fixed; inset:0; z-index:200; background:#fbfcfa; display:flex; flex-direction:column; }
 .pending-review-overlay > header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:16px 24px; border-bottom:1px solid var(--border); }
 .pending-review-overlay > header strong { display:block; margin:4px 0 2px; font-size:calc(16px * var(--text-scale, 1)); }

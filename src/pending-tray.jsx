@@ -72,7 +72,7 @@ function Preview({ action }) {
 }
 
 // 聊天中由 care_* 工具发起的外发/计划/设置提案；医生在此一键确认。
-// 全屏审核：临床类提案（建档/档案更新）在这里逐节核对，不再挤在角标小窗里。
+// 全屏核对：临床类提案（建档/档案更新）在这里逐节核对，不再挤在角标小窗里。
 function ReviewSection({ title, items, render }) {
   if (!items?.length) return null;
   return <section className="pending-review-section">
@@ -131,14 +131,14 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   });
-  return <div className="pending-review-overlay" role="dialog" aria-label={`全屏审核：${TYPES[action.type] || action.type}`}>
+  return <div className="pending-review-overlay" role="dialog" aria-label={`全屏核对：${TYPES[action.type] || action.type}`}>
     <header>
       <div>
         <span className="care-tag">{TYPES[action.type] || action.type}</span>
         <strong>{action.summary}</strong>
         <time>提出于 {new Date(action.createdAt).toLocaleString("zh-CN")}</time>
       </div>
-      <button className="icon-button" aria-label="关闭全屏审核" onClick={onClose}><X size={18} /></button>
+      <button className="icon-button" aria-label="关闭全屏核对" onClick={onClose}><X size={18} /></button>
     </header>
     <div className="pending-review-body">
       {updating && <>
@@ -171,7 +171,7 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
       {error && <p role="alert" className="care-error">{error}</p>}
       <section className="pending-review-section pending-review-consequence">
         <h4>确认与拒绝的后果</h4>
-        <p>确认执行：{clinical
+        <p>确认后：{clinical
           ? "上述内容立即写入患者档案，之后你可以在档案中继续修改。"
           : "按提案内容执行。"}</p>
         <p>拒绝：{p._provenance?.kind === "local-rule" && p._provenance.entry === "patient-group-suggestions"
@@ -181,7 +181,7 @@ function PendingReviewOverlay({ action, busy, error, onConfirm, onReject, onClos
     </div>
     <footer>
       <button className="secondary" disabled={busy} onClick={onReject}>拒绝</button>
-      <button disabled={confirmDisabled} onClick={confirm}>{busy ? "处理中…" : "确认执行"}</button>
+      <button disabled={confirmDisabled} onClick={confirm}>{busy ? "处理中…" : clinical ? "确认写入档案" : "确认执行"}</button>
     </footer>
   </div>;
 }
@@ -315,7 +315,7 @@ export function PendingTray() {
             <button className="text-button" disabled={Boolean(busy)} onClick={() => resolve(a, "reject", false)}>不填了，直接拒绝</button>
           </div>
         </div> : <footer>
-          <button className="text-button" disabled={Boolean(busy)} onClick={() => { setError(""); setReviewing(a); }}>全屏审核</button>
+          <button className="text-button" disabled={Boolean(busy)} onClick={() => { setError(""); setReviewing(a); }}>全屏核对</button>
           <button className="secondary" disabled={Boolean(busy)} onClick={() => { setRejecting(a.id); setNote(""); }}>拒绝</button>
           {a.type === "patient-update"
             ? <button disabled={Boolean(busy)} onClick={() => { setError(""); setReviewing(a); }}>核对变更</button>

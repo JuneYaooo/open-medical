@@ -92,7 +92,7 @@ export function normalizeQuestionnaire(input) {
       }
       if (question.alertIf) {
         check(
-          ["gt", "lt"].includes(question.alertIf.op) &&
+          ["gt", "gte", "lt", "lte"].includes(question.alertIf.op) &&
             Number.isFinite(question.alertIf.value),
           "INVALID_INPUT",
           `第 ${index + 1} 题预警条件无效`,
@@ -222,6 +222,17 @@ function matchOptions(question, rest) {
   return [...new Set(found)];
 }
 
+// Single-question numeric alert: gt/lt are strict, gte/lte include the
+// threshold itself (so "收缩压 ≥180" fires at exactly 180).
+function numberAlertHit(alertIf, value) {
+  switch (alertIf.op) {
+    case "lt": return value < alertIf.value;
+    case "lte": return value <= alertIf.value;
+    case "gte": return value >= alertIf.value;
+    default: return value > alertIf.value;
+  }
+}
+
 // Pure deterministic scoring: single/multi option scores sum into the total;
 // number questions never enter the score, only their own alertIf bounds.
 export function scoreSurvey(questionnaire, answers) {
@@ -243,10 +254,7 @@ export function scoreSurvey(questionnaire, answers) {
       question.alertIf &&
       Number.isFinite(answer.value)
     ) {
-      const out =
-        question.alertIf.op === "lt"
-          ? answer.value < question.alertIf.value
-          : answer.value > question.alertIf.value;
+      const out = numberAlertHit(question.alertIf, answer.value);
       if (out)
         flags.push({
           questionId: question.id,

@@ -63,6 +63,6 @@ export function PatientProposalModal({ patient, proposal, busy, error, onClose, 
       <PatientProposalComparison patient={patient} proposal={proposal} excluded={excluded} onToggle={toggle} />
       {stale && <p className="error-text" role="alert">档案在提案后已变化，无法直接写入。请拒绝此提案后重新生成，避免覆盖新记录。</p>}
       {error && <p className="error-text" role="alert">{error}</p>}
-      <div className="modal-actions"><button className="secondary" disabled={busy} onClick={onClose}>返回核对</button>{onReject && <button className="secondary" disabled={busy} onClick={onReject}>拒绝此变更</button>}<button className="primary" disabled={busy || stale || nothing} onClick={() => onConfirm(excluded.size ? reviewed : undefined)}>{busy ? "写入中…" : excluded.size ? "写入已勾选的变更" : "确认这些变更并写入"}</button></div>
+      <div className="modal-actions"><button className="secondary" disabled={busy} onClick={onClose}>返回核对</button>{onReject && <button className="secondary" disabled={busy} onClick={onReject}>拒绝此变更</button>}<button className="primary" disabled={busy || stale || nothing} onClick={() => onConfirm(excluded.size ? reviewed : undefined)}>{busy ? "写入中…" : excluded.size ? "确认写入已勾选的变更" : "确认写入档案"}</button></div>
   </Modal>;
 }

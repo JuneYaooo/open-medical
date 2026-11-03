@@ -16,8 +16,8 @@
           "title": "降压治疗第 1 周自测",
           "replyWindowHours": 72,
           "questions": [
-            { "id": "sbp", "text": "最近 3 天早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
-            { "id": "dbp", "text": "同一时间的舒张压（低压）平均是多少？", "type": "number", "unit": "mmHg", "min": 30, "max": 160, "required": true, "alertIf": { "op": "gt", "value": 110 } },
+            { "id": "sbp", "text": "最近 3 天早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gte", "value": 180 } },
+            { "id": "dbp", "text": "同一时间的舒张压（低压）平均是多少？", "type": "number", "unit": "mmHg", "min": 30, "max": 160, "required": true, "alertIf": { "op": "gte", "value": 110 } },
             { "id": "symptom", "text": "这一周有没有头晕、站起来眼前发黑？", "type": "single", "required": true, "options": [{ "label": "经常有", "score": 2 }, { "label": "偶尔", "score": 1 }, { "label": "没有", "score": 0 }] },
             { "id": "side", "text": "有没有新出现下面的情况？（可多选）", "type": "multi", "options": [{ "label": "干咳", "score": 1 }, { "label": "脚踝浮肿", "score": 1 }, { "label": "心慌", "score": 1 }, { "label": "都没有", "score": 0 }] },
             { "id": "note", "text": "还有什么想告诉医生的？", "type": "text" }
@@ -33,7 +33,7 @@
           "title": "高血压月度自测",
           "replyWindowHours": 72,
           "questions": [
-            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
+            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gte", "value": 180 } },
             { "id": "days", "text": "最近一周测了几天血压？", "type": "single", "required": true, "options": [{ "label": "5 天以上", "score": 0 }, { "label": "2–4 天", "score": 1 }, { "label": "1 天或没测", "score": 2 }] },
             { "id": "adherence", "text": "降压药是否每天按时吃？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
             { "id": "dizzy", "text": "近一周有没有头晕或头痛？", "type": "single", "required": true, "options": [{ "label": "经常", "score": 2 }, { "label": "偶尔", "score": 1 }, { "label": "没有", "score": 0 }] }
@@ -49,7 +49,7 @@
           "title": "高血压季度自测",
           "replyWindowHours": 72,
           "questions": [
-            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gt", "value": 180 } },
+            { "id": "sbp", "text": "最近一周早晨自测的收缩压（高压）平均是多少？", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": true, "alertIf": { "op": "gte", "value": 180 } },
             { "id": "adherence", "text": "降压药是否每天按时吃？", "type": "single", "required": true, "options": [{ "label": "每天按时", "score": 0 }, { "label": "偶尔忘记", "score": 1 }, { "label": "经常忘记或自己停了", "score": 3 }] },
             { "id": "salt", "text": "现在做菜放盐和以前比？", "type": "single", "required": true, "options": [{ "label": "明显少了", "score": 0 }, { "label": "少了一点", "score": 1 }, { "label": "没变", "score": 2 }] },
             { "id": "weight", "text": "现在的体重是多少？", "type": "number", "unit": "kg", "min": 25, "max": 250 }
@@ -61,6 +61,11 @@
         "offsetDays": 180,
         "title": "半年评估",
         "items": ["靶器官损害筛查：尿白蛋白/肌酐比、心电图", "心血管风险再评估", "调整随访频率"]
+      },
+      {
+        "offsetDays": 270,
+        "title": "9 个月随访",
+        "items": ["血压达标评估与家庭血压记录", "是否按时服药、有无不良反应", "血钾、肌酐与 eGFR（半年未查者补查）", "生活方式：限盐、体重、运动、戒烟限酒"]
       },
       {
         "offsetDays": 365,
