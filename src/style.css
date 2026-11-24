@@ -5085,3 +5085,18 @@ nav.toolbox .session b{font-weight:500;}
 .kw-index-status { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
 .kw-index-status summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; cursor: pointer; }
 .kw-index-status p { margin: 8px 0; overflow-wrap: anywhere; }
+
+/* Next steps offered right after a visit is marked attended (agenda, schedule). */
+.post-visit-next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 0 14px; padding: 14px 18px; border: 1px solid var(--accent); border-radius: var(--card-radius, 10px); background: var(--accent-soft); }
+.post-visit-next > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.post-visit-next small { color: var(--muted); font-size: var(--meta-size, 14px); }
+
+/* Pre-visit questionnaire inside 接诊准备: patient-reported, set apart. */
+.visit-prep .visit-prep-survey { flex-basis: 100%; margin: 0; padding-top: 12px; border-top: 1px dashed var(--border); font-size: var(--meta-size, 14px); }
+.visit-prep .visit-prep-survey > b small { margin-left: 6px; font-weight: 400; }
+.visit-prep .visit-prep-survey dl { display: grid; gap: 6px; margin: 8px 0 0; }
+.visit-prep .visit-prep-survey dl > div { display: grid; grid-template-columns: minmax(160px, 38%) 1fr; gap: 12px; }
+.visit-prep .visit-prep-survey dt { color: var(--muted); }
+.visit-prep .visit-prep-survey dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.visit-prep .visit-prep-alert { margin: 6px 0 0; color: var(--high); font-weight: 600; }
+@media (max-width: 760px) { .visit-prep .visit-prep-survey dl > div { grid-template-columns: 1fr; gap: 2px; } }

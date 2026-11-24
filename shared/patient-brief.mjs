@@ -7,7 +7,7 @@ const bounded = (row) => Object.fromEntries(Object.entries(row).map(([key, value
 export function briefRequest(purpose = "previsit") {
   return purpose === "postvisit"
     ? "请准备诊后文书包：①病历补充摘要；②面向患者、用词清楚的本次沟通说明；③待医生确认的随访事项清单。仅复述已有记录中的计划；未记录的处理决定明确留待医生填写。"
-    : "请准备本次接诊：①用简短条目概括已知病史与最近变化；②列出本次需优先核对的信息缺口；③给出可向患者询问的问题。";
+    : "请准备本次接诊：①用简短条目概括已知病史与最近变化；②列出本次需优先核对的信息缺口；③给出可向患者询问的问题。如附有诊前问卷回复，先单独概括患者自述的本次诉求与变化，并标明为患者自述、待核实。";
 }
 
 // 档案快照作为任务上下文随问题发送（规则在服务端 patient-brief 上下文里），
@@ -24,6 +24,8 @@ export function briefContext(brief, purpose = "previsit") {
     recentVisits: brief.visits.slice(0, 3).map(bounded), recentFollowups: brief.outcomes.slice(0, 3).map((o) => ({ id: o.id, title: excerpt(o.title), status: o.status, contactMethod: o.contactMethod, clinical: Object.fromEntries(Object.entries(o.clinical || {}).map(([key, value]) => [key, excerpt(value, 500)])), note: excerpt(o.note, 500), contactedAt: o.contactedAt, recordedAt: o.recordedAt, source: o.source, addendumCount: o.addendumCount || 0, addenda: (o.addenda || []).slice(-3).map((a) => ({ id: a.id, recordedAt: a.recordedAt, note: excerpt(a.note, 400) })) })),
     careTasks: (brief.careTasks || []).slice(0, 3).map(bounded),
     unprocessedMessages: brief.messages.slice(0, 3).map((m) => ({ ...bounded(m), text: excerpt(m.text, 500) })), informationGaps: brief.gaps.map((g) => g.label), totals: brief.counts,
+    // Patient-reported answers, kept apart from chart facts.
+    previsitSurvey: brief.previsitSurvey?.status === "collected" ? { visitDate: brief.previsitSurvey.visitDate, collectedAt: brief.previsitSurvey.collectedAt, alert: excerpt(brief.previsitSurvey.alert, 300), source: brief.previsitSurvey.source, answers: (brief.previsitSurvey.answers || []).slice(0, 13).map((a) => ({ question: excerpt(a.question, 120), answer: excerpt(a.answer, 400) })) } : null,
   };
   const collections = ["latestLabs", "medications", "diagnoses", "recentFollowups", "unprocessedMessages", "recentVisits", "careTasks"];
   while (JSON.stringify(facts).length > 17500) {

@@ -530,13 +530,14 @@ export default defineUiPlugin({
 
 ### 4.2 全部插槽
 
-`SLOTS` 当前共 9 个：
+`SLOTS` 当前共 10 个：
 
 | 插槽 | 形态 | 固定区位置/props | 说明 |
 | :--- | :--- | :--- | :--- |
 | `patient.tabs` | 数组 | 患者页 tab；`{ patient, config, ... }` | 支持 `area`、`legacyTab`、`replacesBuiltin`、`label` 函数、`order` |
 | `patient.overviewCards` | 数组 | 患者概览卡片末尾；`{ patient }` | 只读概览卡片 |
 | `patient.actions` | 数组 | 患者页“更多”菜单；`{ id, label, run(patient, api) }` | 动作不是组件 |
+| `patient.followupSuggestions` | 数组 | 患者“随访”页顶部；`{ patient, followups, onChanged }` | 按档案给出的随访建议，如专病管理包入组 |
 | `agenda.sources` | 数组 | 今日待办分类元数据 | 通常只声明 `{ id, label, order }`；真正的待办由服务端 `agendaSources` 提供 |
 | `chat.resultCards` | 键值对象 | `{ artifact }` | key 是 `artifact.type`；找不到时走固定区 fallback |
 | `proposal.renderers` | 键值对象 | `{ action }` | key 是提案 `type`；找不到时走固定区预览 |

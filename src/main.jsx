@@ -1742,7 +1742,7 @@ function App() {
                 refreshList().catch(() => {});
               }}
             />
-          ) : view === "agenda" && medical ? (<main id="main" className="work-directory agenda-page"><LazyDoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate}/></main>) : view === "schedule" && medical ? (<main id="main" className="work-directory schedule-page"><LazyClinicSchedule onPatient={openPatient}/></main>) : view === "patients" && medical ? (
+          ) : view === "agenda" && medical ? (<main id="main" className="work-directory agenda-page"><LazyDoctorAgenda onPatient={openPatient} onOpenTask={openTask} onView={navigate} modelConfigured={Boolean(config?.modelConfigured)}/></main>) : view === "schedule" && medical ? (<main id="main" className="work-directory schedule-page"><LazyClinicSchedule onPatient={openPatient} onOpenTask={openTask} modelConfigured={Boolean(config?.modelConfigured)}/></main>) : view === "patients" && medical ? (
             <PatientsView
               key={`${patientRoute.id || "list"}-${patientRoute.tab || "overview"}-${patientRoute.create || false}-${patientRoute.import || false}-${patientRoute.intakeOpen || ""}-${patientRoute.navigationKey || ""}`}
               config={config}

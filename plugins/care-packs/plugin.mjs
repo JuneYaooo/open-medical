@@ -84,8 +84,13 @@ export default definePlugin({
   },
   async api(ctx, req, url, io) {
     const parts = url.pathname.split("/").filter(Boolean); // api p care-packs packs [id] [action]
-    if (parts[0] !== "api" || parts[1] !== "p" || parts[2] !== "care-packs" || parts[3] !== "packs") return false;
+    if (parts[0] !== "api" || parts[1] !== "p" || parts[2] !== "care-packs") return false;
     const service = serviceOf(ctx);
+    if (parts.length === 4 && parts[3] === "previsit-questions" && req.method === "GET") {
+      io.send(200, { questions: service.previsitQuestions(url.searchParams.get("patientId")) });
+      return true;
+    }
+    if (parts[3] !== "packs") return false;
     if (parts.length === 4 && req.method === "GET") {
       io.send(200, { packs: service.list() });
       return true;

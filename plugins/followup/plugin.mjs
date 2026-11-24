@@ -5,6 +5,7 @@ import { registerFollowupTools } from "./tools.mjs";
 import { followupAgendaSources } from "./agenda.mjs";
 import { followupPlanProposals, legacyFollowupProposals } from "./proposals.mjs";
 import { messagingConnected } from "./connection.mjs";
+import { previsitBrief } from "./core/previsit.mjs";
 
 export default definePlugin({
   id: "followup",
@@ -38,6 +39,14 @@ export default definePlugin({
     },
   },
   agendaSources: followupAgendaSources,
+  // The questionnaire reaches patients over a channel, so without one there
+  // is nothing to show.
+  patientBrief(ctx, patientId) {
+    if (!messagingConnected(ctx)) return {};
+    const followups = ctx.plugins.followup?.service?.followups;
+    const value = previsitBrief(ctx.db, patientId, followups ? followups.now() : Date.now());
+    return value ? { previsitSurvey: value } : {};
+  },
   patientSummary(ctx, patientIds, options) {
     return ctx.plugins.followup?.service?.patientSummary(patientIds, options) || {};
   },

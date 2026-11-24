@@ -113,3 +113,27 @@ test("检查检验等结果逾期：同样显示逾期天数并排到最前", ()
   assert.equal(fresh.weight, 5);
   assert.doesNotMatch(fresh.detail, /逾期/);
 });
+
+test("随访统计：随访中患者、待登记与逾期、近期登记率；排除归档患者和手动联系记录", () => {
+  const { db, manager, now } = setup();
+  db.prepare("INSERT INTO patients VALUES (?,?)").run("p2", JSON.stringify({ id: "p2", name: "归档患者", sessionId: "s2", archived: true }));
+  const job = (id, patientId, status) => db.prepare("INSERT INTO follow_ups VALUES (?,?,?,?,?)").run(id, patientId, status, now() + DAY, JSON.stringify({ id, patientId, status }));
+  job("f1", "p1", "active"); job("f2", "p1", "running"); job("f3", "p2", "active"); job("f4", "p1", "completed");
+  const reminder = (id, patientId, kind, daysAgo, status, outcome) => db.prepare("INSERT INTO reminders VALUES (?,?,?,?,?,?)")
+    .run(id, patientId, kind, now() - daysAgo * DAY, status, JSON.stringify({ id, patientId, ...(outcome ? { outcome: { status: outcome } } : {}) }));
+  reminder("r1", "p1", "followup", 1, "pending");          // 待登记
+  reminder("r2", "p1", "followup", 10, "pending");         // 待登记且逾期
+  reminder("r3", "p1", "followup", 20, "done", "completed");
+  reminder("r4", "p1", "followup", 30, "done", "unreachable");
+  reminder("r5", "p1", "followup", 200, "done", "completed"); // 窗口外
+  reminder("r6", "p1", "manual-contact", 1, "pending");     // 手动记录不计
+  reminder("r7", "p2", "followup", 1, "pending");          // 归档患者不计
+  db.prepare("INSERT INTO reminders VALUES (?,?,?,?,?,?)").run("r8", "p1", "followup", now() + DAY, "pending", "{}"); // 推迟到明天，尚未到期
+
+  const stats = manager.stats();
+  assert.equal(stats.patients, 1);
+  assert.equal(stats.pending, 2);
+  assert.equal(stats.overdue, 1);
+  assert.deepEqual(stats.window, { fired: 4, recorded: 2, completed: 1, unreachable: 1, declined: 0, recordRate: 0.5 });
+  assert.throws(() => manager.stats({ days: 0 }), /统计天数/);
+});

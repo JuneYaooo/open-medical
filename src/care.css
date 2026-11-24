@@ -218,3 +218,7 @@ ul.ext-builtin-skills p { margin:4px 0 0; }
 .medical-shell :is(.care-inbox, .followups-view, .care-tracking, .patient-followup-workspace, .appointments) .care-empty { text-align: left; padding: 14px 18px; margin: 0; border: 1px dashed var(--border); border-radius: var(--card-radius, 10px); font-size: var(--meta-size, 14px); }
 .medical-shell :is(.care-inbox, .followups-view, .care-tracking, .patient-followup-workspace, .appointments) .care-empty p { margin: 0 0 4px; }
 .medical-shell .care-tracking > .toolbar-actions .chip { min-height: 34px; padding: 4px 14px; font-size: var(--meta-size, 14px); }
+
+.appointment-form .appointment-previsit { grid-column:1 / -1; flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 8px; font-size:var(--meta-size, 14px); }
+.appointment-form .appointment-previsit input { width:auto; padding:0; }
+.appointment-form .appointment-previsit small { color:var(--muted); }

@@ -49,27 +49,59 @@ export function PatientBriefPanel({ patient, onOpenTask, onNavigate, onEditIdent
 }
 
 // Compact entry on the patient overview: reads a fresh brief right before
-// drafting, then opens the patient's conversation with the request filled in
-// and the brief attached. Nothing is sent until the doctor sends it.
-export function VisitPrepActions({ patient, onOpenTask }) {
+// drafting, then opens the patient's conversation with the brief attached.
+// The request text is a fixed template, so asking the doctor to re-read and
+// send it adds a click without adding review: with a model connected it runs
+// at once and the doctor reviews the answer. Without a model the request is
+// only filled in, as before.
+const fmtDay = (value) => value ? new Date(value).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" }) : "";
+const SURVEY_STATUS = {
+  scheduled: (s) => `${fmtDay(s.dueAt)}生成，到时在今日待办确认后发给患者`,
+  pending_send: () => "已到期，待发给患者（在随访页或今日待办发送）",
+  sent: (s) => `${fmtDay(s.sentAt)}已发出，等待患者回复`,
+  expired: () => "已过回复时限，没有收到回复",
+};
+
+// Patient-reported answers from the pre-visit questionnaire, kept visibly
+// apart from chart facts.
+function PrevisitSurvey({ survey }) {
+  if (!survey) return null;
+  if (survey.status !== "collected")
+    return <p className="visit-prep-survey muted">诊前问卷（{survey.visitDate} 复诊）：{(SURVEY_STATUS[survey.status] || (() => survey.status))(survey)}</p>;
+  return <div className="visit-prep-survey">
+    <b>诊前问卷回复 <small>{fmtDay(survey.collectedAt)}收到 · 患者自述，待核实</small></b>
+    {survey.alert && <p className="visit-prep-alert" role="note">预警：{survey.alert}</p>}
+    <dl>{survey.answers.map((item) => <div key={item.question}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl>
+  </div>;
+}
+
+export function VisitPrepActions({ patient, onOpenTask, modelConfigured = true }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [survey, setSurvey] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setSurvey(null);
+    api(`/api/patients/${patient.id}/brief`).then((brief) => alive && setSurvey(brief.previsitSurvey || null)).catch(() => {});
+    return () => { alive = false; };
+  }, [patient.id, patient.revision]);
   const prepare = async (purpose) => {
     if (busy) return;
     setBusy(purpose); setError("");
     try {
       const brief = await api(`/api/patients/${patient.id}/brief`);
-      await onOpenTask(brief.sessionId, { draft: briefRequest(purpose), context: briefContext(brief, purpose) });
+      await onOpenTask(brief.sessionId, { draft: briefRequest(purpose), context: briefContext(brief, purpose), submit: modelConfigured });
     } catch (err) { setError(err.message); }
     finally { setBusy(""); }
   };
   if (patient.archived) return null;
   return <section className="visit-prep" aria-label="接诊准备">
-    <div><b>接诊准备</b><small>按当前档案生成请求与附带快照，核对后由你发送</small></div>
+    <div><b>接诊准备</b><small>{modelConfigured ? `按当前档案${survey?.status === "collected" ? "和诊前问卷回复" : ""}直接整理，结果供你复核，不会写入档案` : "连接模型后可一键整理；现在只填入请求，由你发送"}</small></div>
     <div className="toolbar-actions">
       <button className="secondary" disabled={Boolean(busy)} onClick={() => prepare("previsit")}>{busy === "previsit" ? "正在读取…" : "准备本次接诊"} <ArrowUpRight size={14} /></button>
       <button className="secondary" disabled={Boolean(busy)} onClick={() => prepare("postvisit")}>{busy === "postvisit" ? "正在读取…" : "准备诊后文书"}</button>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
+    <PrevisitSurvey survey={survey} />
   </section>;
 }

@@ -5,3 +5,17 @@
 .care-packs .care-pack-facts b { display: inline-block; min-width: 5.5em; margin-right: 8px; color: var(--muted); font-weight: 500; }
 .care-packs .care-pack-apply { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
 .care-packs .care-pack-apply label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+
+/* One-click enrollment suggested on a patient's follow-up tab. */
+.care-pack-suggestions { margin: 0 0 16px; }
+.care-pack-suggestion { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 20px; padding: 14px 16px; border: 1px solid var(--accent); border-radius: var(--card-radius, 10px); background: var(--accent-soft); }
+.care-pack-suggestion + .care-pack-suggestion { margin-top: 10px; }
+.care-pack-suggestion-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 320px; }
+.care-pack-suggestion-main > b { display: flex; align-items: center; gap: 6px; font-size: var(--body-size, 16px); }
+.care-pack-suggestion-main > b svg { color: var(--accent); flex: none; }
+.care-pack-suggestion-main small,
+.care-pack-suggestion-main details { color: var(--muted); font-size: var(--meta-size, 14px); line-height: 1.6; }
+.care-pack-suggestion-main details ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
+.care-pack-suggestion-main details li b { margin-right: 8px; font-weight: 500; }
+.care-pack-suggestion-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.care-pack-suggestion-actions label { display: grid; gap: 4px; font-size: var(--small-size, 13px); color: var(--muted); }

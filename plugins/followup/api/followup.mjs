@@ -89,6 +89,13 @@ export function createFollowupApi(ctx) {
     if (
       parts[0] === "api" &&
       parts[1] === "followups" &&
+      parts[2] === "stats" &&
+      req.method === "GET"
+    )
+      return REPLY(send, 200, followups.stats({ days: url.searchParams.has("days") ? Number(url.searchParams.get("days")) : undefined }));
+    if (
+      parts[0] === "api" &&
+      parts[1] === "followups" &&
       parts[2] === "overview" &&
       req.method === "GET"
     )
@@ -177,6 +184,8 @@ export function createFollowupApi(ctx) {
           return REPLY(send, 200, { jobs: followups.list(pid) });
         if (parts.length === 4 && req.method === "POST")
           return REPLY(send, 201, followups.create(pid, await body()));
+        if (parts.length === 5 && parts[4] === "previsit" && req.method === "POST")
+          return REPLY(send, 201, followups.schedulePrevisit(pid, await body()));
         if (parts.length === 5 && parts[4] === "apply" && req.method === "POST")
           return REPLY(
             send,
@@ -237,6 +246,7 @@ export const FOLLOWUP_LEGACY_API_PATHS = [
   { method: "*", path: "/api/followup-plans" },
   { method: "DELETE", path: "/api/followup-plans/:id" },
   { method: "GET", path: "/api/followups/overview" },
+  { method: "GET", path: "/api/followups/stats" },
   { method: "POST", path: "/api/reminders/:id/addendum" },
   { method: "POST", path: "/api/reminders/:id/complete" },
   { method: "POST", path: "/api/reminders/:id/ack" },

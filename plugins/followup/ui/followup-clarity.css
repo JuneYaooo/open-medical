@@ -90,3 +90,17 @@
 /* 下次联系时间快捷选项 */
 .followup-date-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
 .followup-date-chips button[aria-pressed="true"] { font-weight: 600; text-decoration: underline; }
+
+/* Panel-level follow-up numbers above the tabs. */
+.followup-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 18px; }
+.followup-stat { margin: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--card-radius, 10px); background: var(--card, #fff); min-width: 0; }
+.followup-stat dt { color: var(--muted); font-size: var(--meta-size, 14px); }
+.followup-stat dd { margin: 0; }
+.followup-stat dd b { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.followup-stat dd span { color: var(--muted); font-size: var(--meta-size, 14px); }
+.followup-stat .followup-stat-note { color: var(--muted); font-size: var(--small-size, 13px); line-height: 1.5; margin-top: 2px; }
+.followup-stat.is-caution dd b { color: var(--caution); }
+.followup-stat.is-danger dd b { color: var(--high); }
+.followup-stat-button { all: unset; display: block; width: 100%; cursor: pointer; }
+.followup-stat:has(.followup-stat-button):hover { border-color: var(--accent); }
+.followup-stat-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }

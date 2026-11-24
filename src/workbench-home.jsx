@@ -574,6 +574,8 @@ export function WorkbenchHome({
       )}
       {isHome ? (
         <>
+          {/* A clinic day starts from today's patients, so they come before the composer. */}
+          <HomeCockpit onView={onView} onPatient={onPatient} onOpenTask={onOpenTask} reloadKey={reloadKey} />
           {config && !config.modelConfigured && <div className="agent-setup-note" role="status"><span>需先连接模型：未连接时不能发送任务。患者档案、资料导入和随访计划等本地功能不受影响。</span><button type="button" onClick={onModelSettings}>连接模型</button></div>}
           <form className="hub-composer" onSubmit={submit}>
             <div className="hub-composer-caption">
@@ -845,7 +847,6 @@ export function WorkbenchHome({
               <div className="agent-template-grid">{allFlows.filter(f => f.category === category).map(flow => <button key={flow.id} disabled={starting || uploading} aria-pressed={flow.id === flowId} onClick={() => chooseFlow(flow)}><flow.icon size={18}/><span><b>{flow.title}</b><small>{flow.desc}</small></span></button>)}</div>
             </div>}
           </section>
-          <HomeCockpit onView={onView} onPatient={onPatient} onOpenTask={onOpenTask} reloadKey={reloadKey} />
           <details className="workspace-optional"><summary>模板、连接与工作台设置</summary>
           {medicalEnabled(config) && <section className="hub-customize" aria-label="定制我的工作台">
             <div><b>模板与提醒规则</b><span>{customFlows.length ? `已保存 ${customFlows.length} 个模板。` : ""}填写医院模板或提醒要求，核对后保存。</span></div>

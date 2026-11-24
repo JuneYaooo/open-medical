@@ -11,6 +11,7 @@ export const SLOTS = [
   "patient.tabs",
   "patient.overviewCards",
   "patient.actions",
+  "patient.followupSuggestions",
   "agenda.sources",
   "chat.resultCards",
   "proposal.renderers",

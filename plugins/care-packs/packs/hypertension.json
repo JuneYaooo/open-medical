@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "name": "高血压管理包",
   "disease": "I10 原发性高血压",
+  "match": {"codes": ["I10"], "keywords": ["原发性高血压", "高血压病", "高血压"], "exclude": ["妊娠", "继发", "肺动脉", "门静脉", "颅内", "白大衣"]},
+  "previsitQuestions": [{"id": "sbp", "text": "最近一周早晨在家量的收缩压（高压）大概是多少？没量过可不填", "type": "number", "unit": "mmHg", "min": 60, "max": 260, "required": false, "alertIf": {"op": "gte", "value": 180}}, {"id": "dbp", "text": "同一时间的舒张压（低压）大概是多少？", "type": "number", "unit": "mmHg", "min": 30, "max": 160, "required": false, "alertIf": {"op": "gte", "value": 110}}, {"id": "dizzy", "text": "最近有没有头晕、站起来眼前发黑？", "type": "single", "required": false, "options": [{"label": "经常有", "score": 2}, {"label": "偶尔", "score": 1}, {"label": "没有", "score": 0}]}],
   "summary": "启动或调整降压治疗后的一年随访：家庭血压自测问卷、电解质与肾功能监测、生活方式与家庭测压患教。",
   "references": ["中国高血压防治指南（2024 年修订版）", "国家基层高血压防治管理指南"],
   "plan": {

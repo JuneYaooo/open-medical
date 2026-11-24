@@ -241,7 +241,7 @@ HTTP 面统一经 `guard()`：localhost Host 校验 + 同源 + 启动时生成�
 
 ### 6.5 前端插槽
 
-固定区在 `src/plugin-slots.jsx` 定义 9 个插槽：`patient.tabs`、`patient.overviewCards`、`patient.actions`、`agenda.sources`、`chat.resultCards`、`proposal.renderers`、`settings.panels`、`tools.directory`、`legacyViews`。插件 `ui/index.jsx` 用 `defineUiPlugin` 声明贡献；宿主 eager 收集入口、组件 `React.lazy` 懒加载，每个贡献独立 `Suspense + ErrorBoundary`，空插槽不产生 DOM。停用/未激活插件不渲染业务插槽；历史 artifact 和旧 URL 分别走 `ResultCard` fallback 与 `LegacyView` fallback。
+固定区在 `src/plugin-slots.jsx` 定义 10 个插槽：`patient.tabs`、`patient.overviewCards`、`patient.actions`、`patient.followupSuggestions`、`agenda.sources`、`chat.resultCards`、`proposal.renderers`、`settings.panels`、`tools.directory`、`legacyViews`。插件 `ui/index.jsx` 用 `defineUiPlugin` 声明贡献；宿主 eager 收集入口、组件 `React.lazy` 懒加载，每个贡献独立 `Suspense + ErrorBoundary`，空插槽不产生 DOM。停用/未激活插件不渲染业务插槽；历史 artifact 和旧 URL 分别走 `ResultCard` fallback 与 `LegacyView` fallback。
 
 ## 7. 前端（`src/`）
 

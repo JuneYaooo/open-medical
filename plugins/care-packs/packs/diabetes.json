@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "name": "2 型糖尿病管理包",
   "disease": "E11 2 型糖尿病",
+  "match": {"codes": ["E11"], "keywords": ["2型糖尿病", "Ⅱ型糖尿病", "II型糖尿病", "二型糖尿病"], "exclude": ["妊娠"]},
+  "previsitQuestions": [{"id": "fpg", "text": "最近一周早上空腹血糖大概是多少？没测过可不填", "type": "number", "unit": "mmol/L", "min": 1, "max": 35, "required": false, "alertIf": {"op": "gt", "value": 13.9}}, {"id": "lowest", "text": "最近测到的最低一次血糖是多少？没测过可不填", "type": "number", "unit": "mmol/L", "min": 0, "max": 35, "required": false, "alertIf": {"op": "lt", "value": 3.9}}, {"id": "hypo", "text": "最近有没有心慌、出冷汗、手抖、特别饿的情况？", "type": "single", "required": false, "options": [{"label": "有，不止一次", "score": 3}, {"label": "有过一次", "score": 2}, {"label": "没有", "score": 0}]}],
   "summary": "2 型糖尿病一年随访：血糖与低血糖自测问卷、糖化血红蛋白和低血糖监测、并发症筛查节点，以及低血糖处理、足部护理等患教。",
   "references": ["中国糖尿病防治指南（2024 版）", "国家基层糖尿病防治管理指南"],
   "plan": {

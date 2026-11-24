@@ -5,6 +5,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { AppError, check, identifier, string } from "../../../server/errors.mjs";
 import { sqliteTransaction } from "../../../server/sqlite-transaction.mjs";
 import { normalizeQuestionnaire } from "./surveys.mjs";
+import { PREVISIT_KIND, previsitDueAt, previsitQuestionnaire } from "./previsit.mjs";
 import {
   composeDigest,
   selectDigestMessages,
@@ -108,6 +109,27 @@ export class FollowUpManager {
       const job = existing ? { ...JSON.parse(existing.data), reused: true } : this.createNew(patientId, { ...input, ...(source ? { source } : {}) });
       if (requestId) this.store.db.prepare("INSERT INTO followup_creation_requests VALUES (?,?,?,?)").run(requestId, patientId, fingerprint, job.id);
       return job;
+    });
+  }
+  // One pre-visit questionnaire per booked appointment, due the day before.
+  // Re-requesting for the same appointment returns the existing job.
+  schedulePrevisit(patientId, { appointmentId, extraQuestions = [] } = {}) {
+    identifier(patientId);
+    identifier(appointmentId);
+    return sqliteTransaction(this.store.db, () => {
+      const appointment = this.store.db.prepare("SELECT date, status FROM appointments WHERE id=? AND patient_id=?").get(appointmentId, patientId);
+      check(appointment, "NOT_FOUND", "预约不存在", 404);
+      check(appointment.status === "scheduled", "INVALID_INPUT", "只有待到的复诊可以安排诊前问卷", 409);
+      const existing = this.store.db.prepare("SELECT data FROM follow_ups WHERE patient_id=? AND json_extract(data,'$.source.kind')=? AND json_extract(data,'$.source.appointmentId')=? LIMIT 1").get(patientId, PREVISIT_KIND, appointmentId);
+      if (existing) return { ...JSON.parse(existing.data), reused: true };
+      return this.createNew(patientId, {
+        name: `诊前问卷 · ${appointment.date} 复诊`,
+        once: true,
+        firstDueAt: new Date(previsitDueAt(appointment.date, this.now())).toISOString(),
+        checklist: ["发出诊前问卷", "接诊前查看患者回复"],
+        questionnaire: previsitQuestionnaire(extraQuestions),
+        source: { kind: PREVISIT_KIND, appointmentId, visitDate: appointment.date },
+      });
     });
   }
   createNew(patientId, input) {
@@ -354,6 +376,28 @@ export class FollowUpManager {
     return { jobs, total, offset, limit, hasMore: offset + jobs.length < total };
   }
 
+  // Panel-level numbers for the follow-up page: who is being followed, which
+  // fired reminders still have no contact result, and how many of the last
+  // `days` days' reminders got one. Archived patients and manual contact notes
+  // are left out; snoozed reminders count from their new due time.
+  stats({ days = 90, overdueDays = 7 } = {}) {
+    check(Number.isInteger(days) && days >= 1 && days <= 365 && Number.isInteger(overdueDays) && overdueDays >= 1 && overdueDays <= 90, "INVALID_INPUT", "统计天数无效");
+    const DAY = 86400000, now = this.now(), since = now - days * DAY;
+    const live = "(p.id IS NOT NULL AND COALESCE(json_extract(p.data,'$.archived'),0) IN (0,'false'))";
+    const db = this.store.db;
+    const patients = db.prepare(`SELECT COUNT(DISTINCT f.patient_id) n FROM follow_ups f LEFT JOIN patients p ON p.id=f.patient_id WHERE f.status IN ('active','running') AND ${live}`).get().n;
+    const pendingRows = db.prepare(`SELECT r.due_at FROM reminders r LEFT JOIN patients p ON p.id=r.patient_id WHERE r.status='pending' AND r.kind<>'manual-contact' AND r.due_at<=? AND ${live}`).all(now);
+    const pending = pendingRows.length;
+    const overdue = pendingRows.filter((row) => row.due_at <= now - overdueDays * DAY).length;
+    const outcomes = { completed: 0, unreachable: 0, declined: 0 };
+    let recorded = 0;
+    for (const row of db.prepare(`SELECT json_extract(r.data,'$.outcome.status') status FROM reminders r LEFT JOIN patients p ON p.id=r.patient_id WHERE r.status='done' AND r.kind<>'manual-contact' AND r.due_at>? AND r.due_at<=? AND ${live}`).all(since, now)) {
+      recorded += 1;
+      if (row.status in outcomes) outcomes[row.status] += 1;
+    }
+    const fired = recorded + pendingRows.filter((row) => row.due_at > since).length;
+    return { days, overdueDays, patients, pending, overdue, window: { fired, recorded, ...outcomes, recordRate: fired ? recorded / fired : null } };
+  }
   overview({ limit = 200, offset = 0 } = {}) {
     check(
       Number.isInteger(limit) && limit > 0 && limit <= 500 && Number.isSafeInteger(offset) && offset >= 0,

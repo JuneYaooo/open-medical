@@ -28,6 +28,15 @@ export function validatePack(pack, origin = "") {
   for (const node of pack.plan.nodes) if (node.questionnaire) normalizeQuestionnaire(node.questionnaire);
   for (const monitor of pack.labMonitors || [])
     check(typeof monitor.item === "string" && ["gt", "lt"].includes(monitor.op) && Number.isFinite(monitor.threshold), "CARE_PACK", `专病包 ${pack.id} 的检验监测无效`);
+  if (pack.match !== undefined) {
+    check(pack.match && typeof pack.match === "object", "CARE_PACK", `专病包 ${pack.id} 的 match 无效`);
+    for (const key of ["codes", "keywords", "exclude"])
+      check(pack.match[key] === undefined || (Array.isArray(pack.match[key]) && pack.match[key].every((word) => typeof word === "string" && word.trim())), "CARE_PACK", `专病包 ${pack.id} 的 match.${key} 须为非空字符串数组`);
+  }
+  if (pack.previsitQuestions !== undefined) {
+    check(Array.isArray(pack.previsitQuestions) && pack.previsitQuestions.length >= 1 && pack.previsitQuestions.length <= 8, "CARE_PACK", `专病包 ${pack.id} 的诊前问卷补充题须为 1–8 题`);
+    normalizeQuestionnaire({ title: pack.name, questions: pack.previsitQuestions });
+  }
   for (const doc of pack.education || [])
     check(typeof doc.title === "string" && doc.title.trim() && typeof doc.body === "string" && doc.body.trim(), "CARE_PACK", `专病包 ${pack.id} 的患教素材无效`);
   return pack;
@@ -68,6 +77,8 @@ export function createCarePackService({ packs, followups, riskRules, guidelines 
           version: value.version,
           name: value.name,
           disease: value.disease,
+          match: value.match || null,
+          planName: value.plan.name,
           summary: value.summary,
           references: value.references || [],
           nodes: value.plan.nodes.map((node) => ({ offsetDays: node.offsetDays, title: node.title, questionnaire: node.questionnaire?.title || null })),
@@ -121,6 +132,16 @@ export function createCarePackService({ packs, followups, riskRules, guidelines 
       const requestId = `pack_${createHash("sha256").update(JSON.stringify([value.id, value.version, patientId, startDate])).digest("hex").slice(0, 40)}`;
       const jobs = followups().applyTemplate(patientId, { planId: planIdFor(value.id), startDate, requestId });
       return { pack: value.id, followups: Array.isArray(jobs) ? jobs.length : 0, ...this.addMonitors(patientId, value.id) };
+    },
+    // Disease questions appended to a patient's pre-visit questionnaire, for
+    // each pack the patient is currently enrolled in (has an open job from
+    // the pack's plan). Ids are namespaced by pack.
+    previsitQuestions(patientId) {
+      identifier(patientId);
+      const jobs = followups().list(patientId).filter((job) => job.status !== "completed");
+      return packs
+        .filter((value) => value.previsitQuestions && jobs.some((job) => String(job.name || "").startsWith(`${value.plan.name} · `)))
+        .flatMap((value) => value.previsitQuestions.map((question) => ({ ...question, id: `${value.id}_${question.id}` })));
     },
     // Lab thresholds only: used when the doctor applied the pack's follow-up
     // template from the follow-up page. An active monitor on the same item and

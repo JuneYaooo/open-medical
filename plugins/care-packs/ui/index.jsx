@@ -3,6 +3,12 @@ import { defineUiPlugin } from "../../../src/plugin-slots.jsx";
 export default defineUiPlugin({
   id: "care-packs",
   slots: {
+    "patient.followupSuggestions": [
+      {
+        id: "care-pack-suggestion",
+        component: () => import("./CarePackSuggestion.jsx"),
+      },
+    ],
     "settings.panels": [
       {
         id: "care-packs",

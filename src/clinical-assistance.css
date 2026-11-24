@@ -7,6 +7,7 @@
 .assistance-suggestions { margin:28px 0 0; }
 .assistance-suggestions h2 { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:var(--meta-size, 14px); font-weight:600; color:var(--muted); }
 .assistance-suggestions h2 svg { color:var(--accent); }
+.assistance-suggestions h2 small { font-weight:400; }
 .assistance-suggestions ul { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .medical-shell .assistance-suggestions button { display:flex; align-items:center; gap:12px; width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--ink); text-align:left; font-size:var(--body-size, 16px); line-height:1.5; }
 .assistance-suggestions button svg { color:var(--accent); flex-shrink:0; }

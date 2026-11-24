@@ -71,6 +71,9 @@ export class PatientBrief {
       diagnoses: diagnoses.slice(0, 8), medications: medications.slice(0, 20),
       allergies: p.allergies || [], allergyStatus, labs: labs.slice(0, 8),
       visits: [...(p.visits || [])].sort(newest).slice(0, 5), outcomes, messages, gaps, careTasks,
+      // Only present when a plugin supplies it, so briefs without one keep
+      // their historical shape (and fingerprint).
+      ...(contributed.previsitSurvey && typeof contributed.previsitSurvey === "object" ? { previsitSurvey: contributed.previsitSurvey } : {}),
       counts: { ...counts, careTasks: careTaskCount, pendingReviews, activeRisks, diagnoses: diagnoses.length, medications: medications.length, labGroups: labs.length, visits: (p.visits || []).length },
     };
     // Fingerprint includes source content, not the read time. New messages and

@@ -48,7 +48,7 @@ export const CORE_TASK_CONTEXTS = Object.freeze({
     sticky: true,
     validate: (c) => check(["previsit", "postvisit"].includes(c.scope.purpose), "INVALID_INPUT", "诊前速览上下文的 purpose 无效"),
     guidance: () =>
-      "资料是当前患者本地档案的有限快照。请保留日期与来源，不把未核对/缺失资料写成正常或已排除，不合并冲突记录，不推断处方或剂量，不自动发送患者消息。快照最多包含 6 条诊断、8 条用药、6 组检验及各 3 条近期就诊/随访/消息/待跟进事项，长文本为节选；totals 标明原档案总量，未纳入的记录不能视为不存在。需要更多内容时调用 read_patient_brief。生成结果为待医生复核的草稿。",
+      "资料是当前患者本地档案的有限快照。请保留日期与来源，不把未核对/缺失资料写成正常或已排除，不合并冲突记录，不推断处方或剂量，不自动发送患者消息。快照最多包含 6 条诊断、8 条用药、6 组检验及各 3 条近期就诊/随访/消息/待跟进事项，长文本为节选；totals 标明原档案总量，未纳入的记录不能视为不存在。需要更多内容时调用 read_patient_brief。previsitSurvey 是患者在诊前问卷里的自述，不是检查结果或诊断，引用时标明「患者自述」。生成结果为待医生复核的草稿。",
   },
   "task-template": {
     validate: (c) => check(Object.hasOwn(TASK_TEMPLATES, c.scope.template), "INVALID_INPUT", "任务模板不存在或已停用"),

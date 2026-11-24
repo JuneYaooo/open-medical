@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { api } from "../../../src/agent-runtime";
-import { usePluginConnected } from "../../../src/plugin-slots.jsx";
+import { Slot, usePluginConnected } from "../../../src/plugin-slots.jsx";
 import { CampaignPanel } from "./CareInbox.jsx";
 import { FollowupModal } from "./FollowupModal.jsx";
 import { FollowupRecords } from "./FollowupRecords.jsx";
@@ -81,6 +81,7 @@ export default function PatientFollowupsTab({
                   <CalendarClock size={14} /> 新建随访计划
                 </button>
               </div>
+              {!detail.archived && <Slot name="patient.followupSuggestions" patient={detail} followups={followups} onChanged={async () => { await refreshPatient(); onRefreshPanels?.(); }} />}
               {/* 四个子页合并为单页滚动，减少一层嵌套；企微自动随访折叠到底部。 */}
               <div>
               <FollowupRecords

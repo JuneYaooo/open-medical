@@ -18,6 +18,7 @@ import {
 import { api } from "../../../src/agent-runtime";
 import { usePluginConnected } from "../../../src/plugin-slots.jsx";
 import { FollowupRecords } from "./FollowupRecords.jsx";
+import { FollowupStats } from "./FollowupStats.jsx";
 import "./followup-clarity.css";
 
 const fmtDue = (value) => {
@@ -43,6 +44,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
   const [plans, setPlans] = useState([]);
   const [patients, setPatients] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [statsKey, setStatsKey] = useState(0);
   const [apply, setApply] = useState({
     planId: "",
     patientId: "",
@@ -78,6 +80,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
         if (!page.jobs.length) break;
       }
       setJobs(allJobs);
+      setStatsKey((key) => key + 1);
       setLoadFailed(false);
     } catch (err) { setLoadFailed(true); throw err; }
     finally { setLoading(false); }
@@ -233,6 +236,7 @@ export function FollowupsView({ onOpenPatient, onOpenTask, onSettings }) {
         {loading && <p role="status">正在读取随访计划…</p>}
         {loadFailed && <button className="secondary" onClick={() => refresh().then(() => setError("")).catch(err => setError(err.message))}>重新加载随访</button>}
         {notice && <p className="form-notice" role="status">{notice}</p>}
+        <FollowupStats reloadKey={statsKey} onPending={() => setSection("queue")} />
 
         <nav className="tab-row business-tabs" aria-label="随访工作内容">
           <button

@@ -37,11 +37,11 @@ export function patientSuggestions(patient) {
   return out.slice(0, 4);
 }
 
-export function PatientSuggestionList({ patient, onChoose, disabled = false }) {
+export function PatientSuggestionList({ patient, onChoose, disabled = false, hint = '' }) {
   const suggestions = patient ? patientSuggestions(patient) : [];
   if (!suggestions.length) return null;
   return <div className="assistance-suggestions">
-    <h2><Sparkles size={16} aria-hidden="true"/>根据档案建议</h2>
+    <h2><Sparkles size={16} aria-hidden="true"/>根据档案建议{hint && <small>{hint}</small>}</h2>
     <ul>{suggestions.map(({ icon: Icon, label, prompt }) => <li key={label}><button type="button" disabled={disabled} onClick={() => onChoose(prompt)}><Icon size={17} aria-hidden="true"/><span>{label}</span></button></li>)}</ul>
   </div>;
 }
@@ -54,19 +54,24 @@ export function ClinicalAssistance({ patient, onOpenTask, modelConfigured = true
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const sending = useRef(false);
-  const submit = async event => {
-    event.preventDefault();
-    if (sending.current || !question.trim() || !modelConfigured) return;
+  const ask = async (text, flow) => {
+    if (sending.current || !text.trim() || !modelConfigured) return;
     sending.current = true;
     setBusy(true);
     setError('');
     try {
-      await onOpenTask(patient.sessionId, { draft: question.trim(), workflow, submit: true, newQuestion: true });
+      await onOpenTask(patient.sessionId, { draft: text.trim(), workflow: flow, submit: true, newQuestion: true });
       setQuestion('');
       setWorkflow('');
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      // Keep the question so a failed one-click suggestion can be edited and resent.
+      setQuestion(text);
+      setWorkflow(flow);
+      setError(err.message);
+    }
     finally { sending.current = false; setBusy(false); }
   };
+  const submit = event => { event.preventDefault(); return ask(question, workflow); };
   return <section className="clinical-assistance" aria-label="患者诊疗辅助面板">
     <h1>本次想了解什么？</h1>
     <p className="assistance-lead">助手会读取 {patient.name} 的诊断、用药、检验与资料作答，结论供您复核。</p>
@@ -77,8 +82,8 @@ export function ClinicalAssistance({ patient, onOpenTask, modelConfigured = true
     </form>
     {error && <p role="alert" className="error-text">{error}</p>}
     <fieldset disabled={!modelConfigured} style={LOCKED} aria-label="提问建议">
-      <PatientSuggestionList patient={patient} disabled={!modelConfigured} onChoose={prompt => { setQuestion(prompt); setWorkflow(''); }}/>
-      <PatientQuestionStarters label="常用方向" onChoose={({ prompt, workflow = "" }) => { setQuestion(prompt); setWorkflow(workflow); }}/>
+      <PatientSuggestionList patient={patient} disabled={!modelConfigured || busy} hint="点击直接开始，结果供你复核" onChoose={prompt => ask(prompt, '')}/>
+      <PatientQuestionStarters label="常用方向 · 点击直接开始" onChoose={({ prompt, workflow = "" }) => ask(prompt, workflow)}/>
     </fieldset>
   </section>;
 }

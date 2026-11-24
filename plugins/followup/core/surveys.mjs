@@ -336,6 +336,7 @@ export class FollowUpSurveys {
       patientId: patient.id,
       followUpId: followUp.id,
       reminderId: reminder.id,
+      ...(followUp.source?.kind === "previsit" ? { source: followUp.source } : {}),
       questionnaire,
       status: "pending_send",
       channel: "",

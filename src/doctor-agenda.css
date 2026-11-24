@@ -40,3 +40,14 @@
 }
 /* 随访提醒行内「推迟」 */
 .doctor-agenda .agenda-snooze { font-size: calc(12px * var(--text-scale, 1)); padding: 2px 4px; border: 1px solid var(--line, #e3ead9); border-radius: 6px; background: transparent; color: inherit; }
+
+/* Rows with inline actions: the divider and hover belong to the whole row, and
+   the actions line up with the first text line instead of floating mid-row. */
+.doctor-agenda .agenda-items > .agenda-row { align-items: flex-start; border-top: 1px solid var(--line); }
+.doctor-agenda .agenda-items > .agenda-row:first-child { border-top: 0; }
+.doctor-agenda .agenda-items > .agenda-row .agenda-item { border-top: 0; }
+.doctor-agenda .agenda-items > .agenda-row:hover { background: var(--accent-soft); }
+.doctor-agenda .agenda-resolve { align-self: stretch; align-items: flex-start; gap: 4px; padding: 14px 18px 14px 0; }
+.doctor-agenda .agenda-resolve .text-button { font-size: var(--meta-size, 14px); padding: 2px 6px; }
+.doctor-agenda .agenda-resolve .agenda-snooze { font-size: var(--meta-size, 14px); }
+

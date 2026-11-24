@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, CheckCheck, Search, RotateCw, UserPlus } from "lucide-react";
 import { api } from "./agent-runtime";
+import { PostVisitNextStep } from "./post-visit-next-step";
 import { publishAgendaViewIntent } from "./plugin-navigation";
 import { requestSettingsTab } from "./extension-center";
 import { usePluginActive, usePluginConnected } from "./plugin-slots";
@@ -30,7 +31,7 @@ const date = (value) => {
   return parsed.toLocaleDateString("zh-CN", options);
 };
 
-export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
+export function DoctorAgenda({ onPatient, onOpenTask, onView, modelConfigured = true }) {
   const followupActive = usePluginActive("followup");
   // Follow-up reminders need only the plugin; patient messages need a channel.
   const messaging = usePluginConnected("followup");
@@ -109,10 +110,13 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
   };
   const [notice, setNotice] = useState("");
   const [acting, setActing] = useState(null);
-  const quick = async (item, request, message) => {
+  // After a visit is marked attended, offer the steps that usually follow it
+  // instead of telling the doctor where to find them.
+  const [nextStep, setNextStep] = useState(null);
+  const quick = async (item, request, message, after) => {
     if (acting) return;
-    setActing(item.id); setError(""); setNotice("");
-    try { await request(); setNotice(message); setRefreshKey((value) => value + 1); }
+    setActing(item.id); setError(""); setNotice(""); setNextStep(null);
+    try { await request(); if (message) setNotice(message); after?.(); setRefreshKey((value) => value + 1); }
     catch (err) { setError(err.message); }
     finally { setActing(null); }
   };
@@ -122,7 +126,8 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
     `已推迟 ${days} 天，${item.patientName}的随访到时会重新出现在今日待办。`);
   // 今天或已过期的复诊可直接登记到诊结果；带上版本号，别处改过会提示刷新。
   const visitOutcome = (item, status) => quick(item, () => api(`/api/appointments/${item.appointmentId}`, "PATCH", { expectedRevision: item.revision, status, requestId: crypto.randomUUID() }),
-    status === "attended" ? `已登记${item.patientName}到诊。可在患者档案「复诊预约」里约下次复诊。` : `已登记${item.patientName}未到诊，可在患者档案里重新预约。`);
+    status === "attended" ? "" : `已登记${item.patientName}未到诊，可在患者档案里重新预约。`,
+    status === "attended" ? () => setNextStep({ patientId: item.patientId, patientName: item.patientName }) : undefined);
   const inlineActions = (item) => {
     const busy = loading || Boolean(acting);
     // Items from the doctor's own rules are closed here; the outcome tells the rule whether it helps.
@@ -161,6 +166,7 @@ export function DoctorAgenda({ onPatient, onOpenTask, onView }) {
         </select></label>}
       </div>
       {notice && <p className="notice" role="status">{notice}</p>}
+      <PostVisitNextStep step={nextStep} onPatient={onPatient} onOpenTask={onOpenTask} modelConfigured={modelConfigured} onClose={() => setNextStep(null)} />
       {error && <p className="form-error" role="alert">{error}<button className="text-button" onClick={() => setRefreshKey((value) => value + 1)}>重试</button></p>}
       {hasUpdates && <p className="notice" role="status">今日待办有更新。<button className="text-button" disabled={loading} onClick={() => setRefreshKey(value => value + 1)}>刷新查看更新</button></p>}
       {data?.errors?.length > 0 && <p className="muted agenda-source-errors" role="status">部分待办暂时无法读取（{data.errors.map((item) => kindLabels[item.kind] || item.kind).join("、")}），其余事项照常显示。</p>}

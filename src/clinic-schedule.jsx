@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RotateCw } from "lucide-react";
 import { api } from "./agent-runtime";
+import { PostVisitNextStep } from "./post-visit-next-step";
 import "./clinic-schedule.css";
 
 // 复诊名单：接下来谁要来复诊，以及最近谁来了、谁没来。
@@ -16,7 +17,7 @@ const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 // 预约日已过但没登记的，往回多看 60 天。
 const UNREGISTERED_LOOKBACK = 60;
 
-export function ClinicSchedule({ onPatient }) {
+export function ClinicSchedule({ onPatient, onOpenTask, modelConfigured = true }) {
   const today = localDay();
   const [mode, setMode] = useState("upcoming");
   const [months, setMonths] = useState(3);
@@ -25,6 +26,7 @@ export function ClinicSchedule({ onPatient }) {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(null);
+  const [nextStep, setNextStep] = useState(null);
   const [reload, setReload] = useState(0);
   const from = mode === "upcoming" ? addDays(today, -UNREGISTERED_LOOKBACK) : addMonths(today, -months);
   const to = mode === "upcoming" ? addMonths(today, months) : today;
@@ -43,10 +45,11 @@ export function ClinicSchedule({ onPatient }) {
   // 带版本号登记到诊结果，别处改过会提示刷新。
   const outcome = async (a, status) => {
     if (acting) return;
-    setActing(a.id); setError(""); setNotice("");
+    setActing(a.id); setError(""); setNotice(""); setNextStep(null);
     try {
       await api(`/api/appointments/${a.id}`, "PATCH", { expectedRevision: a.revision || 0, status, requestId: crypto.randomUUID() });
-      setNotice(status === "attended" ? `已登记${a.patientName}到诊。` : `已登记${a.patientName}未到诊。`);
+      if (status === "attended") setNextStep({ patientId: a.patientId, patientName: a.patientName || "患者" });
+      else setNotice(`已登记${a.patientName}未到诊。`);
       setReload((n) => n + 1);
     } catch (err) { setError(err.message); }
     finally { setActing(null); }
@@ -88,6 +91,7 @@ export function ClinicSchedule({ onPatient }) {
         </div>
       </div>
       {notice && <p className="notice" role="status">{notice}</p>}
+      <PostVisitNextStep step={nextStep} onPatient={onPatient} onOpenTask={onOpenTask} modelConfigured={modelConfigured} onClose={() => setNextStep(null)} />
       {error && <p className="form-error" role="alert">{error}<button className="text-button" onClick={() => setReload((n) => n + 1)}>重试</button></p>}
 
       {mode === "upcoming" && all && <>

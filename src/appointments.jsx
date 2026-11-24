@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarPlus, RotateCw } from "lucide-react";
 import { useClinicalDraft } from "./clinical-drafts";
 import { api } from "./agent-runtime";
-import { usePluginConnected } from "./plugin-slots";
+import { usePluginActive, usePluginConnected } from "./plugin-slots";
 import "./care.css";
 
 const STATUS = { scheduled: "已预约", attended: "已到诊", missed: "未到诊", cancelled: "已取消" };
@@ -22,6 +22,7 @@ const shiftDate = (from, days, months) => {
 export function AppointmentsPanel({ patient }) {
   // Reminder drafts are messages to the patient; they need a connected channel.
   const followupActive = usePluginConnected("followup");
+  const carePacksActive = usePluginActive("care-packs");
   const [data, setData] = useState(null), [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false);
   const [form, setForm] = useClinicalDraft(patient.id, "appointment", null);
   const inFlight = useRef(false);
@@ -61,7 +62,7 @@ export function AppointmentsPanel({ patient }) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(""); setNotice("");
-    try { await fn(); setNotice(message); if (closeForm) setForm(null); await load(); return true; } catch (e) { setError(e.message); return false; } finally { inFlight.current = false; setBusy(false); }
+    try { await fn(); setNotice(typeof message === "function" ? message() : message); if (closeForm) setForm(null); await load(); return true; } catch (e) { setError(e.message); return false; } finally { inFlight.current = false; setBusy(false); }
   };
   const today = data?.today || localToday();
   const upcoming = (data?.appointments || []).filter((a) => a.status === "scheduled");
@@ -73,7 +74,18 @@ export function AppointmentsPanel({ patient }) {
   }, "已生成复诊提醒草稿，请在下方核对；尚未发送。");
   // 新预约默认沿用这位患者最近一次预约的地点（从预约记录里取，不另存）。
   const lastPlace = [...(data?.appointments || [])].reverse().find((a) => a.place)?.place || "";
-  const book = (from = {}) => setForm({ date: "", time: "", reason: from.reason || "", place: from.place || lastPlace, requestId: requestId() });
+  const book = (from = {}) => setForm({ date: "", time: "", reason: from.reason || "", place: from.place || lastPlace, previsit: true, requestId: requestId() });
+  // Pre-visit questionnaire for a new booking: due the day before, sent by the
+  // doctor over the patient channel. Booking stands even if this step fails.
+  const schedulePrevisit = async (appointment) => {
+    try {
+      const extra = carePacksActive ? await api(`/api/p/care-packs/previsit-questions?patientId=${patient.id}`).then((r) => r.questions || []).catch(() => []) : [];
+      await api(`/api/patients/${patient.id}/followups/previsit`, "POST", { appointmentId: appointment.id, extraQuestions: extra });
+      return `复诊前一天会生成诊前问卷提醒${extra.length ? `（含 ${extra.length} 道病种自测题）` : ""}，在今日待办里确认后发给患者。`;
+    } catch (err) {
+      return `诊前问卷没有排上：${err.message}。可在随访页手动安排。`;
+    }
+  };
   const update = (a, changes, message) => act(() => {
     const key = JSON.stringify([a.id, a.revision || 0, changes]);
     if (!updateRequests.current.has(key)) updateRequests.current.set(key, crypto.randomUUID());
@@ -85,8 +97,12 @@ export function AppointmentsPanel({ patient }) {
     if (form._conflict) return;
     const submission = { ...snapshot(form), correctionReason: form.correctionReason, expectedRevision: form.expectedRevision, requestId: form.requestId || requestId() };
     setForm({ ...form, requestId: submission.requestId });
+    let previsitNote = "";
     act(async () => {
-      try { await api(form.id ? `/api/appointments/${form.id}` : `/api/patients/${patient.id}/appointments`, form.id ? "PATCH" : "POST", submission); }
+      try {
+        const saved = await api(form.id ? `/api/appointments/${form.id}` : `/api/patients/${patient.id}/appointments`, form.id ? "PATCH" : "POST", submission);
+        if (!form.id && form.previsit !== false && followupActive && saved?.id) previsitNote = await schedulePrevisit(saved);
+      }
       catch (err) {
         if (form.id && ["REVISION_CONFLICT", "REQUEST_CONFLICT"].includes(err.code)) {
           try {
@@ -102,7 +118,7 @@ export function AppointmentsPanel({ patient }) {
         throw err;
       }
       if (!form.id) clearRequest();
-    }, form.id ? "预约已更正，修改记录已保留。" : "复诊已预约。", { closeForm: true });
+    }, () => form.id ? "预约已更正，修改记录已保留。" : `复诊已预约。${previsitNote}`, { closeForm: true });
   };
   const history = a => a.history?.length > 0 && <details><summary>修改记录 · {a.history.length}</summary>{a.history.map((h, i) => <p key={i}>{new Date(h.at).toLocaleString("zh-CN")} · 修改前：{h.date} {h.time} · {STATUS[h.status]} · {h.place || "地点未记录"} · {h.reason}{h.correctionReason ? ` · 更正原因：${h.correctionReason}` : ""}</p>)}</details>;
 
@@ -120,6 +136,7 @@ export function AppointmentsPanel({ patient }) {
       <label>时间（可选）<input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
       <label>复诊事项<input value={form.reason} maxLength={200} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="如：术后一月复查、调整降压药" /></label>
       <label>地点（可选）<input value={form.place} maxLength={100} onChange={(e) => setForm({ ...form, place: e.target.value })} placeholder="如：周三上午专家门诊" /></label>
+      {!form.id && followupActive && <label className="appointment-previsit"><input type="checkbox" checked={form.previsit !== false} onChange={(e) => setForm({ ...form, previsit: e.target.checked })} />复诊前 1 天发诊前问卷<small>患者的回答会显示在接诊准备里</small></label>}
       {form.id && <><label>预约状态<select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{Object.entries(STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>更正原因（必填）<input required value={form.correctionReason} maxLength={500} onChange={e => setForm({ ...form, correctionReason: e.target.value })} /></label></>}
       {form._conflict && <section className="appointment-conflict" aria-label="预约版本核对"><h4>核对最新预约与本地草稿</h4><p>其他窗口已更新预约。未修改的字段默认采用最新记录；核对选择后仍需保存。</p>
         {Object.entries(appointmentFields).map(([key, label]) => <div key={key}><b>{label}</b><p>最新：{(key === "status" ? STATUS[form._conflict[key]] : form._conflict[key]) || "未记录"}</p><p>草稿：{(key === "status" ? STATUS[form[key]] : form[key]) || "未记录"}</p><label>{label}保留版本<select aria-label={`${label}保留版本`} value={form._choices[key]} onChange={event => setForm({ ...form, _choices: { ...form._choices, [key]: event.target.value } })}><option value="latest">采用最新记录</option><option value="local">保留本地草稿</option></select></label></div>)}

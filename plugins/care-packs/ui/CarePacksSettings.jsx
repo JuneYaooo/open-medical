@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../src/agent-runtime";
 import { localCalendarDate } from "../../../shared/calendar-date.mjs";
+import { enrollInPack, monitorNote } from "./enroll.js";
 import "./care-packs.css";
 
 const OP = { gt: ">", lt: "<" };
@@ -18,20 +19,10 @@ function PackCard({ pack, patients, onChanged }) {
     setNotice(`已安装随访模板${imported ? `，导入 ${imported} 篇患教素材` : ""}${skipped ? `，${skipped} 篇同名素材已存在未覆盖` : ""}。`);
     await onChanged();
   });
-  // The doctor reviewed the pack contents on this card and clicked enroll, so
-  // the proposal is confirmed right away; it still leaves an audit record.
   const apply = () => action(async () => {
-    const { proposal } = await api(`/api/p/care-packs/packs/${pack.id}/apply`, "POST", { patientId, startDate });
-    let applied;
-    try {
-      ({ applied } = await api(`/api/pending-actions/${proposal.id}/confirm`, "POST", {}));
-    } catch (error) {
-      // Do not leave an orphan proposal in the tray; each retry would add another.
-      await api(`/api/pending-actions/${proposal.id}/reject`, "POST", { note: "入组确认失败，已自动撤回" }).catch(() => {});
-      throw error;
-    }
+    const applied = await enrollInPack(pack.id, patientId, startDate);
     const name = patients.find(p => p.id === patientId)?.name || "患者";
-    const skipped = applied.monitorsUnavailable ? "（风险规则插件未启用，未加检验监测）" : applied.monitorsSkipped ? `（${applied.monitorsSkipped} 项监测已存在）` : "";
+    const skipped = monitorNote(applied);
     setNotice(`${name} 已入组：排入 ${applied.followups} 个随访节点，加上 ${applied.monitors} 项检验监测${skipped}。可在患者的随访页查看和调整。`);
     setPatientId("");
   });

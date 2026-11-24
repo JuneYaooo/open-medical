@@ -160,6 +160,7 @@ export function PatientOverview({
   onOpenWorkspace,
   onView,
   riskPanel,
+  modelConfigured = true,
 }) {
   const next = useNextAppointment(patient.id, patient.revision);
   const diagnosisGroups = groupDiagnoses(patient.diagnoses);
@@ -305,7 +306,7 @@ export function PatientOverview({
 
       {riskPanel}
       <PatientAttention patient={patient} onNavigate={onNavigate} onOpenWorkspace={onOpenWorkspace} onView={onView} />
-      <VisitPrepActions patient={patient} onOpenTask={onOpenWorkspace} />
+      <VisitPrepActions patient={patient} onOpenTask={onOpenWorkspace} modelConfigured={modelConfigured} />
 
       <div className="ov-grid">
         <div className="ov-column">
