@@ -7,7 +7,7 @@ import { PendingTray, PENDING_REFRESH_EVENT } from "./pending-tray";
 import "./backup-panel.css";
 import "./doctor-notifications.css";
 import "./message-channels.css";
-import { readLocation, writeLocation, VIEW_LABELS, TOOL_VIEWS, AGENDA_VIEWS } from "./navigation";
+import { readLocation, writeLocation, VIEW_LABELS, TOOL_VIEWS, AGENDA_VIEWS, RESEARCH_VIEWS } from "./navigation";
 import { DueNotifyWatcher } from "./due-notify";
 import { conversationRunIds } from "../shared/patient-conversations.mjs";
 import { PatientQuestionHistory } from "./patient-question-history";
@@ -48,6 +48,7 @@ import {
   PencilLine,
   CalendarClock,
   AtSign,
+  FlaskConical,
 } from "lucide-react";
 import {
   api,
@@ -111,6 +112,7 @@ const LazyTaskDirectory = lazyView(() => import("./work-directory"), "TaskDirect
 const LazyWorkspacesView = lazyView(() => import("./workspaces"), "WorkspacesView");
 const LazyDoctorAgenda = lazyView(() => import("./doctor-agenda"), "DoctorAgenda");
 const LazyClinicSchedule = lazyView(() => import("./clinic-schedule"), "ClinicSchedule");
+const LazyResearchHub = lazyView(() => import("./research-hub"), "ResearchHub");
 const LazyKnowledgeLibraries = lazyView(() => import("./knowledge-libraries"), "KnowledgeLibraries");
 const LazyCasesView = lazyView(() => import("./cases"), "CasesView");
 const SHORTCUT_MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || "") ? "⌥" : "Alt+";
@@ -1383,17 +1385,18 @@ function App() {
     window.addEventListener(OPEN_MODEL_SETTINGS_EVENT, open);
     return () => window.removeEventListener(OPEN_MODEL_SETTINGS_EVENT, open);
   }, []);
-  // 高频导航快捷键：Alt+1 患者 / Alt+2 今日待办 / Alt+3 知识库 / Alt+N 新任务。
+  // 高频导航快捷键：Alt+1 患者 / Alt+2 今日待办 / Alt+3 知识库 / Alt+4 研究 / Alt+N 新任务。
   useEffect(() => {
     const onHotkey = (event) => {
       if (!event.altKey || event.ctrlKey || event.metaKey) return;
       // macOS 上 Option+键 会改写 event.key（如 ¡、˜），按物理键位 event.code 判断。
-      const key = { Digit1: "1", Digit2: "2", Digit3: "3", KeyN: "n" }[event.code];
+      const key = { Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4", KeyN: "n" }[event.code];
       if (!key) return;
       event.preventDefault();
       if (key === "1") openPatient({ navigationKey: Date.now() });
       else if (key === "2") navigate("agenda");
       else if (key === "3") navigate("knowledge");
+      else if (key === "4") { if (medicalEnabled(config)) navigate("study"); }
       else if (key === "n") startNewTask();
     };
     window.addEventListener("keydown", onHotkey);
@@ -1404,6 +1407,14 @@ function App() {
       navigate("home");
       setHomeKey(value => value + 1);
     } else openWorkspaces({ create: true });
+  };
+  // 从研究页打开写作类任务模板：带上模板回到新建任务，由医生选患者或附材料。
+  const startTemplate = (flowId) => {
+    const flow = MEDICAL_WORKFLOWS.find((item) => item.id === flowId);
+    if (!flow) return;
+    setHomeDraft({ flowId: flow.id, prompt: flow.prompt });
+    setHomeKey((value) => value + 1);
+    navigate("home");
   };
   const startProjectTask = async ({ id, prompt }) => {
     const task = await api(`/api/workspaces/${id}/tasks`, "POST", {});
@@ -1672,10 +1683,10 @@ function App() {
           </button>
           {medical && <div className="medical-quick-wrap">
             <nav className="medical-quick" aria-label="主要业务">
-              {[["patients", "患者", Stethoscope, "1"], ["agenda", "今日待办", CalendarClock, "2"], ["knowledge", "知识库", BookOpen, "3"]].map(([id,label,Icon,hotkey]) => { const current = view === id || (id === "agenda" && AGENDA_VIEWS.includes(view)); return <button key={id} title={`${label}（${SHORTCUT_MOD}${hotkey}）`} aria-current={current ? "page" : undefined} className={current ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>; })}
+              {[["patients", "患者", Stethoscope, "1"], ["agenda", "今日待办", CalendarClock, "2"], ["knowledge", "知识库", BookOpen, "3"], ["study", "研究", FlaskConical, "4"]].map(([id,label,Icon,hotkey]) => { const current = view === id || (id === "agenda" && AGENDA_VIEWS.includes(view)) || (id === "study" && RESEARCH_VIEWS.includes(view)); return <button key={id} title={`${label}（${SHORTCUT_MOD}${hotkey}）`} aria-current={current ? "page" : undefined} className={current ? "active" : ""} onClick={() => id === "patients" ? openPatient({ navigationKey: Date.now() }) : navigate(id)}><Icon size={17}/><span>{label}</span></button>; })}
             </nav>
             <nav className="medical-quick" aria-label="资料与工具">
-              <button aria-current={TOOL_VIEWS.includes(view) && !AGENDA_VIEWS.includes(view) ? "page" : undefined} className={TOOL_VIEWS.includes(view) && !AGENDA_VIEWS.includes(view) ? "active" : ""} onClick={() => navigate("tools")}><Search size={17}/><span>资料与工具</span></button>
+              {(() => { const current = TOOL_VIEWS.includes(view) && !AGENDA_VIEWS.includes(view) && !RESEARCH_VIEWS.includes(view); return <button aria-current={current ? "page" : undefined} className={current ? "active" : ""} onClick={() => navigate("tools")}><Search size={17}/><span>资料与工具</span></button>; })()}
             </nav>
           </div>}
           {medical && <div className="agent-recents">
@@ -1709,7 +1720,7 @@ function App() {
           <div className="business-preferences"><button onClick={() => navigate("settings")}><Settings2 size={16}/>设置与连接</button></div>
         </aside>
         <div className="product-content" id="main-content" tabIndex={-1}>
-          {view !== "tools" && (TOOL_VIEWS.includes(view) || view === "schedule") && (() => { const parent = medical && AGENDA_VIEWS.includes(view) ? "agenda" : "tools"; return <nav className="page-trail" aria-label="当前位置"><button onClick={() => navigate(parent)}>{VIEW_LABELS[parent]}</button><ChevronRight size={14}/><span>{VIEW_LABELS[view]}</span></nav>; })()}
+          {view !== "tools" && (TOOL_VIEWS.includes(view) || view === "schedule") && (() => { const parent = medical && AGENDA_VIEWS.includes(view) ? "agenda" : medical && RESEARCH_VIEWS.includes(view) ? "study" : "tools"; return <nav className="page-trail" aria-label="当前位置"><button onClick={() => navigate(parent)}>{VIEW_LABELS[parent]}</button><ChevronRight size={14}/><span>{VIEW_LABELS[view]}</span></nav>; })()}
           {listError && <div className="navigation-notice" role="alert"><span>{listError}</span><button className="secondary" onClick={() => refreshList()}>重新加载列表</button></div>}
           {!config ? (<main id="main" className="workbench-hub">
                 {error ? <div className="connection-recovery" role="alert">
@@ -1756,6 +1767,8 @@ function App() {
               onView={navigate}
               onChanged={refreshList}
             />
+          ) : view === "study" && medical ? (
+            <LazyResearchHub config={config} sessions={sessions} onOpenTask={openTask} onNavigate={navigate} onModelSettings={() => setModal("model")} onStartTemplate={startTemplate} />
           ) : view === "knowledge" ? (
             <LazyKnowledgeLibraries onOpenTask={openTask} />
           ) : view === "cases" ? (

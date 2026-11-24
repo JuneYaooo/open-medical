@@ -2,10 +2,13 @@ export const TOOL_VIEWS = ["tools", "care", "followups", "research", "literature
 // Cross-patient follow-up and message lists are daily work: in medical mode
 // they sit under 今日待办, not 资料与工具.
 export const AGENDA_VIEWS = ["care", "followups", "schedule"];
+// Research tools open from 研究 in medical mode, so their breadcrumb and the
+// sidebar highlight point there instead of 资料与工具.
+export const RESEARCH_VIEWS = ["research", "literature", "data-analysis"];
 
 // Only opaque record IDs belong in navigation; never put chart contents in URLs.
 export const VIEW_LABELS = {
-  examples: "示例体验", care: "患者消息", agenda: "今日待办", schedule: "复诊名单", settings: "设置", home: "新建任务", patients: "患者", followups: "随访", research: "临床试验",
+  examples: "示例体验", care: "患者消息", agenda: "今日待办", schedule: "复诊名单", settings: "设置", study: "研究", home: "新建任务", patients: "患者", followups: "随访", research: "临床试验",
   "data-analysis": "科研统计", projects: "项目文件", tools: "资料与工具", tasks: "任务记录",
   knowledge: "知识库", literature: "文献研究", "clinical-ref": "临床速查",
   cases: "病例库", drg: "DRG", review: "任务记录", history: "任务记录",

@@ -1,6 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { assignCohorts, describeOutcome } from "../../../server/medical/cohort-stats.mjs";
-import { buildResearchDataset, researchDataDictionary } from "../../../server/medical/research-dataset.mjs";
 
 // 导出脱敏队列：与 cohort_compare 同一分组和结局口径，只导出
 // 假名编号、组别、年龄、性别和结局值。不含姓名、电话、病历号、证件号或
@@ -57,17 +56,5 @@ export function exportCohortCsv(patients, input, { now = Date.now() } = {}) {
   };
 }
 
-// 统计页顶部的一句话：本地患者库有什么数据。只给计数，不给逐人数据。
-export function dictionarySummary(patients, { top = 6 } = {}) {
-  const dictionary = researchDataDictionary(buildResearchDataset(patients));
-  const pick = (block) => block.items.slice(0, top).map((item) => ({ name: item.key, patients: item.patients, ...(item.units ? { units: item.units } : {}) }));
-  return {
-    patients: dictionary.patients.total,
-    ageKnown: dictionary.patients.age.known,
-    coverage: Object.fromEntries(Object.entries(dictionary.coverage).map(([table, value]) => [table, { patients: value.patients, records: value.records }])),
-    topDiagnoses: pick(dictionary.diagnoses),
-    topLabs: pick(dictionary.labs),
-    topMedications: pick(dictionary.medications),
-    snapshot: dictionary.snapshot.hash,
-  };
-}
+// 统计页顶部的数据概况移到了核心（研究页也用），这里保留导出名。
+export { dictionarySummary } from "../../../server/medical/research-dataset.mjs";

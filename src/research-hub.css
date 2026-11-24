@@ -1,0 +1,96 @@
+/* 研究页：顶部"从我的患者出发"是主操作，文献/试验/统计与写作卡片沿用资料与工具的样式。 */
+.research-hub-start {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  background: var(--card, #fff);
+}
+.research-hub-start > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--body-size, 16px);
+  font-weight: 650;
+}
+.research-hub-start > h2 svg { color: var(--accent); }
+.research-hub-data { display: grid; gap: 10px; }
+.research-hub-data dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+}
+.research-hub-data dl div { display: grid; gap: 1px; }
+.research-hub-data dt { color: var(--muted); font-size: var(--small-size, 13px); }
+.research-hub-data dd { margin: 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.research-hub-chips,
+.research-hub-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.research-hub-chips > span,
+.research-hub-examples > span {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: var(--small-size, 13px);
+}
+.research-hub-chips button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: var(--meta-size, 14px);
+}
+.research-hub-chips button small { color: var(--faint); font-size: var(--small-size, 13px); }
+.research-hub-chips button:hover:not(:disabled),
+.research-hub-examples button:hover:not(:disabled) { border-color: var(--accent-line); color: var(--accent); }
+.research-hub-start form { display: grid; gap: 8px; }
+.research-hub-start textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  font: inherit;
+}
+.research-hub-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.research-hub-actions .primary { display: inline-flex; align-items: center; gap: 6px; }
+.research-hub-examples button {
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--meta-size, 14px);
+  text-align: left;
+}
+.research-hub-start .om-source { margin: 0; }
+.research-hub-recent ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.research-hub-recent button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.research-hub-recent button:hover { border-color: var(--border); background: var(--card, #fff); }
+.research-hub-recent button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-hub-recent button small { color: var(--faint); }
+@media (max-width: 640px) {
+  .research-hub-start { padding: 14px; }
+}

@@ -155,3 +155,18 @@ export function researchDataDictionary(dataset, { limit = 80 } = {}) {
     },
   };
 }
+
+// 本地患者库有什么数据（研究页、科研统计页顶部）。只给计数和常见项目名，不给逐人数据。
+export function dictionarySummary(patients, { top = 6 } = {}) {
+  const dictionary = researchDataDictionary(buildResearchDataset(patients));
+  const pick = (block) => block.items.slice(0, top).map((item) => ({ name: item.key, patients: item.patients, ...(item.units ? { units: item.units } : {}) }));
+  return {
+    patients: dictionary.patients.total,
+    ageKnown: dictionary.patients.age.known,
+    coverage: Object.fromEntries(Object.entries(dictionary.coverage).map(([table, value]) => [table, { patients: value.patients, records: value.records }])),
+    topDiagnoses: pick(dictionary.diagnoses),
+    topLabs: pick(dictionary.labs),
+    topMedications: pick(dictionary.medications),
+    snapshot: dictionary.snapshot.hash,
+  };
+}

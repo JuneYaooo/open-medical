@@ -245,7 +245,7 @@ HTTP 面统一经 `guard()`：localhost Host 校验 + 同源 + 启动时生成�
 
 ## 7. 前端（`src/`）
 
-React 19 单页（无路由库，URL query 状态机 `navigation.js`），Vite 构建。通信统一 `agent-runtime.js`：`bootstrap()` 取 token → `api()` fetch 封装（401 自动重取）→ `streamTurn()` POST + SSE 帧解析（`shared/sse.mjs`，UTF-8 分片安全）。关键面：首页驾驶舱（数字卡 + 今日名单 + 待确认预览行内确认）、任务工作区（会话/流式/步骤流/产物复核）、患者页（多页签 + 材料阅读区）、知识库（入库→审核→证据）、全局助手（单例会话）、命令面板（Cmd+K）。设计令牌单一出处（`style.css :root`，muted 对比度 ≥4.5:1）。
+React 19 单页（无路由库，URL query 状态机 `navigation.js`），Vite 构建。通信统一 `agent-runtime.js`：`bootstrap()` 取 token → `api()` fetch 封装（401 自动重取）→ `streamTurn()` POST + SSE 帧解析（`shared/sse.mjs`，UTF-8 分片安全）。关键面：首页驾驶舱（数字卡 + 今日名单 + 待确认预览行内确认）、任务工作区（会话/流式/步骤流/产物复核）、患者页（多页签 + 材料阅读区）、知识库（入库→审核→证据）、研究页（本机数据概况 → 一句话研究问题 → 文献/试验/统计/写作入口）、全局助手（单例会话）、命令面板（Cmd+K）。设计令牌单一出处（`style.css :root`，muted 对比度 ≥4.5:1）。
 
 ## 8. 安全模型（分层）
 

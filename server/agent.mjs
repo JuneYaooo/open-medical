@@ -73,6 +73,7 @@ import { DocumentPython } from "./core/document-python.mjs";
 import { AGENT_BROWSER_HEADER, registerSelfPort } from "./core/browser-tools.mjs";
 import { MaterialPrivacy, PrivacySettings, builtinPrivacyService, deidentifyViaService } from "./medical/privacy.mjs";
 import { runCohortQuery } from "./medical/cohort-query.mjs";
+import { dictionarySummary } from "./medical/research-dataset.mjs";
 import { configureLocalOcrService, imageTextWithFallback, visionTranscriber } from "./core/image-text.mjs";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const mime = {
@@ -1848,6 +1849,8 @@ export function createServer(options = {}) {
       if (path === "/api/demo-pack" && req.method === "GET") return send(res, 200, demoPack.status());
       if (path === "/api/demo-pack" && req.method === "POST") return send(res, 201, await demoPack.seed());
       if (path === "/api/demo-pack" && req.method === "DELETE") return send(res, 200, await demoPack.clear());
+      // 研究页顶部：本机患者库数据概况，只有计数和常见项目名。
+      if (path === "/api/research-overview" && req.method === "GET") return send(res, 200, dictionarySummary(patients, { top: 8 }));
       // 按条件找患者（本机界面用）：与 cohort_query 工具同一判断逻辑，
       // 这里附上姓名和编号供医生打开档案；这些身份信息不进入模型。
       if (path === "/api/cohort/query" && req.method === "POST") {
